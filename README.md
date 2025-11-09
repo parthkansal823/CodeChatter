@@ -29,6 +29,91 @@
 
 ---
 
+## 🗂️ CodeChatter — Full Project Structure
+```bash
+CodeChatter/
+│
+├── README.md                            # 📘 Project overview file (you added)
+├── package.json                         # Root config (can include concurrently)
+├── .gitignore                           # Hides node_modules, .env, logs, etc.
+│
+├── client/                              # ⚛️ Frontend (React)
+│   ├── package.json
+│   ├── public/
+│   │   ├── index.html
+│   │   └── favicon.ico
+│   │
+│   └── src/
+│       ├── index.js                     # React entry point
+│       ├── App.js                       # Root component
+│       ├── Actions.js                   # Shared socket action constants
+│       │
+│       ├── component/                   # 🧩 Reusable Components
+│       │   ├── MonacoEditor.jsx         # Core collaborative editor
+│       │   ├── Topbar.jsx               # Language + Theme bar
+│       │   ├── LanguageDropdown.jsx     # Language selector (syncs with others)
+│       │   ├── ChatBox.jsx              # Real-time chat UI
+│       │   ├── OutputPanel.jsx          # Displays Judge0 code output
+│       │   ├── CursorOverlay.jsx        # Cursor highlighting (for collab)
+│       │   └── Loader.jsx               # Optional loading animation
+│       │
+│       ├── pages/                       # 📄 Route Pages
+│       │   ├── Home.jsx                 # Landing screen
+│       │   ├── EditorPage.jsx           # Main collaborative editor page
+│       │   ├── Login.jsx                # Auth login screen
+│       │   └── Register.jsx             # Auth register screen
+│       │
+│       ├── context/                     # 🌐 Global Contexts
+│       │   └── UserContext.js
+│       │
+│       ├── hooks/                       # ⚙️ Custom React Hooks
+│       │   └── useSocket.js             # Handles Socket.IO client connection
+│       │
+│       ├── utils/                       # 🧠 Utility Helpers
+│       │   ├── languageMap.js           # Maps frontend language → Judge0 IDs
+│       │   ├── themeUtils.js            # Handles VS Code-style themes
+│       │   └── formatTime.js            # Chat timestamp formatter
+│       │
+│       ├── styles/                      # 🎨 Styling
+│       │   ├── editor.css
+│       │   ├── home.css
+│       │   ├── topbar.css
+│       │   └── chatbox.css
+│       │
+│       └── config.js                    # Frontend API base URL
+│
+├── server/                              # 🖥️ Backend (Express + Socket.IO)
+│   ├── package.json
+│   ├── server.js                        # Main backend server
+│   ├── Actions.js                       # Shared socket event constants
+│   ├── .env                             # Environment variables (private)
+│   ├── .env.example                     # Public sample env (safe for GitHub)
+│   │
+│   ├── models/                          # 🧩 MongoDB Models
+│   │   ├── User.js
+│   │   └── Chat.js
+│   │
+│   ├── routes/                          # 🌍 API Routes
+│   │   ├── auth.js                      # Handles OAuth + login
+│   │   ├── user.js                      # User info endpoints
+│   │   └── compile.js                   # Optional code execution route
+│   │
+│   ├── middleware/                      # 🔐 Middlewares
+│   │   ├── authMiddleware.js            # JWT + session protection
+│   │   └── errorHandler.js              # Error formatter
+│   │
+│   ├── passport/                        # 🧾 OAuth Config
+│   │   └── index.js                     # Google OAuth setup
+│   │
+│   └── utils/                           # 🛠️ Helpers
+│       ├── logger.js                    # Console + file logging
+│       └── generateRoomId.js            # Unique ID generator for rooms
+│
+└── concurrently.config.json             # For running client + server together
+
+```
+
+
 ## ⚙️ Setup Instructions
 
 ### 1. Clone this repository
