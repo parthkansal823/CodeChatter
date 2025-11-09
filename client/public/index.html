@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- Essential Meta Tags -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="color-scheme" content="dark light" />
+
+    <!-- SEO Meta Tags -->
+    <title>Code Chatter | Real-Time Code Collaboration</title>
+    <meta name="description" content="Code Chatter lets developers collaborate in real-time with code, chat, and AI-assisted tools — all in one place."/>
+    <meta name="keywords" content="Code Chatter, real-time code editor, coding chat app, AI pair programmer, collaborative coding, code room" />
+    <meta name="author" content="Code Chatter Team" />
+
+    <!-- Open Graph (for social sharing) -->
+    <meta property="og:title" content="Code Chatter | Real-Time Code Collaboration" />
+    <meta
+      property="og:description"
+      content="Collaborate with developers in real time using an AI-powered code editor and chat interface."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://codechatter.app/" />
+    <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
+
+    <!-- ✅ Favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
+
+    <!-- ✅ PWA Manifest -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <!-- ✅ Web Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Preconnect and Prefetch for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+
+    <!-- Dark Mode Preference -->
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1117" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+
+    <!-- App Name -->
+    <meta name="application-name" content="Code Chatter" />
+    <meta name="apple-mobile-web-app-title" content="Code Chatter" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Progressive Enhancement -->
+    <script>
+      document.documentElement.classList.add("js");
+    </script>
+  </head>
+
+  <body>
+    <noscript>
+      <strong>
+        You need to enable JavaScript to run this app.
+        <br />
+        Please enable it in your browser settings.
+      </strong>
+    </noscript>
+
+    <div id="root"></div>
+
+    <!-- Optional: Loading Screen -->
+    <div id="loading-screen" style="display: none;">
+      <style>
+        #loading-screen {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          background-color: #0d1117;
+          color: #fff;
+          font-family: 'Inter', sans-serif;
+          font-size: 1.25rem;
+          letter-spacing: 0.05em;
+        }
+        .dot {
+          animation: blink 1s infinite alternate;
+        }
+        @keyframes blink {
+          0% { opacity: 0.2; }
+          100% { opacity: 1; }
+        }
+      </style>
+      Loading<span class="dot">...</span>
+    </div>
+
+    <!-- React scripts will be injected here by the build process -->
+  </body>
+</html>

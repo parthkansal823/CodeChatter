@@ -1,0 +1,71 @@
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.editor-layout,
+.editor-main,
+.code-container,
+.CodeMirror,
+.CodeMirror-scroll,
+.CodeMirror-lines,
+.CodeMirror-gutters,
+.CodeMirror-line,
+.CodeMirror pre {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+  will-change: auto !important;
+  backface-visibility: hidden !important;
+  filter: none !important;
+}
+
+.compiler-output,
+.compiler-window {
+  animation: none !important;
+  transition: none !important;
+  box-shadow: none !important;
+}
+
+button,
+.btn-run,
+.btn-gradient,
+.btn-red,
+.dropdown-toggle,
+.client:hover,
+.sidebar-logo:hover {
+  transform: none !important;
+  filter: none !important;
+}
+
+.CodeMirror *,
+.CodeMirror pre,
+.CodeMirror-line,
+.CodeMirror-scroll,
+.CodeMirror-code {
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: optimizeLegibility !important;
+  text-shadow: none !important;
+  transform: none !important;
+  will-change: auto !important;
+}
+
+.CodeMirror-cursor {
+  border-left: 2px solid var(--accent) !important;
+  animation: none !important;
+}
+
+.CodeMirror-selected {
+  background: rgba(47, 129, 247, 0.25) !important;
+}
+
+@keyframes fadeIn {}
+@keyframes glowFade {}
