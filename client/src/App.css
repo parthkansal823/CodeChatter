@@ -1,0 +1,63 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+/* Gradient Shift */
+@keyframes bgShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-bgShift {
+  background-size: 200% 200%;
+  animation: bgShift 20s ease infinite;
+}
+
+/* Rotate Glow */
+@keyframes rotateSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-rotateSlow {
+  animation: rotateSlow 120s linear infinite;
+}
+
+/* Floating Blob */
+@keyframes floatBlob {
+  0% { transform: translate(0,0); }
+  50% { transform: translate(40px,-60px); }
+  100% { transform: translate(0,0); }
+}
+.animate-floatBlob {
+  animation: floatBlob 35s ease-in-out infinite;
+}
+
+/* Grid Move */
+@keyframes gridMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 50px 50px; }
+}
+.animate-gridMove {
+  animation: gridMove 40s linear infinite;
+}
+
+/* Floating Dots */
+@keyframes dotFloat {
+  0% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(-20px); opacity: 0.8; }
+  100% { transform: translateY(0); opacity: 0.4; }
+}
+.animate-dotFloat {
+  animation: dotFloat 8s ease-in-out infinite;
+}
+
+/* Cursor */
+@keyframes cursorBlink {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.animate-cursor {
+  animation: cursorBlink 1s infinite;
+}
