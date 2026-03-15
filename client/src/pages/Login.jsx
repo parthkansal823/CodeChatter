@@ -27,12 +27,12 @@ export default function Login() {
 
   const handleGithubLogin = () => {
     console.log("GitHub OAuth Clicked");
-    // window.location.href = "http://localhost:5000/auth/github";
+     window.location.href = "http://localhost:8000/auth/github";
   };
 
   const handleGoogleLogin = () => {
     console.log("Google OAuth Clicked");
-    // window.location.href = "http://localhost:5000/auth/google";
+    window.location.href = "http://localhost:8000/auth/google";
   };
 
   return (
@@ -227,9 +227,12 @@ export default function Login() {
                   onClick={handleGoogleLogin}
                   className="flex items-center justify-center gap-2 py-3 border border-gray-700 rounded-lg hover:bg-white/5 transition"
                 >
+                  
                   <FcGoogle size={18}/>
                   Google
                 </button>
+
+                <button onClick={handleLogout}>Logout</button>
               </div>
             </form>
 

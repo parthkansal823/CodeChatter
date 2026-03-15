@@ -27,10 +27,12 @@ export default function Signup() {
 
   const handleGithubLogin = () => {
     console.log("GitHub OAuth");
+     window.location.href = "http://localhost:8000/auth/github";
   };
 
   const handleGoogleLogin = () => {
     console.log("Google OAuth");
+     window.location.href = "http://localhost:8000/auth/google";
   };
 
   return (
