@@ -1,13 +1,51 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>client</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+
+  <!-- App Icon -->
+  <link rel="icon" type="image/png" href="/logo.png" />
+
+  <!-- Responsive -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- App Info -->
+  <title>CodeChatter | Real-Time Collaborative Coding</title>
+  <meta name="description" content="CodeChatter - Real-time collaborative coding platform with chat, video, AI code review, and flowcharts." />
+
+  <!-- Theme Color -->
+  <meta name="theme-color" content="#18181b" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Fira+Code&display=swap" rel="stylesheet">
+
+  <!-- Tailwind base style fix -->
+  <style>
+    body {
+      margin: 0;
+      font-family: "Inter", sans-serif;
+      background: #ffffff;
+    }
+
+    code {
+      font-family: "Fira Code", monospace;
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <!-- React Root -->
+  <div id="root"></div>
+
+  <!-- React Entry -->
+  <script type="module" src="/src/main.jsx"></script>
+
+</body>
+
 </html>

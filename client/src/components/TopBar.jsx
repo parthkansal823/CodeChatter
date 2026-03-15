@@ -1,4 +1,4 @@
-import { Github, Share2, LogOut, ChevronDown, Copy } from "lucide-react";
+import { Github, Share2, LogOut, ChevronDown, Copy, Sun, Moon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import toast from "react-hot-toast";
 
@@ -45,10 +45,10 @@ export default function TopBar({
   const dropdownRef = useRef();
 
   const users = [
-    { name: "Parth", active: true },
-    { name: "Niyati", active: true },
-    { name: "Aman", active: false },
-    { name: "Aman", active: true }
+    { id: 1, name: "Parth", active: false },
+    { id: 2, name: "Niyati", active: true },
+    { id: 3, name: "Aman", active: false },
+    { id: 4, name: "Riya", active: true }
   ];
 
   const sortedUsers = [...users].sort(
@@ -56,6 +56,15 @@ export default function TopBar({
   );
 
   const connectionStatus = "connected";
+
+  const avatarColors = [
+    "bg-red-500",
+    "bg-blue-500",
+    "bg-green-500",
+    "bg-purple-500",
+    "bg-pink-500",
+    "bg-yellow-500"
+  ];
 
   useEffect(() => {
     const handler = (e) => {
@@ -66,13 +75,18 @@ export default function TopBar({
 
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-
   }, []);
 
   const handleLanguageSelect = (lang) => {
     setLanguage(lang);
     onLanguageChange?.(lang.value);
     setDropdownOpen(false);
+  };
+
+  const toggleTheme = () => {
+    const newTheme = theme === "vs-dark" ? "light" : "vs-dark";
+    setTheme(newTheme);
+    onThemeChange?.(newTheme);
   };
 
   const copyRoomLink = async () => {
@@ -101,24 +115,13 @@ export default function TopBar({
 
   const CurrentIcon = language.icon;
 
-  const avatarColors = [
-    "bg-red-500",
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-purple-500",
-    "bg-pink-500",
-    "bg-yellow-500"
-  ];
-
   return (
-    <div
-      className="h-14 border-b flex items-center justify-between px-6
+    <div className="h-14 border-b flex items-center justify-between px-6
       bg-white dark:bg-zinc-950
-      border-zinc-300 dark:border-zinc-800"
-    >
+      border-zinc-300 dark:border-zinc-800">
 
       {/* LEFT */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-5">
 
         <span className="font-semibold text-zinc-800 dark:text-white">
           Room: {roomId}
@@ -128,19 +131,17 @@ export default function TopBar({
           onClick={copyRoomLink}
           className="flex items-center gap-1 text-sm
           text-zinc-600 dark:text-zinc-400
-          hover:text-black dark:hover:text-white"
+          hover:text-black dark:hover:text-white transition"
         >
           <Copy size={14} />
           Copy Link
         </button>
 
-        <span
-          className={`text-xs px-2 py-1 rounded font-medium ${
-            connectionStatus === "connected"
-              ? "bg-green-600 text-white"
-              : "bg-red-600 text-white"
-          }`}
-        >
+        <span className={`text-xs px-2 py-1 rounded font-medium ${
+          connectionStatus === "connected"
+            ? "bg-green-600 text-white"
+            : "bg-red-600 text-white"
+        }`}>
           {connectionStatus}
         </span>
 
@@ -149,6 +150,7 @@ export default function TopBar({
       {/* CENTER */}
       <div className="flex items-center gap-4">
 
+        {/* LANGUAGE DROPDOWN */}
         <div className="relative" ref={dropdownRef}>
 
           <button
@@ -157,7 +159,8 @@ export default function TopBar({
             bg-zinc-200 dark:bg-zinc-800
             border border-zinc-300 dark:border-zinc-700
             px-3 py-1.5 rounded text-sm
-            text-zinc-800 dark:text-white"
+            text-zinc-800 dark:text-white
+            hover:bg-zinc-300 dark:hover:bg-zinc-700 transition"
           >
             <CurrentIcon size={16} />
             {language.label}
@@ -165,13 +168,12 @@ export default function TopBar({
           </button>
 
           {dropdownOpen && (
-            <div
-              className="absolute top-10 left-0 w-56 rounded shadow-lg z-50
+            <div className="absolute top-10 left-0 w-56 rounded shadow-lg z-50
               bg-white dark:bg-zinc-900
-              border border-zinc-300 dark:border-zinc-800"
-            >
+              border border-zinc-300 dark:border-zinc-800">
 
               {LANGUAGES.map((lang) => {
+
                 const Icon = lang.icon;
 
                 return (
@@ -180,7 +182,7 @@ export default function TopBar({
                     onClick={() => handleLanguageSelect(lang)}
                     className={`w-full flex items-center gap-3 px-3 py-2 text-sm
                     text-zinc-800 dark:text-white
-                    hover:bg-zinc-200 dark:hover:bg-zinc-800
+                    hover:bg-zinc-200 dark:hover:bg-zinc-800 transition
                     ${
                       language.value === lang.value
                         ? "bg-zinc-200 dark:bg-zinc-800"
@@ -198,20 +200,20 @@ export default function TopBar({
 
         </div>
 
-        <select
-          value={theme}
-          onChange={(e) => {
-            setTheme(e.target.value);
-            onThemeChange?.(e.target.value);
-          }}
-          className="text-sm px-2 py-1 rounded
-          bg-zinc-200 dark:bg-zinc-800
+        {/* THEME TOGGLE */}
+        <button
+          onClick={toggleTheme}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md
           border border-zinc-300 dark:border-zinc-700
-          text-zinc-800 dark:text-white"
+          bg-zinc-200 dark:bg-zinc-800
+          hover:bg-zinc-300 dark:hover:bg-zinc-700
+          text-sm font-medium
+          text-zinc-800 dark:text-white
+          transition"
         >
-          <option value="vs-dark">Dark</option>
-          <option value="light">Light</option>
-        </select>
+          {theme === "vs-dark" ? <Moon size={16}/> : <Sun size={16}/>}
+          {theme === "vs-dark" ? "Dark" : "Light"}
+        </button>
 
       </div>
 
@@ -219,7 +221,7 @@ export default function TopBar({
       <div className="flex items-center gap-4">
 
         {/* ACTIVE USERS */}
-        <div className="flex -space-x-2">
+        <div className="flex items-center gap-2">
 
           {sortedUsers.map((user, index) => {
 
@@ -227,20 +229,20 @@ export default function TopBar({
 
             return (
               <div
-                key={user.name}
-                title={user.name}
+                key={user.id}
+                title={`${user.name} ${user.active ? "(online)" : "(offline)"}`}
                 className={`relative w-8 h-8 rounded-full flex items-center justify-center
-                text-white text-xs font-semibold
+                text-white text-xs font-semibold cursor-pointer
                 ${color}
                 ${user.active ? "ring-2 ring-green-400" : "opacity-40"}
-                border-2 border-white dark:border-zinc-950`}
+                border border-white dark:border-zinc-900
+                hover:scale-110 transition`}
               >
 
                 {user.name.charAt(0)}
 
                 {user.active && (
-                  <span
-                    className="absolute bottom-0 right-0 w-2.5 h-2.5
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5
                     bg-green-400 border-2 border-white dark:border-zinc-950
                     rounded-full"
                   />
@@ -256,16 +258,16 @@ export default function TopBar({
         {/* GITHUB */}
         <button
           onClick={() => window.open("https://github.com", "_blank")}
-          className="text-zinc-700 dark:text-white hover:text-blue-500"
+          className="p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition"
         >
           <Github size={18} />
         </button>
 
-        {/* SHARE CODE */}
+        {/* SHARE */}
         <button
           onClick={shareCode}
           title="Share Code"
-          className="text-zinc-700 dark:text-white hover:text-blue-500"
+          className="p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition"
         >
           <Share2 size={18} />
         </button>
@@ -273,7 +275,7 @@ export default function TopBar({
         {/* LOGOUT */}
         <button
           onClick={handleLogout}
-          className="text-zinc-700 dark:text-white hover:text-red-500"
+          className="p-2 rounded-md hover:bg-red-100 dark:hover:bg-red-900 transition"
         >
           <LogOut size={18} />
         </button>
