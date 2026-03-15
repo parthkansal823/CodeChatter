@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Github } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
@@ -30,9 +30,18 @@ export default function Login() {
      window.location.href = "http://localhost:8000/auth/github";
   };
 
+  const navigate = useNavigate();
+
   const handleGoogleLogin = () => {
     console.log("Google OAuth Clicked");
     window.location.href = "http://localhost:8000/auth/google";
+  };
+
+  const handleLogout = () => {
+    console.log("Logout clicked");
+    // Clear any stored auth tokens and redirect to the login page
+    localStorage.clear();
+    navigate("/login");
   };
 
   return (
