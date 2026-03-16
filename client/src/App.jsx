@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import CodeRoom from "./pages/CodeRoom";
+import Home from "./pages/Home"; // NEW
 
 function App() {
   return (
@@ -23,14 +24,16 @@ function App() {
 
       <Routes>
 
+        {/* Auth */}
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Auto-create room */}
-        <Route path="/room" element={<CodeRoom />} />
+        {/* Home Dashboard */}
+        <Route path="/home" element={<Home />} />
 
-        {/* Join existing room */}
+        {/* Code Rooms */}
+        <Route path="/room" element={<CodeRoom />} />
         <Route path="/room/:roomId" element={<CodeRoom />} />
 
       </Routes>
