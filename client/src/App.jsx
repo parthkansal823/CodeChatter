@@ -4,7 +4,7 @@ import { Toaster } from "react-hot-toast";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import CodeRoom from "./pages/CodeRoom";
-import Home from "./pages/Home"; // NEW
+import Home from "./pages/Home";
 
 function App() {
   return (
