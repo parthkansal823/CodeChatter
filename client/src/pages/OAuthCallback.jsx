@@ -1,12 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 
 export default function OAuthCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { oauthLogin } = useAuth();
+  const hasCalledRef = useRef(false);
 
   useEffect(() => {
+    // Prevent double calls in development mode (React StrictMode)
+    if (hasCalledRef.current) return;
+    hasCalledRef.current = true;
+
     const handleCallback = async () => {
       try {
         // Get token and user data from URL params (backend redirects with these)
@@ -28,13 +35,24 @@ export default function OAuthCallback() {
           return;
         }
 
-        // Store token and user data in localStorage
-        const user = { id, email, username };
-        localStorage.setItem("authToken", token);
-        localStorage.setItem("user", JSON.stringify(user));
+        // Create user object
+        const userData = {
+          id,
+          email,
+          username
+        };
 
-        toast.success("Logged in successfully!");
-        navigate("/home");
+        // Use OAuth login method from AuthContext
+        const result = await oauthLogin(token, userData);
+
+        if (result.success) {
+          toast.success("Logged in successfully!");
+          // Navigate to home with replace to prevent back button
+          navigate("/home", { replace: true });
+        } else {
+          toast.error(result.error || "Login failed");
+          navigate("/auth");
+        }
       } catch (error) {
         console.error("OAuth callback error:", error);
         toast.error("Login failed. Please try again.");
@@ -43,7 +61,7 @@ export default function OAuthCallback() {
     };
 
     handleCallback();
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, oauthLogin]);
 
   return (
     <div className="flex items-center justify-center h-screen bg-black">

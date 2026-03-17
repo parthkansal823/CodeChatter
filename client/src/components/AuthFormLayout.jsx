@@ -11,11 +11,11 @@ export default function AuthFormLayout({ title, subtitle, children, onMouseMove,
       className="relative min-h-screen bg-black overflow-hidden text-white"
     >
       {/* Grid Background */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:40px_40px] animate-gridMove" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:30px_30px] sm:bg-[size:40px_40px] animate-gridMove" />
 
       {/* Animated Blobs */}
-      <div className="absolute top-[-200px] left-[-200px] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-[-200px] right-[-200px] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-3xl animate-pulse" />
+      <div className="absolute top-[-150px] sm:top-[-200px] left-[-150px] sm:left-[-200px] w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-purple-600/20 rounded-full blur-3xl animate-pulse" />
+      <div className="absolute bottom-[-150px] sm:bottom-[-200px] right-[-150px] sm:right-[-200px] w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-blue-600/20 rounded-full blur-3xl animate-pulse" />
 
       {/* Noise Overlay */}
       <div className="absolute inset-0 opacity-5 bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
@@ -23,12 +23,12 @@ export default function AuthFormLayout({ title, subtitle, children, onMouseMove,
       <div className="relative z-10 flex min-h-screen">
 
         {/* Hero Section */}
-        <div className="hidden lg:flex w-1/2 flex-col justify-center px-20">
+        <div className="hidden lg:flex w-1/2 flex-col justify-center px-12 xl:px-20">
           <motion.h1
             initial={{ opacity: 0, x: -60 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 1 }}
-            className="text-6xl font-bold leading-tight"
+            className="text-5xl lg:text-6xl font-bold leading-tight"
           >
             {isSignup ? "Join." : "Code."}
             <br />
@@ -43,13 +43,13 @@ export default function AuthFormLayout({ title, subtitle, children, onMouseMove,
             initial={{ opacity: 0, x: -40 }}
             animate={{ opacity: 0.8, x: 0 }}
             transition={{ delay: 0.4 }}
-            className="mt-6 text-gray-400 max-w-md"
+            className="mt-6 text-gray-400 max-w-md text-sm lg:text-base"
           >
             Real-time secure communication for developers.
           </motion.p>
 
           {/* Terminal Animation */}
-          <div className="mt-8 bg-black/60 border border-white/10 rounded-xl p-4 text-green-400 text-sm font-mono shadow-inner">
+          <div className="mt-8 bg-black/60 border border-white/10 rounded-xl p-4 text-green-400 text-xs lg:text-sm font-mono shadow-inner">
             <TypeAnimation
               sequence={[
                 isSignup ? "Creating secure developer account..." : "Initializing secure connection...",
@@ -67,7 +67,7 @@ export default function AuthFormLayout({ title, subtitle, children, onMouseMove,
         </div>
 
         {/* Auth Card */}
-        <div className="flex w-full lg:w-1/2 items-center justify-center px-6">
+        <div className="flex w-full lg:w-1/2 items-center justify-center px-4 sm:px-6 py-6 lg:py-0">
           {children}
         </div>
       </div>

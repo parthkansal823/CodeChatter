@@ -110,28 +110,28 @@ export default function TopBar({
   const CurrentIcon = language.icon;
 
   return (
-    <div className="h-14 border-b flex items-center justify-between px-6
+    <div className="h-14 border-b flex items-center justify-between px-3 sm:px-4 md:px-6 gap-2 sm:gap-4
       bg-white dark:bg-zinc-950
-      border-zinc-300 dark:border-zinc-800">
+      border-zinc-300 dark:border-zinc-800 overflow-x-auto">
 
       {/* LEFT */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-2 sm:gap-4 md:gap-5 flex-shrink-0">
 
-        <span className="font-semibold text-zinc-800 dark:text-white">
+        <span className="font-semibold text-xs sm:text-sm md:text-base text-zinc-800 dark:text-white whitespace-nowrap">
           Room: {roomId}
         </span>
 
         <button
           onClick={copyRoomLink}
-          className="flex items-center gap-1 text-sm
+          className="hidden sm:flex items-center gap-1 text-xs md:text-sm
           text-zinc-600 dark:text-zinc-400
-          hover:text-black dark:hover:text-white transition"
+          hover:text-black dark:hover:text-white transition flex-shrink-0"
         >
           <Copy size={14} />
           Copy Link
         </button>
 
-        <span className={`text-xs px-2 py-1 rounded font-medium ${
+        <span className={`text-xs px-2 py-1 rounded font-medium flex-shrink-0 ${
           connectionStatus === "connected"
             ? "bg-green-600 text-white"
             : "bg-red-600 text-white"
@@ -142,23 +142,23 @@ export default function TopBar({
       </div>
 
       {/* CENTER */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
 
         {/* LANGUAGE DROPDOWN */}
         <div className="relative" ref={dropdownRef}>
 
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2
+            className="flex items-center gap-1 md:gap-2
             bg-zinc-200 dark:bg-zinc-800
             border border-zinc-300 dark:border-zinc-700
-            px-3 py-1.5 rounded text-sm
+            px-2 md:px-3 py-1.5 rounded text-xs md:text-sm
             text-zinc-800 dark:text-white
-            hover:bg-zinc-300 dark:hover:bg-zinc-700 transition"
+            hover:bg-zinc-300 dark:hover:bg-zinc-700 transition whitespace-nowrap flex-shrink-0"
           >
-            <CurrentIcon size={16} />
-            {language.label}
-            <ChevronDown size={16} />
+            <CurrentIcon size={14} className="md:w-4 md:h-4" />
+            <span className="hidden md:inline">{language.label}</span>
+            <ChevronDown size={14} className="md:w-4 md:h-4" />
           </button>
 
           {dropdownOpen && (
@@ -197,10 +197,10 @@ export default function TopBar({
       </div>
 
       {/* RIGHT */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-1 md:gap-4 ml-auto flex-shrink-0">
 
         {/* ACTIVE USERS */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
 
           {sortedUsers.map((user, index) => {
 
@@ -210,18 +210,18 @@ export default function TopBar({
               <div
                 key={user.id}
                 title={`${user.name} ${user.active ? "(online)" : "(offline)"}`}
-                className={`relative w-8 h-8 rounded-full flex items-center justify-center
+                className={`relative w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center
                 text-white text-xs font-semibold cursor-pointer
                 ${color}
                 ${user.active ? "ring-2 ring-green-400" : "opacity-40"}
                 border border-white dark:border-zinc-900
-                hover:scale-110 transition`}
+                hover:scale-110 transition flex-shrink-0`}
               >
 
                 {user.name.charAt(0)}
 
                 {user.active && (
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5
+                  <span className="absolute bottom-0 right-0 w-2 h-2 md:w-2.5 md:h-2.5
                     bg-green-400 border-2 border-white dark:border-zinc-950
                     rounded-full"
                   />
@@ -237,28 +237,28 @@ export default function TopBar({
         {/* GITHUB */}
         <button
           onClick={() => window.open("https://github.com", "_blank")}
-          className="p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition"
+          className="p-1.5 md:p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition flex-shrink-0"
         >
-          <Github size={18} />
+          <Github size={16} className="md:w-4.5 md:h-4.5" />
         </button>
 
         {/* SHARE */}
         <button
           onClick={shareCode}
           title="Share Code"
-          className="p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition"
+          className="p-1.5 md:p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition flex-shrink-0"
         >
-          <Share2 size={18} />
+          <Share2 size={16} className="md:w-4.5 md:h-4.5" />
         </button>
 
         {/* BACK TO HOME */}
         <button
           onClick={handleBackToHome}
-          className="p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition
-          text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white"
+          className="p-1.5 md:p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition
+          text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white flex-shrink-0"
           title="Back to Dashboard"
         >
-          <Home size={18} />
+          <Home size={16} className="md:w-4.5 md:h-4.5" />
         </button>
 
       </div>
