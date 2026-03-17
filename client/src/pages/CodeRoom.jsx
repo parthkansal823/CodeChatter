@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
+import Navbar from "../components/Navbar";
 import TopBar from "../components/TopBar";
 import FileExplorer from "../components/FileExplorer";
 import CodeEditor from "../components/CodeEditor";
 import RightSidebar from "../components/RightSidebar";
 import BottomPanel from "../components/BottomPanel";
 
-export default function CodeRoom() {
+export default function CodeRoom({ theme: propTheme, onThemeChange }) {
 
   const { roomId } = useParams();
   const navigate = useNavigate();
 
   const [selectedLanguage, setSelectedLanguage] = useState("cpp");
 
-  // 🌙 Theme (load from localStorage if exists)
+  // 🌙 Theme (load from prop or localStorage if exists)
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem("theme") || "vs-dark";
+    return propTheme || localStorage.getItem("theme") || "vs-dark";
   });
 
   // ⭐ Apply theme globally
@@ -47,8 +48,16 @@ export default function CodeRoom() {
 
   }, [roomId, navigate]);
 
+  const handleThemeChange = (newTheme) => {
+    setTheme(newTheme);
+    onThemeChange?.(newTheme);
+  };
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-white dark:bg-zinc-950 text-black dark:text-white">
+
+      {/* Navbar */}
+      <Navbar theme={theme} onThemeChange={handleThemeChange} />
 
       {/* Top Bar */}
       <TopBar

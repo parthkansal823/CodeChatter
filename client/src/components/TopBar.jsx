@@ -1,5 +1,6 @@
-import { Github, Share2, LogOut, ChevronDown, Copy, Sun, Moon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { Github, Share2, ChevronDown, Copy, Home } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
 import {
@@ -33,14 +34,13 @@ const LANGUAGES = [
 
 export default function TopBar({
   onLanguageChange,
-  onThemeChange,
   roomId,
   code
 }) {
+  const navigate = useNavigate();
 
   const [language, setLanguage] = useState(LANGUAGES[0]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [theme, setTheme] = useState("vs-dark");
 
   const dropdownRef = useRef();
 
@@ -83,12 +83,6 @@ export default function TopBar({
     setDropdownOpen(false);
   };
 
-  const toggleTheme = () => {
-    const newTheme = theme === "vs-dark" ? "light" : "vs-dark";
-    setTheme(newTheme);
-    onThemeChange?.(newTheme);
-  };
-
   const copyRoomLink = async () => {
     const link = `${window.location.origin}/room/${roomId}`;
 
@@ -109,8 +103,8 @@ export default function TopBar({
     }
   };
 
-  const handleLogout = () => {
-    window.location.href = "/login";
+  const handleBackToHome = () => {
+    navigate("/home");
   };
 
   const CurrentIcon = language.icon;
@@ -200,21 +194,6 @@ export default function TopBar({
 
         </div>
 
-        {/* THEME TOGGLE */}
-        <button
-          onClick={toggleTheme}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-md
-          border border-zinc-300 dark:border-zinc-700
-          bg-zinc-200 dark:bg-zinc-800
-          hover:bg-zinc-300 dark:hover:bg-zinc-700
-          text-sm font-medium
-          text-zinc-800 dark:text-white
-          transition"
-        >
-          {theme === "vs-dark" ? <Moon size={16}/> : <Sun size={16}/>}
-          {theme === "vs-dark" ? "Dark" : "Light"}
-        </button>
-
       </div>
 
       {/* RIGHT */}
@@ -272,12 +251,14 @@ export default function TopBar({
           <Share2 size={18} />
         </button>
 
-        {/* LOGOUT */}
+        {/* BACK TO HOME */}
         <button
-          onClick={handleLogout}
-          className="p-2 rounded-md hover:bg-red-100 dark:hover:bg-red-900 transition"
+          onClick={handleBackToHome}
+          className="p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition
+          text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white"
+          title="Back to Dashboard"
         >
-          <LogOut size={18} />
+          <Home size={18} />
         </button>
 
       </div>
