@@ -1,6 +1,7 @@
 /**
  * Security utility functions for input validation, sanitization, and protection
  */
+const SPECIAL_CHAR_PATTERN = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/;
 
 // ============================================================================
 // INPUT VALIDATION
@@ -34,7 +35,7 @@ export const validatePassword = (password) => {
   const hasUppercase = /[A-Z]/.test(password);
   const hasLowercase = /[a-z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
-  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  const hasSpecialChar = SPECIAL_CHAR_PATTERN.test(password);
 
   return hasUppercase && hasLowercase && hasNumber && hasSpecialChar;
 };
@@ -57,7 +58,7 @@ export const getPasswordStrength = (password) => {
   if (password.length >= 12) score++;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
   if (/[0-9]/.test(password)) score++;
-  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) score++;
+  if (SPECIAL_CHAR_PATTERN.test(password)) score++;
   return Math.min(score, 4);
 };
 
@@ -196,15 +197,29 @@ export const getSecureHeaders = (token) => {
  * Prevents inline scripts and external script injection
  */
 export const setupCSP = () => {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const existingPolicy = document.querySelector(
+    'meta[http-equiv="Content-Security-Policy"]'
+  );
+
+  if (existingPolicy) {
+    return;
+  }
+
   const meta = document.createElement('meta');
   meta.httpEquiv = 'Content-Security-Policy';
   meta.content = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com", // Google OAuth needs some exceptions
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
-    "font-src 'self'",
-    "connect-src 'self' http://localhost:8000 https:",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 ws: wss: https:",
+    "worker-src 'self' blob:",
+    "child-src 'self' blob:",
     "frame-src 'self' https://accounts.google.com",
   ].join('; ');
 
@@ -303,11 +318,23 @@ export const secureFetch = async (url, options = {}, token = null) => {
 
     // Handle non-2xx responses
     if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+      try {
+        const errorPayload = await response.clone().json();
+
+        if (typeof errorPayload?.detail === "string" && errorPayload.detail.trim()) {
+          errorMessage = errorPayload.detail;
+        }
+      } catch {
+        // Ignore JSON parse failures and fall back to status text.
+      }
+
       if (response.status === 401) {
         // Unauthorized - token likely expired
         clearSecureData();
       }
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(errorMessage);
     }
 
     return await response.json();

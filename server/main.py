@@ -1,142 +1,998 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-from starlette.middleware.sessions import SessionMiddleware
-from authlib.integrations.starlette_client import OAuth
-from jose import jwt
+from __future__ import annotations
+
+import hashlib
+import hmac
+import logging
 import os
-from datetime import datetime, timedelta
+import re
+import secrets
+import shutil
+import subprocess
+import tempfile
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+from pathlib import Path, PurePosixPath
+from typing import Any
+from urllib.parse import urlencode, urlparse
+
+from authlib.integrations.starlette_client import OAuth
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from jose import JWTError, jwt
+from pydantic import BaseModel, Field, field_validator
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+
+try:
+  from .database import MongoRepository
+except ImportError:
+  from database import MongoRepository
 
 load_dotenv()
 
-app = FastAPI()
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
+logger = logging.getLogger("codechatter.server")
 
-# CORS middleware
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXPIRATION_DAYS = int(os.getenv("JWT_EXPIRATION_DAYS", "7"))
+SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
+SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY") or secrets.token_urlsafe(32)
+ALLOWED_ORIGINS = [
+  origin.strip()
+  for origin in os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:3000"
+  ).split(",")
+  if origin.strip()
+]
+DEFAULT_FRONTEND_URL = os.getenv(
+  "FRONTEND_URL",
+  ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "http://localhost:5173"
+)
+DEFAULT_CALLBACK_URL = f"{DEFAULT_FRONTEND_URL.rstrip('/')}/auth/callback"
+RUN_TIMEOUT_SECONDS = int(os.getenv("CODE_RUN_TIMEOUT_SECONDS", "15"))
+
+APP_DIR = Path(__file__).resolve().parent
+repository = MongoRepository(
+  mongo_uri=os.getenv("MONGODB_URI", "mongodb://localhost:27017"),
+  database_name=os.getenv("MONGODB_DB_NAME", "codechatter"),
+  legacy_data_file=APP_DIR / "data" / "storage.json",
+)
+
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
+ROOM_ID_PATTERN = re.compile(r"^[A-Z0-9]{6,20}$")
+TEMPLATE_ID_PATTERN = re.compile(r"^[a-z0-9-]{3,40}$")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+  repository.initialize()
+  yield
+  repository.close()
+
+
+app = FastAPI(title="CodeChatter API", lifespan=lifespan)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+  async def dispatch(self, request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+    if ENVIRONMENT == "production":
+      response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+  CORSMiddleware,
+  allow_origins=ALLOWED_ORIGINS,
+  allow_credentials=True,
+  allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+  max_age=3600,
+)
+app.add_middleware(
+  SessionMiddleware,
+  secret_key=SESSION_SECRET_KEY,
+  same_site="lax",
+  https_only=ENVIRONMENT == "production",
 )
 
 oauth = OAuth()
-app.add_middleware(SessionMiddleware, secret_key="supersecretkey")
+REGISTERED_OAUTH_PROVIDERS: set[str] = set()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this")
-oauth.register(
-    name="google",
-    client_id=os.getenv("GOOGLE_CLIENT_ID"),
-    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    client_kwargs={"scope": "openid email profile"},
-)
 
-oauth.register(
-    name="github",
-    client_id=os.getenv("GITHUB_CLIENT_ID"),
-    client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
-    access_token_url="https://github.com/login/oauth/access_token",
-    authorize_url="https://github.com/login/oauth/authorize",
-    api_base_url="https://api.github.com/",
-    client_kwargs={"scope": "user:email"},
-)
+def register_oauth_providers() -> None:
+  google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+  google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+
+  if google_client_id and google_client_secret:
+    oauth.register(
+      name="google",
+      client_id=google_client_id,
+      client_secret=google_client_secret,
+      server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+      client_kwargs={"scope": "openid email profile"},
+    )
+    REGISTERED_OAUTH_PROVIDERS.add("google")
+
+  github_client_id = os.getenv("GITHUB_CLIENT_ID")
+  github_client_secret = os.getenv("GITHUB_CLIENT_SECRET")
+
+  if github_client_id and github_client_secret:
+    oauth.register(
+      name="github",
+      client_id=github_client_id,
+      client_secret=github_client_secret,
+      access_token_url="https://github.com/login/oauth/access_token",
+      authorize_url="https://github.com/login/oauth/authorize",
+      api_base_url="https://api.github.com/",
+      client_kwargs={"scope": "user:email"},
+    )
+    REGISTERED_OAUTH_PROVIDERS.add("github")
+
+
+register_oauth_providers()
+
+
+class LoginRequest(BaseModel):
+  email: str = Field(min_length=3, max_length=254)
+  password: str = Field(min_length=8, max_length=128)
+
+  @field_validator("email")
+  @classmethod
+  def normalize_identifier(cls, value: str) -> str:
+    normalized = value.strip()
+
+    if "@" in normalized:
+      if not EMAIL_PATTERN.fullmatch(normalized):
+        raise ValueError("Enter a valid email address")
+      return normalized.lower()
+
+    if not USERNAME_PATTERN.fullmatch(normalized):
+      raise ValueError("Enter a valid email address or username")
+
+    return normalized
+
+
+class SignupRequest(BaseModel):
+  email: str = Field(min_length=5, max_length=254)
+  username: str = Field(min_length=3, max_length=32)
+  password: str = Field(min_length=8, max_length=128)
+
+  @field_validator("email")
+  @classmethod
+  def validate_email(cls, value: str) -> str:
+    normalized = value.strip().lower()
+
+    if not EMAIL_PATTERN.fullmatch(normalized):
+      raise ValueError("Enter a valid email address")
+
+    return normalized
+
+  @field_validator("username")
+  @classmethod
+  def validate_username(cls, value: str) -> str:
+    normalized = value.strip()
+
+    if not USERNAME_PATTERN.fullmatch(normalized):
+      raise ValueError("Username must be 3-32 characters and use only letters, numbers, _ and -")
+
+    return normalized
+
+  @field_validator("password")
+  @classmethod
+  def validate_password(cls, value: str) -> str:
+    has_upper = any(character.isupper() for character in value)
+    has_lower = any(character.islower() for character in value)
+    has_number = any(character.isdigit() for character in value)
+    has_special = any(not character.isalnum() for character in value)
+
+    if not (has_upper and has_lower and has_number and has_special):
+      raise ValueError(
+        "Password must contain uppercase, lowercase, number, and special character"
+      )
+
+    return value
+
+
+class RoomCreateRequest(BaseModel):
+  name: str | None = Field(default=None, max_length=80)
+  description: str | None = Field(default=None, max_length=240)
+  is_public: bool = False
+  templateId: str | None = Field(default="blank", max_length=40)
+
+  @field_validator("name", "description")
+  @classmethod
+  def normalize_optional_text(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+
+    stripped = value.strip()
+    return stripped or None
+
+  @field_validator("templateId")
+  @classmethod
+  def normalize_template_id(cls, value: str | None) -> str:
+    normalized = (value or "blank").strip().lower()
+
+    if not TEMPLATE_ID_PATTERN.fullmatch(normalized):
+      raise ValueError("Invalid room template")
+
+    return normalized
+
+
+class RoomJoinRequest(BaseModel):
+  roomId: str = Field(min_length=6, max_length=20)
+
+  @field_validator("roomId")
+  @classmethod
+  def validate_room_id(cls, value: str) -> str:
+    normalized = value.strip().upper()
+
+    if not ROOM_ID_PATTERN.fullmatch(normalized):
+      raise ValueError("Room ID must be 6-20 uppercase letters or numbers")
+
+    return normalized
+
+
+class RoomWorkspaceUpdateRequest(BaseModel):
+  tree: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RoomRunRequest(BaseModel):
+  filePath: str = Field(min_length=1, max_length=260)
+  stdin: str | None = Field(default="", max_length=20_000)
+
+  @field_validator("filePath")
+  @classmethod
+  def normalize_file_path(cls, value: str) -> str:
+    return normalize_workspace_path(value)
+
+  @field_validator("stdin")
+  @classmethod
+  def normalize_stdin(cls, value: str | None) -> str:
+    return value or ""
+
+
+def utc_now() -> datetime:
+  return datetime.now(timezone.utc)
+
+
+def hash_password(password: str, salt_hex: str | None = None) -> tuple[str, str]:
+  salt = bytes.fromhex(salt_hex) if salt_hex else secrets.token_bytes(16)
+  password_hash = hashlib.pbkdf2_hmac(
+    "sha256",
+    password.encode("utf-8"),
+    salt,
+    150_000,
+  )
+  return salt.hex(), password_hash.hex()
+
+
+def verify_password(password: str, password_hash: str, salt_hex: str) -> bool:
+  _, calculated_hash = hash_password(password, salt_hex)
+  return hmac.compare_digest(password_hash, calculated_hash)
+
+
+def create_access_token(user: dict[str, Any]) -> str:
+  issued_at = utc_now()
+  expires_at = issued_at + timedelta(days=JWT_EXPIRATION_DAYS)
+  payload = {
+    "sub": user["id"],
+    "email": user["email"],
+    "username": user["username"],
+    "iat": int(issued_at.timestamp()),
+    "exp": int(expires_at.timestamp()),
+  }
+  return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def get_bearer_token(request: Request) -> str:
+  auth_header = request.headers.get("Authorization", "")
+  scheme, _, token = auth_header.partition(" ")
+
+  if scheme.lower() != "bearer" or not token:
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Missing or invalid authorization header",
+    )
+
+  return token
+
+
+def get_current_user(request: Request) -> dict[str, Any]:
+  token = get_bearer_token(request)
+
+  try:
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+  except JWTError as error:
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Invalid or expired token",
+    ) from error
+
+  user_id = payload.get("sub")
+
+  if not user_id:
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Token is missing a subject",
+    )
+
+  user = repository.get_user_by_id(user_id)
+
+  if not user:
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="User no longer exists",
+    )
+
+  return user
+
+
+def validate_room_id_value(room_id: str) -> str:
+  normalized = room_id.strip().upper()
+
+  if not ROOM_ID_PATTERN.fullmatch(normalized):
+    raise HTTPException(
+      status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+      detail="Room ID must be 6-20 uppercase letters or numbers",
+    )
+
+  return normalized
+
+
+def normalize_workspace_path(value: str) -> str:
+  raw_value = value.strip().replace("\\", "/")
+  path = PurePosixPath(raw_value)
+
+  if path.is_absolute():
+    raise ValueError("Workspace paths must be relative")
+
+  parts = [part for part in path.parts if part not in {"", "."}]
+
+  if not parts or any(part == ".." for part in parts):
+    raise ValueError("Invalid workspace path")
+
+  return "/".join(parts)
+
+
+def iter_workspace_files(
+  nodes: list[dict[str, Any]],
+  parent_path: str = "",
+) -> list[tuple[str, str]]:
+  files: list[tuple[str, str]] = []
+
+  for node in nodes:
+    node_name = str(node.get("name", "")).strip()
+
+    if not node_name:
+      continue
+
+    current_path = f"{parent_path}/{node_name}" if parent_path else node_name
+
+    if node.get("type") == "file":
+      files.append((current_path, str(node.get("content", ""))))
+      continue
+
+    if node.get("type") == "folder":
+      files.extend(iter_workspace_files(node.get("children", []), current_path))
+
+  return files
+
+
+def find_installed_command(*candidates: str) -> str | None:
+  for candidate in candidates:
+    executable_path = shutil.which(candidate)
+    if executable_path:
+      return executable_path
+
+  return None
+
+
+def run_process(
+  command: list[str],
+  cwd: str,
+  stdin_text: str = "",
+) -> dict[str, Any]:
+  start_time = utc_now()
+
+  try:
+    completed = subprocess.run(
+      command,
+      cwd=cwd,
+      input=stdin_text,
+      text=True,
+      capture_output=True,
+      timeout=RUN_TIMEOUT_SECONDS,
+      shell=False,
+      check=False,
+    )
+  except subprocess.TimeoutExpired as error:
+    return {
+      "stdout": error.stdout or "",
+      "stderr": (error.stderr or "") + f"\nProcess timed out after {RUN_TIMEOUT_SECONDS} seconds.",
+      "exitCode": None,
+      "runtimeMs": int((utc_now() - start_time).total_seconds() * 1000),
+    }
+  except OSError as error:
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail=f"Could not start the configured runner: {error}",
+    ) from error
+
+  return {
+    "stdout": completed.stdout,
+    "stderr": completed.stderr,
+    "exitCode": completed.returncode,
+    "runtimeMs": int((utc_now() - start_time).total_seconds() * 1000),
+  }
+
+
+def build_run_plan(workspace_root: Path, relative_path: str) -> dict[str, Any]:
+  target_file = workspace_root / PurePosixPath(relative_path)
+  extension = target_file.suffix.lower()
+
+  if extension == ".py":
+    runner = find_installed_command("python", "py")
+
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Python is not installed on the server")
+
+    return {
+      "compile": None,
+      "run": [runner, str(target_file)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension in {".js", ".mjs", ".cjs"}:
+    runner = find_installed_command("node")
+
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Node.js is not installed on the server")
+
+    return {
+      "compile": None,
+      "run": [runner, str(target_file)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension == ".ts":
+    runner = find_installed_command("tsx", "ts-node")
+
+    if runner is None:
+      raise HTTPException(
+        status_code=400,
+        detail="TypeScript execution is not available. Install `tsx` or `ts-node` first.",
+      )
+
+    return {
+      "compile": None,
+      "run": [runner, str(target_file)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension == ".php":
+    runner = find_installed_command("php")
+
+    if runner is None:
+      raise HTTPException(status_code=400, detail="PHP is not installed on the server")
+
+    return {
+      "compile": None,
+      "run": [runner, str(target_file)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension == ".rb":
+    runner = find_installed_command("ruby")
+
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Ruby is not installed on the server")
+
+    return {
+      "compile": None,
+      "run": [runner, str(target_file)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension == ".go":
+    runner = find_installed_command("go")
+
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Go is not installed on the server")
+
+    return {
+      "compile": None,
+      "run": [runner, "run", str(target_file)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension == ".java":
+    javac = find_installed_command("javac")
+    java = find_installed_command("java")
+
+    if javac is None or java is None:
+      raise HTTPException(status_code=400, detail="Java is not installed on the server")
+
+    return {
+      "compile": [javac, str(target_file)],
+      "run": [java, target_file.stem],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension == ".c":
+    compiler = find_installed_command("gcc", "clang")
+
+    if compiler is None:
+      raise HTTPException(status_code=400, detail="A C compiler is not installed on the server")
+
+    binary_name = "codechatter-c.exe" if os.name == "nt" else "codechatter-c"
+    binary_path = workspace_root / binary_name
+    return {
+      "compile": [compiler, str(target_file), "-o", str(binary_path)],
+      "run": [str(binary_path)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension in {".cpp", ".cc", ".cxx"}:
+    compiler = find_installed_command("g++", "clang++")
+
+    if compiler is None:
+      raise HTTPException(status_code=400, detail="A C++ compiler is not installed on the server")
+
+    binary_name = "codechatter-cpp.exe" if os.name == "nt" else "codechatter-cpp"
+    binary_path = workspace_root / binary_name
+    return {
+      "compile": [compiler, str(target_file), "-o", str(binary_path)],
+      "run": [str(binary_path)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension == ".rs":
+    compiler = find_installed_command("rustc")
+
+    if compiler is None:
+      raise HTTPException(status_code=400, detail="Rust is not installed on the server")
+
+    binary_name = "codechatter-rust.exe" if os.name == "nt" else "codechatter-rust"
+    binary_path = workspace_root / binary_name
+    return {
+      "compile": [compiler, str(target_file), "-o", str(binary_path)],
+      "run": [str(binary_path)],
+      "cwd": str(target_file.parent),
+    }
+
+  if extension in {".html", ".css", ".json", ".md"}:
+    raise HTTPException(
+      status_code=400,
+      detail="This file type is not directly runnable. Use the browser preview or switch to a script file.",
+    )
+
+  raise HTTPException(
+    status_code=400,
+    detail=f"Running `{extension or 'this file type'}` is not supported yet.",
+  )
+
+
+def execute_workspace_file(
+  workspace_tree: list[dict[str, Any]],
+  file_path: str,
+  stdin_text: str,
+) -> dict[str, Any]:
+  normalized_path = normalize_workspace_path(file_path)
+  workspace_files = iter_workspace_files(workspace_tree)
+  file_lookup = {relative_path: content for relative_path, content in workspace_files}
+
+  if normalized_path not in file_lookup:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail="The selected file does not exist in this room workspace",
+    )
+
+  with tempfile.TemporaryDirectory(prefix="codechatter-run-") as temp_dir:
+    workspace_root = Path(temp_dir)
+
+    for relative_path, content in workspace_files:
+      target_path = workspace_root / PurePosixPath(relative_path)
+      target_path.parent.mkdir(parents=True, exist_ok=True)
+      target_path.write_text(content, encoding="utf-8")
+
+    run_plan = build_run_plan(workspace_root, normalized_path)
+    compile_command = run_plan["compile"]
+    run_command = run_plan["run"]
+    working_directory = run_plan["cwd"]
+
+    if compile_command is not None:
+      compile_result = run_process(compile_command, working_directory)
+      compile_result["phase"] = "compile"
+      compile_result["command"] = " ".join(compile_command)
+      compile_result["filePath"] = normalized_path
+
+      if compile_result["exitCode"] not in {0, None}:
+        return compile_result
+
+    run_result = run_process(run_command, working_directory, stdin_text)
+    run_result["phase"] = "run"
+    run_result["command"] = " ".join(run_command)
+    run_result["filePath"] = normalized_path
+
+    if compile_command is not None:
+      run_result["compileCommand"] = " ".join(compile_command)
+
+    return run_result
+
+
+def get_safe_redirect_uri(redirect_uri: str | None) -> str:
+  if not redirect_uri:
+    return DEFAULT_CALLBACK_URL
+
+  try:
+    parsed = urlparse(redirect_uri)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+  except ValueError:
+    return DEFAULT_CALLBACK_URL
+
+  if parsed.scheme in {"http", "https"} and origin in ALLOWED_ORIGINS:
+    return redirect_uri
+
+  return DEFAULT_CALLBACK_URL
+
+
+def build_frontend_error_redirect(error_code: str) -> str:
+  return f"{DEFAULT_FRONTEND_URL.rstrip('/')}/auth?{urlencode({'error': error_code})}"
+
+
+@app.get("/")
+def home() -> dict[str, Any]:
+  return {
+    "status": "server running",
+    "oauthProviders": sorted(REGISTERED_OAUTH_PROVIDERS),
+    "database": repository.health(),
+  }
+
+
+@app.get("/api/health")
+def health() -> dict[str, Any]:
+  return {
+    "status": "ok",
+    "database": repository.health(),
+  }
+
+
+@app.post("/api/auth/signup")
+def signup(payload: SignupRequest) -> dict[str, Any]:
+  if repository.get_user_by_email(payload.email):
+    raise HTTPException(
+      status_code=status.HTTP_409_CONFLICT,
+      detail="This email is already registered",
+    )
+
+  if repository.get_user_by_username(payload.username):
+    raise HTTPException(
+      status_code=status.HTTP_409_CONFLICT,
+      detail="This username is already taken",
+    )
+
+  salt_hex, password_hash = hash_password(payload.password)
+  user = repository.create_user(
+    email=payload.email,
+    username=payload.username,
+    password_hash=password_hash,
+    password_salt=salt_hex,
+  )
+
+  return {
+    "token": create_access_token(user),
+    "user": repository.serialize_user(user),
+  }
+
+
+@app.post("/api/auth/login")
+def login(payload: LoginRequest) -> dict[str, Any]:
+  user = (
+    repository.get_user_by_email(payload.email)
+    if "@" in payload.email
+    else repository.get_user_by_username(payload.email)
+  )
+
+  if not user or not user.get("password_hash") or not verify_password(
+    payload.password,
+    user["password_hash"],
+    user["password_salt"],
+  ):
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Invalid email/username or password",
+    )
+
+  return {
+    "token": create_access_token(user),
+    "user": repository.serialize_user(user),
+  }
+
+
+@app.post("/api/auth/logout")
+def logout(_: dict[str, Any] = Depends(get_current_user)) -> dict[str, bool]:
+  return {"success": True}
+
+
+@app.get("/api/auth/me")
+def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+  return repository.serialize_user(current_user)
+
+
+@app.get("/api/rooms/templates")
+def get_room_templates() -> list[dict[str, Any]]:
+  return repository.list_room_templates()
+
+
+@app.post("/api/rooms/create")
+def create_room(
+  payload: RoomCreateRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  try:
+    return repository.create_room(
+      owner_id=current_user["id"],
+      name=payload.name,
+      description=payload.description,
+      is_public=payload.is_public,
+      template_id=payload.templateId,
+    )
+  except ValueError as error:
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail=str(error),
+    ) from error
+
+
+@app.post("/api/rooms/join")
+def join_room(
+  payload: RoomJoinRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  try:
+    return repository.join_room(
+      user_id=current_user["id"],
+      room_id=payload.roomId,
+    )
+  except ValueError as error:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail=str(error),
+    ) from error
+
+
+@app.get("/api/rooms")
+def get_rooms(current_user: dict[str, Any] = Depends(get_current_user)) -> list[dict[str, Any]]:
+  return repository.list_user_rooms(current_user["id"])
+
+
+@app.get("/api/rooms/public")
+def get_public_rooms() -> list[dict[str, Any]]:
+  return repository.list_public_rooms()
+
+
+@app.delete("/api/rooms/{room_id}")
+def delete_room(
+  room_id: str,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, bool]:
+  normalized_room_id = validate_room_id_value(room_id)
+
+  try:
+    repository.delete_room(current_user["id"], normalized_room_id)
+  except ValueError as error:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail=str(error),
+    ) from error
+  except PermissionError as error:
+    raise HTTPException(
+      status_code=status.HTTP_403_FORBIDDEN,
+      detail=str(error),
+    ) from error
+
+  return {"success": True}
+
+
+@app.get("/api/rooms/{room_id}")
+def get_room(
+  room_id: str,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  normalized_room_id = validate_room_id_value(room_id)
+  room = repository.get_room_for_user(current_user["id"], normalized_room_id)
+
+  if room:
+    return room
+
+  if repository.get_room_by_id(normalized_room_id) is None:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail="Room not found",
+    )
+
+  raise HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="You do not have access to this room",
+  )
+
+
+@app.put("/api/rooms/{room_id}/workspace")
+def save_room_workspace(
+  room_id: str,
+  payload: RoomWorkspaceUpdateRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  normalized_room_id = validate_room_id_value(room_id)
+
+  try:
+    return repository.update_room_workspace(
+      user_id=current_user["id"],
+      room_id=normalized_room_id,
+      workspace_tree=payload.tree,
+    )
+  except ValueError as error:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail=str(error),
+    ) from error
+  except PermissionError as error:
+    raise HTTPException(
+      status_code=status.HTTP_403_FORBIDDEN,
+      detail=str(error),
+    ) from error
+
+
+@app.post("/api/rooms/{room_id}/run")
+def run_room_file(
+  room_id: str,
+  payload: RoomRunRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  normalized_room_id = validate_room_id_value(room_id)
+  room = repository.get_room_by_id(normalized_room_id)
+
+  if room is None:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail="Room not found",
+    )
+
+  if not repository.user_can_access_room(current_user["id"], room):
+    raise HTTPException(
+      status_code=status.HTTP_403_FORBIDDEN,
+      detail="You do not have access to this room",
+    )
+
+  result = execute_workspace_file(
+    room.get("workspace_tree", []),
+    payload.filePath,
+    payload.stdin or "",
+  )
+  repository.touch_room(normalized_room_id)
+  return result
+
+
+@app.get("/api/collaborators")
+def get_collaborators(
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+  return repository.list_collaborators(current_user["id"])
+
 
 @app.get("/auth/google")
-async def login_google(request: Request, redirect_uri: str = None):
-    # Store redirect_uri in session for callback
-    if redirect_uri:
-        request.session["redirect_uri"] = redirect_uri
-    redirect_url = request.url_for("auth_google_callback")
-    return await oauth.google.authorize_redirect(request, redirect_url)
+async def login_google(request: Request, redirect_uri: str | None = None):
+  if "google" not in REGISTERED_OAUTH_PROVIDERS:
+    return RedirectResponse(build_frontend_error_redirect("google_not_configured"))
+
+  request.session["redirect_uri"] = get_safe_redirect_uri(redirect_uri)
+  redirect_url = request.url_for("auth_google_callback")
+  return await oauth.google.authorize_redirect(request, redirect_url)
 
 
 @app.get("/auth/google/callback")
 async def auth_google_callback(request: Request):
-    try:
-        token = await oauth.google.authorize_access_token(request)
-        user = token["userinfo"]
+  if "google" not in REGISTERED_OAUTH_PROVIDERS:
+    return RedirectResponse(build_frontend_error_redirect("google_not_configured"))
 
-        email = user.get("email")
-        name = user.get("name")
-        user_id = user.get("sub")
+  try:
+    token = await oauth.google.authorize_access_token(request)
+    profile = token.get("userinfo", {})
 
-        # Create JWT token
-        payload = {
-            "sub": user_id,
-            "email": email,
-            "username": name.split()[0] if name else email.split("@")[0],
-            "iat": datetime.utcnow(),
-            "exp": datetime.utcnow() + timedelta(days=7)
-        }
-        jwt_token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    email = str(profile.get("email", "")).strip().lower()
+    name = str(profile.get("name", "")).strip()
+    provider_user_id = str(profile.get("sub", "")).strip()
 
-        user_data = {
-            "id": user_id,
-            "email": email,
-            "username": name.split()[0] if name else email.split("@")[0]
-        }
+    if not email or not provider_user_id:
+      raise ValueError("Google OAuth response did not include the required fields")
 
-        # Get redirect_uri from session or default
-        redirect_uri = request.session.get("redirect_uri", "http://localhost:5173/home")
+    username = name.split()[0] if name else email.split("@")[0]
+    user = repository.upsert_oauth_user("google", provider_user_id, email, username)
 
-        # Redirect to frontend callback with token data as query params
-        frontend_url = f"{redirect_uri}?token={jwt_token}&user={user_data['username']}&email={email}&id={user_id}"
-        return RedirectResponse(url=frontend_url)
-    except Exception as e:
-        print(f"Google OAuth error: {e}")
-        return RedirectResponse(url="http://localhost:5173/auth?error=google_auth_failed")
+    jwt_token = create_access_token(user)
+    redirect_uri = request.session.get("redirect_uri", DEFAULT_CALLBACK_URL)
+    query_string = urlencode(
+      {
+        "token": jwt_token,
+        "user": user["username"],
+        "email": user["email"],
+        "id": user["id"],
+      }
+    )
+    return RedirectResponse(url=f"{redirect_uri}?{query_string}")
+  except Exception as error:
+    logger.exception("Google OAuth error: %s", error)
+    return RedirectResponse(build_frontend_error_redirect("google_auth_failed"))
 
 
 @app.get("/auth/github")
-async def login_github(request: Request, redirect_uri: str = None):
-    # Store redirect_uri in session for callback
-    if redirect_uri:
-        request.session["redirect_uri"] = redirect_uri
-    redirect_url = request.url_for("auth_github_callback")
-    return await oauth.github.authorize_redirect(request, redirect_url)
+async def login_github(request: Request, redirect_uri: str | None = None):
+  if "github" not in REGISTERED_OAUTH_PROVIDERS:
+    return RedirectResponse(build_frontend_error_redirect("github_not_configured"))
+
+  request.session["redirect_uri"] = get_safe_redirect_uri(redirect_uri)
+  redirect_url = request.url_for("auth_github_callback")
+  return await oauth.github.authorize_redirect(request, redirect_url)
 
 
 @app.get("/auth/github/callback")
 async def auth_github_callback(request: Request):
-    try:
-        token = await oauth.github.authorize_access_token(request)
+  if "github" not in REGISTERED_OAUTH_PROVIDERS:
+    return RedirectResponse(build_frontend_error_redirect("github_not_configured"))
 
-        resp = await oauth.github.get("user", token=token)
-        profile = resp.json()
+  try:
+    token = await oauth.github.authorize_access_token(request)
+    profile_response = await oauth.github.get("user", token=token)
+    profile = profile_response.json()
 
-        username = profile.get("login")
-        user_id = profile.get("id")
-        email = profile.get("email") or f"{username}@github.com"
+    username = str(profile.get("login", "")).strip()
+    provider_user_id = str(profile.get("id", "")).strip()
+    email = str(profile.get("email", "")).strip().lower()
 
-        # Create JWT token
-        payload = {
-            "sub": user_id,
-            "email": email,
-            "username": username,
-            "iat": datetime.utcnow(),
-            "exp": datetime.utcnow() + timedelta(days=7)
-        }
-        jwt_token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    if not email:
+      emails_response = await oauth.github.get("user/emails", token=token)
+      emails = emails_response.json()
+      primary_email = next(
+        (
+          item.get("email", "").strip().lower()
+          for item in emails
+          if item.get("primary") or item.get("verified")
+        ),
+        "",
+      )
+      email = primary_email
 
-        user_data = {
-            "id": user_id,
-            "email": email,
-            "username": username
-        }
+    if not username or not provider_user_id or not email:
+      raise ValueError("GitHub OAuth response did not include the required fields")
 
-        # Get redirect_uri from session or default
-        redirect_uri = request.session.get("redirect_uri", "http://localhost:5173/home")
+    user = repository.upsert_oauth_user("github", provider_user_id, email, username)
 
-        # Redirect to frontend callback with token data as query params
-        frontend_url = f"{redirect_uri}?token={jwt_token}&user={username}&email={email}&id={user_id}"
-        return RedirectResponse(url=frontend_url)
-    except Exception as e:
-        print(f"GitHub OAuth error: {e}")
-        return RedirectResponse(url="http://localhost:5173/auth?error=github_auth_failed")
-
-
-@app.get("/")
-def home():
-    return {"status": "server running"}
+    jwt_token = create_access_token(user)
+    redirect_uri = request.session.get("redirect_uri", DEFAULT_CALLBACK_URL)
+    query_string = urlencode(
+      {
+        "token": jwt_token,
+        "user": user["username"],
+        "email": user["email"],
+        "id": user["id"],
+      }
+    )
+    return RedirectResponse(url=f"{redirect_uri}?{query_string}")
+  except Exception as error:
+    logger.exception("GitHub OAuth error: %s", error)
+    return RedirectResponse(build_frontend_error_redirect("github_auth_failed"))

@@ -1,268 +1,120 @@
-import { useState, useRef, useEffect } from "react";
-import { Github, Share2, ChevronDown, Copy, Home } from "lucide-react";
+import { Copy, Home, PanelLeft, PanelRight, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
 
-import {
-  SiCplusplus,
-  SiJavascript,
-  SiTypescript,
-  SiPython,
-  SiRust,
-  SiPhp,
-  SiRuby,
-  SiHtml5
-} from "react-icons/si";
+function StatusText({ saveStatus }) {
+  if (saveStatus === "saving") {
+    return <span className="text-amber-600 dark:text-amber-400">Saving...</span>;
+  }
 
-import { DiJava, DiCss3 } from "react-icons/di";
-import { VscJson, VscMarkdown } from "react-icons/vsc";
+  if (saveStatus === "error") {
+    return <span className="text-red-600 dark:text-red-400">Save failed</span>;
+  }
 
-const LANGUAGES = [
-  { label: "C++", value: "cpp", icon: SiCplusplus },
-  { label: "JavaScript", value: "javascript", icon: SiJavascript },
-  { label: "TypeScript", value: "typescript", icon: SiTypescript },
-  { label: "Python", value: "python", icon: SiPython },
-  { label: "Java", value: "java", icon: DiJava },
-  { label: "Rust", value: "rust", icon: SiRust },
-  { label: "PHP", value: "php", icon: SiPhp },
-  { label: "Ruby", value: "ruby", icon: SiRuby },
-  { label: "HTML", value: "html", icon: SiHtml5 },
-  { label: "CSS", value: "css", icon: DiCss3 },
-  { label: "JSON", value: "json", icon: VscJson },
-  { label: "Markdown", value: "markdown", icon: VscMarkdown }
-];
+  return <span>Saved</span>;
+}
 
 export default function TopBar({
-  onLanguageChange,
-  roomId,
-  code
+  room,
+  activePath,
+  collaborators = [],
+  explorerOpen,
+  sidebarOpen,
+  onToggleExplorer,
+  onToggleSidebar,
+  onCopyInvite,
+  onRun,
+  isRunning,
+  saveStatus = "saved"
 }) {
   const navigate = useNavigate();
 
-  const [language, setLanguage] = useState(LANGUAGES[0]);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-
-  const dropdownRef = useRef();
-
-  const users = [
-    { id: 1, name: "Parth", active: false },
-    { id: 2, name: "Niyati", active: true },
-    { id: 3, name: "Aman", active: false },
-    { id: 4, name: "Riya", active: true }
-  ];
-
-  const sortedUsers = [...users].sort(
-    (a, b) => Number(b.active) - Number(a.active)
-  );
-
-  const connectionStatus = "connected";
-
-  const avatarColors = [
-    "bg-red-500",
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-purple-500",
-    "bg-pink-500",
-    "bg-yellow-500"
-  ];
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (!dropdownRef.current?.contains(e.target)) {
-        setDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const handleLanguageSelect = (lang) => {
-    setLanguage(lang);
-    onLanguageChange?.(lang.value);
-    setDropdownOpen(false);
-  };
-
-  const copyRoomLink = async () => {
-    const link = `${window.location.origin}/room/${roomId}`;
-
-    try {
-      await navigator.clipboard.writeText(link);
-      toast.success("Room link copied!");
-    } catch {
-      toast.error("Failed to copy link");
-    }
-  };
-
-  const shareCode = async () => {
-    try {
-      await navigator.clipboard.writeText(code || "");
-      toast.success("Code copied!");
-    } catch {
-      toast.error("Failed to copy code");
-    }
-  };
-
-  const handleBackToHome = () => {
-    navigate("/home");
-  };
-
-  const CurrentIcon = language.icon;
-
   return (
-    <div className="h-14 border-b flex items-center justify-between px-3 sm:px-4 md:px-6 gap-2 sm:gap-4
-      bg-white dark:bg-zinc-950
-      border-zinc-300 dark:border-zinc-800 overflow-x-auto">
-
-      {/* LEFT */}
-      <div className="flex items-center gap-2 sm:gap-4 md:gap-5 flex-shrink-0">
-
-        <span className="font-semibold text-xs sm:text-sm md:text-base text-zinc-800 dark:text-white whitespace-nowrap">
-          Room: {roomId}
-        </span>
-
-        <button
-          onClick={copyRoomLink}
-          className="hidden sm:flex items-center gap-1 text-xs md:text-sm
-          text-zinc-600 dark:text-zinc-400
-          hover:text-black dark:hover:text-white transition flex-shrink-0"
-        >
-          <Copy size={14} />
-          Copy Link
-        </button>
-
-        <span className={`text-xs px-2 py-1 rounded font-medium flex-shrink-0 ${
-          connectionStatus === "connected"
-            ? "bg-green-600 text-white"
-            : "bg-red-600 text-white"
-        }`}>
-          {connectionStatus}
-        </span>
-
-      </div>
-
-      {/* CENTER */}
-      <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
-
-        {/* LANGUAGE DROPDOWN */}
-        <div className="relative" ref={dropdownRef}>
-
+    <div className="border-b border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <button
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-1 md:gap-2
-            bg-zinc-200 dark:bg-zinc-800
-            border border-zinc-300 dark:border-zinc-700
-            px-2 md:px-3 py-1.5 rounded text-xs md:text-sm
-            text-zinc-800 dark:text-white
-            hover:bg-zinc-300 dark:hover:bg-zinc-700 transition whitespace-nowrap flex-shrink-0"
+            onClick={onToggleExplorer}
+            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+              explorerOpen
+                ? "border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white"
+            }`}
+            title="Toggle files"
           >
-            <CurrentIcon size={14} className="md:w-4 md:h-4" />
-            <span className="hidden md:inline">{language.label}</span>
-            <ChevronDown size={14} className="md:w-4 md:h-4" />
+            <PanelLeft size={16} />
+            <span className="hidden sm:inline">Files</span>
           </button>
 
-          {dropdownOpen && (
-            <div className="absolute top-10 left-0 w-56 rounded shadow-lg z-50
-              bg-white dark:bg-zinc-900
-              border border-zinc-300 dark:border-zinc-800">
+          <button
+            onClick={onToggleSidebar}
+            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+              sidebarOpen
+                ? "border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white"
+            }`}
+            title="Toggle tools"
+          >
+            <PanelRight size={16} />
+            <span className="hidden sm:inline">Tools</span>
+          </button>
 
-              {LANGUAGES.map((lang) => {
-
-                const Icon = lang.icon;
-
-                return (
-                  <button
-                    key={lang.value}
-                    onClick={() => handleLanguageSelect(lang)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 text-sm
-                    text-zinc-800 dark:text-white
-                    hover:bg-zinc-200 dark:hover:bg-zinc-800 transition
-                    ${
-                      language.value === lang.value
-                        ? "bg-zinc-200 dark:bg-zinc-800"
-                        : ""
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {lang.label}
-                  </button>
-                );
-              })}
-
-            </div>
-          )}
-
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              {room?.name || "Workspace"}
+            </p>
+            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+              {activePath || "No file selected"}
+            </p>
+          </div>
         </div>
 
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="hidden text-xs text-zinc-500 dark:text-zinc-400 lg:block">
+            <StatusText saveStatus={saveStatus} />
+          </div>
 
-      {/* RIGHT */}
-      <div className="flex items-center gap-1 md:gap-4 ml-auto flex-shrink-0">
-
-        {/* ACTIVE USERS */}
-        <div className="flex items-center gap-1">
-
-          {sortedUsers.map((user, index) => {
-
-            const color = avatarColors[index % avatarColors.length];
-
-            return (
+          <div className="hidden items-center sm:flex">
+            {collaborators.slice(0, 5).map((collaborator, index) => (
               <div
-                key={user.id}
-                title={`${user.name} ${user.active ? "(online)" : "(offline)"}`}
-                className={`relative w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center
-                text-white text-xs font-semibold cursor-pointer
-                ${color}
-                ${user.active ? "ring-2 ring-green-400" : "opacity-40"}
-                border border-white dark:border-zinc-900
-                hover:scale-110 transition flex-shrink-0`}
+                key={collaborator.id}
+                title={collaborator.username}
+                className={`-ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-white bg-zinc-900 text-xs font-semibold text-white first:ml-0 dark:border-zinc-950 ${
+                  index === 0 ? "bg-cyan-600" : index === 1 ? "bg-blue-600" : index === 2 ? "bg-emerald-600" : index === 3 ? "bg-violet-600" : "bg-amber-600"
+                }`}
               >
-
-                {user.name.charAt(0)}
-
-                {user.active && (
-                  <span className="absolute bottom-0 right-0 w-2 h-2 md:w-2.5 md:h-2.5
-                    bg-green-400 border-2 border-white dark:border-zinc-950
-                    rounded-full"
-                  />
-                )}
-
+                {collaborator.username?.charAt(0).toUpperCase()}
               </div>
-            );
+            ))}
+          </div>
 
-          })}
+          <button
+            onClick={onRun}
+            disabled={isRunning}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70 dark:border-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            <Play size={15} />
+            <span>{isRunning ? "Running..." : "Run"}</span>
+          </button>
 
+          <button
+            onClick={onCopyInvite}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:text-white"
+            title="Copy invite link"
+          >
+            <Copy size={15} />
+            <span className="hidden sm:inline">Invite</span>
+          </button>
+
+          <button
+            onClick={() => navigate("/home")}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:text-white"
+            title="Back to dashboard"
+          >
+            <Home size={15} />
+            <span className="hidden sm:inline">Home</span>
+          </button>
         </div>
-
-        {/* GITHUB */}
-        <button
-          onClick={() => window.open("https://github.com", "_blank")}
-          className="p-1.5 md:p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition flex-shrink-0"
-        >
-          <Github size={16} className="md:w-4.5 md:h-4.5" />
-        </button>
-
-        {/* SHARE */}
-        <button
-          onClick={shareCode}
-          title="Share Code"
-          className="p-1.5 md:p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition flex-shrink-0"
-        >
-          <Share2 size={16} className="md:w-4.5 md:h-4.5" />
-        </button>
-
-        {/* BACK TO HOME */}
-        <button
-          onClick={handleBackToHome}
-          className="p-1.5 md:p-2 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 transition
-          text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white flex-shrink-0"
-          title="Back to Dashboard"
-        >
-          <Home size={16} className="md:w-4.5 md:h-4.5" />
-        </button>
-
       </div>
-
     </div>
   );
 }

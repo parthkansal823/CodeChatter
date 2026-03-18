@@ -1,35 +1,49 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  getSecureToken,
-  setSecureToken,
   clearSecureData,
+  getSecureToken,
   isTokenExpired,
+  RateLimiter,
+  sanitizeInput,
+  secureFetch,
+  setSecureToken,
+  setupCSP,
   validateEmail,
   validatePassword,
   validateUsername,
-  sanitizeInput,
-  secureFetch,
-  RateLimiter,
-  setupCSP,
 } from "../utils/security";
+import { API_ENDPOINTS } from "../config/security";
 import {
-  decodeJWT,
+  clearJWT,
   extractUserFromJWT,
-  validateJWTBeforeUse,
+  getValidJWT,
   logJWTInfo,
   storeJWT,
-  getValidJWT,
-  clearJWT,
+  validateJWTBeforeUse,
 } from "../utils/jwt";
+import { AuthContext } from "./auth-context";
 
-const AuthContext = createContext();
+const loginLimiter = new RateLimiter(5, 15 * 60 * 1000);
+const signupLimiter = new RateLimiter(3, 60 * 60 * 1000);
 
-// Initialize rate limiters for login/signup attempts
-const loginLimiter = new RateLimiter(5, 15 * 60 * 1000); // 5 attempts per 15 minutes
-const signupLimiter = new RateLimiter(3, 60 * 60 * 1000); // 3 attempts per hour
-
-// Setup CSP on app initialization
 setupCSP();
+
+const getStoredAuthToken = () => {
+  const storedJwt = getValidJWT();
+
+  if (storedJwt) {
+    return storedJwt;
+  }
+
+  const secureToken = getSecureToken();
+
+  if (!secureToken || isTokenExpired(secureToken)) {
+    return null;
+  }
+
+  const validation = validateJWTBeforeUse(secureToken);
+  return validation.valid ? secureToken : null;
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -37,7 +51,6 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [token, setToken] = useState(null);
 
-  // Helper to clear all auth data
   const clearData = () => {
     clearSecureData();
     clearJWT();
@@ -46,74 +59,113 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
   };
 
-  // Initialize auth state from secure storage
+  const applyAuthenticatedState = (nextToken, fallbackUser) => {
+    const jwtValidation = validateJWTBeforeUse(nextToken);
+
+    if (!jwtValidation.valid) {
+      console.error("Invalid JWT from server:", jwtValidation.error);
+      return {
+        success: false,
+        error: "Invalid token received from server",
+      };
+    }
+
+    const userFromJWT = extractUserFromJWT(nextToken);
+    const authenticatedUser = userFromJWT || fallbackUser;
+
+    storeJWT(nextToken);
+    setSecureToken(nextToken);
+    setToken(nextToken);
+    setUser(authenticatedUser);
+    setIsAuthenticated(true);
+
+    logJWTInfo(nextToken);
+
+    return {
+      success: true,
+      user: authenticatedUser,
+    };
+  };
+
   useEffect(() => {
+    let isMounted = true;
+
     const initializeAuth = async () => {
       try {
-        // Try to get valid JWT from storage
-        const storedToken = getValidJWT();
+        const storedToken = getStoredAuthToken();
 
-        if (storedToken) {
-          // JWT is valid, extract user info from token payload
-          const decoded = decodeJWT(storedToken);
-          const userInfo = extractUserFromJWT(storedToken);
-
-          setToken(storedToken);
-          setUser(userInfo);
-          setIsAuthenticated(true);
-
-          console.log("🔐 Auth initialized from JWT");
-          logJWTInfo(storedToken);
-
-          // Optionally verify token with backend
-          try {
-            const userData = await secureFetch(
-              "http://localhost:8000/api/auth/me",
-              {},
-              storedToken
-            );
-            if (userData) {
-              setUser(userData);
-            }
-          } catch (error) {
-            // /auth/me endpoint may not exist yet, that's ok
-            console.warn("⚠️ Could not verify JWT with backend:", error.message);
-          }
-        } else {
-          // No valid token found
+        if (!storedToken) {
           clearJWT();
-          console.log("🔓 No valid JWT found");
+          return;
+        }
+
+        const userInfo = extractUserFromJWT(storedToken);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setToken(storedToken);
+        setUser(userInfo);
+        setIsAuthenticated(true);
+
+        console.log("Auth initialized from stored JWT");
+        logJWTInfo(storedToken);
+
+        try {
+          const userData = await secureFetch(API_ENDPOINTS.ME, {}, storedToken);
+
+          if (isMounted && userData) {
+            setUser(userData);
+          }
+        } catch (error) {
+          console.warn("Could not verify JWT with backend:", error.message);
         }
       } catch (error) {
         console.error("Auth initialization failed:", error);
-        clearData();
+
+        if (isMounted) {
+          clearData();
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     initializeAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (emailOrUsername, password) => {
     setIsLoading(true);
+
     try {
-      // Rate limiting check
       if (!loginLimiter.isAllowed()) {
         const remainingTime = Math.ceil(loginLimiter.getRemainingTime() / 1000);
+
         return {
           success: false,
           error: `Too many login attempts. Please try again in ${remainingTime} seconds.`,
         };
       }
 
-      // Input validation
       if (!emailOrUsername || !password) {
-        return { success: false, error: "Email/username and password are required" };
+        return {
+          success: false,
+          error: "Email/username and password are required",
+        };
       }
 
       if (!validateEmail(emailOrUsername) && !validateUsername(emailOrUsername)) {
-        return { success: false, error: "Invalid email or username format" };
+        return {
+          success: false,
+          error: "Invalid email or username format",
+        };
       }
 
       if (!validatePassword(password)) {
@@ -123,49 +175,26 @@ export function AuthProvider({ children }) {
         };
       }
 
-      // Sanitize inputs
-      const sanitizedEmail = sanitizeInput(emailOrUsername);
-      const sanitizedPassword = password; // Don't sanitize password
-
-      // Call backend
-      const response = await secureFetch("http://localhost:8000/api/auth/login", {
+      const response = await secureFetch(API_ENDPOINTS.LOGIN, {
         method: "POST",
         body: JSON.stringify({
-          email: sanitizedEmail,
-          password: sanitizedPassword,
+          email: sanitizeInput(emailOrUsername),
+          password,
         }),
       });
 
-      const { token: newToken, user: userData } = response;
-
-      if (!newToken || !userData) {
-        return { success: false, error: "Invalid response from server" };
+      if (!response?.token || !response?.user) {
+        return {
+          success: false,
+          error: "Invalid response from server",
+        };
       }
 
-      // Validate JWT token before storing
-      const jwtValidation = validateJWTBeforeUse(newToken);
-      if (!jwtValidation.valid) {
-        console.error("❌ Invalid JWT from server:", jwtValidation.error);
-        return { success: false, error: "Invalid token received from server" };
-      }
-
-      // Extract user info from JWT payload
-      const userFromJWT = extractUserFromJWT(newToken);
-
-      // Store token securely
-      storeJWT(newToken);
-      setSecureToken(newToken);
-      setToken(newToken);
-      setUser(userFromJWT || userData);
-      setIsAuthenticated(true);
-
-      console.log("✅ Login successful, JWT authenticated");
-      logJWTInfo(newToken);
-
-      return { success: true, user: userFromJWT || userData };
+      return applyAuthenticatedState(response.token, response.user);
     } catch (error) {
       console.error("Login error:", error);
       clearData();
+
       return {
         success: false,
         error: error.message || "Login failed. Please try again.",
@@ -177,23 +206,29 @@ export function AuthProvider({ children }) {
 
   const signup = async (email, username, password) => {
     setIsLoading(true);
+
     try {
-      // Rate limiting check
       if (!signupLimiter.isAllowed()) {
         const remainingTime = Math.ceil(signupLimiter.getRemainingTime() / 1000 / 60);
+
         return {
           success: false,
           error: `Too many signup attempts. Please try again in ${remainingTime} minutes.`,
         };
       }
 
-      // Input validation
       if (!email || !username || !password) {
-        return { success: false, error: "All fields are required" };
+        return {
+          success: false,
+          error: "All fields are required",
+        };
       }
 
       if (!validateEmail(email)) {
-        return { success: false, error: "Invalid email format" };
+        return {
+          success: false,
+          error: "Invalid email format",
+        };
       }
 
       if (!validateUsername(username)) {
@@ -210,51 +245,27 @@ export function AuthProvider({ children }) {
         };
       }
 
-      // Sanitize inputs
-      const sanitizedEmail = sanitizeInput(email);
-      const sanitizedUsername = sanitizeInput(username);
-      const sanitizedPassword = password; // Don't sanitize password
-
-      // Call backend
-      const response = await secureFetch("http://localhost:8000/api/auth/signup", {
+      const response = await secureFetch(API_ENDPOINTS.SIGNUP, {
         method: "POST",
         body: JSON.stringify({
-          email: sanitizedEmail,
-          username: sanitizedUsername,
-          password: sanitizedPassword,
+          email: sanitizeInput(email),
+          username: sanitizeInput(username),
+          password,
         }),
       });
 
-      const { token: newToken, user: userData } = response;
-
-      if (!newToken || !userData) {
-        return { success: false, error: "Invalid response from server" };
+      if (!response?.token || !response?.user) {
+        return {
+          success: false,
+          error: "Invalid response from server",
+        };
       }
 
-      // Validate JWT token before storing
-      const jwtValidation = validateJWTBeforeUse(newToken);
-      if (!jwtValidation.valid) {
-        console.error("❌ Invalid JWT from server:", jwtValidation.error);
-        return { success: false, error: "Invalid token received from server" };
-      }
-
-      // Extract user info from JWT payload
-      const userFromJWT = extractUserFromJWT(newToken);
-
-      // Store token securely
-      storeJWT(newToken);
-      setSecureToken(newToken);
-      setToken(newToken);
-      setUser(userFromJWT || userData);
-      setIsAuthenticated(true);
-
-      console.log("✅ Signup successful, JWT authenticated");
-      logJWTInfo(newToken);
-
-      return { success: true, user: userFromJWT || userData };
+      return applyAuthenticatedState(response.token, response.user);
     } catch (error) {
       console.error("Signup error:", error);
       clearData();
+
       return {
         success: false,
         error: error.message || "Signup failed. Please try again.",
@@ -267,38 +278,27 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       if (token) {
-        await secureFetch(
-          "http://localhost:8000/api/auth/logout",
-          { method: "POST" },
-          token
-        );
+        await secureFetch(API_ENDPOINTS.LOGOUT, { method: "POST" }, token);
       }
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
       clearData();
-      console.log("🔓 User logged out, all data cleared");
+      console.log("User logged out and session data cleared");
     }
   };
 
-  // Handle OAuth callback - directly set auth state with token from OAuth provider
   const oauthLogin = async (oauthToken, userData) => {
     try {
-      // Validate inputs
-      if (!oauthToken || !userData || !userData.username) {
+      if (!oauthToken || !userData?.username) {
         throw new Error("Invalid OAuth response");
       }
 
-      // Store token securely
-      setSecureToken(oauthToken);
-      setToken(oauthToken);
-      setUser(userData);
-      setIsAuthenticated(true);
-
-      return { success: true, user: userData };
+      return applyAuthenticatedState(oauthToken, userData);
     } catch (error) {
       console.error("OAuth login error:", error);
-      clearSecureData();
+      clearData();
+
       return {
         success: false,
         error: error.message || "OAuth login failed",
@@ -314,20 +314,8 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
-    oauthLogin
+    oauthLogin,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return context;
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

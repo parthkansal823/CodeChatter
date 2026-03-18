@@ -1,25 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { Github } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import toast from "react-hot-toast";
 import FloatingInput from "../components/FloatingInput";
 import PasswordInput from "../components/PasswordInput";
 import AuthFormLayout from "../components/AuthFormLayout";
-import { useAuth } from "../context/AuthContext";
+import { API_ENDPOINTS } from "../config/security";
+import { useAuth } from "../hooks/useAuth";
 
 export default function Auth() {
-  const [mode, setMode] = useState("login"); // "login" or "signup"
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [mode, setMode] = useState("login");
   const [cardGlow, setCardGlow] = useState({ x: 0, y: 0 });
   const [loading, setLoading] = useState(false);
 
-  // Login fields
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Signup fields
   const [signupEmail, setSignupEmail] = useState("");
   const [signupUsername, setSignupUsername] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -28,28 +26,26 @@ export default function Auth() {
   const navigate = useNavigate();
   const { login, signup } = useAuth();
 
-  const handleMouseMove = (e) => {
-    setMousePos({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault();
+  const handleLoginSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
 
-    const result = await login(loginEmail, loginPassword);
+    try {
+      const result = await login(loginEmail, loginPassword);
 
-    if (result.success) {
-      toast.success("Logged in successfully!");
-      navigate("/home");
-    } else {
-      toast.error(result.error || "Login failed");
+      if (result.success) {
+        toast.success("Logged in successfully!");
+        navigate("/home");
+      } else {
+        toast.error(result.error || "Login failed");
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  const handleSignupSubmit = async (e) => {
-    e.preventDefault();
+  const handleSignupSubmit = async (event) => {
+    event.preventDefault();
 
     if (signupPassword !== signupConfirmPassword) {
       toast.error("Passwords do not match");
@@ -58,42 +54,34 @@ export default function Auth() {
 
     setLoading(true);
 
-    const result = await signup(signupEmail, signupUsername, signupPassword);
+    try {
+      const result = await signup(signupEmail, signupUsername, signupPassword);
 
-    if (result.success) {
-      toast.success("Account created! Welcome to CodeChatter!");
-      navigate("/home");
-    } else {
-      toast.error(result.error || "Signup failed");
+      if (result.success) {
+        toast.success("Account created! Welcome to CodeChatter!");
+        navigate("/home");
+      } else {
+        toast.error(result.error || "Signup failed");
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  const handleGithubLogin = () => {
+  const startOAuthLogin = (providerUrl) => {
     const redirectUri = `${window.location.origin}/auth/callback`;
-    window.location.href = `http://localhost:8000/auth/github?redirect_uri=${encodeURIComponent(redirectUri)}`;
-  };
-
-  const handleGoogleLogin = () => {
-    const redirectUri = `${window.location.origin}/auth/callback`;
-    window.location.href = `http://localhost:8000/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
+    window.location.href = `${providerUrl}?redirect_uri=${encodeURIComponent(redirectUri)}`;
   };
 
   return (
-    <AuthFormLayout
-      title={mode === "login" ? "Welcome Back" : "Create Account"}
-      subtitle={mode === "login" ? "Login to continue coding." : "Join CodeChatter today."}
-      onMouseMove={handleMouseMove}
-      isSignup={mode === "signup"}
-    >
-      <motion.div
+    <AuthFormLayout isSignup={mode === "signup"}>
+      <Motion.div
         whileHover={{ rotateX: 4, rotateY: -4 }}
-        onMouseMove={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
+        onMouseMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
           setCardGlow({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
           });
         }}
         style={{
@@ -101,7 +89,6 @@ export default function Auth() {
         }}
         className="w-full max-w-md backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl"
       >
-        {/* Tab Switcher */}
         <div className="flex gap-2 mb-6 border-b border-white/10">
           <button
             onClick={() => setMode("login")}
@@ -137,7 +124,7 @@ export default function Auth() {
                 type="text"
                 required
                 value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
+                onChange={(event) => setLoginEmail(event.target.value)}
               />
 
               <PasswordInput
@@ -145,7 +132,7 @@ export default function Auth() {
                 label="Password"
                 required
                 value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
+                onChange={(event) => setLoginPassword(event.target.value)}
               />
 
               <div className="flex justify-between text-sm text-gray-400">
@@ -161,10 +148,7 @@ export default function Auth() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-lg font-medium
-                bg-gradient-to-r from-purple-500 to-blue-500
-                hover:scale-105 active:scale-95 transition duration-200 shadow-lg shadow-purple-500/20
-                disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 rounded-lg font-medium bg-gradient-to-r from-purple-500 to-blue-500 hover:scale-105 active:scale-95 transition duration-200 shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Logging in..." : "Login"}
               </button>
@@ -182,7 +166,7 @@ export default function Auth() {
                 type="email"
                 required
                 value={signupEmail}
-                onChange={(e) => setSignupEmail(e.target.value)}
+                onChange={(event) => setSignupEmail(event.target.value)}
               />
 
               <FloatingInput
@@ -191,7 +175,7 @@ export default function Auth() {
                 type="text"
                 required
                 value={signupUsername}
-                onChange={(e) => setSignupUsername(e.target.value)}
+                onChange={(event) => setSignupUsername(event.target.value)}
               />
 
               <PasswordInput
@@ -199,7 +183,7 @@ export default function Auth() {
                 label="Password"
                 required
                 value={signupPassword}
-                onChange={(e) => setSignupPassword(e.target.value)}
+                onChange={(event) => setSignupPassword(event.target.value)}
               />
 
               <PasswordInput
@@ -207,16 +191,13 @@ export default function Auth() {
                 label="Confirm Password"
                 required
                 value={signupConfirmPassword}
-                onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                onChange={(event) => setSignupConfirmPassword(event.target.value)}
               />
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-lg font-medium
-                bg-gradient-to-r from-purple-500 to-blue-500
-                hover:scale-105 active:scale-95 transition duration-200 shadow-lg shadow-purple-500/20
-                disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 rounded-lg font-medium bg-gradient-to-r from-purple-500 to-blue-500 hover:scale-105 active:scale-95 transition duration-200 shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Creating..." : "Create Account"}
               </button>
@@ -224,18 +205,16 @@ export default function Auth() {
           </>
         )}
 
-        {/* Divider */}
         <div className="flex items-center gap-3 my-6">
           <div className="flex-1 h-px bg-gray-700" />
           <span className="text-gray-500 text-sm">OR</span>
           <div className="flex-1 h-px bg-gray-700" />
         </div>
 
-        {/* OAuth Buttons */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             type="button"
-            onClick={handleGithubLogin}
+            onClick={() => startOAuthLogin(API_ENDPOINTS.GITHUB_LOGIN)}
             className="flex items-center justify-center gap-2 py-3 border border-gray-700 rounded-lg hover:bg-white/5 transition"
           >
             <Github size={18} />
@@ -244,7 +223,7 @@ export default function Auth() {
 
           <button
             type="button"
-            onClick={handleGoogleLogin}
+            onClick={() => startOAuthLogin(API_ENDPOINTS.GOOGLE_LOGIN)}
             className="flex items-center justify-center gap-2 py-3 border border-gray-700 rounded-lg hover:bg-white/5 transition"
           >
             <FcGoogle size={18} />
@@ -275,7 +254,7 @@ export default function Auth() {
             </>
           )}
         </p>
-      </motion.div>
+      </Motion.div>
     </AuthFormLayout>
   );
 }

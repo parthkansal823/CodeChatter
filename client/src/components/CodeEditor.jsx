@@ -1,87 +1,13 @@
 import Editor from "@monaco-editor/react";
-import { useState, useEffect, useRef } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ChevronRight } from "lucide-react";
 
-const LANGUAGE_TEMPLATES = {
-  cpp: `#include <iostream>
-using namespace std;
-
-int main() {
-    cout << "Hello CodeChatter!" << endl;
-    return 0;
-}`,
-  c: `#include <stdio.h>
-
-int main() {
-    printf("Hello CodeChatter!");
-    return 0;
-}`,
-  javascript: `// Welcome to CodeChatter
-
-console.log("Hello CodeChatter!");
-
-function greet(name){
-  return \`Hello \${name}!\`;
-}`,
-  typescript: `function greet(name: string): string {
-  return "Hello " + name;
-}
-
-console.log(greet("CodeChatter"));`,
-  python: `def greet(name):
-    return f"Hello {name}"
-
-print("Hello CodeChatter!")`,
-  java: `public class Main {
-    public static void main(String[] args) {
-        System.out.println("Hello CodeChatter!");
-    }
-}`,
-  go: `package main
-
-import "fmt"
-
-func main() {
-    fmt.Println("Hello CodeChatter!")
-}`,
-  rust: `fn main() {
-    println!("Hello CodeChatter!");
-}`,
-  php: `<?php
-echo "Hello CodeChatter!";
-?>`,
-  ruby: `puts "Hello CodeChatter!"`,
-  html: `<!DOCTYPE html>
-<html>
-<head>
-  <title>CodeChatter</title>
-</head>
-<body>
-  <h1>Hello CodeChatter!</h1>
-</body>
-</html>`,
-  css: `body {
-  background: #0f0f0f;
-  color: white;
-}`,
-  json: `{
-  "message": "Hello CodeChatter"
-}`,
-  markdown: `# CodeChatter
-
-Welcome to the **CodeChatter editor**
-
-## Features
-- Live coding
-- Multi-language support
-- Markdown preview
-
-\`\`\`javascript
-console.log("Hello CodeChatter");
-\`\`\`
-`
-};
+import "../utils/monaco";
+import { detectLanguageFromName } from "../utils/workspace";
+import { getFileVisual } from "../utils/fileIcons";
+import { usePreferences } from "../context/PreferencesContext";
 
 const LANGUAGE_EXTENSION_MAP = {
   cpp: "cpp",
@@ -97,62 +23,53 @@ const LANGUAGE_EXTENSION_MAP = {
   html: "html",
   css: "css",
   json: "json",
-  markdown: "markdown"
+  markdown: "markdown",
+  plaintext: "plaintext",
 };
 
+function Breadcrumb({ filePath, fileName }) {
+  if (!filePath) return null;
+  
+  const parts = filePath.split("/").filter(Boolean);
+  const { Icon, className: iconClassName } = getFileVisual(fileName);
+
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
+      <span className="flex-shrink-0">📁</span>
+      {parts.slice(0, -1).map((part, idx) => (
+        <div key={idx} className="flex items-center gap-1">
+          <ChevronRight size={14} className="flex-shrink-0" />
+          <span className="inline-block max-w-[100px] truncate">{part}</span>
+        </div>
+      ))}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <ChevronRight size={14} />
+        <Icon size={14} className={iconClassName} />
+        <span className="font-medium text-zinc-700 dark:text-zinc-300">{fileName}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function CodeEditor({
-  selectedLanguage = "cpp",
+  selectedFileName,
+  selectedFilePath,
+  code = "",
   theme = "vs-dark",
-  onCodeChange
+  onCodeChange,
 }) {
-
+  const { preferences } = usePreferences();
   const editorRef = useRef(null);
-
-  const [codeMap, setCodeMap] = useState({});
-  const [code, setCode] = useState("");
   const [isEditorReady, setIsEditorReady] = useState(false);
 
+  const selectedLanguage = detectLanguageFromName(selectedFileName || "");
   const isMarkdown = selectedLanguage === "markdown";
-
-  // Load saved code
-  useEffect(() => {
-    const saved = localStorage.getItem("codechatter_editor");
-    if (saved) {
-      setCodeMap(JSON.parse(saved));
-    }
-  }, []);
-
-  // Load code when language changes
-  useEffect(() => {
-    const savedCode =
-      codeMap[selectedLanguage] ||
-      LANGUAGE_TEMPLATES[selectedLanguage] ||
-      "";
-
-    setCode(savedCode);
-  }, [selectedLanguage, codeMap]);
-
-  // Save code per language
-  const handleEditorChange = (value) => {
-
-    if (value === undefined) return;
-
-    setCode(value);
-
-    const updated = {
-      ...codeMap,
-      [selectedLanguage]: value
-    };
-
-    setCodeMap(updated);
-
-    localStorage.setItem(
-      "codechatter_editor",
-      JSON.stringify(updated)
-    );
-
-    onCodeChange?.(value);
-  };
+  const deferredCode = useDeferredValue(code);
+  const lineCount = code ? code.split("\n").length : 1;
+  const characterCount = code.length;
+  const editorPath = selectedFilePath
+    ? encodeURI(`file:///${selectedFilePath.replace(/^\/+/, "")}`)
+    : "file:///untitled";
 
   const handleEditorMount = (editor) => {
     editorRef.current = editor;
@@ -160,61 +77,110 @@ export default function CodeEditor({
     editor.focus();
   };
 
+  useEffect(() => {
+    if (!editorRef.current) {
+      return;
+    }
+
+    editorRef.current.focus();
+  }, [editorPath]);
+
   return (
-    <div className="flex-1 flex relative overflow-hidden bg-white dark:bg-zinc-950">
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-zinc-950">
+      <Breadcrumb filePath={selectedFilePath} fileName={selectedFileName} />
+      
+      <div className={`flex min-h-0 flex-1 ${isMarkdown ? "flex-col xl:flex-row" : ""}`}>
+        <div className={isMarkdown ? "min-h-[55%] xl:min-h-0 xl:w-[58%]" : "w-full"}>
+          <Editor
+            height="100%"
+            defaultPath={editorPath}
+            path={editorPath}
+            theme={theme}
+            defaultLanguage={LANGUAGE_EXTENSION_MAP[selectedLanguage] || "plaintext"}
+            language={LANGUAGE_EXTENSION_MAP[selectedLanguage] || "plaintext"}
+            defaultValue={code}
+            value={code}
+            onChange={(value) => onCodeChange?.(value ?? "")}
+            onMount={handleEditorMount}
+            saveViewState
+            keepCurrentModel
+            options={{
+              minimap: { enabled: preferences.minimap },
+              fontSize: preferences.fontSize,
+              fontFamily: "'Fira Code', monospace",
+              lineNumbers: "on",
+              lineHeight: preferences.lineHeight * 20,
+              smoothScrolling: true,
+              cursorBlinking: "smooth",
+              cursorSmoothCaretAnimation: "on",
+              wordWrap: "off",
+              automaticLayout: true,
+              scrollBeyondLastLine: false,
+              formatOnPaste: true,
+              formatOnType: true,
+              renderLineHighlight: "all",
+              bracketPairColorization: { enabled: true },
+              guides: { bracketPairs: true, indentation: true },
+              stickyScroll: { enabled: true },
+              padding: { top: 16, bottom: 16 },
+              scrollbar: {
+                alwaysConsumeMouseWheel: false,
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+              },
+              scrollBeyondLastColumn: 5,
+              columnSelection: false,
+            }}
+          />
+        </div>
 
-      {/* Editor Section */}
-      <div className={isMarkdown ? "w-[60%] h-full" : "w-full h-full"}>
-
-        <Editor
-          height="100%"
-          theme={theme}
-          language={LANGUAGE_EXTENSION_MAP[selectedLanguage] || "cpp"}
-          value={code}
-          onChange={handleEditorChange}
-          onMount={handleEditorMount}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 15,
-            fontFamily: "'Fira Code', monospace",
-            lineNumbers: "on",
-            smoothScrolling: true,
-            cursorBlinking: "smooth",
-            wordWrap: "on",
-            automaticLayout: true,
-            scrollBeyondLastLine: false,
-            formatOnPaste: true,
-            formatOnType: true,
-            bracketPairColorization: { enabled: true },
-            guides: { bracketPairs: true },
-            stickyScroll: { enabled: true },
-            padding: { top: 10 }
-          }}
-        />
-
+        {isMarkdown && (
+          <div className="min-h-[45%] border-t border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 xl:min-h-0 xl:w-[42%] xl:border-l xl:border-t-0">
+            <div className={`h-full overflow-auto p-6 ${
+              theme === "vs-dark"
+                ? "prose prose-invert"
+                : "prose text-black"
+            }`}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{deferredCode}</ReactMarkdown>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Markdown Preview */}
-      {isMarkdown && (
-        <div
-          className={`w-[40%] h-full border-l overflow-auto p-6 max-w-none ${
-            theme === "vs-dark"
-              ? "prose prose-invert border-zinc-800"
-              : "prose border-zinc-300 bg-white text-black"
-          }`}
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {code}
-          </ReactMarkdown>
+      <div className="flex items-center justify-between gap-4 border-t border-zinc-200 bg-white px-4 py-2 text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+        <div className="flex items-center gap-4">
+          {isMarkdown && (
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-green-500"></span>
+              Preview
+            </span>
+          )}
+          {!isMarkdown && (
+            <span className="uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">{selectedLanguage}</span>
+          )}
         </div>
-      )}
+        
+        <div className="flex items-center gap-6">
+          <span className="text-zinc-500 dark:text-zinc-400">Ln 1, Col 1</span>
+          <span className="text-zinc-500 dark:text-zinc-400">{lineCount} lines</span>
+          <span className="text-zinc-500 dark:text-zinc-400">{characterCount} chars</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-900">
+            <span>UTF-8</span>
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-900">
+            <span>LF</span>
+          </span>
+        </div>
+      </div>
 
       {!isEditorReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400">
-          Loading Editor...
+        <div className="absolute inset-0 flex items-center justify-center bg-white/90 text-zinc-500 dark:bg-zinc-950/90 dark:text-zinc-400">
+          Loading editor...
         </div>
       )}
-
     </div>
   );
 }

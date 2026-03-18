@@ -1,19 +1,37 @@
-import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { LogOut, Moon, Sun, Menu, X, Home, Settings } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useAuth } from "../context/AuthContext";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { AnimatePresence, motion as Motion } from "framer-motion";
+import {
+  Command,
+  Home,
+  LogOut,
+  Menu,
+  Moon,
+  Settings,
+  Sun,
+  X
+} from "lucide-react";
 
-export default function Navbar({ theme, onThemeChange }) {
+import { useAuth } from "../hooks/useAuth";
+
+export default function Navbar({
+  theme,
+  onThemeChange,
+  minimal = false,
+  contextLabel = "Workspace",
+  contextValue = "",
+  contextHint = ""
+}) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const dropdownRef = useRef();
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
-    const handler = (e) => {
-      if (!dropdownRef.current?.contains(e.target)) {
+    const handler = (event) => {
+      if (!dropdownRef.current?.contains(event.target)) {
         setDropdownOpen(false);
       }
     };
@@ -28,201 +46,219 @@ export default function Navbar({ theme, onThemeChange }) {
   };
 
   const toggleTheme = () => {
-    const newTheme = theme === "vs-dark" ? "light" : "vs-dark";
-    onThemeChange?.(newTheme);
+    const nextTheme = theme === "vs-dark" ? "light" : "vs-dark";
+    onThemeChange?.(nextTheme);
+  };
+
+  const goTo = (path) => {
+    navigate(path);
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
   };
 
   const userInitial = user?.username?.charAt(0).toUpperCase() || "U";
-  const avatarColors = [
-    "bg-red-500",
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-purple-500",
-    "bg-pink-500",
-    "bg-yellow-500"
-  ];
-  const colorIndex = user?.id ? user.id % avatarColors.length : 0;
-
   const navItems = [
-    { label: "Dashboard", icon: Home, onClick: () => { navigate("/home"); setMobileMenuOpen(false); } }
+    { label: "Dashboard", icon: Home, path: "/home" },
+    { label: "Settings", icon: Settings, path: "/settings" }
   ];
 
   return (
-    <div className="sticky top-0 z-40 border-b
-      bg-white/95 dark:bg-zinc-950/95 backdrop-blur-sm
-      border-zinc-200 dark:border-zinc-800
-      shadow-sm dark:shadow-zinc-900/50">
-
-      <div className="h-16 flex items-center justify-between px-4 md:px-8 max-w-7xl mx-auto w-full">
-
-        {/* LEFT - Logo */}
-        <motion.div
-          className="flex items-center gap-2"
-          whileHover={{ scale: 1.02 }}
-        >
-          <button
-            onClick={() => navigate("/home")}
-            className="font-bold text-xl bg-gradient-to-r from-purple-600 to-blue-600
-            bg-clip-text text-transparent dark:from-purple-400 dark:to-blue-400
-            hover:opacity-80 transition-opacity"
+    <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/95">
+      <div className={`mx-auto flex w-full max-w-[1600px] items-center justify-between gap-3 px-4 md:px-6 ${
+        minimal ? "h-11" : "h-14"
+      }`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <Motion.button
+            onClick={() => goTo("/home")}
+            className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
           >
-            CodeChatter
-          </button>
-        </motion.div>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-950">
+              <Command size={15} />
+            </span>
+            <span className="truncate text-sm font-semibold text-zinc-900 dark:text-white">
+              CodeChatter
+            </span>
+          </Motion.button>
 
-        {/* CENTER - Navigation (hidden on mobile) */}
-        <div className="hidden md:flex items-center gap-8">
-          {navItems.map((item) => (
-            <motion.button
-              key={item.label}
-              onClick={item.onClick}
-              className="flex items-center gap-2 text-sm font-medium
-              text-zinc-700 dark:text-zinc-300
-              hover:text-purple-600 dark:hover:text-purple-400
-              transition-colors"
-              whileHover={{ x: 2 }}
-            >
-              <item.icon size={16} />
-              {item.label}
-            </motion.button>
-          ))}
+          {contextValue && (
+            <div className="hidden min-w-0 items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 md:flex">
+              <span>{contextLabel}</span>
+              <span className="truncate font-mono text-zinc-900 dark:text-zinc-100">
+                {contextValue}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* RIGHT - Actions */}
+        {!minimal && (
+          <div className="hidden items-center gap-1 md:flex">
+            {navItems.map((item) => {
+              const isActive = location.pathname.startsWith(item.path);
+              const Icon = item.icon;
+
+              return (
+                <button
+                  key={item.label}
+                  onClick={() => goTo(item.path)}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                    isActive
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-white"
+                      : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Icon size={15} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
-
-          {/* Theme Toggle */}
-          <motion.button
+          <button
             onClick={toggleTheme}
-            className="p-2.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800
-            transition-colors"
+            className="inline-flex h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium text-zinc-700 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-700"
             title="Toggle theme"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
           >
-            {theme === "vs-dark" ? <Sun size={18} /> : <Moon size={18} />}
-          </motion.button>
+            {theme === "vs-dark" ? <Sun size={15} /> : <Moon size={15} />}
+            {!minimal && (
+              <span className="hidden lg:inline">
+                {theme === "vs-dark" ? "Light" : "Dark"}
+              </span>
+            )}
+          </button>
 
-          {/* User Dropdown */}
-          <div className="relative" ref={dropdownRef}>
-            <motion.button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className={`w-9 h-9 rounded-full flex items-center justify-center
-              text-white text-xs font-semibold cursor-pointer
-              ${avatarColors[colorIndex]}
-              border-2 border-white/20 dark:border-zinc-800
-              hover:border-white/40 transition-all shadow-md`}
+          <div className="relative hidden sm:block" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((current) => !current)}
+              className="flex h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 text-left transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
               title={user?.username}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.98 }}
             >
-              {userInitial}
-            </motion.button>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-[11px] font-semibold text-white dark:bg-white dark:text-zinc-950">
+                {userInitial}
+              </span>
+              {!minimal && (
+                <span className="hidden max-w-[120px] truncate text-sm text-zinc-800 dark:text-zinc-100 xl:block">
+                  {user?.username}
+                </span>
+              )}
+            </button>
 
             <AnimatePresence>
               {dropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                <Motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute top-12 right-0 w-56 rounded-lg shadow-xl z-50
-                  bg-white dark:bg-zinc-900
-                  border border-zinc-200 dark:border-zinc-800
-                  overflow-hidden"
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.16 }}
+                  className="absolute right-0 top-10 z-50 w-64 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
                 >
-                  {/* User Info */}
-                  <div className="px-4 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-purple-50 dark:from-purple-950/30 to-transparent">
+                  <div className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
                     <p className="text-sm font-semibold text-zinc-900 dark:text-white">
                       {user?.username}
                     </p>
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">
+                    <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
                       {user?.email}
                     </p>
+                    {contextValue && (
+                      <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+                        <span className="font-semibold text-zinc-900 dark:text-white">{contextLabel}:</span>{" "}
+                        {contextValue}
+                        {contextHint ? ` · ${contextHint}` : ""}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Menu Items */}
-                  <button
-                    onClick={() => {
-                      navigate("/home");
-                      setDropdownOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-3 text-sm flex items-center gap-3
-                    text-zinc-800 dark:text-zinc-300
-                    hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    <Home size={16} />
-                    Dashboard
-                  </button>
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+
+                    return (
+                      <button
+                        key={item.label}
+                        onClick={() => goTo(item.path)}
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        <Icon size={16} />
+                        {item.label}
+                      </button>
+                    );
+                  })}
 
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-3 text-sm flex items-center gap-3
-                    text-red-600 dark:text-red-400
-                    hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-t
-                    border-zinc-200 dark:border-zinc-800"
+                    className="flex w-full items-center gap-3 border-t border-zinc-200 px-4 py-3 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:border-zinc-800 dark:text-red-400 dark:hover:bg-red-900/20"
                   >
                     <LogOut size={16} />
                     Logout
                   </button>
-                </motion.div>
+                </Motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* Mobile Menu Toggle */}
-          <motion.button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+          <button
+            onClick={() => setMobileMenuOpen((current) => !current)}
+            className="rounded-lg border border-zinc-200 bg-white p-2 text-zinc-700 transition-colors dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 md:hidden"
           >
             <AnimatePresence mode="wait">
               {mobileMenuOpen ? (
-                <motion.div key="close" initial={{ rotate: -90 }} animate={{ rotate: 0 }} exit={{ rotate: 90 }}>
-                  <X size={20} />
-                </motion.div>
+                <Motion.div key="close" initial={{ rotate: -90 }} animate={{ rotate: 0 }} exit={{ rotate: 90 }}>
+                  <X size={18} />
+                </Motion.div>
               ) : (
-                <motion.div key="open" initial={{ rotate: 90 }} animate={{ rotate: 0 }} exit={{ rotate: -90 }}>
-                  <Menu size={20} />
-                </motion.div>
+                <Motion.div key="open" initial={{ rotate: 90 }} animate={{ rotate: 0 }} exit={{ rotate: -90 }}>
+                  <Menu size={18} />
+                </Motion.div>
               )}
             </AnimatePresence>
-          </motion.button>
-
+          </button>
         </div>
       </div>
 
-      {/* Mobile Menu */}
       <AnimatePresence>
         {mobileMenuOpen && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3 }}
-            className="md:hidden border-t border-zinc-200 dark:border-zinc-800
-            bg-white dark:bg-zinc-900"
+            transition={{ duration: 0.2 }}
+            className="border-t border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950 md:hidden"
           >
-            <div className="px-4 py-3 space-y-1">
-              {navItems.map((item) => (
-                <motion.button
-                  key={item.label}
-                  onClick={item.onClick}
-                  className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3
-                  text-zinc-800 dark:text-zinc-300
-                  hover:bg-purple-50 dark:hover:bg-purple-900/20
-                  hover:text-purple-600 dark:hover:text-purple-400
-                  transition-colors"
-                  whileHover={{ x: 4 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <item.icon size={18} />
-                  {item.label}
-                </motion.button>
-              ))}
+            <div className="space-y-3">
+              {contextValue && (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                  <span className="font-semibold text-zinc-900 dark:text-white">{contextLabel}:</span>{" "}
+                  {contextValue}
+                  {contextHint ? ` · ${contextHint}` : ""}
+                </div>
+              )}
+
+              {navItems.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => goTo(item.path)}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                  >
+                    <Icon size={18} />
+                    {item.label}
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 rounded-xl border border-red-200 px-3 py-3 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                <LogOut size={18} />
+                Logout
+              </button>
             </div>
-          </motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
     </div>

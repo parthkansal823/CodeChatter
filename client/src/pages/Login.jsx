@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { Eye, EyeOff, Github } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { TypeAnimation } from "react-type-animation";
@@ -45,7 +45,7 @@ export default function Login() {
   };
 
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
@@ -75,7 +75,7 @@ export default function Login() {
 
         {/* Hero Section */}
         <div className="hidden lg:flex w-1/2 flex-col justify-center px-20">
-          <motion.h1
+          <Motion.h1
             initial={{ opacity: 0, x: -60 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 1 }}
@@ -88,16 +88,16 @@ export default function Login() {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-400 animate-gradientText">
               Collaborate.
             </span>
-          </motion.h1>
+          </Motion.h1>
 
-          <motion.p
+          <Motion.p
             initial={{ opacity: 0, x: -40 }}
             animate={{ opacity: 0.8, x: 0 }}
             transition={{ delay: 0.4 }}
             className="mt-6 text-gray-400 max-w-md"
           >
             Real-time secure communication for developers.
-          </motion.p>
+          </Motion.p>
 
           {/* Terminal Animation */}
           <div className="mt-8 bg-black/60 border border-white/10 rounded-xl p-4 text-green-400 text-sm font-mono shadow-inner">
@@ -119,7 +119,7 @@ export default function Login() {
 
         {/* Login Card */}
         <div className="flex w-full lg:w-1/2 items-center justify-center px-6">
-          <motion.div
+          <Motion.div
             whileHover={{ rotateX: 4, rotateY: -4 }}
             onMouseMove={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
@@ -251,9 +251,9 @@ export default function Login() {
                 Signup
               </Link>
             </p>
-          </motion.div>
+          </Motion.div>
         </div>
       </div>
-    </motion.div>
+    </Motion.div>
   );
 }

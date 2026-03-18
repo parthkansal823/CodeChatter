@@ -1,114 +1,114 @@
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
-
 import {
-  SiJavascript,
-  SiCplusplus,
-  SiPython,
-  SiHtml5,
-  SiMarkdown
-} from "react-icons/si";
-
-import { VscJson } from "react-icons/vsc";
-import { DiCss3 } from "react-icons/di";
-import { FiFile } from "react-icons/fi";
+  ChevronRight,
+  FilePlus2,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Trash2,
+} from "lucide-react";
+import { getFileVisual, getFolderVisual } from "../utils/fileIcons";
 
 export default function FileItem({
-  name,
+  node,
+  depth = 0,
+  isActive = false,
+  isFocused = false,
+  isExpanded = false,
+  onToggleFolder,
   onSelect,
-  isSelected = false,
-  onDelete
+  onCreateFile,
+  onCreateFolder,
+  onDelete,
 }) {
-
-  const [isHovering, setIsHovering] = useState(false);
-
-  // safer extension detection
-  const extension = name.includes(".")
-    ? name.split(".").pop().toLowerCase()
-    : "";
-
-  const getIcon = () => {
-
-    switch (extension) {
-
-      case "js":
-      case "jsx":
-        return <SiJavascript className="text-yellow-500" size={16} />;
-
-      case "cpp":
-      case "c":
-        return <SiCplusplus className="text-blue-500" size={16} />;
-
-      case "py":
-        return <SiPython className="text-yellow-400" size={16} />;
-
-      case "html":
-        return <SiHtml5 className="text-orange-500" size={16} />;
-
-      case "css":
-        return <DiCss3 className="text-blue-500" size={16} />;
-
-      case "json":
-        return <VscJson className="text-yellow-400" size={16} />;
-
-      case "md":
-        return <SiMarkdown className="text-purple-500" size={16} />;
-
-      case "txt":
-        return <FiFile className="text-zinc-400" size={16} />;
-
-      default:
-        return <FiFile className="text-zinc-400" size={16} />;
-    }
-
-  };
+  const isFolder = node.type === "folder";
+  const { Icon: FileIcon, className: fileIconClassName } = getFileVisual(node.name);
+  const { Icon: FolderIcon, OpenIcon: OpenFolderIcon, className: folderIconClassName } = getFolderVisual(node.name);
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 px-3 py-2 cursor-pointer transition-colors
-      ${
-        isSelected
-          ? "bg-blue-500/20"
-          : "hover:bg-zinc-200 dark:hover:bg-zinc-800"
+      className={`group flex items-center gap-1 rounded-md transition-colors cursor-default ${
+        isActive
+          ? "bg-blue-100/50 text-zinc-950 dark:bg-blue-500/15 dark:text-blue-300"
+          : isFocused
+            ? "bg-zinc-200/50 text-zinc-950 dark:bg-zinc-800/50 dark:text-zinc-100"
+            : "text-zinc-700 hover:bg-zinc-100/60 dark:text-zinc-300 dark:hover:bg-zinc-900/40"
       }`}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      aria-label={`File: ${name}`}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") onSelect();
-      }}
+      style={{ paddingLeft: `${depth * 16 + 6}px` }}
     >
+      <button
+        type="button"
+        onClick={() => {
+          if (isFolder) {
+            onToggleFolder?.(node.id);
+          }
 
-      {/* File Icon + Name */}
-      <div className="flex items-center gap-3 min-w-0">
+          onSelect?.(node);
+        }}
+        className="flex h-7 min-w-0 flex-1 items-center gap-2 px-1 text-left font-medium"
+        title={node.name}
+      >
+        {isFolder ? (
+          <>
+            <ChevronRight
+              size={16}
+              className={`flex-shrink-0 text-zinc-500 transition-transform dark:text-zinc-400 ${isExpanded ? "rotate-90" : ""}`}
+            />
+            {isExpanded ? (
+              <OpenFolderIcon size={16} className={`flex-shrink-0 ${folderIconClassName}`} />
+            ) : (
+              <FolderIcon size={16} className={`flex-shrink-0 ${folderIconClassName}`} />
+            )}
+          </>
+        ) : (
+          <>
+            <span className="w-4 flex-shrink-0" />
+            <FileIcon size={16} className={`flex-shrink-0 ${fileIconClassName}`} />
+          </>
+        )}
 
-        <div className="flex-shrink-0">
-          {getIcon()}
-        </div>
+        <span className="truncate text-[13px]">{node.name}</span>
+      </button>
 
-        <span className="text-sm truncate text-zinc-800 dark:text-zinc-200">
-          {name}
-        </span>
+      <div className="mr-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        {isFolder && (
+          <>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onCreateFile?.(node.id);
+              }}
+              className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+              title={`New file in ${node.name}`}
+            >
+              <FilePlus2 size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onCreateFolder?.(node.id);
+              }}
+              className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+              title={`New folder in ${node.name}`}
+            >
+              <FolderPlus size={13} />
+            </button>
+          </>
+        )}
 
-      </div>
-
-      {/* Delete Button */}
-      {isHovering && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete?.(node);
           }}
-          className="p-1 hover:bg-red-600 rounded transition"
-          title="Delete file"
+          className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-red-600 hover:text-white"
+          title={`Delete ${node.name}`}
         >
-          <Trash2 size={14} className="text-red-400" />
+          <Trash2 size={13} />
         </button>
-      )}
-
+      </div>
     </div>
   );
 }

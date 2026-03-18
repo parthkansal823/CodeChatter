@@ -1,389 +1,462 @@
-import { useState, useEffect } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Plus, ArrowRight, Users, Flame, Zap, Code2 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { motion as Motion } from "framer-motion";
+import {
+  ArrowRight,
+  FolderGit2,
+  Link2,
+  Plus,
+  Sparkles,
+  Trash2,
+  Users
+} from "lucide-react";
 import toast from "react-hot-toast";
-import { secureFetch, sanitizeInput, validateRoomId } from "../utils/security";
-import { API_ENDPOINTS } from "../config/security";
 
-// Skeleton Loader Component
+import { useAuth } from "../hooks/useAuth";
+import { API_ENDPOINTS } from "../config/security";
+import { sanitizeInput, secureFetch, validateRoomId } from "../utils/security";
+
 const SkeletonCard = () => (
-  <div className="rounded-xl p-6 bg-white dark:bg-zinc-900 animate-pulse">
-    <div className="h-6 bg-gray-300 dark:bg-zinc-700 rounded mb-4 w-3/4"></div>
-    <div className="h-4 bg-gray-300 dark:bg-zinc-700 rounded w-1/2"></div>
+  <div className="rounded-xl border border-zinc-200 bg-white p-6 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="mb-4 h-6 w-3/4 rounded bg-zinc-200 dark:bg-zinc-700" />
+    <div className="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-700" />
   </div>
 );
 
+function extractRoomId(rawValue) {
+  const trimmedValue = rawValue.trim();
+
+  if (!trimmedValue) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmedValue)) {
+    try {
+      const url = new URL(trimmedValue);
+      const segments = url.pathname.split("/").filter(Boolean);
+      return (segments.at(-1) || "").toUpperCase();
+    } catch {
+      return trimmedValue.toUpperCase();
+    }
+  }
+
+  return trimmedValue.toUpperCase();
+}
+
 export default function Home() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [joinRoomId, setJoinRoomId] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { user, token } = useAuth();
+  const [joinRoomValue, setJoinRoomValue] = useState("");
+  const [joiningRoom, setJoiningRoom] = useState(false);
+  const [creatingRoom, setCreatingRoom] = useState(false);
   const [rooms, setRooms] = useState([]);
-  const [publicRooms, setPublicRooms] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
+  const [roomTemplates, setRoomTemplates] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [roomName, setRoomName] = useState("");
+  const [roomDescription, setRoomDescription] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
+
+  const selectedTemplate = useMemo(() => {
+    return roomTemplates.find((template) => template.id === selectedTemplateId) || null;
+  }, [roomTemplates, selectedTemplateId]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch recent rooms
-      try {
-        const data = await secureFetch(API_ENDPOINTS.GET_ROOMS, {}, user?.token);
-        setRooms(data || []);
-      } catch (error) {
-        console.warn("Failed to fetch recent rooms:", error);
-        toast.error("Could not load recent rooms");
-        setRooms([]);
-      }
-
-      // Fetch public rooms
-      try {
-        const data = await secureFetch(API_ENDPOINTS.GET_PUBLIC_ROOMS, {}, user?.token);
-        setPublicRooms(data || []);
-      } catch (error) {
-        console.warn("Failed to fetch public rooms:", error);
-        toast.error("Could not load featured rooms");
-        setPublicRooms([]);
-      }
-
-      // Fetch collaborators
-      try {
-        const data = await secureFetch(API_ENDPOINTS.GET_COLLABORATORS, {}, user?.token);
-        setCollaborators(data || []);
-      } catch (error) {
-        console.warn("Failed to fetch collaborators:", error);
-        setCollaborators([]);
-      }
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    }
-    setIsLoading(false);
-  };
-
-  const handleCreateRoom = () => {
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    navigate(`/room/${roomId}`);
-  };
-
-  const handleJoinRoom = async (e) => {
-    e.preventDefault();
-    const trimmedRoomId = joinRoomId.trim();
-
-    if (!trimmedRoomId) {
-      toast.error("Please enter a room ID");
+    if (!token) {
+      setIsLoading(false);
       return;
     }
 
-    // Validate room ID format
-    if (!validateRoomId(trimmedRoomId)) {
-      toast.error("Invalid room ID format. Use 6-20 alphanumeric characters");
+    let isMounted = true;
+
+    const fetchDashboard = async () => {
+      setIsLoading(true);
+
+      try {
+        const [roomsResult, collaboratorsResult, templateResult] = await Promise.allSettled([
+          secureFetch(API_ENDPOINTS.GET_ROOMS, {}, token),
+          secureFetch(API_ENDPOINTS.GET_COLLABORATORS, {}, token),
+          secureFetch(API_ENDPOINTS.GET_ROOM_TEMPLATES, {}, token),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        startTransition(() => {
+          setRooms(roomsResult.status === "fulfilled" ? roomsResult.value || [] : []);
+          setCollaborators(
+            collaboratorsResult.status === "fulfilled" ? collaboratorsResult.value || [] : []
+          );
+          setRoomTemplates(
+            templateResult.status === "fulfilled" ? templateResult.value || [] : []
+          );
+        });
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+
+        if (isMounted) {
+          toast.error("Could not load dashboard data");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token]);
+
+  const handleJoinById = async (roomId) => {
+    if (!roomId) {
+      toast.error("Enter a room ID or invite link");
       return;
     }
 
-    setLoading(true);
-    try {
-      const sanitizedRoomId = sanitizeInput(trimmedRoomId);
+    if (!validateRoomId(roomId)) {
+      toast.error("Invalid room ID format");
+      return;
+    }
 
-      const response = await secureFetch(
+    setJoiningRoom(true);
+
+    try {
+      await secureFetch(
         API_ENDPOINTS.JOIN_ROOM,
         {
           method: "POST",
-          body: JSON.stringify({ roomId: sanitizedRoomId }),
+          body: JSON.stringify({ roomId }),
         },
-        user?.token
+        token
       );
 
-      if (response) {
-        toast.success("Joining room...");
-        navigate(`/room/${sanitizedRoomId}`);
-      }
+      navigate(`/room/${roomId}`);
     } catch (error) {
-      console.error("Error joining room:", error);
-      toast.error(error.message || "Failed to join room");
+      toast.error(error.message || "Could not join room");
     } finally {
-      setLoading(false);
-      setJoinRoomId("");
+      setJoiningRoom(false);
     }
   };
 
-  const avatarColors = [
-    "bg-red-500", "bg-blue-500", "bg-green-500", "bg-purple-500",
-    "bg-pink-500", "bg-yellow-500"
-  ];
+  const handleCreateRoom = async (event) => {
+    event.preventDefault();
+    setCreatingRoom(true);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1, delayChildren: 0.2 }
+    try {
+      const room = await secureFetch(
+        API_ENDPOINTS.CREATE_ROOM,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: sanitizeInput(roomName) || null,
+            description: sanitizeInput(roomDescription) || null,
+            templateId: selectedTemplateId,
+          }),
+        },
+        token
+      );
+
+      setCreateModalOpen(false);
+      toast.success("Room created");
+      navigate(`/room/${room.id}`);
+    } catch (error) {
+      toast.error(error.message || "Could not create room");
+    } finally {
+      setCreatingRoom(false);
     }
   };
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+  const handleDeleteRoom = async (room) => {
+    const confirmed = window.confirm(
+      `Delete "${room.name}"?\n\nThis will permanently remove the room, its files, and collaborator access.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await secureFetch(
+        API_ENDPOINTS.DELETE_ROOM(room.id),
+        { method: "DELETE" },
+        token
+      );
+
+      setRooms((currentRooms) => currentRooms.filter((currentRoom) => currentRoom.id !== room.id));
+      toast.success("Room deleted");
+    } catch (error) {
+      toast.error(error.message || "Could not delete room");
+    }
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.3 }}
-      className="min-h-screen bg-gradient-to-br from-white to-gray-50 dark:from-zinc-950 dark:to-zinc-900 text-black dark:text-white"
-    >
-      {/* Hero Section */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="relative overflow-hidden"
-      >
-        {/* Gradient Background */}
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-transparent to-blue-500/10 dark:from-purple-900/20 dark:to-blue-900/20" />
-
-        <div className="relative px-4 sm:px-6 md:px-12 lg:px-20 py-12 sm:py-16 md:py-20 max-w-7xl mx-auto w-full">
-          {/* Welcome Section */}
-          <motion.div variants={itemVariants} className="mb-8 sm:mb-12">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 dark:from-purple-400 dark:via-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
-              Welcome back, {user?.username}! 🚀
-            </h1>
-            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 max-w-2xl">
-              Ready to collaborate? Start coding with your team in real-time.
+    <div className="min-h-screen bg-zinc-50 text-black dark:bg-zinc-950 dark:text-white">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Welcome back, {user?.username || "developer"}.
             </p>
-          </motion.div>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Build room-based workspaces
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400 sm:text-base">
+              Start with a blank room or choose a starter template, invite collaborators by link,
+              and keep each room&apos;s files and members separate.
+            </p>
+          </div>
 
-          {/* Stats Section */}
-          <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-12">
-            <div className="rounded-xl p-4 sm:p-6 bg-white/50 dark:bg-zinc-900/50 backdrop-blur border border-gray-200 dark:border-zinc-700">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Code2 size={20} className="text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Rooms</p>
-                  <p className="text-xl sm:text-2xl font-bold">{rooms.length}</p>
-                </div>
+          <div className="grid grid-cols-3 gap-3">
+            <SummaryCard label="Your Rooms" value={rooms.length} icon={FolderGit2} />
+            <SummaryCard label="Collaborators" value={collaborators.length} icon={Users} />
+            <SummaryCard label="Templates" value={roomTemplates.length} icon={Sparkles} />
+          </div>
+        </div>
+
+        <div className="mt-10 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <button
+            onClick={() => setCreateModalOpen(true)}
+            className="rounded-2xl border border-zinc-200 bg-white p-6 text-left transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">Create room</p>
+                <h2 className="mt-1 text-2xl font-semibold">Blank workspace or starter template</h2>
+                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                  Name the room, pick a template, and jump straight into the editor.
+                </p>
+              </div>
+              <div className="rounded-xl bg-zinc-900 p-3 text-white dark:bg-white dark:text-zinc-950">
+                <Plus size={22} />
               </div>
             </div>
-            <div className="rounded-xl p-4 sm:p-6 bg-white/50 dark:bg-zinc-900/50 backdrop-blur border border-gray-200 dark:border-zinc-700">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Users size={20} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Collaborators</p>
-                  <p className="text-xl sm:text-2xl font-bold">{collaborators.length}</p>
-                </div>
-              </div>
+          </button>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleJoinById(extractRoomId(joinRoomValue));
+            }}
+            className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Join room</p>
+            <h2 className="mt-1 text-2xl font-semibold">Paste a room ID or invite link</h2>
+            <div className="mt-4 flex flex-col gap-3">
+              <input
+                type="text"
+                placeholder="ABC123 or https://.../room/ABC123"
+                value={joinRoomValue}
+                onChange={(event) => setJoinRoomValue(event.target.value)}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950"
+              />
+              <button
+                type="submit"
+                disabled={joiningRoom}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                <Link2 size={16} />
+                {joiningRoom ? "Joining..." : "Join room"}
+              </button>
             </div>
-            <div className="rounded-xl p-4 sm:p-6 bg-white/50 dark:bg-zinc-900/50 backdrop-blur border border-gray-200 dark:border-zinc-700">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Zap size={20} className="text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Featured</p>
-                  <p className="text-xl sm:text-2xl font-bold">{publicRooms.length}</p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          </form>
+        </div>
 
-          {/* Quick Actions */}
-          <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-12 sm:mb-16">
-            {/* Create Room */}
-            <button
-              onClick={handleCreateRoom}
-              className="group relative overflow-hidden rounded-xl sm:rounded-2xl p-6 sm:p-8 bg-gradient-to-br from-purple-600 to-blue-600 hover:shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 transform hover:scale-105 text-left"
-            >
-              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition" />
-              <div className="relative flex items-center justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-1 sm:mb-2">Create New Room</h3>
-                  <p className="text-sm sm:text-base text-purple-100">Start a new coding session instantly</p>
-                </div>
-                <Plus size={32} className="text-white opacity-80 flex-shrink-0 hidden sm:block" />
-              </div>
-            </button>
+        <section className="mt-10">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Recent rooms</h2>
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">{rooms.length} total</span>
+          </div>
 
-            {/* Join Room */}
-            <form
-              onSubmit={handleJoinRoom}
-              className="rounded-xl sm:rounded-2xl p-6 sm:p-8 border-2 border-dashed border-zinc-300 dark:border-zinc-700 bg-gradient-to-br from-zinc-50 to-gray-100 dark:from-zinc-900 dark:to-zinc-800 hover:border-purple-500 transition-colors"
-            >
-              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">Join Existing Room</h3>
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-3 sm:mb-4">
-                Enter a room ID to join your team
-              </p>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g., ABC123"
-                  value={joinRoomId}
-                  onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
-                  className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition text-black dark:text-white text-sm sm:text-base"
-                />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 font-medium text-sm sm:text-base whitespace-nowrap"
-                >
-                  {loading ? "Joining..." : "Join"}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-
-          {/* Recent Rooms Section */}
           {isLoading ? (
-            <motion.div variants={itemVariants} className="mb-12 sm:mb-16">
-              <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8">Recent Rooms</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {[1, 2, 3].map((i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
-            </motion.div>
-          ) : rooms.length > 0 && (
-            <motion.div variants={itemVariants} className="mb-12 sm:mb-16">
-              <div className="flex items-center gap-3 mb-6 sm:mb-8 flex-wrap">
-                <h2 className="text-2xl sm:text-3xl font-bold">Recent Rooms</h2>
-                <span className="px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs sm:text-sm font-medium">
-                  {rooms.length}
-                </span>
-              </div>
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
-              >
-                {rooms.map((room) => (
-                  <motion.button
-                    key={room.id}
-                    variants={itemVariants}
-                    onClick={() => navigate(`/room/${room.id}`)}
-                    className="group text-left rounded-xl p-4 sm:p-6 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 hover:border-purple-500 dark:hover:border-purple-500 hover:shadow-lg transition-all duration-300"
-                  >
-                    <h3 className="text-base sm:text-lg font-semibold mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 truncate">
-                      {room.name || `Room ${room.id}`}
-                    </h3>
-                    <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                      <span className="truncate">{room.collaborators?.length || 0} collaborators</span>
-                      <ArrowRight size={16} className="group-hover:translate-x-1 transition flex-shrink-0" />
-                    </div>
-                  </motion.button>
-                ))}
-              </motion.div>
-            </motion.div>
-          )}
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {[1, 2, 3].map((item) => (
+                <SkeletonCard key={item} />
+              ))}
+            </div>
+          ) : rooms.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {rooms.map((room) => (
+                <div
+                  key={room.id}
+                  className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <button
+                      onClick={() => navigate(`/room/${room.id}`)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <h3 className="truncate text-base font-semibold">{room.name}</h3>
+                      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                        {room.templateName || "Blank Workspace"}
+                      </p>
+                    </button>
 
-          {/* Active Collaborators Section */}
-          {collaborators.length > 0 && (
-            <motion.div variants={itemVariants} className="mb-12 sm:mb-16">
-              <div className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-8 flex-wrap">
-                <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-                  <Users size={28} className="hidden sm:block" />
-                  <Users size={24} className="block sm:hidden" />
-                  Active Collaborators
-                </h2>
-                <span className="px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs sm:text-sm font-medium">
-                  {collaborators.length} online
-                </span>
-              </div>
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4"
-              >
-                {collaborators.map((collab, index) => (
-                  <motion.div
-                    key={collab.id}
-                    variants={itemVariants}
-                    className="flex flex-col items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 hover:shadow-md transition"
+                    {room.ownerId === user?.id && (
+                      <button
+                        onClick={() => handleDeleteRoom(room)}
+                        className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                        title={`Delete ${room.name}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => navigate(`/room/${room.id}`)}
+                    className="mt-4 block w-full text-left"
                   >
-                    <div className={`w-12 sm:w-14 h-12 sm:h-14 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-lg ${avatarColors[index % avatarColors.length]} border-2 border-purple-500 shadow-md flex-shrink-0`}>
-                      {collab.username?.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="text-center min-w-0">
-                      <p className="text-xs sm:text-sm font-semibold truncate">{collab.username}</p>
-                      <span className="text-xs text-green-500 font-medium flex items-center gap-1 justify-center">
-                        <span className="w-2 h-2 bg-green-500 rounded-full"></span> Online
+                    <div className="flex flex-wrap gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">
+                        {room.fileCount || 0} files
+                      </span>
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">
+                        {room.participantCount || 0} collaborators
+                      </span>
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">
+                        {room.id}
                       </span>
                     </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </motion.div>
-          )}
-
-          {/* Featured Public Rooms Section */}
-          {publicRooms.length > 0 && (
-            <motion.div variants={itemVariants} className="mb-12 sm:mb-16">
-              <div className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-8 flex-wrap">
-                <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-                  <Flame size={28} className="text-orange-500 hidden sm:block" />
-                  <Flame size={24} className="text-orange-500 block sm:hidden" />
-                  Featured Rooms
-                </h2>
-                <span className="px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs sm:text-sm font-medium">
-                  {publicRooms.length}
-                </span>
-              </div>
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
-              >
-                {publicRooms.map((room) => (
-                  <motion.button
-                    key={room.id}
-                    variants={itemVariants}
-                    onClick={() => navigate(`/room/${room.id}`)}
-                    className="group text-left rounded-xl p-4 sm:p-6 bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border border-orange-200 dark:border-orange-700/50 hover:shadow-lg transition-all duration-300"
-                  >
-                    <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2">
-                      <h3 className="text-base sm:text-lg font-semibold group-hover:text-orange-600 dark:group-hover:text-orange-400 truncate">
-                        {room.name || `Room ${room.id}`}
-                      </h3>
-                      <Flame size={18} className="text-orange-500 flex-shrink-0" />
+                    <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+                      Open room
+                      <ArrowRight size={15} />
                     </div>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-3 sm:mb-4 line-clamp-2">
-                      {room.description || "Python, JavaScript, Algorithms"}
-                    </p>
-                    <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                      <span className="truncate">{room.participantCount || 0} currently coding</span>
-                      <ArrowRight size={16} className="group-hover:translate-x-1 transition flex-shrink-0" />
-                    </div>
-                  </motion.button>
-                ))}
-              </motion.div>
-            </motion.div>
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              You have no rooms yet. Create one to start with a blank workspace or a starter template.
+            </div>
           )}
+        </section>
+      </div>
 
-          {/* Empty State */}
-          {!isLoading && rooms.length === 0 && publicRooms.length === 0 && (
-            <motion.div variants={itemVariants} className="text-center py-12 sm:py-20">
-              <div className="mb-6 sm:mb-8">
-                <Zap size={48} className="mx-auto text-purple-600 dark:text-purple-400 opacity-20 mb-3 sm:mb-4" />
+      {createModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
+          <Motion.form
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            onSubmit={handleCreateRoom}
+            className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <div className="border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">Create a room</p>
+              <h2 className="mt-1 text-2xl font-semibold">Choose how the workspace should start</h2>
+            </div>
+
+            <div className="grid gap-6 p-6 lg:grid-cols-[1fr_1.4fr]">
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Room name</label>
+                  <input
+                    value={roomName}
+                    onChange={(event) => setRoomName(event.target.value)}
+                    placeholder="Example: DSA Pairing Session"
+                    className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Description</label>
+                  <textarea
+                    value={roomDescription}
+                    onChange={(event) => setRoomDescription(event.target.value)}
+                    placeholder="Optional room description"
+                    rows={4}
+                    className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950"
+                  />
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+                  <p className="text-sm font-medium">{selectedTemplate?.name || "Blank Workspace"}</p>
+                  <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    {selectedTemplate?.description || "Start from an empty workspace."}
+                  </p>
+                </div>
               </div>
-              <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-400 mb-6 sm:mb-8">
-                No rooms yet. Create one to get started!
-              </p>
+
+              <div>
+                <p className="mb-3 text-sm font-medium">Starter templates</p>
+                <div className="grid max-h-[52vh] gap-3 overflow-auto pr-1 md:grid-cols-2">
+                  {roomTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => setSelectedTemplateId(template.id)}
+                      className={`rounded-xl border p-4 text-left transition-colors ${
+                        selectedTemplateId === template.id
+                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-950"
+                          : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium">{template.name}</p>
+                        <span className={`rounded-full px-2.5 py-1 text-xs ${
+                          selectedTemplateId === template.id
+                            ? "bg-white/15 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                        }`}>
+                          {template.category}
+                        </span>
+                      </div>
+                      <p className={`mt-2 text-sm ${
+                        selectedTemplateId === template.id
+                          ? "text-white/80 dark:text-zinc-600"
+                          : "text-zinc-500 dark:text-zinc-400"
+                      }`}>
+                        {template.description}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
               <button
-                onClick={handleCreateRoom}
-                className="px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all transform hover:scale-105 font-semibold text-base sm:text-lg"
+                type="button"
+                onClick={() => setCreateModalOpen(false)}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:text-white"
               >
-                Create Your First Room
+                Cancel
               </button>
-            </motion.div>
-          )}
+              <button
+                type="submit"
+                disabled={creatingRoom}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                {creatingRoom ? "Creating..." : "Create room"}
+              </button>
+            </div>
+          </Motion.form>
         </div>
-      </motion.div>
-    </motion.div>
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, icon }) {
+  const IconComponent = icon;
+
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex items-center gap-3">
+        <div className="rounded-lg bg-zinc-100 p-2 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+          <IconComponent size={16} />
+        </div>
+        <div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+          <p className="text-lg font-semibold">{value}</p>
+        </div>
+      </div>
+    </div>
   );
 }

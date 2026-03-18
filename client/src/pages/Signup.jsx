@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { Eye, EyeOff, Github } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { TypeAnimation } from "react-type-animation";
@@ -36,7 +36,7 @@ export default function Signup() {
   };
 
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
@@ -61,7 +61,7 @@ export default function Signup() {
 
         {/* Hero Section (same as login) */}
         <div className="hidden lg:flex w-1/2 flex-col justify-center px-20">
-          <motion.h1
+          <Motion.h1
             initial={{ opacity: 0, x: -60 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 1 }}
@@ -74,7 +74,7 @@ export default function Signup() {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-400">
               Collaborate.
             </span>
-          </motion.h1>
+          </Motion.h1>
 
           <div className="mt-8 bg-black/60 border border-white/10 rounded-xl p-4 text-green-400 text-sm font-mono">
             <TypeAnimation
@@ -95,7 +95,7 @@ export default function Signup() {
 
         {/* Signup Card */}
         <div className="flex w-full lg:w-1/2 items-center justify-center px-6">
-          <motion.div
+          <Motion.div
             whileHover={{ rotateX: 4, rotateY: -4 }}
             onMouseMove={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
@@ -176,10 +176,10 @@ export default function Signup() {
                 Login
               </Link>
             </p>
-          </motion.div>
+          </Motion.div>
         </div>
       </div>
-    </motion.div>
+    </Motion.div>
   );
 }
 

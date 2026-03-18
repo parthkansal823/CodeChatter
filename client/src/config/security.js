@@ -24,8 +24,12 @@ export const API_ENDPOINTS = {
   CREATE_ROOM: `${API_BASE_URL}/api/rooms/create`,
   JOIN_ROOM: `${API_BASE_URL}/api/rooms/join`,
   GET_ROOMS: `${API_BASE_URL}/api/rooms`,
+  GET_ROOM_TEMPLATES: `${API_BASE_URL}/api/rooms/templates`,
   GET_PUBLIC_ROOMS: `${API_BASE_URL}/api/rooms/public`,
-  DELETE_ROOM: `${API_BASE_URL}/api/rooms/:roomId/delete`,
+  GET_ROOM: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}`,
+  UPDATE_ROOM_WORKSPACE: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/workspace`,
+  RUN_ROOM_FILE: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/run`,
+  DELETE_ROOM: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}`,
 
   // Collaborators
   GET_COLLABORATORS: `${API_BASE_URL}/api/collaborators`,
