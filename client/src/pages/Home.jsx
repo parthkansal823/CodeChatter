@@ -89,9 +89,7 @@ export default function Home() {
           setCollaborators(
             collaboratorsResult.status === "fulfilled" ? collaboratorsResult.value || [] : []
           );
-          setRoomTemplates(
-            templateResult.status === "fulfilled" ? templateResult.value || [] : []
-          );
+
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -212,10 +210,9 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <SummaryCard label="Your Rooms" value={rooms.length} icon={FolderGit2} />
             <SummaryCard label="Collaborators" value={collaborators.length} icon={Users} />
-            <SummaryCard label="Templates" value={roomTemplates.length} icon={Sparkles} />
           </div>
         </div>
 
