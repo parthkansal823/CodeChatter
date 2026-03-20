@@ -6,7 +6,6 @@ import {
   FolderGit2,
   Link2,
   Plus,
-  Sparkles,
   Trash2,
   Users
 } from "lucide-react";
@@ -58,9 +57,10 @@ export default function Home() {
   const [roomDescription, setRoomDescription] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
 
-  const selectedTemplate = useMemo(() => {
-    return roomTemplates.find((template) => template.id === selectedTemplateId) || null;
-  }, [roomTemplates, selectedTemplateId]);
+  const selectedTemplate = useMemo(
+    () => roomTemplates.find((t) => t.id === selectedTemplateId) || null,
+    [roomTemplates, selectedTemplateId]
+  );
 
   useEffect(() => {
     if (!token) {
@@ -89,7 +89,7 @@ export default function Home() {
           setCollaborators(
             collaboratorsResult.status === "fulfilled" ? collaboratorsResult.value || [] : []
           );
-
+          setRoomTemplates(templateResult.status === "fulfilled" ? templateResult.value || [] : []);
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);

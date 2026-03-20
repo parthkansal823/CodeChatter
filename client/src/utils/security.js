@@ -49,34 +49,9 @@ export const validateRoomId = (roomId) => {
   return roomRegex.test(roomId);
 };
 
-/**
- * Get password strength score (0-4)
- */
-export const getPasswordStrength = (password) => {
-  let score = 0;
-  if (password.length >= 8) score++;
-  if (password.length >= 12) score++;
-  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
-  if (/[0-9]/.test(password)) score++;
-  if (SPECIAL_CHAR_PATTERN.test(password)) score++;
-  return Math.min(score, 4);
-};
-
 // ============================================================================
 // INPUT SANITIZATION
 // ============================================================================
-
-/**
- * Sanitize HTML to prevent XSS attacks
- * Removes all HTML tags and special characters
- */
-export const sanitizeHTML = (input) => {
-  if (typeof input !== 'string') return '';
-
-  const div = document.createElement('div');
-  div.textContent = input;
-  return div.innerHTML;
-};
 
 /**
  * Sanitize user input for safe display
@@ -86,27 +61,10 @@ export const sanitizeInput = (input) => {
   if (typeof input !== 'string') return '';
 
   return input
-    .replace(/[<>]/g, '') // Remove angle brackets
-    .replace(/javascript:/gi, '') // Remove javascript: protocol
-    .replace(/on\w+\s*=/gi, '') // Remove event handlers (onclick=, etc)
+    .replace(/[<>]/g, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
     .trim();
-};
-
-/**
- * Escape special characters for safe use in URLs
- */
-export const escapeUrlParam = (param) => {
-  if (typeof param !== 'string') return '';
-  return encodeURIComponent(param);
-};
-
-/**
- * Sanitize room name/code content
- */
-export const sanitizeCode = (code) => {
-  if (typeof code !== 'string') return '';
-  // Remove potentially harmful patterns but preserve code structure
-  return code.replace(/[<]\s*script[^>]*>[^<]*<\s*\/\s*script\s*>/gi, '');
 };
 
 // ============================================================================
@@ -114,14 +72,12 @@ export const sanitizeCode = (code) => {
 // ============================================================================
 
 /**
- * Securely store auth token in memory (not localStorage)
- * Use sessionStorage as fallback (cleared on browser close)
+ * Securely store auth token in sessionStorage
  */
 export const setSecureToken = (token) => {
   if (!token) return;
 
   try {
-    // Try to use sessionStorage first (more secure than localStorage)
     sessionStorage.setItem('__auth_token', token);
   } catch (e) {
     console.error('Failed to store token securely:', e);
@@ -163,11 +119,8 @@ export const isTokenExpired = (token) => {
     if (parts.length !== 3) return true;
 
     const decoded = JSON.parse(atob(parts[1]));
-    const exp = decoded.exp * 1000; // Convert to milliseconds
-
-    return Date.now() >= exp;
-  } catch (e) {
-    console.error('Failed to validate token expiration:', e);
+    return Date.now() >= decoded.exp * 1000;
+  } catch {
     return true;
   }
 };
@@ -182,7 +135,7 @@ export const isTokenExpired = (token) => {
 export const getSecureHeaders = (token) => {
   const headers = {
     'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest', // CSRF protection
+    'X-Requested-With': 'XMLHttpRequest',
   };
 
   if (token) {
@@ -194,7 +147,6 @@ export const getSecureHeaders = (token) => {
 
 /**
  * Setup Content Security Policy
- * Prevents inline scripts and external script injection
  */
 export const setupCSP = () => {
   if (typeof document === "undefined") {
@@ -213,7 +165,7 @@ export const setupCSP = () => {
   meta.httpEquiv = 'Content-Security-Policy';
   meta.content = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com", // Google OAuth needs some exceptions
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
@@ -242,7 +194,6 @@ export class RateLimiter {
 
   isAllowed() {
     const now = Date.now();
-    // Remove old attempts outside the window
     this.attempts = this.attempts.filter(time => now - time < this.windowMs);
 
     if (this.attempts.length >= this.maxAttempts) {
@@ -256,36 +207,9 @@ export class RateLimiter {
   getRemainingTime() {
     if (this.attempts.length === 0) return 0;
     const oldestAttempt = this.attempts[0];
-    const remaining = this.windowMs - (Date.now() - oldestAttempt);
-    return Math.max(0, remaining);
+    return Math.max(0, this.windowMs - (Date.now() - oldestAttempt));
   }
 }
-
-// ============================================================================
-// CSRF PROTECTION
-// ============================================================================
-
-/**
- * Generate CSRF token
- */
-export const generateCSRFToken = () => {
-  return Math.random().toString(36).substring(2, 15) +
-         Math.random().toString(36).substring(2, 15);
-};
-
-/**
- * Store CSRF token
- */
-export const setCSRFToken = (token) => {
-  sessionStorage.setItem('__csrf_token', token);
-};
-
-/**
- * Get CSRF token
- */
-export const getCSRFToken = () => {
-  return sessionStorage.getItem('__csrf_token');
-};
 
 // ============================================================================
 // SECURE API CALLS
@@ -298,7 +222,6 @@ export const secureFetch = async (url, options = {}, token = null) => {
   const timeout = options.timeout || 10000;
 
   try {
-    // Validate URL
     if (!url.startsWith('http://localhost') && !url.startsWith('https://')) {
       throw new Error('Invalid URL protocol. Only http/https allowed.');
     }
@@ -311,12 +234,11 @@ export const secureFetch = async (url, options = {}, token = null) => {
       ...options,
       headers: { ...headers, ...options.headers },
       signal: controller.signal,
-      credentials: 'same-origin', // Only send credentials for same-origin requests
+      credentials: 'same-origin',
     });
 
     clearTimeout(timeoutId);
 
-    // Handle non-2xx responses
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -331,7 +253,6 @@ export const secureFetch = async (url, options = {}, token = null) => {
       }
 
       if (response.status === 401) {
-        // Unauthorized - token likely expired
         clearSecureData();
       }
       throw new Error(errorMessage);
@@ -343,33 +264,5 @@ export const secureFetch = async (url, options = {}, token = null) => {
       throw new Error('Request timeout');
     }
     throw error;
-  }
-};
-
-// ============================================================================
-// URL SAFETY
-// ============================================================================
-
-/**
- * Validate redirect URL to prevent open redirect attacks
- */
-export const isValidRedirectUrl = (url) => {
-  try {
-    const urlObj = new URL(url, window.location.origin);
-    // Only allow same-origin redirects
-    return urlObj.origin === window.location.origin;
-  } catch {
-    return false;
-  }
-};
-
-/**
- * Safe redirect
- */
-export const safeRedirect = (url, defaultUrl = '/') => {
-  if (isValidRedirectUrl(url)) {
-    window.location.href = url;
-  } else {
-    window.location.href = defaultUrl;
   }
 };

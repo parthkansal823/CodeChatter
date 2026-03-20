@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 import {
   clearSecureData,
   getSecureToken,
@@ -21,7 +21,8 @@ import {
   storeJWT,
   validateJWTBeforeUse,
 } from "../utils/jwt";
-import { AuthContext } from "./auth-context";
+
+export const AuthContext = createContext(null);
 
 const loginLimiter = new RateLimiter(5, 15 * 60 * 1000);
 const signupLimiter = new RateLimiter(3, 60 * 60 * 1000);
@@ -109,7 +110,6 @@ export function AuthProvider({ children }) {
         setUser(userInfo);
         setIsAuthenticated(true);
 
-        console.log("Auth initialized from stored JWT");
         logJWTInfo(storedToken);
 
         try {
@@ -284,7 +284,6 @@ export function AuthProvider({ children }) {
       console.error("Logout error:", error);
     } finally {
       clearData();
-      console.log("User logged out and session data cleared");
     }
   };
 
