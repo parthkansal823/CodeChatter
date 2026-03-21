@@ -17,6 +17,11 @@ const LANGUAGE_BY_EXTENSION = {
   css: "css",
   json: "json",
   md: "markdown",
+  sh: "shell",
+  lua: "lua",
+  pl: "perl",
+  swift: "swift",
+  kt: "kotlin",
 };
 
 function generateNodeId() {
@@ -190,4 +195,22 @@ export function getFolderChildren(tree, folderId) {
   }
 
   return folderNode.children || [];
+}
+
+export function renameNode(tree, nodeId, newName) {
+  return updateNodeById(tree, nodeId, (node) => ({ ...node, name: newName }));
+}
+
+export function moveNode(tree, nodeId, targetParentId) {
+  const targetNode = findNodeById(tree, nodeId);
+  if (!targetNode) return tree;
+
+  // Prevent moving into self or descendants
+  if (targetNode.type === "folder" && targetParentId) {
+    const isTargetInsideSelf = findNodeById([targetNode], targetParentId);
+    if (isTargetInsideSelf) return tree;
+  }
+
+  const nextTree = removeNodeById(tree, nodeId);
+  return addNodeToWorkspace(nextTree, targetParentId, targetNode);
 }

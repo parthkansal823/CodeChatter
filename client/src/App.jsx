@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { PreferencesProvider } from "./context/PreferencesContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import CommandPalette from "./components/CommandPalette";
 import { useAuth } from "./hooks/useAuth";
 
 const Layout = lazy(() => import("./pages/Layout"));
@@ -63,6 +64,7 @@ function App() {
           />
 
         <Suspense fallback={<RouteFallback />}>
+          <CommandPalette theme={theme} onThemeChange={setTheme} />
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/auth/callback" element={<OAuthCallback />} />

@@ -7,8 +7,13 @@ import os
 import re
 import secrets
 import shutil
+import os
+import re
+import secrets
+import shutil
 import subprocess
 import tempfile
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
@@ -17,7 +22,7 @@ from urllib.parse import urlencode, urlparse
 
 from authlib.integrations.starlette_client import OAuth
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
@@ -44,7 +49,7 @@ ALLOWED_ORIGINS = [
   origin.strip()
   for origin in os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:3000"
+    "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000"
   ).split(",")
   if origin.strip()
 ]
@@ -212,6 +217,7 @@ class RoomCreateRequest(BaseModel):
   description: str | None = Field(default=None, max_length=240)
   is_public: bool = False
   templateId: str | None = Field(default="blank", max_length=40)
+  terminalShell: str | None = Field(default="bash", max_length=20)
 
   @field_validator("name", "description")
   @classmethod
@@ -245,6 +251,12 @@ class RoomJoinRequest(BaseModel):
       raise ValueError("Room ID must be 6-20 uppercase letters or numbers")
 
     return normalized
+
+
+class RoomSettingsUpdateRequest(BaseModel):
+  name: str | None = Field(default=None, max_length=80)
+  description: str | None = Field(default=None, max_length=240)
+  terminalShell: str | None = Field(default=None, max_length=20)
 
 
 class RoomWorkspaceUpdateRequest(BaseModel):
@@ -575,6 +587,41 @@ def build_run_plan(workspace_root: Path, relative_path: str) -> dict[str, Any]:
       "cwd": str(target_file.parent),
     }
 
+  if extension == ".sh":
+    runner = find_installed_command("bash", "sh")
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Bash/sh is not installed on the server")
+    return {"compile": None, "run": [runner, str(target_file)], "cwd": str(target_file.parent)}
+
+  if extension == ".lua":
+    runner = find_installed_command("lua")
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Lua is not installed on the server")
+    return {"compile": None, "run": [runner, str(target_file)], "cwd": str(target_file.parent)}
+
+  if extension == ".pl":
+    runner = find_installed_command("perl")
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Perl is not installed on the server")
+    return {"compile": None, "run": [runner, str(target_file)], "cwd": str(target_file.parent)}
+
+  if extension == ".swift":
+    runner = find_installed_command("swift")
+    if runner is None:
+      raise HTTPException(status_code=400, detail="Swift is not installed on the server")
+    return {"compile": None, "run": [runner, str(target_file)], "cwd": str(target_file.parent)}
+
+  if extension == ".kt":
+    kotlinc = find_installed_command("kotlinc")
+    java = find_installed_command("java")
+    if kotlinc is None or java is None:
+      raise HTTPException(status_code=400, detail="Kotlin or Java is not installed on the server")
+    return {
+      "compile": [kotlinc, str(target_file), "-include-runtime", "-d", "codechatter-kt.jar"],
+      "run": [java, "-jar", "codechatter-kt.jar"],
+      "cwd": str(target_file.parent)
+    }
+
   if extension in {".html", ".css", ".json", ".md"}:
     raise HTTPException(
       status_code=400,
@@ -585,6 +632,19 @@ def build_run_plan(workspace_root: Path, relative_path: str) -> dict[str, Any]:
     status_code=400,
     detail=f"Running `{extension or 'this file type'}` is not supported yet.",
   )
+
+
+def sync_workspace_to_disk(room_id: str, workspace_tree: list[dict[str, Any]]) -> str:
+  workspace_root = APP_DIR / "data" / "workspaces" / room_id
+  workspace_root.mkdir(parents=True, exist_ok=True)
+  
+  workspace_files = iter_workspace_files(workspace_tree)
+  for relative_path, content in workspace_files:
+    target_path = workspace_root / PurePosixPath(relative_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(content, encoding="utf-8")
+      
+  return str(workspace_root)
 
 
 def execute_workspace_file(
@@ -751,6 +811,7 @@ def create_room(
       description=payload.description,
       is_public=payload.is_public,
       template_id=payload.templateId,
+      terminal_shell=payload.terminalShell or "bash",
     )
   except ValueError as error:
     raise HTTPException(
@@ -832,6 +893,27 @@ def get_room(
   )
 
 
+@app.put("/api/rooms/{room_id}/settings")
+def update_room_settings(
+  room_id: str,
+  payload: RoomSettingsUpdateRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  normalized_room_id = validate_room_id_value(room_id)
+  try:
+    return repository.update_room_settings(
+      user_id=current_user["id"],
+      room_id=normalized_room_id,
+      name=payload.name,
+      description=payload.description,
+      terminal_shell=payload.terminalShell,
+    )
+  except ValueError as error:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+  except PermissionError as error:
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+
+
 @app.put("/api/rooms/{room_id}/workspace")
 def save_room_workspace(
   room_id: str,
@@ -886,6 +968,187 @@ def run_room_file(
   )
   repository.touch_room(normalized_room_id)
   return result
+
+
+@app.websocket("/api/rooms/{room_id}/terminal")
+async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
+    await websocket.accept()
+    
+    # Authenticate token manually for websocket
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("Token missing subject")
+    except Exception as e:
+        await websocket.send_text("\r\n\x1b[31mx Authentication failed \x1b[0m\r\n")
+        await websocket.close()
+        return
+
+    normalized_room_id = validate_room_id_value(room_id)
+    room = repository.get_room_by_id(normalized_room_id)
+    if not room or not repository.user_can_access_room(user_id, room):
+        await websocket.send_text("\r\n\x1b[31mx Room access denied \x1b[0m\r\n")
+        await websocket.close()
+        return
+
+    # Ensure physical workspace is synced first
+    workspace_dir = sync_workspace_to_disk(normalized_room_id, room.get("workspace_tree", []))
+    terminal_shell = room.get("terminal_shell", "bash")
+
+    # Use pywinpty on Windows, or standard subprocess/pty on other platforms
+    if os.name == "nt":
+        try:
+            import winpty
+            import os.path
+
+            git_bash = r"C:\Program Files\Git\bin\bash.exe"
+            if terminal_shell == "bash" and os.path.exists(git_bash):
+                proc = winpty.PtyProcess.spawn([git_bash, "--login", "-i"], cwd=workspace_dir)
+            elif terminal_shell == "powershell":
+                proc = winpty.PtyProcess.spawn("powershell.exe", cwd=workspace_dir)
+            else:
+                proc = winpty.PtyProcess.spawn("cmd.exe", cwd=workspace_dir)
+
+            stop_event = asyncio.Event()
+
+            async def read_from_process():
+                try:
+                    while not stop_event.is_set():
+                        # proc.read() is blocking; run in a thread.
+                        # It returns "" between bursts — that is normal, NOT EOF.
+                        # It raises EOFError when the shell actually exits.
+                        data = await asyncio.to_thread(proc.read, 65536)
+                        if data:
+                            await websocket.send_text(data)
+                except EOFError:
+                    # Shell process exited normally
+                    pass
+                except Exception as e:
+                    logger.error(f"Pty read error: {e}")
+                finally:
+                    stop_event.set()
+
+            async def read_from_websocket():
+                try:
+                    while not stop_event.is_set():
+                        msg = await websocket.receive_json()
+                        if msg.get("type") == "input" and "data" in msg:
+                            data = msg["data"]
+                            if isinstance(data, str):
+                                proc.write(data)
+                        elif msg.get("type") == "resize":
+                            cols = msg.get("cols", 80)
+                            rows = msg.get("rows", 24)
+                            try:
+                                proc.setwinsize(rows, cols)
+                            except Exception:
+                                pass
+                except WebSocketDisconnect:
+                    pass
+                except Exception as e:
+                    logger.error(f"WebSocket input error: {e}")
+                finally:
+                    stop_event.set()
+
+            try:
+                await asyncio.gather(
+                    read_from_process(),
+                    read_from_websocket(),
+                )
+            finally:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                try:
+                    await websocket.close()
+                except Exception:
+                    pass
+
+        except ImportError:
+            await websocket.send_text("\r\n\x1b[31mx Terminal requires 'pywinpty' on Windows. Run: pip install pywinpty\x1b[0m\r\n")
+            await websocket.close()
+            return
+    else:
+        # Fallback for Linux/macOS
+        # We can use 'pty' module with subprocess, but since typical Unix setup uses bash natively:
+        import pty
+        import fcntl
+        import struct
+        import termios
+        
+        master_fd, slave_fd = pty.openpty()
+        
+        try:
+            cmd = ["bash"] if terminal_shell == "bash" else ["sh"]
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                cwd=workspace_dir,
+                preexec_fn=os.setsid
+            )
+            os.close(slave_fd)
+        except Exception as e:
+            logger.error(f"Failed to start Unix terminal process: {e}")
+            await websocket.send_text(f"\r\n\x1b[31mx Failed to start terminal: {e}\x1b[0m\r\n")
+            await websocket.close()
+            return
+
+        async def read_from_process():
+            loop = asyncio.get_running_loop()
+            try:
+                while True:
+                    data = await loop.run_in_executor(None, os.read, master_fd, 1024)
+                    if not data:
+                        break
+                    await websocket.send_text(data.decode(errors='replace'))
+            except OSError: # Usually when process exits
+                pass
+            except Exception as e:
+                logger.error(f"Unix pty read error: {e}")
+
+        async def read_from_websocket():
+            try:
+                while True:
+                    msg = await websocket.receive_json()
+                    if msg.get("type") == "input" and "data" in msg:
+                        data = msg["data"]
+                        if isinstance(data, str):
+                            os.write(master_fd, data.encode('utf-8'))
+                    elif msg.get("type") == "resize":
+                        cols = msg.get("cols", 80)
+                        rows = msg.get("rows", 24)
+                        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+                        try:
+                            fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                        except Exception:
+                            pass
+            except WebSocketDisconnect:
+                pass
+            except Exception as e:
+                logger.error(f"WebSocket input error: {e}")
+
+        try:
+            await asyncio.gather(
+                read_from_process(),
+                read_from_websocket()
+            )
+        finally:
+            try:
+                process.terminate()
+            except Exception:
+                pass
+            try:
+                os.close(master_fd)
+            except OSError:
+                pass
+            try:
+                await websocket.close()
+            except Exception:
+                pass
 
 
 @app.get("/api/collaborators")

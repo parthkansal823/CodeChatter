@@ -17,6 +17,9 @@ import CodeEditor from "../components/CodeEditor";
 import TabBar from "../components/TabBar";
 import BottomPanel from "../components/BottomPanel";
 import RightSidebar from "../components/RightSidebar";
+import RoomSettingsModal from "../components/RoomSettingsModal";
+import ConfirmModal from "../components/ConfirmModal";
+import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch } from "../utils/security";
@@ -29,7 +32,9 @@ import {
   getFirstFile,
   getFolderChildren,
   removeNodeById,
-  updateNodeById
+  updateNodeById,
+  renameNode,
+  moveNode
 } from "../utils/workspace";
 
 export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
@@ -46,12 +51,13 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isDesktopExplorerOpen, setIsDesktopExplorerOpen] = useState(true);
   const [isMobileExplorerOpen, setIsMobileExplorerOpen] = useState(false);
-  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState("saved");
   const [stdin, setStdin] = useState("");
   const [runResult, setRunResult] = useState(null);
   const [runPanelSignal, setRunPanelSignal] = useState(0);
+  const [nodeToDelete, setNodeToDelete] = useState(null);
   const saveSnapshotRef = useRef("");
   const latestWorkspaceSnapshotRef = useRef("");
   const hasHydratedWorkspaceRef = useRef(false);
@@ -312,14 +318,14 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   };
 
   const handleDeleteNode = (node) => {
-    const confirmed = window.confirm(`Delete ${node.name}?`);
+    setNodeToDelete(node);
+  };
 
-    if (!confirmed) {
-      return;
-    }
+  const confirmDeleteNode = () => {
+    if (!nodeToDelete) return;
 
     setWorkspaceTree((currentTree) => {
-      const nextTree = removeNodeById(currentTree, node.id);
+      const nextTree = removeNodeById(currentTree, nodeToDelete.id);
       const nextActiveFile = activeFileId && findNodeById(nextTree, activeFileId)
         ? findNodeById(nextTree, activeFileId)
         : getFirstFile(nextTree);
@@ -335,16 +341,32 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     // Remove from open files if it was open
     setOpenFileIds((prev) => {
       const next = new Set(prev);
-      next.delete(node.id);
+      next.delete(nodeToDelete.id);
       return next;
     });
 
     // Remove from modified files
     setModifiedFileIds((prev) => {
       const next = new Set(prev);
-      next.delete(node.id);
+      next.delete(nodeToDelete.id);
       return next;
     });
+    
+    setNodeToDelete(null);
+  };
+
+  const handleRenameNode = (nodeId, newName) => {
+    const cleanedName = sanitizeInput(newName).replace(/[\\/]/g, "").trim();
+    if (!cleanedName) return;
+    setWorkspaceTree((currentTree) => renameNode(currentTree, nodeId, cleanedName));
+    setModifiedFileIds((prev) => new Set([...prev, nodeId]));
+  };
+
+  const handleMoveNode = (nodeId, newParentId) => {
+    setWorkspaceTree((currentTree) => {
+      return moveNode(currentTree, nodeId, newParentId);
+    });
+    setModifiedFileIds((prev) => new Set([...prev, nodeId]));
   };
 
   const handleCodeChange = (nextCode) => {
@@ -436,15 +458,6 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     setIsDesktopExplorerOpen((current) => !current);
   };
 
-  const toggleSidebar = () => {
-    if (isMobileViewport) {
-      setIsMobileSidebarOpen((current) => !current);
-      return;
-    }
-
-    setIsDesktopSidebarOpen((current) => !current);
-  };
-
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-white text-zinc-600 dark:bg-zinc-950 dark:text-zinc-300">
@@ -457,7 +470,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white text-black dark:bg-zinc-950 dark:text-white">
+    <div className="flex h-screen flex-col overflow-hidden bg-zinc-50 text-black dark:bg-[#09090b] dark:text-white">
       <Navbar
         theme={theme}
         onThemeChange={onThemeChange}
@@ -477,6 +490,8 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
             onDeleteNode={handleDeleteNode}
             onCreateFile={handleCreateFile}
             onCreateFolder={handleCreateFolder}
+            onRenameNode={handleRenameNode}
+            onMoveNode={handleMoveNode}
             isOpen={isDesktopExplorerOpen}
             onToggle={toggleExplorer}
           />
@@ -488,13 +503,14 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
             activePath={activeFileEntry?.path}
             collaborators={room?.collaborators || []}
             explorerOpen={isMobileViewport ? isMobileExplorerOpen : isDesktopExplorerOpen}
-            sidebarOpen={isMobileViewport ? isMobileSidebarOpen : isDesktopSidebarOpen}
             onToggleExplorer={toggleExplorer}
-            onToggleSidebar={toggleSidebar}
+            sidebarOpen={isRightSidebarOpen}
+            onToggleSidebar={() => setIsRightSidebarOpen(prev => !prev)}
             onCopyInvite={handleCopyInvite}
             onRun={handleRun}
             isRunning={runResult?.status === "running"}
             saveStatus={saveStatus}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
 
           {openFiles.length > 0 && (
@@ -508,59 +524,62 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
           )}
 
           <div className="flex min-h-0 flex-1">
-            {activeFileEntry ? (
-              <CodeEditor
-                selectedFileName={activeFileEntry.name}
-                selectedFilePath={activeFileEntry.path}
-                code={activeCode}
-                theme={theme}
-                onCodeChange={handleCodeChange}
-              />
-            ) : (
-              <div className="flex flex-1 items-center justify-center bg-white dark:bg-zinc-950">
-                <div className="w-full max-w-md px-6 text-center">
-                  <p className="text-lg font-semibold text-zinc-900 dark:text-white">
-                    This room starts empty
-                  </p>
-                  <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-                    Create a file or folder and the workspace will be saved for everyone in this room.
-                  </p>
-                  <div className="mt-6 flex justify-center gap-3">
-                    <button
-                      onClick={() => handleQuickCreate("file")}
-                      className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:border-zinc-700"
-                    >
-                      <FilePlus2 size={16} />
-                      New File
-                    </button>
-                    <button
-                      onClick={() => handleQuickCreate("folder")}
-                      className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:border-zinc-700"
-                    >
-                      <FolderPlus size={16} />
-                      New Folder
-                    </button>
+            <div className="flex flex-1 flex-col min-w-0">
+              {activeFileEntry ? (
+                <CodeEditor
+                  selectedFileName={activeFileEntry.name}
+                  selectedFilePath={activeFileEntry.path}
+                  code={activeCode}
+                  theme={theme}
+                  onCodeChange={handleCodeChange}
+                />
+              ) : (
+                <div className="flex flex-1 items-center justify-center bg-white dark:bg-zinc-950">
+                  <div className="w-full max-w-md px-6 text-center">
+                    <p className="text-lg font-semibold text-zinc-900 dark:text-white">
+                      This room starts empty
+                    </p>
+                    <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                      Create a file or folder and the workspace will be saved for everyone in this room.
+                    </p>
+                    <div className="mt-6 flex justify-center gap-3">
+                      <Button
+                        onClick={() => handleQuickCreate("file")}
+                        variant="outline"
+                      >
+                        <FilePlus2 size={16} className="mr-2" />
+                        New File
+                      </Button>
+                      <Button
+                        onClick={() => handleQuickCreate("folder")}
+                        variant="outline"
+                      >
+                        <FolderPlus size={16} className="mr-2" />
+                        New Folder
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+            
+            <RightSidebar
+              isOpen={isRightSidebarOpen}
+              onToggle={() => setIsRightSidebarOpen((prev) => !prev)}
+              mobile={isMobileViewport}
+              onClose={() => setIsRightSidebarOpen(false)}
+            />
           </div>
 
           <BottomPanel
             key={runPanelSignal || "idle"}
             runResult={runResult}
             stdin={stdin}
+            roomId={roomId}
             onStdinChange={setStdin}
             defaultMinimized={runPanelSignal === 0}
           />
         </div>
-
-        {!isMobileViewport && (
-          <RightSidebar
-            isOpen={isDesktopSidebarOpen}
-            onToggle={toggleSidebar}
-          />
-        )}
       </div>
 
       {isMobileViewport && (
@@ -575,18 +594,31 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
             onDeleteNode={handleDeleteNode}
             onCreateFile={handleCreateFile}
             onCreateFolder={handleCreateFolder}
+            onRenameNode={handleRenameNode}
+            onMoveNode={handleMoveNode}
             isOpen={isMobileExplorerOpen}
             onClose={() => setIsMobileExplorerOpen(false)}
           />
-
-          <RightSidebar
-            mobile
-            isOpen={isMobileSidebarOpen}
-            onToggle={toggleSidebar}
-            onClose={() => setIsMobileSidebarOpen(false)}
-          />
         </>
       )}
+
+      <RoomSettingsModal
+        room={room}
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onUpdate={(updatedRoom) => setRoom(updatedRoom)}
+      />
+
+      <ConfirmModal
+        isOpen={!!nodeToDelete}
+        title={`Delete "${nodeToDelete?.name}"?`}
+        description={`This will permanently delete the ${nodeToDelete?.type}.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDestructive={true}
+        onConfirm={confirmDeleteNode}
+        onCancel={() => setNodeToDelete(null)}
+      />
     </div>
   );
 }

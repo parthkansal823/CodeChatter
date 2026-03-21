@@ -9,27 +9,9 @@ import { detectLanguageFromName } from "../utils/workspace";
 import { getFileVisual } from "../utils/fileIcons";
 import { usePreferences } from "../context/PreferencesContext";
 
-const LANGUAGE_EXTENSION_MAP = {
-  cpp: "cpp",
-  c: "c",
-  javascript: "javascript",
-  typescript: "typescript",
-  python: "python",
-  java: "java",
-  go: "go",
-  rust: "rust",
-  php: "php",
-  ruby: "ruby",
-  html: "html",
-  css: "css",
-  json: "json",
-  markdown: "markdown",
-  plaintext: "plaintext",
-};
-
 function Breadcrumb({ filePath, fileName }) {
   if (!filePath) return null;
-  
+
   const parts = filePath.split("/").filter(Boolean);
   const { Icon, className: iconClassName } = getFileVisual(fileName);
 
@@ -61,6 +43,7 @@ export default function CodeEditor({
   const { preferences } = usePreferences();
   const editorRef = useRef(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 
   const selectedLanguage = detectLanguageFromName(selectedFileName || "");
   const isMarkdown = selectedLanguage === "markdown";
@@ -71,24 +54,40 @@ export default function CodeEditor({
     ? encodeURI(`file:///${selectedFilePath.replace(/^\/+/, "")}`)
     : "file:///untitled";
 
-  const handleEditorMount = (editor) => {
+  const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
     setIsEditorReady(true);
     editor.focus();
+
+    editor.onDidChangeCursorPosition((event) => {
+      setCursorPosition({
+        line: event.position.lineNumber,
+        column: event.position.column,
+      });
+    });
+
+    try {
+      editor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+        () => {
+          editor.getAction("editor.action.formatDocument")?.run();
+        }
+      );
+    } catch (err) {
+      // Ignore if monaco is not fully typed/available yet
+    }
   };
 
   useEffect(() => {
-    if (!editorRef.current) {
-      return;
-    }
-
+    if (!editorRef.current) return;
     editorRef.current.focus();
+    setCursorPosition({ line: 1, column: 1 });
   }, [editorPath]);
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-zinc-950">
       <Breadcrumb filePath={selectedFilePath} fileName={selectedFileName} />
-      
+
       <div className={`flex min-h-0 flex-1 ${isMarkdown ? "flex-col xl:flex-row" : ""}`}>
         <div className={isMarkdown ? "min-h-[55%] xl:min-h-0 xl:w-[58%]" : "w-full"}>
           <Editor
@@ -96,8 +95,8 @@ export default function CodeEditor({
             defaultPath={editorPath}
             path={editorPath}
             theme={theme}
-            defaultLanguage={LANGUAGE_EXTENSION_MAP[selectedLanguage] || "plaintext"}
-            language={LANGUAGE_EXTENSION_MAP[selectedLanguage] || "plaintext"}
+            defaultLanguage={selectedLanguage}
+            language={selectedLanguage}
             defaultValue={code}
             value={code}
             onChange={(value) => onCodeChange?.(value ?? "")}
@@ -107,13 +106,14 @@ export default function CodeEditor({
             options={{
               minimap: { enabled: preferences.minimap },
               fontSize: preferences.fontSize,
-              fontFamily: "'Fira Code', monospace",
+              fontFamily: preferences.fontLigatures ? "'Fira Code', 'JetBrains Mono', monospace" : "monospace",
+              fontLigatures: preferences.fontLigatures,
               lineNumbers: "on",
               lineHeight: preferences.lineHeight * 20,
               smoothScrolling: true,
               cursorBlinking: "smooth",
               cursorSmoothCaretAnimation: "on",
-              wordWrap: "off",
+              wordWrap: preferences.wordWrap ? "on" : "off",
               automaticLayout: true,
               scrollBeyondLastLine: false,
               formatOnPaste: true,
@@ -159,9 +159,11 @@ export default function CodeEditor({
             <span className="uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">{selectedLanguage}</span>
           )}
         </div>
-        
+
         <div className="flex items-center gap-6">
-          <span className="text-zinc-500 dark:text-zinc-400">Ln 1, Col 1</span>
+          <span className="text-zinc-500 dark:text-zinc-400">
+            Ln {cursorPosition.line}, Col {cursorPosition.column}
+          </span>
           <span className="text-zinc-500 dark:text-zinc-400">{lineCount} lines</span>
           <span className="text-zinc-500 dark:text-zinc-400">{characterCount} chars</span>
         </div>

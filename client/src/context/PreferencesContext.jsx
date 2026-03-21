@@ -7,7 +7,9 @@ const DEFAULT_PREFERENCES = {
   fontSize: 15,
   lineHeight: 1.6,
   autoSave: true,
-  minimap: false,
+  minimap: true,
+  wordWrap: true,
+  fontLigatures: true,
   
   // Theme
   theme: "vs-dark",

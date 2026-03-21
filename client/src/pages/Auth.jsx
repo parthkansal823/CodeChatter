@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion as Motion } from "framer-motion";
-import { Github } from "lucide-react";
+import { motion as Motion, AnimatePresence } from "framer-motion";
+import { Github, Mail, Lock, User } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import toast from "react-hot-toast";
 import FloatingInput from "../components/FloatingInput";
@@ -14,6 +14,27 @@ export default function Auth() {
   const [mode, setMode] = useState("login");
   const [cardGlow, setCardGlow] = useState({ x: 0, y: 0 });
   const [loading, setLoading] = useState(false);
+
+  const formVariant = {
+    hidden: { opacity: 0, x: mode === "login" ? -20 : 20, filter: "blur(4px)" },
+    visible: {
+      opacity: 1,
+      x: 0,
+      filter: "blur(0px)",
+      transition: { duration: 0.4, ease: "easeOut", staggerChildren: 0.08, delayChildren: 0.1 },
+    },
+    exit: {
+      opacity: 0,
+      x: mode === "login" ? 20 : -20,
+      filter: "blur(4px)",
+      transition: { duration: 0.2 },
+    },
+  };
+
+  const itemVariant = {
+    hidden: { opacity: 0, y: 15, filter: "blur(4px)" },
+    visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.4, ease: "easeOut" } },
+  };
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -76,7 +97,7 @@ export default function Auth() {
   return (
     <AuthFormLayout isSignup={mode === "signup"}>
       <Motion.div
-        whileHover={{ rotateX: 4, rotateY: -4 }}
+        whileHover={{ rotateX: 2, rotateY: -2 }}
         onMouseMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
           setCardGlow({
@@ -85,161 +106,199 @@ export default function Auth() {
           });
         }}
         style={{
-          background: `radial-gradient(circle at ${cardGlow.x}px ${cardGlow.y}px, rgba(168,85,247,0.15), rgba(255,255,255,0.03))`,
+          background: `radial-gradient(circle 350px at ${cardGlow.x}px ${cardGlow.y}px, rgba(168,85,247,0.1), transparent 80%)`,
         }}
-        className="w-full max-w-md backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl"
+        className="w-full max-w-md bg-black/40 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden"
       >
-        <div className="flex gap-2 mb-6 border-b border-white/10">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
+
+        <div className="relative flex p-1 mb-8 bg-black/40 border border-white/5 rounded-xl overflow-hidden">
+          <div
+            className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white/10 border border-white/10 rounded-lg shadow-sm transition-transform duration-300 ease-out ${
+              mode === "signup" ? "translate-x-[calc(100%+0px)]" : "translate-x-0"
+            }`}
+          />
           <button
             onClick={() => setMode("login")}
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              mode === "login"
-                ? "text-purple-400 border-b-2 border-purple-400"
-                : "text-gray-400 hover:text-white"
+            className={`relative w-1/2 py-2.5 text-sm font-semibold tracking-wide transition-colors z-10 ${
+              mode === "login" ? "text-white" : "text-gray-400 hover:text-white"
             }`}
           >
             Login
           </button>
           <button
             onClick={() => setMode("signup")}
-            className={`flex-1 py-2 text-sm font-medium transition-colors ${
-              mode === "signup"
-                ? "text-purple-400 border-b-2 border-purple-400"
-                : "text-gray-400 hover:text-white"
+            className={`relative w-1/2 py-2.5 text-sm font-semibold tracking-wide transition-colors z-10 ${
+              mode === "signup" ? "text-white" : "text-gray-400 hover:text-white"
             }`}
           >
             Sign Up
           </button>
         </div>
 
-        {mode === "login" ? (
-          <>
-            <h2 className="text-3xl font-semibold mb-2">Welcome Back</h2>
-            <p className="text-gray-400 text-sm mb-8">Login to continue coding.</p>
+        <AnimatePresence mode="wait" initial={false}>
+          <Motion.div
+            key={mode}
+            variants={formVariant}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            {mode === "login" ? (
+              <>
+                <Motion.h2 variants={itemVariant} className="text-3xl font-bold mb-2 tracking-tight">Welcome Back</Motion.h2>
+                <Motion.p variants={itemVariant} className="text-gray-400 text-sm mb-8 font-light tracking-wide">Enter your credentials to continue coding.</Motion.p>
 
-            <form onSubmit={handleLoginSubmit} className="space-y-6">
-              <FloatingInput
-                id="login-email"
-                label="Email or Username"
-                type="text"
-                required
-                value={loginEmail}
-                onChange={(event) => setLoginEmail(event.target.value)}
-              />
+                <form onSubmit={handleLoginSubmit} className="space-y-5">
+                  <Motion.div variants={itemVariant}>
+                    <FloatingInput
+                      id="login-email"
+                      label="Email or Username"
+                      type="text"
+                      required
+                      value={loginEmail}
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      icon={Mail}
+                    />
+                  </Motion.div>
 
-              <PasswordInput
-                id="login-password"
-                label="Password"
-                required
-                value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
-              />
+                  <Motion.div variants={itemVariant}>
+                    <PasswordInput
+                      id="login-password"
+                      label="Password"
+                      required
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      icon={Lock}
+                    />
+                  </Motion.div>
 
-              <div className="flex justify-between text-sm text-gray-400">
-                <label className="flex gap-2 items-center hover:text-white cursor-pointer">
-                  <input type="checkbox" className="accent-purple-500" />
-                  Remember me
-                </label>
-                <span className="hover:text-purple-400 cursor-pointer">
-                  Forgot password?
-                </span>
-              </div>
+                  <Motion.div variants={itemVariant} className="flex justify-between items-center text-sm text-gray-400 pt-1">
+                    <label className="flex gap-2 items-center hover:text-white cursor-pointer transition-colors">
+                      <input type="checkbox" className="accent-purple-500 rounded bg-white/10 border-white/20 w-4 h-4" />
+                      Remember me
+                    </label>
+                    <span className="hover:text-purple-400 cursor-pointer font-medium transition-colors">
+                      Forgot password?
+                    </span>
+                  </Motion.div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-lg font-medium bg-gradient-to-r from-purple-500 to-blue-500 hover:scale-105 active:scale-95 transition duration-200 shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Logging in..." : "Login"}
-              </button>
-            </form>
-          </>
-        ) : (
-          <>
-            <h2 className="text-3xl font-semibold mb-2">Create Account</h2>
-            <p className="text-gray-400 text-sm mb-8">Join CodeChatter today.</p>
+                  <Motion.button
+                    variants={itemVariant}
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-4 py-3.5 rounded-xl font-semibold tracking-wide text-white bg-gradient-to-r from-purple-600 to-blue-600 transition-all shadow-[0_0_20px_rgba(168,85,247,0.25)] hover:shadow-[0_0_25px_rgba(168,85,247,0.5)] disabled:opacity-50"
+                  >
+                    {loading ? "Authenticating..." : "Login to Workspace"}
+                  </Motion.button>
+                </form>
+              </>
+            ) : (
+              <>
+                <Motion.h2 variants={itemVariant} className="text-3xl font-bold mb-2 tracking-tight">Create Account</Motion.h2>
+                <Motion.p variants={itemVariant} className="text-gray-400 text-sm mb-8 font-light tracking-wide">Join thousands of developers on CodeChatter.</Motion.p>
 
-            <form onSubmit={handleSignupSubmit} className="space-y-6">
-              <FloatingInput
-                id="signup-email"
-                label="Email"
-                type="email"
-                required
-                value={signupEmail}
-                onChange={(event) => setSignupEmail(event.target.value)}
-              />
+                <form onSubmit={handleSignupSubmit} className="space-y-4">
+                  <Motion.div variants={itemVariant} className="grid grid-cols-2 gap-4">
+                    <FloatingInput
+                      id="signup-email"
+                      label="Email"
+                      type="email"
+                      required
+                      value={signupEmail}
+                      onChange={(event) => setSignupEmail(event.target.value)}
+                      icon={Mail}
+                    />
 
-              <FloatingInput
-                id="signup-username"
-                label="Username"
-                type="text"
-                required
-                value={signupUsername}
-                onChange={(event) => setSignupUsername(event.target.value)}
-              />
+                    <FloatingInput
+                      id="signup-username"
+                      label="Username"
+                      type="text"
+                      required
+                      value={signupUsername}
+                      onChange={(event) => setSignupUsername(event.target.value)}
+                      icon={User}
+                    />
+                  </Motion.div>
 
-              <PasswordInput
-                id="signup-password"
-                label="Password"
-                required
-                value={signupPassword}
-                onChange={(event) => setSignupPassword(event.target.value)}
-              />
+                  <Motion.div variants={itemVariant} className="grid grid-cols-2 gap-4">
+                    <PasswordInput
+                      id="signup-password"
+                      label="Password"
+                      required
+                      value={signupPassword}
+                      onChange={(event) => setSignupPassword(event.target.value)}
+                      icon={Lock}
+                    />
 
-              <PasswordInput
-                id="signup-confirm-password"
-                label="Confirm Password"
-                required
-                value={signupConfirmPassword}
-                onChange={(event) => setSignupConfirmPassword(event.target.value)}
-              />
+                    <PasswordInput
+                      id="signup-confirm-password"
+                      label="Confirm"
+                      required
+                      value={signupConfirmPassword}
+                      onChange={(event) => setSignupConfirmPassword(event.target.value)}
+                      icon={Lock}
+                    />
+                  </Motion.div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-lg font-medium bg-gradient-to-r from-purple-500 to-blue-500 hover:scale-105 active:scale-95 transition duration-200 shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Creating..." : "Create Account"}
-              </button>
-            </form>
-          </>
-        )}
+                  <Motion.button
+                    variants={itemVariant}
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-4 py-3.5 rounded-xl font-semibold tracking-wide text-white bg-gradient-to-r from-purple-600 to-blue-600 transition-all shadow-[0_0_20px_rgba(168,85,247,0.25)] hover:shadow-[0_0_25px_rgba(168,85,247,0.5)] disabled:opacity-50"
+                  >
+                    {loading ? "Creating..." : "Create Free Account"}
+                  </Motion.button>
+                </form>
+              </>
+            )}
+          </Motion.div>
+        </AnimatePresence>
 
-        <div className="flex items-center gap-3 my-6">
-          <div className="flex-1 h-px bg-gray-700" />
-          <span className="text-gray-500 text-sm">OR</span>
-          <div className="flex-1 h-px bg-gray-700" />
+        <div className="flex items-center gap-4 my-8">
+          <div className="flex-1 h-px bg-gradient-to-r from-transparent to-white/10" />
+          <span className="text-gray-500 text-xs font-medium uppercase tracking-widest">or continue with</span>
+          <div className="flex-1 h-px bg-gradient-to-l from-transparent to-white/10" />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
+          <Motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             type="button"
             onClick={() => startOAuthLogin(API_ENDPOINTS.GITHUB_LOGIN)}
-            className="flex items-center justify-center gap-2 py-3 border border-gray-700 rounded-lg hover:bg-white/5 transition"
+            className="flex items-center justify-center gap-3 py-3 bg-white/[0.03] border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/20 transition-all duration-300 group"
           >
-            <Github size={18} />
-            GitHub
-          </button>
+            <Github size={18} className="text-gray-300 group-hover:text-white transition-colors" />
+            <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">GitHub</span>
+          </Motion.button>
 
-          <button
+          <Motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             type="button"
             onClick={() => startOAuthLogin(API_ENDPOINTS.GOOGLE_LOGIN)}
-            className="flex items-center justify-center gap-2 py-3 border border-gray-700 rounded-lg hover:bg-white/5 transition"
+            className="flex items-center justify-center gap-3 py-3 bg-white/[0.03] border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/20 transition-all duration-300 group"
           >
             <FcGoogle size={18} />
-            Google
-          </button>
+            <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Google</span>
+          </Motion.button>
         </div>
 
-        <p className="text-center text-sm text-gray-400 mt-6">
+        <p className="text-center text-sm text-gray-400 mt-8 font-light">
           {mode === "login" ? (
             <>
               Don't have an account?{" "}
               <button
                 onClick={() => setMode("signup")}
-                className="text-purple-400 hover:underline"
+                className="text-white hover:text-purple-400 font-medium transition-colors"
+                style={{ textDecorationColor: 'rgba(168,85,247,0.5)', textUnderlineOffset: '4px' }}
               >
-                Sign up
+                <span className="hover:underline">Sign up now</span>
               </button>
             </>
           ) : (
@@ -247,9 +306,10 @@ export default function Auth() {
               Already have an account?{" "}
               <button
                 onClick={() => setMode("login")}
-                className="text-purple-400 hover:underline"
+                className="text-white hover:text-purple-400 font-medium transition-colors"
+                style={{ textDecorationColor: 'rgba(168,85,247,0.5)', textUnderlineOffset: '4px' }}
               >
-                Login
+                <span className="hover:underline">Log in instead</span>
               </button>
             </>
           )}

@@ -89,6 +89,8 @@ export default function FileExplorer({
   onDeleteNode,
   onCreateFile,
   onCreateFolder,
+  onRenameNode,
+  onMoveNode,
   isOpen = true,
   onToggle,
   mobile = false,
@@ -96,6 +98,7 @@ export default function FileExplorer({
 }) {
   const [createDraft, setCreateDraft] = useState(null);
   const [newNodeName, setNewNodeName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [collapsedFolders, setCollapsedFolders] = useState(() => new Set());
 
   const isCollapsed = !mobile && !isOpen;
@@ -245,6 +248,8 @@ export default function FileExplorer({
             onCreateFile={(folderId) => startCreate("file", folderId)}
             onCreateFolder={(folderId) => startCreate("folder", folderId)}
             onDelete={onDeleteNode}
+            onRename={onRenameNode}
+            onMove={onMoveNode}
           />
 
           {node.type === "folder" && isExpanded && (
@@ -260,7 +265,7 @@ export default function FileExplorer({
 
   const panel = (
     <div
-      className={`flex h-full flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 ${
+      className={`flex h-full flex-col border-r border-zinc-100 bg-zinc-50/50 dark:border-white/[0.04] dark:bg-[#0a0a0a] ${
         mobile
           ? "w-[86vw] max-w-[340px] shadow-2xl shadow-zinc-950/20"
           : isCollapsed
@@ -269,7 +274,7 @@ export default function FileExplorer({
       }`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-3 dark:border-zinc-800">
+      <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-3 dark:border-white/[0.04]">
         <div className="flex min-w-0 items-center gap-2.5">
           {!mobile && (
             <button
@@ -309,13 +314,22 @@ export default function FileExplorer({
             </button>
 
             {activeFolderCount > 0 && (
-              <button
-                onClick={() => setCollapsedFolders(new Set(folderIds))}
-                className="hidden text-xs font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-white sm:block rounded-md px-2 py-1"
-                title="Collapse all"
-              >
-                ⋮
-              </button>
+              <>
+                <button
+                  onClick={() => setCollapsedFolders(new Set())}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+                  title="Expand all"
+                >
+                  <ChevronRight size={15} className="rotate-90" />
+                </button>
+                <button
+                  onClick={() => setCollapsedFolders(new Set(folderIds))}
+                  className="hidden text-xs font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-white sm:block rounded-md px-2 py-1"
+                  title="Collapse all"
+                >
+                  ⋮
+                </button>
+              </>
             )}
 
             {mobile && (
@@ -332,18 +346,34 @@ export default function FileExplorer({
       </div>
 
       {!isCollapsed && (
-        <div className="border-b border-zinc-200 px-3 py-2.5 text-xs uppercase tracking-widest text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-          <div className="flex items-center justify-between gap-3">
+        <div className="border-b border-zinc-100 px-3 py-2 text-xs uppercase tracking-widest text-zinc-500 dark:border-white/[0.04] dark:text-zinc-500">
+          <div className="flex items-center justify-between gap-3 mb-2">
             <span className="truncate font-semibold text-zinc-600 dark:text-zinc-300">{workspaceLabel}</span>
             <span className="whitespace-nowrap text-xs">
               {activeFileCount}F {activeFolderCount}D
             </span>
           </div>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files..."
+            className="w-full rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs lowercase outline-none dark:border-white/10 dark:bg-white/5 dark:focus:border-purple-500/50 dark:focus:bg-zinc-900 transition-colors"
+          />
         </div>
       )}
 
       {/* Tree */}
-      <div className="flex-1 overflow-y-auto px-1 py-1.5 scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700">
+      <div 
+        className="flex-1 overflow-y-auto px-1 py-1.5 scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const draggedNodeId = e.dataTransfer.getData("nodeId");
+          if (draggedNodeId) {
+            onMoveNode?.(draggedNodeId, null);
+          }
+        }}
+      >
         {isCollapsed ? (
           <div className="space-y-2 px-1">
             <button
@@ -376,9 +406,27 @@ export default function FileExplorer({
             ))}
           </div>
         ) : tree.length || createDraft ? (
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 pb-8">
             {renderCreateInput(0, null)}
-            {renderNodes(tree)}
+            {searchQuery.trim() ? (
+              explorerEntries
+                .filter(en => en.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map(en => (
+                  <FileItem
+                    key={en.id}
+                    node={en.node}
+                    depth={0}
+                    isActive={activeFileId === en.id}
+                    isFocused={focusedNodeId === en.id}
+                    onSelect={onSelectNode}
+                    onDelete={onDeleteNode}
+                    onRename={onRenameNode}
+                    onMove={onMoveNode}
+                  />
+                ))
+            ) : (
+              renderNodes(tree)
+            )}
           </div>
         ) : (
           <div className="mx-2 rounded-md border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">

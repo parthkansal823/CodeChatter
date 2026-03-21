@@ -1,6 +1,11 @@
-export default function FloatingInput({ id, label, type = "text", required = false, value, onChange }) {
+export default function FloatingInput({ id, label, type = "text", required = false, value, onChange, icon: Icon }) {
   return (
-    <div className="relative">
+    <div className="relative group">
+      {Icon && (
+        <div className="absolute left-4 top-[1.15rem] text-gray-400 group-focus-within:text-purple-400 transition-colors z-10">
+          <Icon size={20} />
+        </div>
+      )}
       <input
         id={id}
         type={type}
@@ -8,15 +13,15 @@ export default function FloatingInput({ id, label, type = "text", required = fal
         required={required}
         value={value}
         onChange={onChange}
-        className="peer w-full px-4 pt-6 pb-2 bg-transparent border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
+        className={`peer w-full ${Icon ? "pl-11" : "px-4"} pr-4 pt-6 pb-2 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 focus:bg-white/10 outline-none transition-all duration-300 text-white placeholder-transparent`}
       />
       <label
         htmlFor={id}
-        className="absolute left-4 top-4 text-gray-400 text-sm transition-all
-        peer-focus:top-2 peer-focus:text-xs peer-focus:text-purple-400
+        className={`absolute ${Icon ? "left-11" : "left-4"} top-4 text-gray-400 text-sm transition-all duration-300
+        peer-focus:top-2 peer-focus:text-[11px] peer-focus:text-purple-400 peer-focus:font-medium
         peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm
-        peer-not-placeholder-shown:top-2 peer-not-placeholder-shown:text-xs
-        pointer-events-none"
+        peer-not-placeholder-shown:top-2 peer-not-placeholder-shown:text-[11px]
+        pointer-events-none`}
       >
         {label}
       </label>

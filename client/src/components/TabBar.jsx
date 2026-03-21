@@ -1,5 +1,5 @@
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getFileVisual } from "../utils/fileIcons";
 
 export default function TabBar({
@@ -9,18 +9,35 @@ export default function TabBar({
   onSelectFile,
   onCloseFile,
 }) {
-  const [scrollOffset, setScrollOffset] = useState(0);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const tabsContainerRef = useRef(null);
 
+  const updateScrollState = () => {
+    const el = tabsContainerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+
+  useEffect(() => {
+    const el = tabsContainerRef.current;
+    if (!el) return;
+
+    updateScrollState();
+    el.addEventListener("scroll", updateScrollState);
+    window.addEventListener("resize", updateScrollState);
+
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [openFiles]);
+
   const scroll = (direction) => {
-    if (!tabsContainerRef.current) return;
-    const container = tabsContainerRef.current;
-    const scrollAmount = 200;
-    const newOffset = direction === "left" 
-      ? Math.max(0, scrollOffset - scrollAmount)
-      : scrollOffset + scrollAmount;
-    setScrollOffset(newOffset);
-    container.scrollLeft = newOffset;
+    const el = tabsContainerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction === "left" ? -200 : 200, behavior: "smooth" });
   };
 
   if (openFiles.length === 0) {
@@ -28,9 +45,8 @@ export default function TabBar({
   }
 
   return (
-    <div className="flex items-center border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      {/* Scroll Left Button */}
-      {scrollOffset > 0 && (
+    <div className="flex items-center bg-[#fafafa] dark:bg-[#0f0f11]">
+      {canScrollLeft && (
         <button
           onClick={() => scroll("left")}
           className="flex-shrink-0 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
@@ -40,7 +56,6 @@ export default function TabBar({
         </button>
       )}
 
-      {/* Tabs Container */}
       <div
         ref={tabsContainerRef}
         className="flex min-w-0 flex-1 gap-0 overflow-x-auto scrollbar-hide"
@@ -51,23 +66,22 @@ export default function TabBar({
           const { Icon, className: iconClassName } = getFileVisual(file.name);
 
           return (
-            <button
+            <div
               key={file.id}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectFile?.(file)}
-              className={`group relative flex min-w-[140px] max-w-[200px] items-center gap-2 border-r border-zinc-200 px-3 py-2 text-sm transition-colors dark:border-zinc-800 ${
+              onKeyDown={(e) => e.key === "Enter" && onSelectFile?.(file)}
+              className={`group relative flex min-w-[120px] max-w-[200px] cursor-pointer items-center gap-2 px-4 py-2 text-sm transition-colors border-t-2 ${
                 isActive
-                  ? "bg-white text-zinc-900 dark:bg-zinc-900 dark:text-white"
-                  : "bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                  ? "border-t-brand-500 bg-white text-zinc-900 dark:bg-[#1e1e1e] dark:text-white"
+                  : "border-t-transparent bg-[#fafafa] text-zinc-500 hover:bg-zinc-100 dark:bg-[#0f0f11] dark:text-zinc-400 dark:hover:bg-[#1a1a1c]"
               }`}
               title={file.name}
             >
-              {/* File Icon */}
               <Icon size={16} className={`flex-shrink-0 ${iconClassName}`} />
-
-              {/* File Name */}
               <span className="min-w-0 truncate">{file.name}</span>
 
-              {/* Modified Indicator */}
               {isModified && (
                 <div
                   className="h-2 w-2 flex-shrink-0 rounded-full bg-orange-400"
@@ -75,7 +89,6 @@ export default function TabBar({
                 />
               )}
 
-              {/* Close Button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -86,13 +99,12 @@ export default function TabBar({
               >
                 <X size={14} />
               </button>
-            </button>
+            </div>
           );
         })}
       </div>
 
-      {/* Scroll Right Button */}
-      {openFiles.length > 4 && (
+      {canScrollRight && (
         <button
           onClick={() => scroll("right")}
           className="flex-shrink-0 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"

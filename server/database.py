@@ -45,36 +45,62 @@ ROOM_TEMPLATE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "starterLanguage": "any",
     "build": lambda: [],
   },
-  "python-starter": {
-    "id": "python-starter",
-    "name": "Python Starter",
-    "description": "A small Python project with source, tests, and notes.",
+  "python-fastapi": {
+    "id": "python-fastapi",
+    "name": "Python FastAPI",
+    "description": "A robust FastAPI backend project structure.",
     "category": "Backend",
     "starterLanguage": "python",
     "build": lambda: [
+      _folder("app", [
+        _file("main.py", "from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\ndef read_root():\n    return {\"Hello\": \"CodeChatter\"}\n"),
+        _file("models.py", "from pydantic import BaseModel\n\nclass Item(BaseModel):\n    name: str\n    description: str | None = None\n"),
+      ]),
+      _file("requirements.txt", "fastapi\nuvicorn\n"),
+      _file("README.md", "# FastAPI Starter\n\nRun `uvicorn app.main:app --reload`\n"),
+    ],
+  },
+  "node-express": {
+    "id": "node-express",
+    "name": "Node.js Express",
+    "description": "A standard Express API server.",
+    "category": "Backend",
+    "starterLanguage": "javascript",
+    "build": lambda: [
       _folder("src", [
-        _file("main.py", """def greet(name: str) -> str:
-    return f"Hello, {name}!"
-
-
-def main() -> None:
-    print(greet("CodeChatter"))
-
-
-if __name__ == "__main__":
-    main()
-"""),
+        _file("index.js", "const express = require('express');\nconst app = express();\n\napp.use(express.json());\n\napp.get('/', (req, res) => {\n  res.json({ message: 'Hello from Express!' });\n});\n\napp.listen(3000, () => {\n  console.log('Server running on port 3000');\n});\n"),
       ]),
-      _folder("tests", [
-        _file("test_main.py", """from src.main import greet
-
-
-def test_greet():
-    assert greet("team") == "Hello, team!"
-"""),
+      _file("package.json", "{\n  \"name\": \"express-starter\",\n  \"dependencies\": {\n    \"express\": \"^4.18.2\"\n  }\n}\n"),
+      _file("README.md", "# Express Starter\n\nRun `npm install` and `node src/index.js`\n"),
+    ],
+  },
+  "react-next": {
+    "id": "react-next",
+    "name": "Next.js Framework",
+    "description": "A Next.js fullstack React application structure.",
+    "category": "Frontend",
+    "starterLanguage": "typescript",
+    "build": lambda: [
+      _folder("app", [
+        _file("layout.tsx", "export default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang=\"en\">\n      <body>{children}</body>\n    </html>\n  );\n}\n"),
+        _file("page.tsx", "export default function Home() {\n  return (\n    <main className=\"p-24\">\n      <h1 className=\"text-4xl font-bold\">Welcome to Next.js on CodeChatter</h1>\n    </main>\n  );\n}\n"),
       ]),
-      _file("README.md", "# Python Starter\n\nCreate files, run `src/main.py`, and collaborate from the same room.\n"),
-      _file("requirements.txt", "pytest\n"),
+      _file("package.json", "{\n  \"name\": \"nextjs-starter\",\n  \"dependencies\": {\n    \"next\": \"latest\",\n    \"react\": \"latest\",\n    \"react-dom\": \"latest\"\n  }\n}\n"),
+    ],
+  },
+  "vue-starter": {
+    "id": "vue-starter",
+    "name": "Vue 3 Starter",
+    "description": "A Vue 3 setup with an App component.",
+    "category": "Frontend",
+    "starterLanguage": "vue",
+    "build": lambda: [
+      _folder("src", [
+        _file("App.vue", "<script setup>\nimport { ref } from 'vue'\n\nconst count = ref(0)\n</script>\n\n<template>\n  <main>\n    <h1>CodeChatter + Vue</h1>\n    <button @click=\"count++\">Count is {{ count }}</button>\n  </main>\n</template>\n\n<style scoped>\nmain {\n  padding: 2rem;\n  font-family: sans-serif;\n}\nbutton {\n  padding: 0.5rem 1rem;\n}\n</style>\n"),
+        _file("main.js", "import { createApp } from 'vue'\nimport App from './App.vue'\n\ncreateApp(App).mount('#app')\n"),
+      ]),
+      _file("index.html", "<!DOCTYPE html>\n<html lang=\"en\">\n  <body>\n    <div id=\"app\"></div>\n    <script type=\"module\" src=\"/src/main.js\"></script>\n  </body>\n</html>\n"),
+      _file("package.json", "{\n  \"name\": \"vue-starter\",\n  \"dependencies\": {\n    \"vue\": \"^3.3.0\"\n  }\n}\n"),
     ],
   },
   "web-starter": {
@@ -84,164 +110,13 @@ def test_greet():
     "category": "Frontend",
     "starterLanguage": "html",
     "build": lambda: [
-      _file("index.html", """<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CodeChatter Web Starter</title>
-    <link rel="stylesheet" href="styles/main.css" />
-  </head>
-  <body>
-    <main class="app">
-      <h1>CodeChatter Web Starter</h1>
-      <p>Edit this project together and open <code>index.html</code> in the browser.</p>
-      <button id="hello-button">Click me</button>
-    </main>
-    <script src="scripts/main.js"></script>
-  </body>
-</html>
-"""),
+      _file("index.html", "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>CodeChatter Web Starter</title>\n    <link rel=\"stylesheet\" href=\"styles/main.css\" />\n  </head>\n  <body>\n    <main class=\"app\">\n      <h1>CodeChatter Web Starter</h1>\n      <p>Edit this project together and open <code>index.html</code> in the browser.</p>\n      <button id=\"hello-button\">Click me</button>\n    </main>\n    <script src=\"scripts/main.js\"></script>\n  </body>\n</html>\n"),
       _folder("styles", [
-        _file("main.css", """body {
-  margin: 0;
-  font-family: sans-serif;
-  background: #111827;
-  color: #f9fafb;
-}
-
-.app {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 4rem 1.5rem;
-}
-"""),
+        _file("main.css", "body {\n  margin: 0;\n  font-family: sans-serif;\n  background: #111827;\n  color: #f9fafb;\n}\n\n.app {\n  max-width: 720px;\n  margin: 0 auto;\n  padding: 4rem 1.5rem;\n}\n"),
       ]),
       _folder("scripts", [
-        _file("main.js", """const button = document.getElementById("hello-button");
-
-button?.addEventListener("click", () => {
-  button.textContent = "Build something fun";
-});
-"""),
+        _file("main.js", "const button = document.getElementById(\"hello-button\");\n\nbutton?.addEventListener(\"click\", () => {\n  button.textContent = \"Build something fun\";\n});\n"),
       ]),
-    ],
-  },
-  "node-api": {
-    "id": "node-api",
-    "name": "Node API",
-    "description": "A tiny HTTP server you can run locally with Node.",
-    "category": "Backend",
-    "starterLanguage": "javascript",
-    "build": lambda: [
-      _folder("src", [
-        _file("server.js", """const http = require("http");
-
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ message: "Hello from CodeChatter" }));
-});
-
-server.listen(3000, () => {
-  console.log("Server listening on http://localhost:3000");
-});
-"""),
-      ]),
-      _file("package.json", """{
-  "name": "codechatter-node-api",
-  "private": true,
-  "scripts": {
-    "start": "node src/server.js"
-  }
-}
-"""),
-      _file("README.md", "# Node API\n\nRun `src/server.js` to start a simple HTTP server.\n"),
-    ],
-  },
-  "react-component": {
-    "id": "react-component",
-    "name": "React Component",
-    "description": "A small component-oriented front-end starter.",
-    "category": "Frontend",
-    "starterLanguage": "javascript",
-    "build": lambda: [
-      _folder("src", [
-        _file("App.jsx", """import { WelcomeCard } from "./components/WelcomeCard";
-import "./index.css";
-
-export default function App() {
-  return <WelcomeCard title="CodeChatter" subtitle="Start building from here." />;
-}
-"""),
-        _folder("components", [
-          _file("WelcomeCard.jsx", """export function WelcomeCard({ title, subtitle }) {
-  return (
-    <section className="card">
-      <h1>{title}</h1>
-      <p>{subtitle}</p>
-    </section>
-  );
-}
-"""),
-        ]),
-        _file("index.css", """.card {
-  padding: 2rem;
-  border-radius: 1rem;
-  background: #18181b;
-  color: white;
-}
-"""),
-      ]),
-      _file("package.json", """{
-  "name": "codechatter-react-component",
-  "private": true
-}
-"""),
-    ],
-  },
-  "cpp-console": {
-    "id": "cpp-console",
-    "name": "C++ Console",
-    "description": "A simple console program with a source and include folder.",
-    "category": "Systems",
-    "starterLanguage": "cpp",
-    "build": lambda: [
-      _folder("src", [
-        _file("main.cpp", """#include <iostream>
-
-int main() {
-  std::cout << "Hello from CodeChatter C++!" << std::endl;
-  return 0;
-}
-"""),
-      ]),
-      _folder("include", []),
-      _file("README.md", "# C++ Console\n\nUse `src/main.cpp` as your entry point.\n"),
-    ],
-  },
-  "data-notebook": {
-    "id": "data-notebook",
-    "name": "Notes and Data",
-    "description": "Markdown notes plus sample JSON and a Python script.",
-    "category": "Analysis",
-    "starterLanguage": "markdown",
-    "build": lambda: [
-      _file("notes.md", "# Workspace Notes\n\n- Add research notes\n- Track ideas\n- Keep todos close to the code\n"),
-      _folder("data", [
-        _file("sample.json", """{
-  "users": [
-    { "id": 1, "name": "Ada" },
-    { "id": 2, "name": "Linus" }
-  ]
-}
-"""),
-      ]),
-      _file("analysis.py", """import json
-from pathlib import Path
-
-data = json.loads(Path("data/sample.json").read_text(encoding="utf-8"))
-print(f"Loaded {len(data['users'])} users")
-"""),
     ],
   },
 }
@@ -411,6 +286,7 @@ class MongoRepository:
     description: str | None,
     is_public: bool,
     template_id: str | None = None,
+    terminal_shell: str = "bash",
   ) -> dict[str, Any]:
     self.initialize()
     selected_template_id = template_id or "blank"
@@ -429,6 +305,7 @@ class MongoRepository:
       "owner_id": owner_id,
       "participant_ids": [owner_id],
       "template_id": selected_template_id,
+      "terminal_shell": terminal_shell,
       "workspace_tree": self.build_workspace_from_template(selected_template_id),
       "created_at": timestamp,
       "updated_at": timestamp,
@@ -512,6 +389,36 @@ class MongoRepository:
         }
       },
     )
+
+    updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+    return self.serialize_room(updated_room, include_workspace=True)
+
+  def update_room_settings(
+    self,
+    user_id: str,
+    room_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    terminal_shell: str | None = None,
+  ) -> dict[str, Any]:
+    self.initialize()
+    room = self.get_room_by_id(room_id)
+
+    if room is None:
+      raise ValueError("Room not found")
+
+    if not self.user_can_access_room(user_id, room):
+      raise PermissionError("You do not have access to this room")
+
+    updates = {"updated_at": self._utc_now()}
+    if name is not None:
+      updates["name"] = name
+    if description is not None:
+      updates["description"] = description
+    if terminal_shell is not None:
+      updates["terminal_shell"] = terminal_shell
+
+    self._rooms.update_one({"id": room_id}, {"$set": updates})
 
     updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
     return self.serialize_room(updated_room, include_workspace=True)
@@ -677,6 +584,7 @@ class MongoRepository:
       "ownerId": room.get("owner_id"),
       "templateId": template_id,
       "templateName": template_definition["name"],
+      "terminalShell": room.get("terminal_shell", "bash"),
       "fileCount": self.count_workspace_files(workspace_tree),
     }
 
@@ -815,6 +723,7 @@ class MongoRepository:
           "owner_id": room.get("owner_id", "system"),
           "participant_ids": list(room.get("participant_ids", [])),
           "template_id": room.get("template_id") or "blank",
+          "terminal_shell": room.get("terminal_shell", "bash"),
           "workspace_tree": self.normalize_workspace_tree(list(room.get("workspace_tree", []))),
           "created_at": self._parse_datetime(room.get("created_at")),
           "updated_at": self._parse_datetime(room.get("updated_at") or room.get("created_at")),
@@ -836,6 +745,7 @@ class MongoRepository:
           "owner_id": "system",
           "participant_ids": [],
           "template_id": "web-starter",
+          "terminal_shell": "bash",
           "workspace_tree": self.build_workspace_from_template("web-starter"),
           "created_at": timestamp,
           "updated_at": timestamp,
@@ -848,6 +758,7 @@ class MongoRepository:
           "owner_id": "system",
           "participant_ids": [],
           "template_id": "python-starter",
+          "terminal_shell": "bash",
           "workspace_tree": self.build_workspace_from_template("python-starter"),
           "created_at": timestamp,
           "updated_at": timestamp,

@@ -19,24 +19,11 @@ import { useAuth } from "../hooks/useAuth";
 import { usePreferences } from "../context/PreferencesContext";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import ConfirmModal from "../components/ConfirmModal";
+import { Card, CardHeader, CardContent } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
 
-function SettingCard({ icon: Icon, title, description, children, className = "" }) {
-  return (
-    <section className={`rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 ${className}`}>
-      <div className="flex items-center gap-3">
-        <div className="rounded-lg bg-blue-100 p-2.5 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
-          <Icon size={20} />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">{title}</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
-        </div>
-      </div>
 
-      {children && <div className="mt-6">{children}</div>}
-    </section>
-  );
-}
 
 function SettingRow({ label, value, action }) {
   return (
@@ -55,6 +42,8 @@ export default function Settings() {
   const navigate = useNavigate();
   const { preferences, updatePreference, updateNotification, updatePrivacy } = usePreferences();
   const [copiedId, setCopiedId] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleCopyUserId = () => {
     navigator.clipboard.writeText(user?.id || "");
@@ -63,12 +52,15 @@ export default function Settings() {
     toast.success("User ID copied!");
   };
 
-  const handleLogout = async () => {
-    if (window.confirm("Are you sure you want to logout?")) {
-      logout();
-      navigate("/");
-      toast.success("Logged out successfully");
-    }
+  const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
+    logout();
+    navigate("/");
+    toast.success("Logged out successfully");
   };
 
   const handleThemeChange = (newTheme) => {
@@ -83,11 +75,12 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = () => {
-    if (window.confirm("Are you absolutely sure? This cannot be undone.")) {
-      if (window.confirm("This will permanently delete your account and all data.")) {
-        toast.error("Account deletion not yet implemented");
-      }
-    }
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteAccount = () => {
+    setShowDeleteConfirm(false);
+    toast.error("Account deletion not yet implemented");
   };
 
   return (
@@ -95,7 +88,7 @@ export default function Settings() {
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-12 max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Settings</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">Settings</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-zinc-900 dark:text-white">
             Workspace preferences
           </h1>
@@ -110,60 +103,62 @@ export default function Settings() {
             Account
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingCard
-              icon={UserRound}
-              title="Profile"
-              description="Your account information"
-            >
-              <div className="space-y-4">
-                <SettingRow
-                  label="Username"
-                  value={user?.username || "Unknown"}
-                />
-                <SettingRow
-                  label="Email"
-                  value={user?.email || "Unknown"}
-                />
-                <SettingRow
-                  label="User ID"
-                  value={user?.id?.slice(0, 12) + "..."}
-                  action={
-                    <button
-                      onClick={handleCopyUserId}
-                      className="flex items-center gap-2 rounded-md bg-zinc-100 p-2 text-xs hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-                      title="Copy full ID"
-                    >
-                      {copiedId ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
-                  }
-                />
-                <SettingRow
-                  label="Member Since"
-                  value="March 18, 2026"
-                />
-              </div>
-            </SettingCard>
+            <Card>
+              <CardHeader
+                icon={UserRound}
+                title="Profile"
+                description="Your account information"
+              />
+              <CardContent>
+                <div className="space-y-4">
+                  <SettingRow
+                    label="Username"
+                    value={user?.username || "Unknown"}
+                  />
+                  <SettingRow
+                    label="Email"
+                    value={user?.email || "Unknown"}
+                  />
+                  <SettingRow
+                    label="User ID"
+                    value={user?.id?.slice(0, 12) + "..."}
+                    action={
+                      <button
+                        onClick={handleCopyUserId}
+                        className="flex items-center gap-2 rounded-md bg-zinc-100 p-2 text-xs hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                        title="Copy full ID"
+                      >
+                        {copiedId ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    }
+                  />
+                  <SettingRow
+                    label="Member Since"
+                    value="March 18, 2026"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-            <SettingCard
-              icon={Github}
-              title="Connected Accounts"
-              description="Link external services"
-            >
-              <div className="space-y-3">
-                <button className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700">
-                  <div className="flex items-center justify-center gap-2">
-                    <Github size={16} />
+            <Card>
+              <CardHeader
+                icon={Github}
+                title="Connected Accounts"
+                description="Link external services"
+              />
+              <CardContent>
+                <div className="space-y-3">
+                  <Button variant="outline" className="w-full">
+                    <Github size={16} className="mr-2" />
                     Connect GitHub
-                  </div>
-                </button>
-                <button className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700">
-                  <div className="flex items-center justify-center gap-2">
-                    <Mail size={16} />
+                  </Button>
+                  <Button variant="outline" className="w-full">
+                    <Mail size={16} className="mr-2" />
                     Connect Social
-                  </div>
-                </button>
-              </div>
-            </SettingCard>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -173,120 +168,166 @@ export default function Settings() {
             Editor
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingCard
-              icon={Code2}
-              title="Editor Settings"
-              description="Customize your coding experience"
-            >
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Font Size: <span className="text-blue-600 dark:text-blue-400">{preferences.fontSize}px</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="12"
-                    max="20"
-                    value={preferences.fontSize}
-                    onChange={(e) => {
-                      updatePreference("fontSize", parseInt(e.target.value));
-                      toast.success(`Font size set to ${e.target.value}px`);
-                    }}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Line Height: <span className="text-blue-600 dark:text-blue-400">{preferences.lineHeight}</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="1.2"
-                    max="2"
-                    step="0.1"
-                    value={preferences.lineHeight}
-                    onChange={(e) => {
-                      updatePreference("lineHeight", parseFloat(e.target.value));
-                      toast.success(`Line height set to ${e.target.value}`);
-                    }}
-                    className="w-full"
-                  />
-                </div>
-
-                <div className="pt-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.autoSave}
-                      onChange={(e) => {
-                        updatePreference("autoSave", e.target.checked);
-                        toast.success(e.target.checked ? "Auto-save enabled" : "Auto-save disabled");
-                      }}
-                      className="rounded border-zinc-300 dark:border-zinc-600"
-                    />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Auto-save files
-                    </span>
-                  </label>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    Automatically save file changes every 2 seconds
-                  </p>
-                </div>
-              </div>
-            </SettingCard>
-
-            <SettingCard
-              icon={Palette}
-              title="Appearance"
-              description="Visual theme preferences"
-            >
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">Editor Theme</p>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="theme"
-                        value="vs-dark"
-                        checked={preferences.theme === "vs-dark"}
-                        onChange={(e) => handleThemeChange(e.target.value)}
-                        className="rounded-full"
-                      />
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">Dark Theme</span>
+            <Card>
+              <CardHeader
+                icon={Code2}
+                title="Editor Settings"
+                description="Customize your coding experience"
+              />
+              <CardContent>
+                <div className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Font Size: <span className="text-brand-600 dark:text-brand-400">{preferences.fontSize}px</span>
                     </label>
+                    <input
+                      type="range"
+                      min="12"
+                      max="20"
+                      value={preferences.fontSize}
+                      onChange={(e) => {
+                        updatePreference("fontSize", parseInt(e.target.value));
+                        toast.success(`Font size set to ${e.target.value}px`);
+                      }}
+                      className="w-full accent-brand-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Line Height: <span className="text-brand-600 dark:text-brand-400">{preferences.lineHeight}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="1.2"
+                      max="2"
+                      step="0.1"
+                      value={preferences.lineHeight}
+                      onChange={(e) => {
+                        updatePreference("lineHeight", parseFloat(e.target.value));
+                        toast.success(`Line height set to ${e.target.value}`);
+                      }}
+                      className="w-full accent-brand-500"
+                    />
+                  </div>
+
+                  <div className="pt-3">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
-                        type="radio"
-                        name="theme"
-                        value="vs"
-                        checked={preferences.theme === "vs"}
-                        onChange={(e) => handleThemeChange(e.target.value)}
-                        className="rounded-full"
+                        type="checkbox"
+                        checked={preferences.autoSave}
+                        onChange={(e) => {
+                          updatePreference("autoSave", e.target.checked);
+                          toast.success(e.target.checked ? "Auto-save enabled" : "Auto-save disabled");
+                        }}
+                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
                       />
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">Light Theme</span>
+                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                        Auto-save files
+                      </span>
+                    </label>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      Automatically save file changes every 2 seconds
+                    </p>
+                  </div>
+
+                  <div className="pt-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preferences.wordWrap}
+                        onChange={(e) => {
+                          updatePreference("wordWrap", e.target.checked);
+                          toast.success(e.target.checked ? "Word wrap enabled" : "Word wrap disabled");
+                        }}
+                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                      />
+                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                        Enable Word Wrap
+                      </span>
+                    </label>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      Wrap lines that exceed the editor width
+                    </p>
+                  </div>
+
+                  <div className="pt-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preferences.fontLigatures}
+                        onChange={(e) => {
+                          updatePreference("fontLigatures", e.target.checked);
+                          toast.success(e.target.checked ? "Font ligatures enabled" : "Font ligatures disabled");
+                        }}
+                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                      />
+                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                        Enable Font Ligatures
+                      </span>
+                    </label>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      Use specialized multi-character symbols like =&gt;
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader
+                icon={Palette}
+                title="Appearance"
+                description="Visual theme preferences"
+              />
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">Editor Theme</p>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="theme"
+                          value="vs-dark"
+                          checked={preferences.theme === "vs-dark"}
+                          onChange={(e) => handleThemeChange(e.target.value)}
+                          className="text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-sm text-zinc-700 dark:text-zinc-300">Dark Theme</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="theme"
+                          value="vs"
+                          checked={preferences.theme === "vs"}
+                          onChange={(e) => handleThemeChange(e.target.value)}
+                          className="text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-sm text-zinc-700 dark:text-zinc-300">Light Theme</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="pt-3">
+                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">Minimap</p>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preferences.minimap}
+                        onChange={(e) => {
+                          updatePreference("minimap", e.target.checked);
+                          toast.success(e.target.checked ? "Minimap enabled" : "Minimap disabled");
+                        }}
+                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                      />
+                      <span className="text-sm text-zinc-700 dark:text-zinc-300">Show code minimap</span>
                     </label>
                   </div>
                 </div>
-
-                <div className="pt-3">
-                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">Minimap</p>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.minimap}
-                      onChange={(e) => {
-                        updatePreference("minimap", e.target.checked);
-                        toast.success(e.target.checked ? "Minimap enabled" : "Minimap disabled");
-                      }}
-                      className="rounded border-zinc-300 dark:border-zinc-600"
-                    />
-                    <span className="text-sm text-zinc-700 dark:text-zinc-300">Show code minimap</span>
-                  </label>
-                </div>
-              </div>
-            </SettingCard>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -296,49 +337,55 @@ export default function Settings() {
             Collaboration
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingCard
-              icon={Users}
-              title="Collaboration"
-              description="Room and team settings"
-            >
-              <div className="space-y-4">
-                <SettingRow
-                  label="Rooms Created"
-                  value="5 rooms"
-                />
-                <SettingRow
-                  label="Total Collaborators"
-                  value="12 people across rooms"
-                />
-                <button className="w-full mt-4 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800">
-                  Manage Rooms
-                </button>
-              </div>
-            </SettingCard>
+            <Card>
+              <CardHeader
+                icon={Users}
+                title="Collaboration"
+                description="Room and team settings"
+              />
+              <CardContent>
+                <div className="space-y-4">
+                  <SettingRow
+                    label="Rooms Created"
+                    value="5 rooms"
+                  />
+                  <SettingRow
+                    label="Total Collaborators"
+                    value="12 people across rooms"
+                  />
+                  <Button className="w-full mt-4">
+                    Manage Rooms
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
-            <SettingCard
-              icon={Zap}
-              title="Keyboard Shortcuts"
-              description="Quick actions and navigation"
-            >
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-600 dark:text-zinc-400">Save file</span>
-                  <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+S</kbd>
+            <Card>
+              <CardHeader
+                icon={Zap}
+                title="Keyboard Shortcuts"
+                description="Quick actions and navigation"
+              />
+              <CardContent>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-600 dark:text-zinc-400">Save file</span>
+                    <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+S</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-600 dark:text-zinc-400">Open file</span>
+                    <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+O</kbd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-600 dark:text-zinc-400">New file</span>
+                    <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+N</kbd>
+                  </div>
+                  <Button variant="ghost" className="w-full mt-2 text-brand-600 dark:text-brand-400">
+                    View all shortcuts →
+                  </Button>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-600 dark:text-zinc-400">Open file</span>
-                  <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+O</kbd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-600 dark:text-zinc-400">New file</span>
-                  <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+N</kbd>
-                </div>
-                <button className="mt-2 w-full text-blue-600 text-xs font-medium hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                  View all shortcuts →
-                </button>
-              </div>
-            </SettingCard>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -348,101 +395,107 @@ export default function Settings() {
             Preferences
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingCard
-              icon={Bell}
-              title="Notifications"
-              description="Email and in-app alerts"
-            >
-              <div className="space-y-4">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={preferences.notifications.pushNotifications}
-                    onChange={(e) => updateNotification("pushNotifications", e.target.checked)}
-                    className="rounded border-zinc-300 dark:border-zinc-600"
-                  />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Push notifications
-                  </span>
-                </label>
+            <Card>
+              <CardHeader
+                icon={Bell}
+                title="Notifications"
+                description="Email and in-app alerts"
+              />
+              <CardContent>
+                <div className="space-y-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preferences.notifications.pushNotifications}
+                      onChange={(e) => updateNotification("pushNotifications", e.target.checked)}
+                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                    />
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Push notifications
+                    </span>
+                  </label>
 
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={preferences.notifications.collaboratorJoined}
-                    onChange={(e) => updateNotification("collaboratorJoined", e.target.checked)}
-                    className="rounded border-zinc-300 dark:border-zinc-600"
-                  />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Collaborator joined
-                  </span>
-                </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preferences.notifications.collaboratorJoined}
+                      onChange={(e) => updateNotification("collaboratorJoined", e.target.checked)}
+                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                    />
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Collaborator joined
+                    </span>
+                  </label>
 
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={preferences.notifications.codeChanges}
-                    onChange={(e) => updateNotification("codeChanges", e.target.checked)}
-                    className="rounded border-zinc-300 dark:border-zinc-600"
-                  />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Code changes
-                  </span>
-                </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preferences.notifications.codeChanges}
+                      onChange={(e) => updateNotification("codeChanges", e.target.checked)}
+                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                    />
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Code changes
+                    </span>
+                  </label>
 
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={preferences.notifications.emailDigest}
-                    onChange={(e) => updateNotification("emailDigest", e.target.checked)}
-                    className="rounded border-zinc-300 dark:border-zinc-600"
-                  />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Email digest
-                  </span>
-                </label>
-              </div>
-            </SettingCard>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preferences.notifications.emailDigest}
+                      onChange={(e) => updateNotification("emailDigest", e.target.checked)}
+                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                    />
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Email digest
+                    </span>
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
 
-            <SettingCard
-              icon={Shield}
-              title="Privacy & Security"
-              description="Data and access control"
-            >
-              <div className="space-y-4">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={preferences.privacy.profileVisibility}
-                    onChange={(e) => updatePrivacy("profileVisibility", e.target.checked)}
-                    className="rounded border-zinc-300 dark:border-zinc-600"
-                  />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Profile visibility
-                  </span>
-                </label>
+            <Card>
+              <CardHeader
+                icon={Shield}
+                title="Privacy & Security"
+                description="Data and access control"
+              />
+              <CardContent>
+                <div className="space-y-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preferences.privacy.profileVisibility}
+                      onChange={(e) => updatePrivacy("profileVisibility", e.target.checked)}
+                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                    />
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Profile visibility
+                    </span>
+                  </label>
 
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={preferences.privacy.showActivityStatus}
-                    onChange={(e) => updatePrivacy("showActivityStatus", e.target.checked)}
-                    className="rounded border-zinc-300 dark:border-zinc-600"
-                  />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Show activity status
-                  </span>
-                </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preferences.privacy.showActivityStatus}
+                      onChange={(e) => updatePrivacy("showActivityStatus", e.target.checked)}
+                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
+                    />
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Show activity status
+                    </span>
+                  </label>
 
-                <button className="w-full mt-4 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700">
-                  Change Password
-                </button>
+                  <Button variant="outline" className="w-full mt-4">
+                    Change Password
+                  </Button>
 
-                <button className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700">
-                  Active Sessions
-                </button>
-              </div>
-            </SettingCard>
+                  <Button variant="outline" className="w-full">
+                    Active Sessions
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -461,21 +514,22 @@ export default function Settings() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <button
+                <Button
                   onClick={handleLogout}
-                  className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                  variant="danger"
                 >
-                  <LogOut size={16} />
+                  <LogOut size={16} className="mr-2" />
                   Logout
-                </button>
+                </Button>
 
-                <button
+                <Button
                   onClick={handleDeleteAccount}
-                  className="flex items-center justify-center gap-2 rounded-lg border border-red-600 bg-transparent px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950"
+                  variant="outline"
+                  className="!text-red-500 !border-red-500 hover:!bg-red-50 dark:hover:!bg-red-950/30"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={16} className="mr-2" />
                   Delete Account
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -488,6 +542,28 @@ export default function Settings() {
           </p>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Logout"
+        description="Are you sure you want to logout?"
+        confirmText="Logout"
+        cancelText="Cancel"
+        isDestructive={false}
+        onConfirm={confirmLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
+
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="Delete Account"
+        description="Are you absolutely sure? This will permanently delete your account and all data. This cannot be undone."
+        confirmText="Delete Account"
+        cancelText="Cancel"
+        isDestructive={true}
+        onConfirm={confirmDeleteAccount}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

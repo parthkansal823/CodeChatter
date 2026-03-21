@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import toast from "react-hot-toast";
@@ -10,13 +10,11 @@ export default function OAuthCallback() {
   const hasCalledRef = useRef(false);
 
   useEffect(() => {
-    // Prevent double calls in development mode (React StrictMode)
     if (hasCalledRef.current) return;
     hasCalledRef.current = true;
 
     const handleCallback = async () => {
       try {
-        // Get token and user data from URL params (backend redirects with these)
         const token = searchParams.get("token");
         const username = searchParams.get("user");
         const email = searchParams.get("email");
@@ -35,19 +33,11 @@ export default function OAuthCallback() {
           return;
         }
 
-        // Create user object
-        const userData = {
-          id,
-          email,
-          username
-        };
-
-        // Use OAuth login method from AuthContext
+        const userData = { id, email, username };
         const result = await oauthLogin(token, userData);
 
         if (result.success) {
           toast.success("Logged in successfully!");
-          // Navigate to home with replace to prevent back button
           navigate("/home", { replace: true });
         } else {
           toast.error(result.error || "Login failed");
@@ -72,4 +62,3 @@ export default function OAuthCallback() {
     </div>
   );
 }
-

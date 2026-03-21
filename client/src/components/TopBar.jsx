@@ -1,4 +1,4 @@
-import { Copy, Home, PanelLeft, PanelRight, Play } from "lucide-react";
+import { Copy, Home, PanelLeft, PanelRight, Play, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 function StatusText({ saveStatus }) {
@@ -18,44 +18,32 @@ export default function TopBar({
   activePath,
   collaborators = [],
   explorerOpen,
-  sidebarOpen,
   onToggleExplorer,
+  sidebarOpen,
   onToggleSidebar,
   onCopyInvite,
   onRun,
   isRunning,
-  saveStatus = "saved"
+  saveStatus = "saved",
+  onOpenSettings
 }) {
   const navigate = useNavigate();
 
   return (
-    <div className="border-b border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="border-b border-zinc-100 bg-white/70 backdrop-blur-md px-3 py-2 dark:border-white/[0.04] dark:bg-[#09090b]/80">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <button
             onClick={onToggleExplorer}
-            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition-colors ${
               explorerOpen
-                ? "border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
-                : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white"
+                ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
+                : "text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
             }`}
             title="Toggle files"
           >
             <PanelLeft size={16} />
             <span className="hidden sm:inline">Files</span>
-          </button>
-
-          <button
-            onClick={onToggleSidebar}
-            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
-              sidebarOpen
-                ? "border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
-                : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white"
-            }`}
-            title="Toggle tools"
-          >
-            <PanelRight size={16} />
-            <span className="hidden sm:inline">Tools</span>
           </button>
 
           <div className="min-w-0">
@@ -75,30 +63,28 @@ export default function TopBar({
 
           <div className="hidden items-center sm:flex">
             {collaborators.slice(0, 5).map((collaborator, index) => (
-              <div
+              <img
                 key={collaborator.id}
                 title={collaborator.username}
-                className={`-ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-white bg-zinc-900 text-xs font-semibold text-white first:ml-0 dark:border-zinc-950 ${
-                  index === 0 ? "bg-cyan-600" : index === 1 ? "bg-blue-600" : index === 2 ? "bg-emerald-600" : index === 3 ? "bg-violet-600" : "bg-amber-600"
-                }`}
-              >
-                {collaborator.username?.charAt(0).toUpperCase()}
-              </div>
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(collaborator.username || "U")}&background=random&color=fff&size=128`}
+                alt={collaborator.username}
+                className="-ml-2 h-8 w-8 rounded-full border-2 border-white bg-zinc-100 object-cover first:ml-0 dark:border-zinc-950 dark:bg-zinc-800"
+              />
             ))}
           </div>
 
           <button
             onClick={onRun}
             disabled={isRunning}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70 dark:border-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+            className="inline-flex h-8 items-center gap-2 rounded-md bg-purple-600 px-3.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-purple-600 dark:text-white dark:hover:bg-purple-500"
           >
-            <Play size={15} />
+            <Play size={14} fill="currentColor" />
             <span>{isRunning ? "Running..." : "Run"}</span>
           </button>
 
           <button
             onClick={onCopyInvite}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:text-white"
+            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
             title="Copy invite link"
           >
             <Copy size={15} />
@@ -107,11 +93,33 @@ export default function TopBar({
 
           <button
             onClick={() => navigate("/home")}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:text-white"
+            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
             title="Back to dashboard"
           >
             <Home size={15} />
             <span className="hidden sm:inline">Home</span>
+          </button>
+
+          <button
+            onClick={onOpenSettings}
+            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+            title="Room Settings"
+          >
+            <Settings size={15} />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+
+          <button
+            onClick={onToggleSidebar}
+            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition-colors ${
+              sidebarOpen
+                ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
+                : "text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+            }`}
+            title="Toggle tools"
+          >
+            <PanelRight size={16} />
+            <span className="hidden sm:inline">Tools</span>
           </button>
         </div>
       </div>

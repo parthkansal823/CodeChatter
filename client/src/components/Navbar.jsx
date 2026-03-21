@@ -46,7 +46,7 @@ export default function Navbar({
   };
 
   const toggleTheme = () => {
-    const nextTheme = theme === "vs-dark" ? "light" : "vs-dark";
+    const nextTheme = theme === "vs-dark" ? "vs" : "vs-dark";
     onThemeChange?.(nextTheme);
   };
 
@@ -136,9 +136,11 @@ export default function Navbar({
               className="flex h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 text-left transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
               title={user?.username}
             >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-[11px] font-semibold text-white dark:bg-white dark:text-zinc-950">
-                {userInitial}
-              </span>
+              <img 
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.username || "U")}&background=random&color=fff&size=128`}
+                alt={user?.username}
+                className="h-6 w-6 rounded-full object-cover bg-zinc-100 dark:bg-zinc-800"
+              />
               {!minimal && (
                 <span className="hidden max-w-[120px] truncate text-sm text-zinc-800 dark:text-zinc-100 xl:block">
                   {user?.username}
