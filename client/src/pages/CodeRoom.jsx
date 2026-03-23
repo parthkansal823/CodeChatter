@@ -1049,6 +1049,11 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
               onToggle={() => setIsRightSidebarOpen((prev) => !prev)}
               mobile={isMobileViewport}
               onClose={() => setIsRightSidebarOpen(false)}
+              room={room}
+              roomId={roomId}
+              activeFilePath={activeFileEntry?.path}
+              activeCode={activeCode}
+              runResult={runResult}
             />
           </div>
 

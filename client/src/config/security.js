@@ -54,6 +54,9 @@ export const API_ENDPOINTS = {
   GET_COLLABORATORS: `${API_BASE_URL}/api/collaborators`,
   INVITE_COLLABORATOR: `${API_BASE_URL}/api/collaborators/invite`,
 
+  // AI
+  AI_ASSIST: `${API_BASE_URL}/api/ai/gemini`,
+
   // OAuth
   GOOGLE_LOGIN: `${API_BASE_URL}/auth/google`,
   GITHUB_LOGIN: `${API_BASE_URL}/auth/github`,

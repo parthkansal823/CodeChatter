@@ -28,7 +28,7 @@ const TOOL_CARDS = [
   {
     id: "ai",
     name: "AI Help",
-    description: "Explain code, break down logic, and help understand the current file.",
+    description: "Gemini-backed help for explanations, debugging, and code improvements with local fallback.",
     icon: Bot,
     accent: "text-violet-500",
   },
@@ -47,6 +47,11 @@ export default function RightSidebar({
   mobile = false,
   onClose,
   onFeatureSelect,
+  room,
+  roomId,
+  activeFilePath,
+  activeCode,
+  runResult,
 }) {
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -129,7 +134,14 @@ export default function RightSidebar({
       {!isCollapsed && activeFeature === "chat" ? (
         <RoomChat onBack={() => setActiveFeature(null)} />
       ) : !isCollapsed && activeFeature === "ai" ? (
-        <AIHelper onBack={() => setActiveFeature(null)} />
+        <AIHelper
+          onBack={() => setActiveFeature(null)}
+          roomId={roomId}
+          roomName={room?.name}
+          activeFilePath={activeFilePath}
+          activeCode={activeCode}
+          runResult={runResult}
+        />
       ) : (
         <>
           {/* Dock Header */}
@@ -193,7 +205,7 @@ export default function RightSidebar({
                 Feature Dock
               </p>
               <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                Keep this panel for collaboration and helper tools around the editor.
+                Keep this panel for collaboration tools, file-aware guidance, and workspace side tasks.
               </p>
             </div>
 

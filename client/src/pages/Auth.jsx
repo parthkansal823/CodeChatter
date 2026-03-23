@@ -112,6 +112,7 @@ export default function Auth() {
       >
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
 
+
         <div className="relative flex p-1 mb-8 bg-black/40 border border-white/5 rounded-xl overflow-hidden">
           <div
             className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white/10 border border-white/10 rounded-lg shadow-sm transition-transform duration-300 ease-out ${

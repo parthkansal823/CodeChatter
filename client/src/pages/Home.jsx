@@ -5,8 +5,11 @@ import {
   ArrowRight,
   FolderGit2,
   Link2,
+  MoreVertical,
   Plus,
+  Settings2,
   Trash2,
+  Terminal,
   Users
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -17,11 +20,19 @@ import ConfirmModal from "../components/ConfirmModal";
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch, validateRoomId } from "../utils/security";
+import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/terminal";
 
 const SkeletonCard = () => (
-  <div className="rounded-xl border border-zinc-200 bg-white p-6 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
-    <div className="mb-4 h-6 w-3/4 rounded bg-zinc-200 dark:bg-zinc-700" />
-    <div className="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-700" />
+  <div className="rounded-2xl border border-zinc-200 bg-white p-5 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="h-5 w-1/2 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-7 w-16 rounded-lg bg-zinc-100 dark:bg-zinc-800" />
+    </div>
+    <div className="mb-4 h-4 w-1/3 rounded-lg bg-zinc-100 dark:bg-zinc-800" />
+    <div className="flex gap-2">
+      <div className="h-6 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+      <div className="h-6 w-20 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+    </div>
   </div>
 );
 
@@ -61,6 +72,8 @@ const itemVariants = {
 export default function Home() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
+  const terminalShellOptions = useMemo(() => getTerminalShellOptions(), []);
+  const defaultTerminalShell = useMemo(() => getDefaultTerminalShell(), []);
   const [joinRoomValue, setJoinRoomValue] = useState("");
   const [joiningRoom, setJoiningRoom] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -72,8 +85,21 @@ export default function Home() {
   const [roomName, setRoomName] = useState("");
   const [roomDescription, setRoomDescription] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
-  const [selectedShell, setSelectedShell] = useState("bash");
+  const [selectedShell, setSelectedShell] = useState(defaultTerminalShell);
+  const [dsaLanguage, setDsaLanguage] = useState("python");
   const [roomToDelete, setRoomToDelete] = useState(null);
+  const [openMenuId, setOpenMenuId] = useState(null);
+
+  const DSA_LANGUAGES = [
+    { id: "python",     label: "Python" },
+    { id: "javascript", label: "JS" },
+    { id: "typescript", label: "TS" },
+    { id: "cpp",        label: "C++" },
+    { id: "java",       label: "Java" },
+    { id: "c",          label: "C" },
+    { id: "go",         label: "Go" },
+    { id: "rust",       label: "Rust" },
+  ];
 
   const selectedTemplate = useMemo(
     () => roomTemplates.find((t) => t.id === selectedTemplateId) || null,
@@ -129,6 +155,13 @@ export default function Home() {
     };
   }, [token]);
 
+  // Close room action menus when clicking outside
+  useEffect(() => {
+    const handler = () => setOpenMenuId(null);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const handleJoinById = async (roomId) => {
     if (!roomId) {
       toast.error("Enter a room ID or invite link");
@@ -174,12 +207,18 @@ export default function Home() {
             description: sanitizeInput(roomDescription) || null,
             templateId: selectedTemplateId,
             terminalShell: selectedShell,
+            dsaLanguage: selectedTemplateId === "dsa-practice" ? dsaLanguage : undefined,
           }),
         },
         token
       );
 
       setCreateModalOpen(false);
+      setRoomName("");
+      setRoomDescription("");
+      setSelectedTemplateId("blank");
+      setSelectedShell(defaultTerminalShell);
+      setDsaLanguage("python");
       toast.success("Room created");
       navigate(`/room/${room.id}`);
     } catch (error) {
@@ -187,6 +226,15 @@ export default function Home() {
     } finally {
       setCreatingRoom(false);
     }
+  };
+
+  const openCreateModal = () => {
+    setRoomName("");
+    setRoomDescription("");
+    setSelectedTemplateId("blank");
+    setSelectedShell(defaultTerminalShell);
+    setDsaLanguage("python");
+    setCreateModalOpen(true);
   };
 
   const handleDeleteRoom = (room) => {
@@ -227,7 +275,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-black dark:bg-zinc-950 dark:text-white">
+    <div className="relative min-h-screen bg-gradient-to-b from-zinc-50 to-white text-black dark:from-zinc-950 dark:to-zinc-950/90 dark:text-white">
       <Motion.div 
         variants={containerVariants}
         initial="hidden"
@@ -259,7 +307,7 @@ export default function Home() {
             variants={itemVariants}
             whileHover={{ scale: 1.01, y: -2 }}
             whileTap={{ scale: 0.99 }}
-            onClick={() => setCreateModalOpen(true)}
+            onClick={openCreateModal}
             className="group rounded-2xl border border-zinc-200 bg-white/70 p-6 text-left transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
           >
             <div className="flex items-center justify-between gap-4">
@@ -308,7 +356,7 @@ export default function Home() {
 
         <section className="mt-10">
           <Motion.div variants={itemVariants} className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">Recent rooms</h2>
+            <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">Your rooms</h2>
             <span className="text-sm text-zinc-500 dark:text-zinc-400">{rooms.length} total</span>
           </Motion.div>
 
@@ -329,58 +377,124 @@ export default function Home() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
                     whileHover={{ y: -4 }}
-                    className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg"
+                    className="group/card relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-violet-200 dark:hover:border-violet-900/50 hover:shadow-lg hover:shadow-violet-500/5"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button
                         onClick={() => navigate(`/room/${room.id}`)}
                         className="min-w-0 flex-1 text-left"
                       >
-                        <h3 className="truncate text-base font-semibold transition-colors hover:text-zinc-600 dark:hover:text-zinc-300">{room.name}</h3>
+                        <h3 className="truncate text-base font-semibold text-zinc-900 dark:text-white transition-colors">{room.name}</h3>
                         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                           {room.templateName || "Blank Workspace"}
                         </p>
                       </button>
 
-                      <div className="flex items-center gap-2">
-                        {room.ownerId === user?.id && (
-                          <div className="flex items-center rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950/50">
-                            {[
-                              { id: "bash", label: "Bash" },
-                              { id: "powershell", label: "PS" },
-                              { id: "cmd", label: "CMD" }
-                            ].map((shell) => (
-                              <button
-                                key={shell.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleUpdateShell(room, shell.id);
-                                }}
-                                className={`rounded-md px-2 py-1 text-[10px] items-center font-medium uppercase tracking-wider transition-all ${
-                                  (room.terminalShell || "bash") === shell.id
-                                    ? "bg-zinc-900 text-white shadow-sm dark:bg-zinc-200 dark:text-zinc-900"
-                                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-300"
-                                }`}
-                                title={`Set terminal to ${shell.label}`}
-                              >
-                                {shell.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {room.ownerId === user?.id && (
+                      {room.ownerId === user?.id && (
+                        <div className="relative">
+                          {/* Trigger — stopPropagation on BOTH mousedown AND click */}
                           <button
+                            onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteRoom(room);
+                              setOpenMenuId(openMenuId === room.id ? null : room.id);
                             }}
-                            className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                            title={`Delete ${room.name}`}
+                            className={`rounded-lg p-1.5 transition-colors ${
+                              openMenuId === room.id
+                                ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+                                : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                            }`}
+                            title="Workspace settings"
                           >
-                            <Trash2 size={16} />
+                            <MoreVertical size={16} />
                           </button>
-                        )}
-                      </div>
+
+                          {openMenuId === room.id && (
+                            <div
+                              onMouseDown={(e) => e.stopPropagation()}
+                              className="absolute right-0 top-9 z-30 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-700/80 dark:bg-zinc-900"
+                            >
+                              {/* Room info header */}
+                              <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+                                <p className="truncate text-xs font-semibold text-zinc-800 dark:text-white">{room.name}</p>
+                                <p className="mt-0.5 font-mono text-[10px] text-zinc-400">{room.id}</p>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="py-1">
+                                <button
+                                  onClick={() => { navigate(`/room/${room.id}`); setOpenMenuId(null); }}
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                                >
+                                  <ArrowRight size={14} className="text-zinc-400" />
+                                  Open workspace
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    const url = `${window.location.origin}/room/${room.id}`;
+                                    navigator.clipboard.writeText(url);
+                                    toast.success("Invite link copied!");
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                                >
+                                  <Link2 size={14} className="text-zinc-400" />
+                                  Copy invite link
+                                </button>
+                              </div>
+
+                              {/* Terminal shell */}
+                              <div className="border-t border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
+                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                  Terminal shell
+                                </p>
+                                <div className="grid grid-cols-3 gap-1">
+                                  {terminalShellOptions.map((shell) => {
+                                    const isActive = (room.terminalShell || "bash") === shell.id;
+                                    return (
+                                      <button
+                                        key={shell.id}
+                                        onClick={() => { handleUpdateShell(room, shell.id); setOpenMenuId(null); }}
+                                        className={`rounded-lg py-1.5 text-[11px] font-bold tracking-wide transition-all ${
+                                          isActive
+                                            ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
+                                            : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                                        }`}
+                                        title={shell.label}
+                                      >
+                                        {shell.shortLabel}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Collaborators info */}
+                              <div className="flex items-center gap-2 border-t border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
+                                <Users size={13} className="text-zinc-400" />
+                                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                                  {room.participantCount || 0} collaborator{room.participantCount !== 1 ? "s" : ""}
+                                </span>
+                                <span className="ml-auto text-xs text-zinc-400 dark:text-zinc-500">
+                                  {room.fileCount || 0} files
+                                </span>
+                              </div>
+
+                              {/* Delete */}
+                              <div className="border-t border-zinc-100 py-1 dark:border-zinc-800">
+                                <button
+                                  onClick={() => { handleDeleteRoom(room); setOpenMenuId(null); }}
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                                >
+                                  <Trash2 size={14} />
+                                  Delete workspace
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <button
@@ -398,9 +512,9 @@ export default function Home() {
                           {room.id}
                         </span>
                       </div>
-                      <div className="mt-6 flex items-center justify-between text-sm font-medium text-zinc-900 dark:text-zinc-300 opacity-80 group-hover:opacity-100 transition-opacity">
+                      <div className="mt-5 flex items-center justify-between border-t border-zinc-100 pt-3 text-sm font-medium text-zinc-400 dark:border-zinc-800 dark:text-zinc-500 group-hover/card:text-violet-600 dark:group-hover/card:text-violet-400 transition-colors">
                         <span>Open room</span>
-                        <ArrowRight size={15} className="transform group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight size={14} className="transform group-hover/card:translate-x-1 transition-transform" />
                       </div>
                     </button>
                   </Motion.div>
@@ -408,8 +522,20 @@ export default function Home() {
               </AnimatePresence>
             </div>
           ) : (
-            <Motion.div variants={itemVariants} className="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-              You have no rooms yet. Create one to start with a blank workspace or a starter template.
+            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400">
+                <FolderGit2 size={24} />
+              </div>
+              <p className="text-base font-semibold text-zinc-700 dark:text-zinc-300">No rooms yet</p>
+              <p className="mt-1.5 max-w-xs text-sm text-zinc-500 dark:text-zinc-400">
+                Create your first workspace and start coding instantly with a template.
+              </p>
+              <button
+                onClick={openCreateModal}
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-500/20 hover:bg-violet-500 transition-colors"
+              >
+                <Plus size={15} /> Create a room
+              </button>
             </Motion.div>
           )}
         </section>
@@ -456,12 +582,11 @@ export default function Home() {
 
                   <div>
                     <label className="mb-2 block text-sm font-medium">Terminal Shell</label>
+                    <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      {terminalShellOptions.find((shell) => shell.id === selectedShell)?.description}
+                    </p>
                     <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: "bash", name: "Bash" },
-                      { id: "powershell", name: "PowerShell" },
-                      { id: "cmd", name: "CMD" }
-                    ].map((shell) => (
+                    {terminalShellOptions.map((shell) => (
                       <button
                         key={shell.id}
                         type="button"
@@ -472,7 +597,7 @@ export default function Home() {
                             : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700"
                         }`}
                       >
-                        {shell.name}
+                        {shell.label}
                       </button>
                     ))}
                     </div>
@@ -488,7 +613,7 @@ export default function Home() {
 
                 <div>
                   <p className="mb-3 text-sm font-medium">Starter templates</p>
-                  <div className="grid max-h-[52vh] gap-3 overflow-auto pr-1 md:grid-cols-2">
+                  <div className="grid max-h-[38vh] gap-2.5 overflow-auto pr-1 md:grid-cols-2">
                     {roomTemplates.map((template) => (
                       <Motion.button
                         whileHover={{ scale: 1.02 }}
@@ -498,37 +623,64 @@ export default function Home() {
                         onClick={() => setSelectedTemplateId(template.id)}
                         className={`rounded-xl border p-4 text-left transition-colors ${
                           selectedTemplateId === template.id
-                            ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-950 shadow-md"
-                            : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700 hover:shadow-sm"
+                            ? "border-violet-600 bg-violet-50 dark:border-violet-400 dark:bg-violet-900/10"
+                            : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <p className="font-medium">{template.name}</p>
-                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium tracking-wide uppercase ${
+                          <p className={`font-medium text-sm ${selectedTemplateId === template.id ? "text-violet-700 dark:text-violet-300" : ""}`}>{template.name}</p>
+                          <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${
                             selectedTemplateId === template.id
-                              ? "bg-white/15 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                              ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
                               : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
                           }`}>
                             {template.category}
                           </span>
                         </div>
-                        <p className={`mt-2 text-xs leading-relaxed ${
-                          selectedTemplateId === template.id
-                            ? "text-white/90 dark:text-zinc-600"
-                            : "text-zinc-500 dark:text-zinc-400"
-                        }`}>
+                        <p className="mt-1.5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
                           {template.description}
                         </p>
                       </Motion.button>
                     ))}
                   </div>
+
+                  {/* DSA Language Picker */}
+                  {selectedTemplateId === "dsa-practice" && (
+                    <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900/40 dark:bg-violet-900/10">
+                      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                        Starter Language
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {DSA_LANGUAGES.map((lang) => (
+                          <button
+                            key={lang.id}
+                            type="button"
+                            onClick={() => setDsaLanguage(lang.id)}
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              dsaLanguage === lang.id
+                                ? "border-violet-600 bg-violet-600 text-white dark:border-violet-400 dark:bg-violet-400 dark:text-zinc-900"
+                                : "border-zinc-200 bg-white text-zinc-600 hover:border-violet-300 hover:text-violet-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+                            }`}
+                          >
+                            {lang.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        A <strong>{DSA_LANGUAGES.find(l => l.id === dsaLanguage)?.label}</strong> starter solution will be added to your workspace.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
                 <Button
                   type="button"
-                  onClick={() => setCreateModalOpen(false)}
+                  onClick={() => {
+                    setCreateModalOpen(false);
+                    setSelectedShell(defaultTerminalShell);
+                  }}
                   variant="ghost"
                 >
                   Cancel

@@ -21,10 +21,12 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
+import httpx
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 try:
   from .database import MongoRepository
@@ -55,6 +57,13 @@ DEFAULT_FRONTEND_URL = os.getenv(
 )
 DEFAULT_CALLBACK_URL = f"{DEFAULT_FRONTEND_URL.rstrip('/')}/auth/callback"
 RUN_TIMEOUT_SECONDS = int(os.getenv("CODE_RUN_TIMEOUT_SECONDS", "15"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
+GEMINI_API_BASE_URL = os.getenv(
+  "GEMINI_API_BASE_URL",
+  "https://generativelanguage.googleapis.com/v1beta",
+).rstrip("/")
 
 APP_DIR = Path(__file__).resolve().parent
 CLIENT_DIST_DIR = APP_DIR.parent / "client" / "dist"
@@ -69,6 +78,7 @@ EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
 ROOM_ID_PATTERN = re.compile(r"^[A-Z0-9]{6,20}$")
 TEMPLATE_ID_PATTERN = re.compile(r"^[a-z0-9-]{3,40}$")
+TERMINAL_SHELL_PATTERN = re.compile(r"^(bash|powershell|cmd|sh)$")
 _UNSET = object()
 
 
@@ -257,6 +267,7 @@ app.add_middleware(
   same_site="lax",
   https_only=ENVIRONMENT == "production",
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 oauth = OAuth()
 REGISTERED_OAUTH_PROVIDERS: set[str] = set()
@@ -293,6 +304,19 @@ def register_oauth_providers() -> None:
 
 
 register_oauth_providers()
+
+
+def get_default_terminal_shell() -> str:
+  return "powershell" if os.name == "nt" else "bash"
+
+
+def normalize_terminal_shell(value: str | None) -> str:
+  normalized = (value or get_default_terminal_shell()).strip().lower()
+
+  if not TERMINAL_SHELL_PATTERN.fullmatch(normalized):
+    raise ValueError("Unsupported terminal shell")
+
+  return normalized
 
 
 class LoginRequest(BaseModel):
@@ -361,7 +385,18 @@ class RoomCreateRequest(BaseModel):
   description: str | None = Field(default=None, max_length=240)
   is_public: bool = False
   templateId: str | None = Field(default="blank", max_length=40)
-  terminalShell: str | None = Field(default="bash", max_length=20)
+  terminalShell: str | None = Field(default=None, max_length=20)
+  dsaLanguage: str | None = Field(default="python", max_length=20)
+
+  @field_validator("dsaLanguage")
+  @classmethod
+  def validate_dsa_language(cls, value: str | None) -> str:
+    allowed = {"python","javascript","typescript","cpp","java","c","go","rust"}
+    if not value:
+      return "python"
+    if value.lower() not in allowed:
+      raise ValueError(f"Unsupported DSA language. Choose from: {', '.join(sorted(allowed))}")
+    return value.lower()
 
   @field_validator("name", "description")
   @classmethod
@@ -381,6 +416,11 @@ class RoomCreateRequest(BaseModel):
       raise ValueError("Invalid room template")
 
     return normalized
+
+  @field_validator("terminalShell")
+  @classmethod
+  def validate_terminal_shell(cls, value: str | None) -> str:
+    return normalize_terminal_shell(value)
 
 
 class RoomJoinRequest(BaseModel):
@@ -402,6 +442,14 @@ class RoomSettingsUpdateRequest(BaseModel):
   description: str | None = Field(default=None, max_length=240)
   terminalShell: str | None = Field(default=None, max_length=20)
 
+  @field_validator("terminalShell")
+  @classmethod
+  def validate_terminal_shell(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+
+    return normalize_terminal_shell(value)
+
 
 class RoomWorkspaceUpdateRequest(BaseModel):
   tree: list[dict[str, Any]] = Field(default_factory=list)
@@ -420,6 +468,55 @@ class RoomRunRequest(BaseModel):
   @classmethod
   def normalize_stdin(cls, value: str | None) -> str:
     return value or ""
+
+
+class GeminiAssistRequest(BaseModel):
+  prompt: str = Field(min_length=1, max_length=4000)
+  roomId: str | None = Field(default=None, min_length=6, max_length=20)
+  roomName: str | None = Field(default=None, max_length=80)
+  activeFilePath: str | None = Field(default=None, max_length=260)
+  activeCode: str | None = Field(default="", max_length=40_000)
+  runResult: dict[str, Any] | None = None
+
+  @field_validator("prompt")
+  @classmethod
+  def normalize_prompt(cls, value: str) -> str:
+    normalized = value.strip()
+
+    if not normalized:
+      raise ValueError("Prompt cannot be empty")
+
+    return normalized
+
+  @field_validator("roomId")
+  @classmethod
+  def normalize_room_id(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+
+    normalized = value.strip().upper()
+
+    if not ROOM_ID_PATTERN.fullmatch(normalized):
+      raise ValueError("Room ID must be 6-20 uppercase letters or numbers")
+
+    return normalized
+
+  @field_validator("roomName", "activeFilePath")
+  @classmethod
+  def normalize_optional_text(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+
+    normalized = value.strip()
+    return normalized or None
+
+  @field_validator("activeCode")
+  @classmethod
+  def normalize_code(cls, value: str | None) -> str | None:
+    if value is None:
+      return None
+
+    return value
 
 
 def utc_now() -> datetime:
@@ -560,6 +657,153 @@ def normalize_workspace_path(value: str) -> str:
     raise ValueError("Invalid workspace path")
 
   return "/".join(parts)
+
+
+def summarize_run_result_for_ai(run_result: dict[str, Any] | None) -> str:
+  if not isinstance(run_result, dict):
+    return "No recent run result was provided."
+
+  summary_parts: list[str] = []
+
+  command = str(run_result.get("command", "")).strip()
+  if command:
+    summary_parts.append(f"Command: {command}")
+
+  exit_code = run_result.get("exitCode")
+  if exit_code is not None:
+    summary_parts.append(f"Exit code: {exit_code}")
+
+  runtime_ms = run_result.get("runtimeMs")
+  if isinstance(runtime_ms, (int, float)):
+    summary_parts.append(f"Runtime: {int(runtime_ms)} ms")
+
+  stdout = str(run_result.get("stdout", "")).strip()
+  stderr = str(run_result.get("stderr", "")).strip()
+
+  if stdout:
+    summary_parts.append(f"Stdout:\n{stdout[:3000]}")
+
+  if stderr:
+    summary_parts.append(f"Stderr:\n{stderr[:3000]}")
+
+  return "\n\n".join(summary_parts) if summary_parts else "No recent run result was provided."
+
+
+def build_gemini_prompt(
+  payload: GeminiAssistRequest,
+  *,
+  current_user: dict[str, Any],
+  active_file_path: str | None,
+) -> str:
+  active_code = (payload.activeCode or "")[:25_000]
+  room_label = payload.roomName or payload.roomId or "Current workspace"
+  file_label = active_file_path or "No file selected"
+  run_result_summary = summarize_run_result_for_ai(payload.runResult)
+
+  sections = [
+    "You are the AI assistant inside CodeChatter, a collaborative coding workspace.",
+    "Give practical, implementation-focused answers grounded in the provided room context.",
+    "Be concise but useful. Prefer actionable debugging and improvement advice over generic theory.",
+    "",
+    f"Developer: {current_user['username']}",
+    f"Workspace: {room_label}",
+    f"Active file: {file_label}",
+    "",
+    "User request:",
+    payload.prompt,
+    "",
+    "Latest run result:",
+    run_result_summary,
+    "",
+    "Active file content:",
+    active_code or "No active file content was provided.",
+  ]
+
+  return "\n".join(sections)
+
+
+def extract_gemini_text(response_payload: dict[str, Any]) -> str:
+  for candidate in response_payload.get("candidates", []):
+    content = candidate.get("content", {})
+    parts = content.get("parts", [])
+    text_parts = [
+      str(part.get("text", "")).strip()
+      for part in parts
+      if str(part.get("text", "")).strip()
+    ]
+
+    if text_parts:
+      return "\n\n".join(text_parts)
+
+  raise HTTPException(
+    status_code=status.HTTP_502_BAD_GATEWAY,
+    detail="Gemini returned an empty response",
+  )
+
+
+async def request_gemini_completion(prompt: str) -> str:
+  if not GEMINI_API_KEY:
+    raise HTTPException(
+      status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+      detail="Gemini is not configured yet. Add GEMINI_API_KEY to server/.env and restart the backend.",
+    )
+
+  request_payload = {
+    "system_instruction": {
+      "parts": [
+        {
+          "text": (
+            "You are CodeChatter AI, a collaborative coding assistant. "
+            "Focus on code explanation, debugging, and concrete next steps."
+          )
+        }
+      ]
+    },
+    "contents": [
+      {
+        "role": "user",
+        "parts": [{"text": prompt}],
+      }
+    ],
+    "generationConfig": {
+      "temperature": 0.35,
+      "maxOutputTokens": 1024,
+    },
+  }
+
+  try:
+    async with httpx.AsyncClient(timeout=GEMINI_TIMEOUT_SECONDS) as client:
+      response = await client.post(
+        f"{GEMINI_API_BASE_URL}/models/{GEMINI_MODEL}:generateContent",
+        headers={
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
+        json=request_payload,
+      )
+      response.raise_for_status()
+  except httpx.HTTPStatusError as error:
+    detail = "Gemini request failed"
+
+    try:
+      error_payload = error.response.json()
+      api_message = error_payload.get("error", {}).get("message")
+      if isinstance(api_message, str) and api_message.strip():
+        detail = api_message.strip()
+    except ValueError:
+      detail = error.response.text or detail
+
+    raise HTTPException(
+      status_code=status.HTTP_502_BAD_GATEWAY,
+      detail=f"Gemini request failed: {detail}",
+    ) from error
+  except httpx.HTTPError as error:
+    raise HTTPException(
+      status_code=status.HTTP_502_BAD_GATEWAY,
+      detail=f"Gemini request failed: {error}",
+    ) from error
+
+  return extract_gemini_text(response.json())
 
 
 def iter_workspace_files(
@@ -1018,7 +1262,8 @@ def create_room(
       description=payload.description,
       is_public=payload.is_public,
       template_id=payload.templateId,
-      terminal_shell=payload.terminalShell or "bash",
+      terminal_shell=payload.terminalShell or get_default_terminal_shell(),
+      dsa_language=payload.dsaLanguage or "python",
     )
   except ValueError as error:
     raise HTTPException(
@@ -1177,6 +1422,48 @@ def run_room_file(
   return result
 
 
+@app.post("/api/ai/gemini")
+async def assist_with_gemini(
+  payload: GeminiAssistRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  if payload.roomId:
+    room = repository.get_room_by_id(payload.roomId)
+
+    if room is None:
+      raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Room not found",
+      )
+
+    if not repository.user_can_access_room(current_user["id"], room):
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this room",
+      )
+
+  try:
+    active_file_path = normalize_optional_workspace_path(payload.activeFilePath)
+  except ValueError as error:
+    raise HTTPException(
+      status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+      detail=str(error),
+    ) from error
+
+  prompt = build_gemini_prompt(
+    payload,
+    current_user=current_user,
+    active_file_path=active_file_path,
+  )
+  answer = await request_gemini_completion(prompt)
+
+  return {
+    "answer": answer,
+    "source": "gemini",
+    "model": GEMINI_MODEL,
+  }
+
+
 @app.websocket("/api/rooms/{room_id}/collaborate")
 async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str):
   await websocket.accept()
@@ -1184,21 +1471,30 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
   try:
     current_user = get_current_user_from_token(token)
   except HTTPException as error:
-    await websocket.send_json({"type": "error", "detail": error.detail})
-    await websocket.close(code=1008)
+    try:
+      await websocket.send_json({"type": "error", "detail": error.detail})
+      await websocket.close(code=1008)
+    except Exception:
+      pass
     return
 
   normalized_room_id = validate_room_id_value(room_id)
   room = repository.get_room_by_id(normalized_room_id)
 
   if room is None:
-    await websocket.send_json({"type": "error", "detail": "Room not found"})
-    await websocket.close(code=1008)
+    try:
+      await websocket.send_json({"type": "error", "detail": "Room not found"})
+      await websocket.close(code=1008)
+    except Exception:
+      pass
     return
 
   if not repository.user_can_access_room(current_user["id"], room):
-    await websocket.send_json({"type": "error", "detail": "You do not have access to this room"})
-    await websocket.close(code=1008)
+    try:
+      await websocket.send_json({"type": "error", "detail": "You do not have access to this room"})
+      await websocket.close(code=1008)
+    except Exception:
+      pass
     return
 
   connection = await collaboration_manager.connect(normalized_room_id, websocket, current_user)
@@ -1391,20 +1687,26 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
         current_user = get_current_user_from_token(token)
         user_id = current_user["id"]
     except Exception:
-        await websocket.send_text("\r\n\x1b[31mx Authentication failed \x1b[0m\r\n")
-        await websocket.close()
+        try:
+            await websocket.send_text("\r\n\x1b[31mx Authentication failed \x1b[0m\r\n")
+            await websocket.close()
+        except Exception:
+            pass
         return
 
     normalized_room_id = validate_room_id_value(room_id)
     room = repository.get_room_by_id(normalized_room_id)
     if not room or not repository.user_can_access_room(user_id, room):
-        await websocket.send_text("\r\n\x1b[31mx Room access denied \x1b[0m\r\n")
-        await websocket.close()
+        try:
+            await websocket.send_text("\r\n\x1b[31mx Room access denied \x1b[0m\r\n")
+            await websocket.close()
+        except Exception:
+            pass
         return
 
     # Ensure physical workspace is synced first
     workspace_dir = sync_workspace_to_disk(normalized_room_id, room.get("workspace_tree", []))
-    terminal_shell = room.get("terminal_shell", "bash")
+    terminal_shell = room.get("terminal_shell") or get_default_terminal_shell()
 
     # Use pywinpty on Windows, or standard subprocess/pty on other platforms
     if os.name == "nt":

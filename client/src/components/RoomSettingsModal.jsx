@@ -8,12 +8,15 @@ import { Button } from "./ui/Button";
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { secureFetch, sanitizeInput } from "../utils/security";
+import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/terminal";
 
 export default function RoomSettingsModal({ room, isOpen, onClose, onUpdate }) {
   const { token } = useAuth();
+  const terminalShellOptions = getTerminalShellOptions();
+  const defaultTerminalShell = getDefaultTerminalShell();
   const [name, setName] = useState(room?.name || "");
   const [description, setDescription] = useState(room?.description || "");
-  const [shell, setShell] = useState(room?.terminalShell || "bash");
+  const [shell, setShell] = useState(room?.terminalShell || defaultTerminalShell);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -23,10 +26,8 @@ export default function RoomSettingsModal({ room, isOpen, onClose, onUpdate }) {
 
     setName(room?.name || "");
     setDescription(room?.description || "");
-    setShell(room?.terminalShell || "bash");
-  }, [isOpen, room?.description, room?.name, room?.terminalShell]);
-
-
+    setShell(room?.terminalShell || defaultTerminalShell);
+  }, [defaultTerminalShell, isOpen, room?.description, room?.name, room?.terminalShell]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -112,14 +113,10 @@ export default function RoomSettingsModal({ room, isOpen, onClose, onUpdate }) {
           <div>
             <label className="mb-2 block text-sm font-medium">Terminal Shell</label>
             <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-              Changes will apply next time you open the terminal or refresh.
+              {terminalShellOptions.find((option) => option.id === shell)?.description}
             </p>
             <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: "bash", name: "Git Bash" },
-                { id: "powershell", name: "PowerShell" },
-                { id: "cmd", name: "CMD" }
-              ].map((s) => (
+              {terminalShellOptions.map((s) => (
                 <button
                   key={s.id}
                   type="button"
@@ -130,7 +127,7 @@ export default function RoomSettingsModal({ room, isOpen, onClose, onUpdate }) {
                       : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700"
                   }`}
                 >
-                  {s.name}
+                  {s.label}
                 </button>
               ))}
             </div>

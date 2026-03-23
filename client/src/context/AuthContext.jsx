@@ -119,7 +119,16 @@ export function AuthProvider({ children }) {
             setUser(userData);
           }
         } catch (error) {
-          console.warn("Could not verify JWT with backend:", error.message);
+          // 401 = token is invalid/expired — clear it and redirect to login
+          if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+            console.warn("Stored token rejected by server (401) — clearing auth state.");
+            if (isMounted) {
+              clearData();
+              window.location.href = "/auth";
+            }
+          } else {
+            console.warn("Could not verify JWT with backend:", error.message);
+          }
         }
       } catch (error) {
         console.error("Auth initialization failed:", error);

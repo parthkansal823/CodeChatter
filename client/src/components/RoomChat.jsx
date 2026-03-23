@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Hash } from "lucide-react";
+import { ArrowLeft, Send, Hash } from "lucide-react";
 
 export default function RoomChat({ onBack }) {
   const [messages, setMessages] = useState([
@@ -34,6 +34,14 @@ export default function RoomChat({ onBack }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-zinc-200/80 px-4 py-3 dark:border-zinc-800">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+          title="Back to tools"
+        >
+          <ArrowLeft size={16} />
+        </button>
         <Hash size={16} className="text-emerald-500" />
         <span className="text-sm font-semibold text-zinc-900 dark:text-white">Room Chat</span>
       </div>

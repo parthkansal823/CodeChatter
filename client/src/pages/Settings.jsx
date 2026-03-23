@@ -1,38 +1,72 @@
 import {
-  LockKeyhole,
-  Palette,
-  UserRound,
-  Code2,
-  Bell,
-  Users,
-  Zap,
-  Shield,
-  LogOut,
-  Trash2,
-  Github,
-  Mail,
-  Copy,
-  Check,
+  LockKeyhole, Palette, UserRound, Code2, Bell, Users,
+  Zap, Shield, LogOut, Trash2, Github, Mail, Copy, Check,
+  ChevronRight, Moon, Sun, AlignLeft, Type, Wand2,
 } from "lucide-react";
 import { useState } from "react";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { usePreferences } from "../context/PreferencesContext";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
-import { Card, CardHeader, CardContent } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import UserAvatar from "../components/UserAvatar";
 
+const NAV = [
+  { id: "profile",    label: "Profile",       icon: UserRound },
+  { id: "editor",     label: "Editor",         icon: Code2 },
+  { id: "appearance", label: "Appearance",     icon: Palette },
+  { id: "collab",     label: "Collaboration",  icon: Users },
+  { id: "notifs",     label: "Notifications",  icon: Bell },
+  { id: "privacy",    label: "Privacy",        icon: Shield },
+  { id: "shortcuts",  label: "Shortcuts",      icon: Zap },
+  { id: "danger",     label: "Account Actions",icon: LockKeyhole },
+];
 
+const SHORTCUTS = [
+  ["Save file", "Ctrl+S"],
+  ["Run code", "Ctrl+Enter"],
+  ["Command palette", "Ctrl+K"],
+  ["New file", "Ctrl+N"],
+  ["Toggle terminal", "Ctrl+`"],
+  ["Format file", "Shift+Alt+F"],
+];
 
-function SettingRow({ label, value, action }) {
+function Toggle({ checked, onChange }) {
   return (
-    <div className="flex items-center justify-between border-b border-zinc-200 py-4 last:border-0 dark:border-zinc-800">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</p>
-        {value && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">{value}</p>}
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none ${
+        checked ? "bg-violet-600" : "bg-zinc-300 dark:bg-zinc-700"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-4.5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <h2 className="mb-5 text-lg font-semibold text-zinc-900 dark:text-white">{children}</h2>
+  );
+}
+
+function Row({ label, hint, action }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3.5 border-b border-zinc-100 dark:border-zinc-800/60 last:border-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{label}</p>
+        {hint && <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-500">{hint}</p>}
       </div>
-      {action && <div className="ml-4">{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
@@ -41,6 +75,7 @@ export default function Settings() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { preferences, updatePreference, updateNotification, updatePrivacy } = usePreferences();
+  const [activeSection, setActiveSection] = useState("profile");
   const [copiedId, setCopiedId] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -50,10 +85,6 @@ export default function Settings() {
     setCopiedId(true);
     setTimeout(() => setCopiedId(false), 2000);
     toast.success("User ID copied!");
-  };
-
-  const handleLogout = () => {
-    setShowLogoutConfirm(true);
   };
 
   const confirmLogout = () => {
@@ -74,496 +105,292 @@ export default function Settings() {
     toast.success("Theme updated");
   };
 
-  const handleDeleteAccount = () => {
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDeleteAccount = () => {
-    setShowDeleteConfirm(false);
-    toast.error("Account deletion not yet implemented");
-  };
-
-  return (
-    <div className="min-h-full bg-white text-black dark:bg-zinc-950 dark:text-white">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-12 max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">Settings</p>
-          <h1 className="mt-2 text-4xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            Workspace preferences
-          </h1>
-          <p className="mt-4 text-base text-zinc-600 dark:text-zinc-400">
-            Manage your account, editor preferences, and collaboration settings.
-          </p>
-        </div>
-
-        {/* Account Section */}
-        <div className="mb-8">
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Account
-          </h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader
-                icon={UserRound}
-                title="Profile"
-                description="Your account information"
-              />
-              <CardContent>
-                <div className="space-y-4">
-                  <SettingRow
-                    label="Username"
-                    value={user?.username || "Unknown"}
-                  />
-                  <SettingRow
-                    label="Email"
-                    value={user?.email || "Unknown"}
-                  />
-                  <SettingRow
-                    label="User ID"
-                    value={user?.id?.slice(0, 12) + "..."}
-                    action={
-                      <button
-                        onClick={handleCopyUserId}
-                        className="flex items-center gap-2 rounded-md bg-zinc-100 p-2 text-xs hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-                        title="Copy full ID"
-                      >
-                        {copiedId ? <Check size={14} /> : <Copy size={14} />}
-                      </button>
-                    }
-                  />
-                  <SettingRow
-                    label="Member Since"
-                    value="March 18, 2026"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader
-                icon={Github}
-                title="Connected Accounts"
-                description="Link external services"
-              />
-              <CardContent>
-                <div className="space-y-3">
-                  <Button variant="outline" className="w-full">
-                    <Github size={16} className="mr-2" />
-                    Connect GitHub
-                  </Button>
-                  <Button variant="outline" className="w-full">
-                    <Mail size={16} className="mr-2" />
-                    Connect Social
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Editor Preferences Section */}
-        <div className="mb-8">
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Editor
-          </h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader
-                icon={Code2}
-                title="Editor Settings"
-                description="Customize your coding experience"
-              />
-              <CardContent>
-                <div className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                      Font Size: <span className="text-brand-600 dark:text-brand-400">{preferences.fontSize}px</span>
-                    </label>
-                    <input
-                      type="range"
-                      min="12"
-                      max="20"
-                      value={preferences.fontSize}
-                      onChange={(e) => {
-                        updatePreference("fontSize", parseInt(e.target.value));
-                        toast.success(`Font size set to ${e.target.value}px`);
-                      }}
-                      className="w-full accent-brand-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                      Line Height: <span className="text-brand-600 dark:text-brand-400">{preferences.lineHeight}</span>
-                    </label>
-                    <input
-                      type="range"
-                      min="1.2"
-                      max="2"
-                      step="0.1"
-                      value={preferences.lineHeight}
-                      onChange={(e) => {
-                        updatePreference("lineHeight", parseFloat(e.target.value));
-                        toast.success(`Line height set to ${e.target.value}`);
-                      }}
-                      className="w-full accent-brand-500"
-                    />
-                  </div>
-
-                  <div className="pt-3">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={preferences.autoSave}
-                        onChange={(e) => {
-                          updatePreference("autoSave", e.target.checked);
-                          toast.success(e.target.checked ? "Auto-save enabled" : "Auto-save disabled");
-                        }}
-                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                      />
-                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                        Auto-save files
-                      </span>
-                    </label>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      Automatically save file changes every 2 seconds
-                    </p>
-                  </div>
-
-                  <div className="pt-3">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={preferences.wordWrap}
-                        onChange={(e) => {
-                          updatePreference("wordWrap", e.target.checked);
-                          toast.success(e.target.checked ? "Word wrap enabled" : "Word wrap disabled");
-                        }}
-                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                      />
-                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                        Enable Word Wrap
-                      </span>
-                    </label>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      Wrap lines that exceed the editor width
-                    </p>
-                  </div>
-
-                  <div className="pt-3">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={preferences.fontLigatures}
-                        onChange={(e) => {
-                          updatePreference("fontLigatures", e.target.checked);
-                          toast.success(e.target.checked ? "Font ligatures enabled" : "Font ligatures disabled");
-                        }}
-                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                      />
-                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                        Enable Font Ligatures
-                      </span>
-                    </label>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      Use specialized multi-character symbols like =&gt;
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader
-                icon={Palette}
-                title="Appearance"
-                description="Visual theme preferences"
-              />
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">Editor Theme</p>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="theme"
-                          value="vs-dark"
-                          checked={preferences.theme === "vs-dark"}
-                          onChange={(e) => handleThemeChange(e.target.value)}
-                          className="text-brand-600 focus:ring-brand-500"
-                        />
-                        <span className="text-sm text-zinc-700 dark:text-zinc-300">Dark Theme</span>
-                      </label>
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="theme"
-                          value="vs"
-                          checked={preferences.theme === "vs"}
-                          onChange={(e) => handleThemeChange(e.target.value)}
-                          className="text-brand-600 focus:ring-brand-500"
-                        />
-                        <span className="text-sm text-zinc-700 dark:text-zinc-300">Light Theme</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="pt-3">
-                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">Minimap</p>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={preferences.minimap}
-                        onChange={(e) => {
-                          updatePreference("minimap", e.target.checked);
-                          toast.success(e.target.checked ? "Minimap enabled" : "Minimap disabled");
-                        }}
-                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                      />
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">Show code minimap</span>
-                    </label>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Collaboration Section */}
-        <div className="mb-8">
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Collaboration
-          </h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader
-                icon={Users}
-                title="Collaboration"
-                description="Room and team settings"
-              />
-              <CardContent>
-                <div className="space-y-4">
-                  <SettingRow
-                    label="Rooms Created"
-                    value="5 rooms"
-                  />
-                  <SettingRow
-                    label="Total Collaborators"
-                    value="12 people across rooms"
-                  />
-                  <Button className="w-full mt-4">
-                    Manage Rooms
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader
-                icon={Zap}
-                title="Keyboard Shortcuts"
-                description="Quick actions and navigation"
-              />
-              <CardContent>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">Save file</span>
-                    <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+S</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">Open file</span>
-                    <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+O</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-600 dark:text-zinc-400">New file</span>
-                    <kbd className="rounded bg-zinc-200 px-2 py-1 font-mono text-xs dark:bg-zinc-800">Ctrl+N</kbd>
-                  </div>
-                  <Button variant="ghost" className="w-full mt-2 text-brand-600 dark:text-brand-400">
-                    View all shortcuts →
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Preferences Section */}
-        <div className="mb-8">
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Preferences
-          </h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader
-                icon={Bell}
-                title="Notifications"
-                description="Email and in-app alerts"
-              />
-              <CardContent>
-                <div className="space-y-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.notifications.pushNotifications}
-                      onChange={(e) => updateNotification("pushNotifications", e.target.checked)}
-                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                    />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Push notifications
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.notifications.collaboratorJoined}
-                      onChange={(e) => updateNotification("collaboratorJoined", e.target.checked)}
-                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                    />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Collaborator joined
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.notifications.codeChanges}
-                      onChange={(e) => updateNotification("codeChanges", e.target.checked)}
-                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                    />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Code changes
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.notifications.emailDigest}
-                      onChange={(e) => updateNotification("emailDigest", e.target.checked)}
-                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                    />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Email digest
-                    </span>
-                  </label>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader
-                icon={Shield}
-                title="Privacy & Security"
-                description="Data and access control"
-              />
-              <CardContent>
-                <div className="space-y-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.privacy.profileVisibility}
-                      onChange={(e) => updatePrivacy("profileVisibility", e.target.checked)}
-                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                    />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Profile visibility
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preferences.privacy.showActivityStatus}
-                      onChange={(e) => updatePrivacy("showActivityStatus", e.target.checked)}
-                      className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-600"
-                    />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Show activity status
-                    </span>
-                  </label>
-
-                  <Button variant="outline" className="w-full mt-4">
-                    Change Password
-                  </Button>
-
-                  <Button variant="outline" className="w-full">
-                    Active Sessions
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Danger Zone */}
-        <div className="mb-8">
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Account Actions
-          </h3>
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-950">
-            <div className="space-y-4">
+  const renderSection = () => {
+    switch (activeSection) {
+      case "profile":
+        return (
+          <div>
+            <SectionTitle>Profile</SectionTitle>
+            {/* Avatar hero */}
+            <div className="mb-6 flex items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+              <UserAvatar username={user?.username} size="lg" />
               <div>
-                <h3 className="text-lg font-semibold text-red-900 dark:text-red-100">Danger Zone</h3>
-                <p className="mt-1 text-sm text-red-800 dark:text-red-200">
-                  Irreversible actions that affect your account
-                </p>
+                <p className="font-semibold text-zinc-900 dark:text-white">{user?.username}</p>
+                <p className="text-sm text-zinc-500">{user?.email}</p>
               </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Button
-                  onClick={handleLogout}
-                  variant="danger"
+            </div>
+            <Row label="Username" hint={user?.username || "—"} />
+            <Row label="Email" hint={user?.email || "—"} />
+            <Row
+              label="User ID"
+              hint={(user?.id || "").slice(0, 16) + "…"}
+              action={
+                <button
+                  onClick={handleCopyUserId}
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-violet-300 hover:text-violet-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 transition-colors"
                 >
-                  <LogOut size={16} className="mr-2" />
-                  Logout
+                  {copiedId ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                  {copiedId ? "Copied!" : "Copy"}
+                </button>
+              }
+            />
+            <Row label="Connected accounts" hint="Link GitHub or Google for faster sign-in"
+              action={
+                <div className="flex gap-2">
+                  <button className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400 transition-colors">
+                    <Github size={12} /> GitHub
+                  </button>
+                  <button className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400 transition-colors">
+                    <Mail size={12} /> Google
+                  </button>
+                </div>
+              }
+            />
+          </div>
+        );
+
+      case "editor":
+        return (
+          <div>
+            <SectionTitle>Editor</SectionTitle>
+            <Row
+              label="Font Size"
+              hint={`${preferences.fontSize}px — drag to adjust`}
+              action={
+                <input type="range" min="12" max="20" value={preferences.fontSize}
+                  onChange={(e) => { updatePreference("fontSize", parseInt(e.target.value)); }}
+                  className="w-28 accent-violet-600"
+                />
+              }
+            />
+            <Row
+              label="Line Height"
+              hint={`${preferences.lineHeight} — spacing between lines`}
+              action={
+                <input type="range" min="1.2" max="2" step="0.1" value={preferences.lineHeight}
+                  onChange={(e) => { updatePreference("lineHeight", parseFloat(e.target.value)); }}
+                  className="w-28 accent-violet-600"
+                />
+              }
+            />
+            <Row
+              label="Auto-save"
+              hint="Save file changes automatically every 2s"
+              action={<Toggle checked={preferences.autoSave} onChange={(v) => { updatePreference("autoSave", v); toast.success(v ? "Auto-save on" : "Auto-save off"); }} />}
+            />
+            <Row
+              label="Word Wrap"
+              hint="Wrap long lines to the editor width"
+              action={<Toggle checked={preferences.wordWrap} onChange={(v) => { updatePreference("wordWrap", v); toast.success(v ? "Word wrap on" : "Word wrap off"); }} />}
+            />
+            <Row
+              label="Font Ligatures"
+              hint="Render multi-char symbols like => and !=="
+              action={<Toggle checked={preferences.fontLigatures} onChange={(v) => { updatePreference("fontLigatures", v); toast.success(v ? "Ligatures on" : "Ligatures off"); }} />}
+            />
+            <Row
+              label="Minimap"
+              hint="Show a code overview on the right edge"
+              action={<Toggle checked={preferences.minimap} onChange={(v) => { updatePreference("minimap", v); toast.success(v ? "Minimap on" : "Minimap off"); }} />}
+            />
+          </div>
+        );
+
+      case "appearance":
+        return (
+          <div>
+            <SectionTitle>Appearance</SectionTitle>
+            <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">Choose the app and editor color scheme.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { id: "vs-dark", label: "Dark", desc: "Easy on the eyes", icon: Moon },
+                { id: "vs", label: "Light", desc: "High contrast", icon: Sun },
+              ].map(({ id, label, desc, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleThemeChange(id)}
+                  className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all ${
+                    preferences.theme === id
+                      ? "border-violet-500 bg-violet-50 dark:border-violet-400 dark:bg-violet-900/10"
+                      : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/50"
+                  }`}
+                >
+                  <div className={`rounded-lg p-2 ${preferences.theme === id ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"}`}>
+                    <Icon size={16} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-white">{label}</p>
+                    <p className="text-xs text-zinc-500">{desc}</p>
+                  </div>
+                  {preferences.theme === id && (
+                    <span className="mt-1 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white">Active</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+
+      case "collab":
+        return (
+          <div>
+            <SectionTitle>Collaboration</SectionTitle>
+            <Row label="Rooms Created" hint="Total rooms you own" />
+            <Row label="Total Collaborators" hint="People with access to your rooms" />
+            <div className="mt-4">
+              <Button className="w-full" onClick={() => navigate("/home")}>
+                <Users size={15} className="mr-2" /> Manage Rooms
+              </Button>
+            </div>
+          </div>
+        );
+
+      case "notifs":
+        return (
+          <div>
+            <SectionTitle>Notifications</SectionTitle>
+            {[
+              { key: "pushNotifications", label: "Push notifications", hint: "Browser alerts for room activity" },
+              { key: "collaboratorJoined", label: "Collaborator joined", hint: "Alert when someone enters your room" },
+              { key: "codeChanges", label: "Code changes", hint: "Alert when files are modified" },
+              { key: "emailDigest", label: "Email digest", hint: "Weekly summary of room activity" },
+            ].map(({ key, label, hint }) => (
+              <Row
+                key={key}
+                label={label}
+                hint={hint}
+                action={<Toggle checked={preferences.notifications[key]} onChange={(v) => updateNotification(key, v)} />}
+              />
+            ))}
+          </div>
+        );
+
+      case "privacy":
+        return (
+          <div>
+            <SectionTitle>Privacy & Security</SectionTitle>
+            <Row
+              label="Profile visibility"
+              hint="Allow others to see your profile"
+              action={<Toggle checked={preferences.privacy.profileVisibility} onChange={(v) => updatePrivacy("profileVisibility", v)} />}
+            />
+            <Row
+              label="Activity status"
+              hint="Show when you're active in rooms"
+              action={<Toggle checked={preferences.privacy.showActivityStatus} onChange={(v) => updatePrivacy("showActivityStatus", v)} />}
+            />
+            <div className="mt-4 flex flex-col gap-2">
+              <Button variant="outline" className="w-full"><LockKeyhole size={14} className="mr-2" /> Change Password</Button>
+              <Button variant="outline" className="w-full">Active Sessions</Button>
+            </div>
+          </div>
+        );
+
+      case "shortcuts":
+        return (
+          <div>
+            <SectionTitle>Keyboard Shortcuts</SectionTitle>
+            <div className="space-y-1">
+              {SHORTCUTS.map(([action, keys]) => (
+                <div key={action} className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors">
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">{action}</span>
+                  <kbd className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1 font-mono text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                    {keys}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case "danger":
+        return (
+          <div>
+            <SectionTitle>Account Actions</SectionTitle>
+            <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 dark:border-red-900/50 dark:bg-red-950/20">
+              <p className="mb-1 text-sm font-semibold text-red-700 dark:text-red-300">Danger Zone</p>
+              <p className="mb-4 text-xs text-red-600 dark:text-red-400">These actions are permanent and cannot be undone.</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button onClick={() => setShowLogoutConfirm(true)} variant="danger" className="flex-1">
+                  <LogOut size={14} className="mr-2" /> Sign out
                 </Button>
-
                 <Button
-                  onClick={handleDeleteAccount}
+                  onClick={() => setShowDeleteConfirm(true)}
                   variant="outline"
-                  className="!text-red-500 !border-red-500 hover:!bg-red-50 dark:hover:!bg-red-950/30"
+                  className="flex-1 !text-red-500 !border-red-300 hover:!bg-red-50 dark:!border-red-800 dark:hover:!bg-red-950/30"
                 >
-                  <Trash2 size={16} className="mr-2" />
-                  Delete Account
+                  <Trash2 size={14} className="mr-2" /> Delete Account
                 </Button>
               </div>
             </div>
           </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
+      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+        {/* Page header */}
+        <div className="mb-8">
+          <p className="text-xs font-semibold uppercase tracking-widest text-violet-600 dark:text-violet-400">Settings</p>
+          <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Preferences</h1>
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Manage your account, editor, and workspace settings.</p>
         </div>
 
-        {/* Footer Info */}
-        <div className="mt-12 border-t border-zinc-200 pt-8 dark:border-zinc-800">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Last updated: Today at 2:30 PM • Settings auto-save
-          </p>
+        <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
+          {/* Sidebar nav */}
+          <aside className="shrink-0 lg:w-52">
+            <nav className="flex flex-row flex-wrap gap-1 lg:flex-col">
+              {NAV.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActiveSection(id)}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                    activeSection === id
+                      ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
+                      : "text-zinc-600 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Icon size={15} />
+                  {label}
+                  {activeSection === id && <ChevronRight size={12} className="ml-auto hidden lg:block" />}
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          {/* Section panel */}
+          <main className="flex-1 min-w-0">
+            <AnimatePresence mode="wait">
+              <Motion.div
+                key={activeSection}
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.15 }}
+                className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60"
+              >
+                {renderSection()}
+              </Motion.div>
+            </AnimatePresence>
+          </main>
         </div>
       </div>
 
-      <ConfirmModal
-        isOpen={showLogoutConfirm}
-        title="Logout"
-        description="Are you sure you want to logout?"
-        confirmText="Logout"
-        cancelText="Cancel"
-        isDestructive={false}
-        onConfirm={confirmLogout}
-        onCancel={() => setShowLogoutConfirm(false)}
-      />
-
-      <ConfirmModal
-        isOpen={showDeleteConfirm}
-        title="Delete Account"
-        description="Are you absolutely sure? This will permanently delete your account and all data. This cannot be undone."
-        confirmText="Delete Account"
-        cancelText="Cancel"
-        isDestructive={true}
-        onConfirm={confirmDeleteAccount}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+      <ConfirmModal isOpen={showLogoutConfirm} title="Sign out" description="Are you sure you want to log out?"
+        confirmText="Sign out" cancelText="Cancel" isDestructive={false}
+        onConfirm={confirmLogout} onCancel={() => setShowLogoutConfirm(false)} />
+      <ConfirmModal isOpen={showDeleteConfirm} title="Delete Account"
+        description="This permanently deletes your account and all data. This cannot be undone."
+        confirmText="Delete Account" cancelText="Cancel" isDestructive
+        onConfirm={() => { setShowDeleteConfirm(false); toast.error("Account deletion not yet implemented"); }}
+        onCancel={() => setShowDeleteConfirm(false)} />
     </div>
   );
 }
