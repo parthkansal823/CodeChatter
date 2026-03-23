@@ -22,14 +22,21 @@ MONGODB_DB_NAME=codechatter_test
 
 ```powershell
 cd server
-.\venv\Scripts\pip install -r requirements.txt
+.\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
 ### Run
 
 ```powershell
 cd server
-.\venv\Scripts\uvicorn main:app --reload
+.\.venv\Scripts\python -m uvicorn main:app --reload
+```
+
+If you see logs like `Unsupported upgrade request` or `No supported WebSocket library detected`, reinstall the requirements so the `websockets` package is available:
+
+```powershell
+cd server
+.\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
 On first startup, the server will:

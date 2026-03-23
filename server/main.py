@@ -7,10 +7,6 @@ import os
 import re
 import secrets
 import shutil
-import os
-import re
-import secrets
-import shutil
 import subprocess
 import tempfile
 import asyncio
@@ -24,7 +20,7 @@ from authlib.integrations.starlette_client import OAuth
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -61,6 +57,8 @@ DEFAULT_CALLBACK_URL = f"{DEFAULT_FRONTEND_URL.rstrip('/')}/auth/callback"
 RUN_TIMEOUT_SECONDS = int(os.getenv("CODE_RUN_TIMEOUT_SECONDS", "15"))
 
 APP_DIR = Path(__file__).resolve().parent
+CLIENT_DIST_DIR = APP_DIR.parent / "client" / "dist"
+CLIENT_INDEX_FILE = CLIENT_DIST_DIR / "index.html"
 repository = MongoRepository(
   mongo_uri=os.getenv("MONGODB_URI", "mongodb://localhost:27017"),
   database_name=os.getenv("MONGODB_DB_NAME", "codechatter"),
@@ -71,6 +69,7 @@ EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
 ROOM_ID_PATTERN = re.compile(r"^[A-Z0-9]{6,20}$")
 TEMPLATE_ID_PATTERN = re.compile(r"^[a-z0-9-]{3,40}$")
+_UNSET = object()
 
 
 @asynccontextmanager
@@ -96,6 +95,151 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
       response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
     return response
+
+
+class CollaborationManager:
+  def __init__(self) -> None:
+    self._rooms: dict[str, dict[str, dict[str, Any]]] = {}
+    self._lock = asyncio.Lock()
+
+  @staticmethod
+  def _serialize_connection(connection: dict[str, Any]) -> dict[str, Any]:
+    return {
+      "sessionId": connection["session_id"],
+      "userId": connection["user_id"],
+      "username": connection["username"],
+      "email": connection["email"],
+      "activeFilePath": connection.get("active_file_path"),
+      "cursor": connection.get("cursor"),
+      "typing": connection.get("typing"),
+    }
+
+  async def connect(
+    self,
+    room_id: str,
+    websocket: WebSocket,
+    user: dict[str, Any],
+  ) -> dict[str, Any]:
+    connection = {
+      "session_id": secrets.token_hex(8),
+      "room_id": room_id,
+      "user_id": user["id"],
+      "username": user["username"],
+      "email": user["email"],
+      "websocket": websocket,
+      "active_file_path": None,
+      "cursor": None,
+      "typing": {
+        "isTyping": False,
+        "filePath": None,
+        "updatedAt": None,
+      },
+    }
+
+    async with self._lock:
+      room_connections = self._rooms.setdefault(room_id, {})
+      room_connections[connection["session_id"]] = connection
+
+    return connection
+
+  async def disconnect(self, room_id: str, session_id: str) -> None:
+    async with self._lock:
+      room_connections = self._rooms.get(room_id)
+      if not room_connections:
+        return
+
+      room_connections.pop(session_id, None)
+
+      if not room_connections:
+        self._rooms.pop(room_id, None)
+
+  async def list_presence(self, room_id: str) -> list[dict[str, Any]]:
+    async with self._lock:
+      room_connections = self._rooms.get(room_id, {})
+      presence = [
+        self._serialize_connection(connection)
+        for connection in room_connections.values()
+      ]
+
+    presence.sort(key=lambda item: (item["username"].lower(), item["sessionId"]))
+    return presence
+
+  async def update_presence(
+    self,
+    room_id: str,
+    session_id: str,
+    *,
+    active_file_path: str | None | object = _UNSET,
+    cursor: dict[str, Any] | None | object = _UNSET,
+    typing: dict[str, Any] | None | object = _UNSET,
+  ) -> list[dict[str, Any]]:
+    async with self._lock:
+      room_connections = self._rooms.get(room_id, {})
+      connection = room_connections.get(session_id)
+
+      if connection is None:
+        return []
+
+      if active_file_path is not _UNSET:
+        connection["active_file_path"] = active_file_path
+
+      if cursor is not _UNSET:
+        connection["cursor"] = cursor
+
+      if typing is not _UNSET:
+        connection["typing"] = typing
+
+      presence = [
+        self._serialize_connection(item)
+        for item in room_connections.values()
+      ]
+
+    presence.sort(key=lambda item: (item["username"].lower(), item["sessionId"]))
+    return presence
+
+  async def broadcast(
+    self,
+    room_id: str,
+    payload: dict[str, Any],
+    *,
+    exclude_session_id: str | None = None,
+  ) -> None:
+    async with self._lock:
+      room_connections = list(self._rooms.get(room_id, {}).items())
+
+    stale_session_ids: list[str] = []
+
+    for session_id, connection in room_connections:
+      if exclude_session_id and session_id == exclude_session_id:
+        continue
+
+      try:
+        await connection["websocket"].send_json(payload)
+      except Exception as error:
+        logger.warning(
+          "Could not deliver collaboration payload to session %s in room %s: %s",
+          session_id,
+          room_id,
+          error,
+        )
+        stale_session_ids.append(session_id)
+
+    if stale_session_ids:
+      for session_id in stale_session_ids:
+        await self.disconnect(room_id, session_id)
+
+      updated_presence = await self.list_presence(room_id)
+      if updated_presence:
+        await self.broadcast(
+          room_id,
+          {
+            "type": "presence_snapshot",
+            "presence": updated_presence,
+          },
+        )
+
+
+collaboration_manager = CollaborationManager()
 
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -326,7 +470,10 @@ def get_bearer_token(request: Request) -> str:
 
 def get_current_user(request: Request) -> dict[str, Any]:
   token = get_bearer_token(request)
+  return get_current_user_from_token(token)
 
+
+def get_current_user_from_token(token: str) -> dict[str, Any]:
   try:
     payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
   except JWTError as error:
@@ -352,6 +499,40 @@ def get_current_user(request: Request) -> dict[str, Any]:
     )
 
   return user
+
+
+def normalize_optional_workspace_path(value: Any) -> str | None:
+  if value is None:
+    return None
+
+  raw_value = str(value).strip()
+  if not raw_value:
+    return None
+
+  return normalize_workspace_path(raw_value)
+
+
+def build_cursor_payload(message: dict[str, Any]) -> dict[str, Any] | None:
+  file_path = normalize_optional_workspace_path(message.get("activeFilePath"))
+
+  if file_path is None:
+    return None
+
+  try:
+    line = int(message.get("line", 1))
+    column = int(message.get("column", 1))
+  except (TypeError, ValueError) as error:
+    raise ValueError("Cursor coordinates must be numbers") from error
+
+  if line < 1 or column < 1:
+    raise ValueError("Cursor coordinates must be positive")
+
+  return {
+    "filePath": file_path,
+    "line": line,
+    "column": column,
+    "updatedAt": utc_now().isoformat(),
+  }
 
 
 def validate_room_id_value(room_id: str) -> str:
@@ -715,8 +896,34 @@ def build_frontend_error_redirect(error_code: str) -> str:
   return f"{DEFAULT_FRONTEND_URL.rstrip('/')}/auth?{urlencode({'error': error_code})}"
 
 
+def frontend_is_built() -> bool:
+  return CLIENT_INDEX_FILE.is_file()
+
+
+def resolve_frontend_asset(full_path: str) -> Path | None:
+  normalized_path = full_path.strip().lstrip("/")
+
+  if not normalized_path:
+    return CLIENT_INDEX_FILE if frontend_is_built() else None
+
+  candidate = (CLIENT_DIST_DIR / normalized_path).resolve()
+
+  try:
+    candidate.relative_to(CLIENT_DIST_DIR.resolve())
+  except ValueError:
+    return None
+
+  if candidate.is_file():
+    return candidate
+
+  return None
+
+
 @app.get("/")
-def home() -> dict[str, Any]:
+def home() -> Any:
+  if frontend_is_built():
+    return FileResponse(CLIENT_INDEX_FILE)
+
   return {
     "status": "server running",
     "oauthProviders": sorted(REGISTERED_OAUTH_PROVIDERS),
@@ -970,17 +1177,220 @@ def run_room_file(
   return result
 
 
+@app.websocket("/api/rooms/{room_id}/collaborate")
+async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str):
+  await websocket.accept()
+
+  try:
+    current_user = get_current_user_from_token(token)
+  except HTTPException as error:
+    await websocket.send_json({"type": "error", "detail": error.detail})
+    await websocket.close(code=1008)
+    return
+
+  normalized_room_id = validate_room_id_value(room_id)
+  room = repository.get_room_by_id(normalized_room_id)
+
+  if room is None:
+    await websocket.send_json({"type": "error", "detail": "Room not found"})
+    await websocket.close(code=1008)
+    return
+
+  if not repository.user_can_access_room(current_user["id"], room):
+    await websocket.send_json({"type": "error", "detail": "You do not have access to this room"})
+    await websocket.close(code=1008)
+    return
+
+  connection = await collaboration_manager.connect(normalized_room_id, websocket, current_user)
+
+  try:
+    initial_room = repository.get_room_for_user(current_user["id"], normalized_room_id)
+    if initial_room is None:
+      await websocket.send_json({"type": "error", "detail": "Room not found"})
+      await websocket.close(code=1008)
+      return
+
+    await websocket.send_json(
+      {
+        "type": "session_ready",
+        "sessionId": connection["session_id"],
+        "room": initial_room,
+        "presence": await collaboration_manager.list_presence(normalized_room_id),
+      }
+    )
+
+    await collaboration_manager.broadcast(
+      normalized_room_id,
+      {
+        "type": "presence_snapshot",
+        "presence": await collaboration_manager.list_presence(normalized_room_id),
+      },
+    )
+
+    while True:
+      message = await websocket.receive_json()
+      message_type = str(message.get("type", "")).strip().lower()
+
+      if message_type == "presence_update":
+        try:
+          active_file_path = normalize_optional_workspace_path(message.get("activeFilePath"))
+        except ValueError as error:
+          await websocket.send_json({"type": "error", "detail": str(error)})
+          continue
+
+        presence = await collaboration_manager.update_presence(
+          normalized_room_id,
+          connection["session_id"],
+          active_file_path=active_file_path,
+        )
+        await collaboration_manager.broadcast(
+          normalized_room_id,
+          {
+            "type": "presence_snapshot",
+            "presence": presence,
+          },
+        )
+        continue
+
+      if message_type == "cursor_update":
+        try:
+          cursor = build_cursor_payload(message)
+          active_file_path = cursor["filePath"] if cursor else None
+        except ValueError as error:
+          await websocket.send_json({"type": "error", "detail": str(error)})
+          continue
+
+        presence = await collaboration_manager.update_presence(
+          normalized_room_id,
+          connection["session_id"],
+          active_file_path=active_file_path,
+          cursor=cursor,
+        )
+        await collaboration_manager.broadcast(
+          normalized_room_id,
+          {
+            "type": "presence_snapshot",
+            "presence": presence,
+          },
+        )
+        continue
+
+      if message_type == "typing_update":
+        try:
+          active_file_path = normalize_optional_workspace_path(message.get("activeFilePath"))
+        except ValueError as error:
+          await websocket.send_json({"type": "error", "detail": str(error)})
+          continue
+
+        typing_payload = {
+          "isTyping": bool(message.get("isTyping")),
+          "filePath": active_file_path,
+          "updatedAt": utc_now().isoformat(),
+        }
+        presence = await collaboration_manager.update_presence(
+          normalized_room_id,
+          connection["session_id"],
+          active_file_path=active_file_path,
+          typing=typing_payload,
+        )
+        await collaboration_manager.broadcast(
+          normalized_room_id,
+          {
+            "type": "presence_snapshot",
+            "presence": presence,
+          },
+        )
+        continue
+
+      if message_type == "workspace_update":
+        workspace_tree = message.get("tree")
+
+        if not isinstance(workspace_tree, list):
+          await websocket.send_json(
+            {
+              "type": "error",
+              "detail": "Workspace updates must include a valid tree payload",
+            }
+          )
+          continue
+
+        try:
+          active_file_path = normalize_optional_workspace_path(message.get("activeFilePath"))
+          updated_room = repository.update_room_workspace(
+            user_id=current_user["id"],
+            room_id=normalized_room_id,
+            workspace_tree=workspace_tree,
+          )
+        except (PermissionError, ValueError) as error:
+          await websocket.send_json({"type": "error", "detail": str(error)})
+          continue
+
+        presence = await collaboration_manager.update_presence(
+          normalized_room_id,
+          connection["session_id"],
+          active_file_path=active_file_path,
+        )
+
+        await websocket.send_json(
+          {
+            "type": "workspace_ack",
+            "requestId": message.get("requestId"),
+            "room": updated_room,
+          }
+        )
+        await collaboration_manager.broadcast(
+          normalized_room_id,
+          {
+            "type": "workspace_updated",
+            "requestId": message.get("requestId"),
+            "sessionId": connection["session_id"],
+            "room": updated_room,
+          },
+          exclude_session_id=connection["session_id"],
+        )
+        await collaboration_manager.broadcast(
+          normalized_room_id,
+          {
+            "type": "presence_snapshot",
+            "presence": presence,
+          },
+        )
+        continue
+
+      if message_type == "ping":
+        await websocket.send_json({"type": "pong"})
+        continue
+
+      await websocket.send_json(
+        {
+          "type": "error",
+          "detail": "Unsupported collaboration event",
+        }
+      )
+  except WebSocketDisconnect:
+    pass
+  except Exception as error:
+    logger.exception("Collaboration websocket error for room %s: %s", normalized_room_id, error)
+  finally:
+    await collaboration_manager.disconnect(normalized_room_id, connection["session_id"])
+    await collaboration_manager.broadcast(
+      normalized_room_id,
+      {
+        "type": "presence_snapshot",
+        "presence": await collaboration_manager.list_presence(normalized_room_id),
+      },
+    )
+
+
 @app.websocket("/api/rooms/{room_id}/terminal")
 async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
     await websocket.accept()
     
     # Authenticate token manually for websocket
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise ValueError("Token missing subject")
-    except Exception as e:
+        current_user = get_current_user_from_token(token)
+        user_id = current_user["id"]
+    except Exception:
         await websocket.send_text("\r\n\x1b[31mx Authentication failed \x1b[0m\r\n")
         await websocket.close()
         return
@@ -1259,3 +1669,21 @@ async def auth_github_callback(request: Request):
   except Exception as error:
     logger.exception("GitHub OAuth error: %s", error)
     return RedirectResponse(build_frontend_error_redirect("github_auth_failed"))
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend(full_path: str) -> Any:
+  if not frontend_is_built():
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+  if full_path.startswith("api/"):
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+  asset_path = resolve_frontend_asset(full_path)
+  if asset_path is not None:
+    return FileResponse(asset_path)
+
+  if Path(full_path).suffix:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+  return FileResponse(CLIENT_INDEX_FILE)

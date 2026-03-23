@@ -3,7 +3,33 @@
  * Keep API endpoints in one place
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const trimTrailingSlash = (value = "") => value.replace(/\/+$/, "");
+
+const resolveApiBaseUrl = () => {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+
+  if (configuredUrl) {
+    return trimTrailingSlash(configuredUrl);
+  }
+
+  if (import.meta.env.DEV) {
+    return "http://localhost:8000";
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return trimTrailingSlash(window.location.origin);
+  }
+
+  return "http://localhost:8000";
+};
+
+export const API_BASE_URL = resolveApiBaseUrl();
+
+export const getWebSocketBaseUrl = () => {
+  const apiUrl = new URL(API_BASE_URL);
+  apiUrl.protocol = apiUrl.protocol === "https:" ? "wss:" : "ws:";
+  return apiUrl.origin;
+};
 
 export const API_ENDPOINTS = {
   // Authentication

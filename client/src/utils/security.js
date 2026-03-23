@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "../config/security";
+
 /**
  * Security utility functions for input validation, sanitization, and protection
  */
@@ -161,6 +163,16 @@ export const setupCSP = () => {
     return;
   }
 
+  const connectSources = Array.from(new Set([
+    "'self'",
+    new URL(API_BASE_URL).origin,
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "ws:",
+    "wss:",
+    "https:",
+  ]));
+
   const meta = document.createElement('meta');
   meta.httpEquiv = 'Content-Security-Policy';
   meta.content = [
@@ -169,7 +181,7 @@ export const setupCSP = () => {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
-    "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 ws: wss: https:",
+    `connect-src ${connectSources.join(" ")}`,
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
     "frame-src 'self' https://accounts.google.com",
@@ -222,19 +234,24 @@ export const secureFetch = async (url, options = {}, token = null) => {
   const timeout = options.timeout || 10000;
 
   try {
-    if (!url.startsWith('http://localhost') && !url.startsWith('https://')) {
-      throw new Error('Invalid URL protocol. Only http/https allowed.');
+    const resolvedUrl = new URL(
+      url,
+      typeof window !== "undefined" ? window.location.origin : undefined
+    );
+
+    if (!["http:", "https:"].includes(resolvedUrl.protocol)) {
+      throw new Error("Invalid URL protocol. Only http/https allowed.");
     }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     const headers = getSecureHeaders(token);
-    const response = await fetch(url, {
+    const response = await fetch(resolvedUrl.toString(), {
       ...options,
       headers: { ...headers, ...options.headers },
       signal: controller.signal,
-      credentials: 'same-origin',
+      credentials: "include",
     });
 
     clearTimeout(timeoutId);

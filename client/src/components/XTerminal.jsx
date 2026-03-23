@@ -3,7 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { API_ENDPOINTS } from "../config/security";
+import { getWebSocketBaseUrl } from "../config/security";
 import { useAuth } from "../hooks/useAuth";
 import { RotateCcw } from "lucide-react";
 
@@ -70,9 +70,7 @@ export default function XTerminal({ roomId }) {
           return;
         }
 
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const apiHost = new URL(API_ENDPOINTS.LOGIN).host;
-        const wsUrl = `${wsProtocol}//${apiHost}/api/rooms/${roomId}/terminal?token=${token}`;
+        const wsUrl = `${getWebSocketBaseUrl()}/api/rooms/${roomId}/terminal?token=${encodeURIComponent(token)}`;
 
         ws = new WebSocket(wsUrl);
         wsRef.current = ws;

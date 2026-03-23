@@ -45,6 +45,17 @@ ROOM_TEMPLATE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "starterLanguage": "any",
     "build": lambda: [],
   },
+  "python-starter": {
+    "id": "python-starter",
+    "name": "Python Starter",
+    "description": "A lightweight Python workspace for scripts, notes, and quick practice.",
+    "category": "Backend",
+    "starterLanguage": "python",
+    "build": lambda: [
+      _file("main.py", "def main() -> None:\n    print(\"Hello from CodeChatter\")\n\n\nif __name__ == \"__main__\":\n    main()\n"),
+      _file("README.md", "# Python Starter\n\nRun `python main.py` to execute the starter script.\n"),
+    ],
+  },
   "python-fastapi": {
     "id": "python-fastapi",
     "name": "Python FastAPI",
@@ -58,6 +69,107 @@ ROOM_TEMPLATE_DEFINITIONS: dict[str, dict[str, Any]] = {
       ]),
       _file("requirements.txt", "fastapi\nuvicorn\n"),
       _file("README.md", "# FastAPI Starter\n\nRun `uvicorn app.main:app --reload`\n"),
+    ],
+  },
+  "dsa-practice": {
+    "id": "dsa-practice",
+    "name": "DSA Practice",
+    "description": "An interview-style workspace with a prompt, starter solutions, and test cases.",
+    "category": "Practice",
+    "starterLanguage": "python",
+    "build": lambda: [
+      _file(
+        "README.md",
+        "# DSA Practice\n\n"
+        "Use this room for coding interviews, pair problem solving, and dry runs.\n\n"
+        "Suggested flow:\n"
+        "1. Read the prompt in `problem.md`\n"
+        "2. Discuss edge cases in `notes.md`\n"
+        "3. Implement in `solution.py` or `solution.cpp`\n"
+        "4. Run the selected file inside the room\n",
+      ),
+      _file(
+        "problem.md",
+        "# Problem: Two Sum\n\n"
+        "Given an array of integers `nums` and an integer `target`, return the indices of the two numbers such that they add up to `target`.\n\n"
+        "## Example\n\n"
+        "- Input: `nums = [2, 7, 11, 15]`\n"
+        "- Target: `9`\n"
+        "- Output: `[0, 1]`\n\n"
+        "## Constraints\n\n"
+        "- You may assume each input has exactly one solution.\n"
+        "- Do not use the same element twice.\n"
+        "- Return the answer in any order.\n",
+      ),
+      _file(
+        "notes.md",
+        "# Notes\n\n"
+        "- Clarify brute-force vs optimized approach.\n"
+        "- Track time and space complexity.\n"
+        "- List edge cases before coding.\n",
+      ),
+      _file(
+        "test_cases.txt",
+        "nums=[2,7,11,15], target=9 -> [0,1]\n"
+        "nums=[3,2,4], target=6 -> [1,2]\n"
+        "nums=[3,3], target=6 -> [0,1]\n",
+      ),
+      _file(
+        "solution.py",
+        "def two_sum(nums: list[int], target: int) -> list[int]:\n"
+        "    # TODO: replace this with the optimized solution.\n"
+        "    seen: dict[int, int] = {}\n"
+        "\n"
+        "    for index, value in enumerate(nums):\n"
+        "        needed = target - value\n"
+        "        if needed in seen:\n"
+        "            return [seen[needed], index]\n"
+        "        seen[value] = index\n"
+        "\n"
+        "    return []\n"
+        "\n"
+        "\n"
+        "if __name__ == \"__main__\":\n"
+        "    sample_nums = [2, 7, 11, 15]\n"
+        "    sample_target = 9\n"
+        "    print(two_sum(sample_nums, sample_target))\n",
+      ),
+      _file(
+        "solution.cpp",
+        "#include <iostream>\n"
+        "#include <unordered_map>\n"
+        "#include <vector>\n"
+        "\n"
+        "using namespace std;\n"
+        "\n"
+        "vector<int> twoSum(const vector<int>& nums, int target) {\n"
+        "    unordered_map<int, int> seen;\n"
+        "\n"
+        "    for (int index = 0; index < static_cast<int>(nums.size()); ++index) {\n"
+        "        int needed = target - nums[index];\n"
+        "        auto found = seen.find(needed);\n"
+        "        if (found != seen.end()) {\n"
+        "            return {found->second, index};\n"
+        "        }\n"
+        "        seen[nums[index]] = index;\n"
+        "    }\n"
+        "\n"
+        "    return {};\n"
+        "}\n"
+        "\n"
+        "int main() {\n"
+        "    vector<int> nums{2, 7, 11, 15};\n"
+        "    int target = 9;\n"
+        "    vector<int> answer = twoSum(nums, target);\n"
+        "\n"
+        "    cout << \"Indices:\";\n"
+        "    for (int value : answer) {\n"
+        "        cout << ' ' << value;\n"
+        "    }\n"
+        "    cout << '\\n';\n"
+        "    return 0;\n"
+        "}\n",
+      ),
     ],
   },
   "node-express": {
@@ -683,6 +795,8 @@ class MongoRepository:
     if not has_rooms:
       self._seed_public_rooms()
 
+    self._repair_seeded_rooms()
+
   def _migrate_legacy_data(self) -> None:
     try:
       raw_data = json.loads(self.legacy_data_file.read_text(encoding="utf-8"))
@@ -764,6 +878,25 @@ class MongoRepository:
           "updated_at": timestamp,
         },
       ]
+    )
+
+  def _repair_seeded_rooms(self) -> None:
+    python_starter_workspace = self.build_workspace_from_template("python-starter")
+
+    self._rooms.update_many(
+      {
+        "template_id": "python-starter",
+        "$or": [
+          {"workspace_tree": {"$exists": False}},
+          {"workspace_tree": []},
+        ],
+      },
+      {
+        "$set": {
+          "workspace_tree": python_starter_workspace,
+          "updated_at": self._utc_now(),
+        }
+      },
     )
 
   @staticmethod

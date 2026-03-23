@@ -39,9 +39,14 @@ export default function CodeEditor({
   code = "",
   theme = "vs-dark",
   onCodeChange,
+  onCursorChange,
+  remoteCursors = [],
 }) {
   const { preferences } = usePreferences();
   const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const remoteDecorationIdsRef = useRef([]);
+  const remoteCursorStyleRef = useRef(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 
@@ -56,14 +61,18 @@ export default function CodeEditor({
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
     setIsEditorReady(true);
     editor.focus();
 
     editor.onDidChangeCursorPosition((event) => {
-      setCursorPosition({
+      const nextCursor = {
         line: event.position.lineNumber,
         column: event.position.column,
-      });
+      };
+
+      setCursorPosition(nextCursor);
+      onCursorChange?.(nextCursor);
     });
 
     try {
@@ -73,16 +82,119 @@ export default function CodeEditor({
           editor.getAction("editor.action.formatDocument")?.run();
         }
       );
-    } catch (err) {
+    } catch {
       // Ignore if monaco is not fully typed/available yet
     }
   };
 
   useEffect(() => {
-    if (!editorRef.current) return;
+    if (!editorRef.current || typeof window === "undefined") return undefined;
     editorRef.current.focus();
-    setCursorPosition({ line: 1, column: 1 });
-  }, [editorPath]);
+    const nextPosition = editorRef.current.getPosition() || { lineNumber: 1, column: 1 };
+    const nextCursor = {
+      line: nextPosition.lineNumber,
+      column: nextPosition.column,
+    };
+
+    const frameId = window.requestAnimationFrame(() => {
+      setCursorPosition(nextCursor);
+      onCursorChange?.(nextCursor);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [editorPath, onCursorChange]);
+
+  useEffect(() => {
+    if (!editorRef.current || !monacoRef.current) {
+      return undefined;
+    }
+
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+
+    if (!remoteCursorStyleRef.current) {
+      const styleElement = document.createElement("style");
+      styleElement.setAttribute("data-codechatter-remote-cursors", "true");
+      document.head.appendChild(styleElement);
+      remoteCursorStyleRef.current = styleElement;
+    }
+
+    const model = editorRef.current.getModel();
+
+    if (!model) {
+      return undefined;
+    }
+
+    const sanitizedRemoteCursors = remoteCursors
+      .filter((cursor) => Number.isFinite(cursor?.line) && Number.isFinite(cursor?.column))
+      .map((cursor) => {
+        return {
+          ...cursor,
+          classKey: String(cursor.sessionId || cursor.userId || cursor.username || "remote")
+            .replace(/[^a-zA-Z0-9_-]/g, ""),
+        };
+      });
+
+    remoteCursorStyleRef.current.textContent = sanitizedRemoteCursors.map((cursor) => {
+      return `
+        .monaco-editor .remote-cursor-${cursor.classKey} {
+          border-left: 2px solid ${cursor.color};
+          margin-left: -1px;
+          height: 1.35em;
+        }
+        .monaco-editor .remote-cursor-label-${cursor.classKey} {
+          background: ${cursor.color};
+          color: #ffffff;
+          border-radius: 999px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          margin-left: 0.35rem;
+          padding: 0.1rem 0.4rem;
+        }
+      `;
+    }).join("\n");
+
+    remoteDecorationIdsRef.current = editorRef.current.deltaDecorations(
+      remoteDecorationIdsRef.current,
+      sanitizedRemoteCursors.map((cursor) => {
+        return {
+          range: new monacoRef.current.Range(
+            cursor.line,
+            cursor.column,
+            cursor.line,
+            cursor.column
+          ),
+          options: {
+            beforeContentClassName: `remote-cursor-${cursor.classKey}`,
+            after: {
+              content: ` ${cursor.username}`,
+              inlineClassName: `remote-cursor-label-${cursor.classKey}`,
+            },
+            stickiness: monacoRef.current.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+            zIndex: 20,
+          },
+        };
+      })
+    );
+
+    return () => {
+      if (editorRef.current) {
+        remoteDecorationIdsRef.current = editorRef.current.deltaDecorations(
+          remoteDecorationIdsRef.current,
+          []
+        );
+      }
+    };
+  }, [remoteCursors]);
+
+  useEffect(() => {
+    return () => {
+      if (remoteCursorStyleRef.current?.parentNode) {
+        remoteCursorStyleRef.current.parentNode.removeChild(remoteCursorStyleRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-white dark:bg-zinc-950">

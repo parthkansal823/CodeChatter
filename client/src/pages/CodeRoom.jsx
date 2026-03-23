@@ -21,7 +21,12 @@ import RoomSettingsModal from "../components/RoomSettingsModal";
 import ConfirmModal from "../components/ConfirmModal";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "../hooks/useAuth";
-import { API_ENDPOINTS } from "../config/security";
+import { API_ENDPOINTS, getWebSocketBaseUrl } from "../config/security";
+import {
+  dedupePresenceByUser,
+  generateRequestId,
+  getPresenceColor,
+} from "../utils/collaboration";
 import { sanitizeInput, secureFetch } from "../utils/security";
 import {
   addNodeToWorkspace,
@@ -31,16 +36,16 @@ import {
   flattenWorkspaceTree,
   getFirstFile,
   getFolderChildren,
+  moveNode,
   removeNodeById,
-  updateNodeById,
   renameNode,
-  moveNode
+  updateNodeById,
 } from "../utils/workspace";
 
 export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [room, setRoom] = useState(null);
   const [workspaceTree, setWorkspaceTree] = useState([]);
   const [activeFileId, setActiveFileId] = useState(null);
@@ -58,9 +63,27 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const [runResult, setRunResult] = useState(null);
   const [runPanelSignal, setRunPanelSignal] = useState(0);
   const [nodeToDelete, setNodeToDelete] = useState(null);
+  const [presenceSessions, setPresenceSessions] = useState([]);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [collaborationSessionId, setCollaborationSessionId] = useState(null);
+  const [roomAccessReady, setRoomAccessReady] = useState(false);
+  const [collaborationRetryTick, setCollaborationRetryTick] = useState(0);
+
   const saveSnapshotRef = useRef("");
   const latestWorkspaceSnapshotRef = useRef("");
   const hasHydratedWorkspaceRef = useRef(false);
+  const workspaceTreeRef = useRef([]);
+  const activeFileIdRef = useRef(null);
+  const focusedNodeIdRef = useRef(null);
+  const openFileIdsRef = useRef(new Set());
+  const activeFilePathRef = useRef(null);
+  const collaborationSocketRef = useRef(null);
+  const pendingWorkspaceRequestsRef = useRef(new Map());
+  const cursorBroadcastTimeoutRef = useRef(null);
+  const collaborationReconnectTimeoutRef = useRef(null);
+  const collaborationHeartbeatIntervalRef = useRef(null);
+  const typingStopTimeoutRef = useRef(null);
+  const lastTypingBroadcastAtRef = useRef(0);
 
   const workspaceEntries = useMemo(() => flattenWorkspaceTree(workspaceTree), [workspaceTree]);
   const activeFileEntry = workspaceEntries.find((entry) => {
@@ -71,12 +94,74 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     ? focusedEntry.id
     : focusedEntry?.parentId || null;
   const activeCode = activeFileEntry?.node?.content || "";
+  const activeFilePath = activeFileEntry?.path || null;
 
   const openFiles = useMemo(() => {
     return Array.from(openFileIds)
       .map((fileId) => workspaceEntries.find((entry) => entry.id === fileId && entry.type === "file"))
       .filter(Boolean);
   }, [openFileIds, workspaceEntries]);
+
+  const activeCollaborators = useMemo(() => {
+    return dedupePresenceByUser(presenceSessions, user?.id).map((session) => {
+      return {
+        ...session,
+        color: getPresenceColor(session.userId || session.sessionId),
+      };
+    });
+  }, [presenceSessions, user?.id]);
+
+  const remoteCursors = useMemo(() => {
+    if (!activeFilePath) {
+      return [];
+    }
+
+    return presenceSessions
+      .filter((session) => {
+        return (
+          session.sessionId !== collaborationSessionId
+          && session.cursor?.filePath === activeFilePath
+        );
+      })
+      .map((session) => {
+        return {
+          sessionId: session.sessionId,
+          userId: session.userId,
+          username: session.username,
+          line: session.cursor.line,
+          column: session.cursor.column,
+          color: getPresenceColor(session.userId || session.sessionId),
+        };
+      });
+  }, [activeFilePath, collaborationSessionId, presenceSessions]);
+
+  useEffect(() => {
+    workspaceTreeRef.current = workspaceTree;
+  }, [workspaceTree]);
+
+  useEffect(() => {
+    activeFileIdRef.current = activeFileId;
+  }, [activeFileId]);
+
+  useEffect(() => {
+    focusedNodeIdRef.current = focusedNodeId;
+  }, [focusedNodeId]);
+
+  useEffect(() => {
+    openFileIdsRef.current = openFileIds;
+  }, [openFileIds]);
+
+  useEffect(() => {
+    activeFilePathRef.current = activeFilePath;
+  }, [activeFilePath]);
+
+  useEffect(() => {
+    return () => {
+      if (typingStopTimeoutRef.current) {
+        window.clearTimeout(typingStopTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!roomId) {
@@ -105,23 +190,115 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     return () => mediaQuery.removeListener(updateViewport);
   }, []);
 
-  const applyRoomData = useCallback((roomData) => {
+  const sendCollaborationMessage = useCallback((payload) => {
+    const socket = collaborationSocketRef.current;
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    socket.send(JSON.stringify(payload));
+    return true;
+  }, []);
+
+  const applyRoomData = useCallback((roomData, options = {}) => {
+    const { preserveSelection = false } = options;
     const nextTree = roomData?.workspaceTree || [];
-    const nextActiveFile = getFirstFile(nextTree);
     const nextSnapshot = JSON.stringify(nextTree);
+    const nextEntries = flattenWorkspaceTree(nextTree);
+    const validEntryIds = new Set(nextEntries.map((entry) => entry.id));
+    const validFileIds = new Set(
+      nextEntries
+        .filter((entry) => entry.type === "file")
+        .map((entry) => entry.id)
+    );
+    const nextActiveFile = getFirstFile(nextTree);
 
     startTransition(() => {
       setRoom(roomData);
       setWorkspaceTree(nextTree);
-      setActiveFileId(nextActiveFile?.id || null);
-      setFocusedNodeId(nextActiveFile?.id || null);
+      setModifiedFileIds(new Set());
       setSaveStatus("saved");
+
+      if (!preserveSelection) {
+        const initialActiveFileId = nextActiveFile?.id || null;
+        setOpenFileIds(initialActiveFileId ? new Set([initialActiveFileId]) : new Set());
+        setActiveFileId(initialActiveFileId);
+        setFocusedNodeId(initialActiveFileId);
+        return;
+      }
+
+      const preservedOpenFileIds = Array.from(openFileIdsRef.current).filter((fileId) => {
+        return validFileIds.has(fileId);
+      });
+
+      let resolvedActiveFileId = null;
+      if (activeFileIdRef.current && validFileIds.has(activeFileIdRef.current)) {
+        resolvedActiveFileId = activeFileIdRef.current;
+      } else if (preservedOpenFileIds.length > 0) {
+        [resolvedActiveFileId] = preservedOpenFileIds;
+      } else {
+        resolvedActiveFileId = nextActiveFile?.id || null;
+      }
+
+      if (resolvedActiveFileId && !preservedOpenFileIds.includes(resolvedActiveFileId)) {
+        preservedOpenFileIds.unshift(resolvedActiveFileId);
+      }
+
+      const resolvedFocusedNodeId = focusedNodeIdRef.current && validEntryIds.has(focusedNodeIdRef.current)
+        ? focusedNodeIdRef.current
+        : resolvedActiveFileId || nextActiveFile?.id || null;
+
+      setOpenFileIds(new Set(preservedOpenFileIds));
+      setActiveFileId(resolvedActiveFileId);
+      setFocusedNodeId(resolvedFocusedNodeId);
     });
 
     saveSnapshotRef.current = nextSnapshot;
     latestWorkspaceSnapshotRef.current = nextSnapshot;
     hasHydratedWorkspaceRef.current = true;
+    pendingWorkspaceRequestsRef.current.clear();
   }, []);
+
+  const handleWorkspaceAck = useCallback((message) => {
+    const requestId = message?.requestId;
+    if (!requestId) {
+      return;
+    }
+
+    const outgoingSnapshot = pendingWorkspaceRequestsRef.current.get(requestId);
+    if (!outgoingSnapshot) {
+      return;
+    }
+
+    pendingWorkspaceRequestsRef.current.delete(requestId);
+
+    const persistedSnapshot = JSON.stringify(message?.room?.workspaceTree || workspaceTreeRef.current);
+    saveSnapshotRef.current = persistedSnapshot;
+
+    if (
+      message?.room
+      && latestWorkspaceSnapshotRef.current === outgoingSnapshot
+      && persistedSnapshot !== outgoingSnapshot
+    ) {
+      applyRoomData(message.room, { preserveSelection: true });
+      return;
+    }
+
+    if (message?.room) {
+      setRoom(message.room);
+    }
+
+    if (
+      latestWorkspaceSnapshotRef.current === outgoingSnapshot
+      || latestWorkspaceSnapshotRef.current === persistedSnapshot
+    ) {
+      setSaveStatus("saved");
+      setModifiedFileIds(new Set());
+    } else {
+      setSaveStatus("saving");
+    }
+  }, [applyRoomData]);
 
   const saveWorkspace = useCallback(async (nextTree, notifyError = false) => {
     if (!token || !roomId) {
@@ -130,6 +307,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
     try {
       const outgoingSnapshot = JSON.stringify(nextTree);
+      pendingWorkspaceRequestsRef.current.clear();
       const savedRoom = await secureFetch(
         API_ENDPOINTS.UPDATE_ROOM_WORKSPACE(roomId),
         {
@@ -148,9 +326,11 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
           : "saving"
       );
       setRoom(savedRoom);
-      
-      // Clear modified flag when files are saved
-      if (latestWorkspaceSnapshotRef.current === outgoingSnapshot || latestWorkspaceSnapshotRef.current === persistedSnapshot) {
+
+      if (
+        latestWorkspaceSnapshotRef.current === outgoingSnapshot
+        || latestWorkspaceSnapshotRef.current === persistedSnapshot
+      ) {
         setModifiedFileIds(new Set());
       }
 
@@ -175,6 +355,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
     const openRoom = async () => {
       setIsLoading(true);
+      setRoomAccessReady(false);
       hasHydratedWorkspaceRef.current = false;
 
       try {
@@ -190,10 +371,14 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
         if (isMounted) {
           applyRoomData(roomData);
+          setRoomAccessReady(true);
         }
       } catch (error) {
-        toast.error(error.message || "Could not open room");
-        navigate("/home", { replace: true });
+        if (isMounted) {
+          toast.error(error.message || "Could not open room");
+          setRoomAccessReady(false);
+          navigate("/home", { replace: true });
+        }
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -207,6 +392,224 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       isMounted = false;
     };
   }, [applyRoomData, navigate, roomId, token]);
+
+  useEffect(() => {
+    if (!token || !roomId || !roomAccessReady) {
+      return undefined;
+    }
+
+    let isDisposed = false;
+    let shouldReconnect = true;
+    const socket = new WebSocket(
+      `${getWebSocketBaseUrl()}/api/rooms/${roomId}/collaborate?token=${encodeURIComponent(token)}`
+    );
+    const pendingWorkspaceRequests = pendingWorkspaceRequestsRef.current;
+    collaborationSocketRef.current = socket;
+    setIsRealtimeConnected(false);
+    setCollaborationSessionId(null);
+
+    const clearHeartbeat = () => {
+      if (collaborationHeartbeatIntervalRef.current) {
+        window.clearInterval(collaborationHeartbeatIntervalRef.current);
+        collaborationHeartbeatIntervalRef.current = null;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      if (isDisposed || !shouldReconnect || typeof window === "undefined") {
+        return;
+      }
+
+      if (collaborationReconnectTimeoutRef.current) {
+        window.clearTimeout(collaborationReconnectTimeoutRef.current);
+      }
+
+      collaborationReconnectTimeoutRef.current = window.setTimeout(() => {
+        setCollaborationRetryTick((current) => current + 1);
+      }, 900);
+    };
+
+    socket.onopen = () => {
+      clearHeartbeat();
+      collaborationHeartbeatIntervalRef.current = window.setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 15000);
+    };
+
+    socket.onmessage = (event) => {
+      let message = null;
+
+      try {
+        message = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      if (message.type === "session_ready") {
+        if (collaborationReconnectTimeoutRef.current) {
+          window.clearTimeout(collaborationReconnectTimeoutRef.current);
+          collaborationReconnectTimeoutRef.current = null;
+        }
+        setCollaborationSessionId(message.sessionId || null);
+        setIsRealtimeConnected(true);
+        setPresenceSessions(Array.isArray(message.presence) ? message.presence : []);
+
+        if (message.room) {
+          applyRoomData(message.room, { preserveSelection: true });
+        }
+        return;
+      }
+
+      if (message.type === "pong") {
+        return;
+      }
+
+      if (message.type === "presence_snapshot") {
+        setPresenceSessions(Array.isArray(message.presence) ? message.presence : []);
+        return;
+      }
+
+      if (message.type === "workspace_updated") {
+        if (message.room) {
+          applyRoomData(message.room, { preserveSelection: true });
+        }
+        return;
+      }
+
+      if (message.type === "workspace_ack") {
+        handleWorkspaceAck(message);
+        return;
+      }
+
+      if (message.type === "error") {
+        console.error("Collaboration error:", message.detail || "Unknown error");
+
+        if (
+          typeof message.detail === "string"
+          && /(access|auth|token|room not found)/i.test(message.detail)
+        ) {
+          shouldReconnect = false;
+        }
+      }
+    };
+
+    socket.onclose = () => {
+      clearHeartbeat();
+
+      if (collaborationSocketRef.current === socket) {
+        collaborationSocketRef.current = null;
+      }
+      setIsRealtimeConnected(false);
+      setCollaborationSessionId(null);
+      setPresenceSessions([]);
+      pendingWorkspaceRequests.clear();
+
+      if (latestWorkspaceSnapshotRef.current !== saveSnapshotRef.current) {
+        setSaveStatus("error");
+      }
+
+      scheduleReconnect();
+    };
+
+    socket.onerror = () => {
+      setIsRealtimeConnected(false);
+    };
+
+    return () => {
+      isDisposed = true;
+      shouldReconnect = false;
+
+      if (collaborationSocketRef.current === socket) {
+        collaborationSocketRef.current = null;
+      }
+
+      pendingWorkspaceRequests.clear();
+      setIsRealtimeConnected(false);
+      setCollaborationSessionId(null);
+      setPresenceSessions([]);
+      clearHeartbeat();
+
+      if (cursorBroadcastTimeoutRef.current) {
+        window.clearTimeout(cursorBroadcastTimeoutRef.current);
+      }
+
+      if (typingStopTimeoutRef.current) {
+        window.clearTimeout(typingStopTimeoutRef.current);
+      }
+
+      if (collaborationReconnectTimeoutRef.current) {
+        window.clearTimeout(collaborationReconnectTimeoutRef.current);
+      }
+
+      socket.close();
+    };
+  }, [applyRoomData, collaborationRetryTick, handleWorkspaceAck, roomAccessReady, roomId, token]);
+
+  useEffect(() => {
+    if (!token || !roomId || !roomAccessReady || isRealtimeConnected) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const refreshRoom = async () => {
+      if (latestWorkspaceSnapshotRef.current !== saveSnapshotRef.current) {
+        return;
+      }
+
+      try {
+        const roomData = await secureFetch(API_ENDPOINTS.GET_ROOM(roomId), {}, token);
+
+        if (isCancelled) {
+          return;
+        }
+
+        const incomingSnapshot = JSON.stringify(roomData?.workspaceTree || []);
+
+        if (incomingSnapshot !== latestWorkspaceSnapshotRef.current) {
+          applyRoomData(roomData, { preserveSelection: true });
+          return;
+        }
+
+        setRoom(roomData);
+      } catch {
+        // Keep retrying while realtime is offline.
+      }
+    };
+
+    const intervalId = window.setInterval(refreshRoom, 2000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [applyRoomData, isRealtimeConnected, roomAccessReady, roomId, token]);
+
+  useEffect(() => {
+    if (!token || !roomId || !roomAccessReady || isRealtimeConnected) {
+      return undefined;
+    }
+
+    const triggerReconnect = () => {
+      setCollaborationRetryTick((current) => current + 1);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        triggerReconnect();
+      }
+    };
+
+    window.addEventListener("online", triggerReconnect);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("online", triggerReconnect);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isRealtimeConnected, roomAccessReady, roomId, token]);
 
   useEffect(() => {
     if (!hasHydratedWorkspaceRef.current || !roomId || !token) {
@@ -223,11 +626,38 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     setSaveStatus("saving");
 
     const timeoutId = window.setTimeout(() => {
-      saveWorkspace(workspaceTree).catch(() => {});
-    }, 700);
+      const requestId = generateRequestId();
+
+      if (isRealtimeConnected) {
+        const messageSent = sendCollaborationMessage({
+          type: "workspace_update",
+          requestId,
+          tree: workspaceTreeRef.current,
+          activeFilePath: activeFilePathRef.current,
+        });
+
+        if (messageSent) {
+          pendingWorkspaceRequestsRef.current.set(requestId, nextSnapshot);
+          return;
+        }
+      }
+
+      saveWorkspace(workspaceTreeRef.current).catch(() => {});
+    }, 180);
 
     return () => window.clearTimeout(timeoutId);
-  }, [roomId, saveWorkspace, token, workspaceTree]);
+  }, [isRealtimeConnected, roomId, saveWorkspace, sendCollaborationMessage, token, workspaceTree]);
+
+  useEffect(() => {
+    if (!isRealtimeConnected) {
+      return;
+    }
+
+    sendCollaborationMessage({
+      type: "presence_update",
+      activeFilePath,
+    });
+  }, [activeFilePath, isRealtimeConnected, sendCollaborationMessage]);
 
   useEffect(() => {
     if (activeFileId && findNodeById(workspaceTree, activeFileId)) {
@@ -258,20 +688,17 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   };
 
   const handleCloseFile = (file) => {
-    setOpenFileIds((prev) => {
-      const next = new Set(prev);
+    setOpenFileIds((currentOpenFileIds) => {
+      const next = new Set(currentOpenFileIds);
       next.delete(file.id);
+
+      if (activeFileIdRef.current === file.id) {
+        const [nextFileId] = Array.from(next);
+        setActiveFileId(nextFileId || null);
+      }
+
       return next;
     });
-
-    if (activeFileId === file.id) {
-      const nextFile = Array.from(openFileIds).find((id) => id !== file.id);
-      if (nextFile) {
-        setActiveFileId(nextFile);
-      } else {
-        setActiveFileId(null);
-      }
-    }
   };
 
   const createWorkspaceNodeFromName = (type, rawName, parentIdOverride) => {
@@ -283,7 +710,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       return false;
     }
 
-    const siblings = getFolderChildren(workspaceTree, parentId);
+    const siblings = getFolderChildren(workspaceTreeRef.current, parentId);
     const uniqueName = buildUniqueName(siblings, cleanedName);
     const nextNode = type === "folder"
       ? createWorkspaceNode({ type: "folder", name: uniqueName, children: [] })
@@ -294,6 +721,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
     if (type === "file") {
       setActiveFileId(nextNode.id);
+      setOpenFileIds((currentOpenFileIds) => new Set([...currentOpenFileIds, nextNode.id]));
     }
 
     toast.success(`${type === "folder" ? "Folder" : "File"} created`);
@@ -322,15 +750,17 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   };
 
   const confirmDeleteNode = () => {
-    if (!nodeToDelete) return;
+    if (!nodeToDelete) {
+      return;
+    }
 
     setWorkspaceTree((currentTree) => {
       const nextTree = removeNodeById(currentTree, nodeToDelete.id);
-      const nextActiveFile = activeFileId && findNodeById(nextTree, activeFileId)
-        ? findNodeById(nextTree, activeFileId)
+      const nextActiveFile = activeFileIdRef.current && findNodeById(nextTree, activeFileIdRef.current)
+        ? findNodeById(nextTree, activeFileIdRef.current)
         : getFirstFile(nextTree);
-      const nextFocusedNode = focusedNodeId && findNodeById(nextTree, focusedNodeId)
-        ? findNodeById(nextTree, focusedNodeId)
+      const nextFocusedNode = focusedNodeIdRef.current && findNodeById(nextTree, focusedNodeIdRef.current)
+        ? findNodeById(nextTree, focusedNodeIdRef.current)
         : nextActiveFile;
 
       setActiveFileId(nextActiveFile?.id || null);
@@ -338,50 +768,94 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       return nextTree;
     });
 
-    // Remove from open files if it was open
     setOpenFileIds((prev) => {
       const next = new Set(prev);
       next.delete(nodeToDelete.id);
       return next;
     });
 
-    // Remove from modified files
     setModifiedFileIds((prev) => {
       const next = new Set(prev);
       next.delete(nodeToDelete.id);
       return next;
     });
-    
+
     setNodeToDelete(null);
   };
 
   const handleRenameNode = (nodeId, newName) => {
     const cleanedName = sanitizeInput(newName).replace(/[\\/]/g, "").trim();
-    if (!cleanedName) return;
+    if (!cleanedName) {
+      return;
+    }
+
     setWorkspaceTree((currentTree) => renameNode(currentTree, nodeId, cleanedName));
     setModifiedFileIds((prev) => new Set([...prev, nodeId]));
   };
 
   const handleMoveNode = (nodeId, newParentId) => {
-    setWorkspaceTree((currentTree) => {
-      return moveNode(currentTree, nodeId, newParentId);
-    });
+    setWorkspaceTree((currentTree) => moveNode(currentTree, nodeId, newParentId));
     setModifiedFileIds((prev) => new Set([...prev, nodeId]));
   };
 
   const handleCodeChange = (nextCode) => {
-    if (!activeFileId) {
+    if (!activeFileIdRef.current) {
       return;
     }
 
     setWorkspaceTree((currentTree) => updateNodeById(
       currentTree,
-      activeFileId,
+      activeFileIdRef.current,
       (node) => ({ ...node, content: nextCode })
     ));
 
-    setModifiedFileIds((prev) => new Set([...prev, activeFileId]));
+    setModifiedFileIds((prev) => new Set([...prev, activeFileIdRef.current]));
+
+    if (!isRealtimeConnected || !activeFilePathRef.current) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastTypingBroadcastAtRef.current >= 350) {
+      sendCollaborationMessage({
+        type: "typing_update",
+        activeFilePath: activeFilePathRef.current,
+        isTyping: true,
+      });
+      lastTypingBroadcastAtRef.current = now;
+    }
+
+    if (typingStopTimeoutRef.current) {
+      window.clearTimeout(typingStopTimeoutRef.current);
+    }
+
+    typingStopTimeoutRef.current = window.setTimeout(() => {
+      sendCollaborationMessage({
+        type: "typing_update",
+        activeFilePath: activeFilePathRef.current,
+        isTyping: false,
+      });
+    }, 1200);
   };
+
+  const handleCursorChange = useCallback((nextCursor) => {
+    if (!isRealtimeConnected) {
+      return;
+    }
+
+    if (cursorBroadcastTimeoutRef.current) {
+      window.clearTimeout(cursorBroadcastTimeoutRef.current);
+    }
+
+    cursorBroadcastTimeoutRef.current = window.setTimeout(() => {
+      sendCollaborationMessage({
+        type: "cursor_update",
+        activeFilePath: activeFilePathRef.current,
+        line: nextCursor.line,
+        column: nextCursor.column,
+      });
+    }, 50);
+  }, [isRealtimeConnected, sendCollaborationMessage]);
 
   const handleCopyInvite = async () => {
     const roomLink = `${window.location.origin}/room/${roomId}`;
@@ -410,7 +884,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     setRunPanelSignal((current) => current + 1);
 
     try {
-      await saveWorkspace(workspaceTree, true);
+      await saveWorkspace(workspaceTreeRef.current, true);
 
       const result = await secureFetch(
         API_ENDPOINTS.RUN_ROOM_FILE(roomId),
@@ -502,14 +976,16 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
             room={room}
             activePath={activeFileEntry?.path}
             collaborators={room?.collaborators || []}
+            activeCollaborators={activeCollaborators}
             explorerOpen={isMobileViewport ? isMobileExplorerOpen : isDesktopExplorerOpen}
             onToggleExplorer={toggleExplorer}
             sidebarOpen={isRightSidebarOpen}
-            onToggleSidebar={() => setIsRightSidebarOpen(prev => !prev)}
+            onToggleSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
             onCopyInvite={handleCopyInvite}
             onRun={handleRun}
             isRunning={runResult?.status === "running"}
             saveStatus={saveStatus}
+            liveConnected={isRealtimeConnected}
             onOpenSettings={() => setIsSettingsOpen(true)}
           />
 
@@ -518,13 +994,16 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
               openFiles={openFiles}
               activeFileId={activeFileId}
               modifiedFiles={modifiedFileIds}
-              onSelectFile={(file) => setActiveFileId(file.id)}
+              onSelectFile={(file) => {
+                setActiveFileId(file.id);
+                setFocusedNodeId(file.id);
+              }}
               onCloseFile={handleCloseFile}
             />
           )}
 
           <div className="flex min-h-0 flex-1">
-            <div className="flex flex-1 flex-col min-w-0">
+            <div className="flex min-w-0 flex-1 flex-col">
               {activeFileEntry ? (
                 <CodeEditor
                   selectedFileName={activeFileEntry.name}
@@ -532,6 +1011,8 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                   code={activeCode}
                   theme={theme}
                   onCodeChange={handleCodeChange}
+                  onCursorChange={handleCursorChange}
+                  remoteCursors={remoteCursors}
                 />
               ) : (
                 <div className="flex flex-1 items-center justify-center bg-white dark:bg-zinc-950">
@@ -562,7 +1043,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                 </div>
               )}
             </div>
-            
+
             <RightSidebar
               isOpen={isRightSidebarOpen}
               onToggle={() => setIsRightSidebarOpen((prev) => !prev)}
@@ -583,23 +1064,21 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       </div>
 
       {isMobileViewport && (
-        <>
-          <FileExplorer
-            mobile
-            workspaceLabel={room?.name || "Workspace"}
-            tree={workspaceTree}
-            activeFileId={activeFileId}
-            focusedNodeId={focusedNodeId}
-            onSelectNode={handleSelectNode}
-            onDeleteNode={handleDeleteNode}
-            onCreateFile={handleCreateFile}
-            onCreateFolder={handleCreateFolder}
-            onRenameNode={handleRenameNode}
-            onMoveNode={handleMoveNode}
-            isOpen={isMobileExplorerOpen}
-            onClose={() => setIsMobileExplorerOpen(false)}
-          />
-        </>
+        <FileExplorer
+          mobile
+          workspaceLabel={room?.name || "Workspace"}
+          tree={workspaceTree}
+          activeFileId={activeFileId}
+          focusedNodeId={focusedNodeId}
+          onSelectNode={handleSelectNode}
+          onDeleteNode={handleDeleteNode}
+          onCreateFile={handleCreateFile}
+          onCreateFolder={handleCreateFolder}
+          onRenameNode={handleRenameNode}
+          onMoveNode={handleMoveNode}
+          isOpen={isMobileExplorerOpen}
+          onClose={() => setIsMobileExplorerOpen(false)}
+        />
       )}
 
       <RoomSettingsModal
