@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
@@ -15,6 +15,16 @@ export default function RoomSettingsModal({ room, isOpen, onClose, onUpdate }) {
   const [description, setDescription] = useState(room?.description || "");
   const [shell, setShell] = useState(room?.terminalShell || "bash");
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setName(room?.name || "");
+    setDescription(room?.description || "");
+    setShell(room?.terminalShell || "bash");
+  }, [isOpen, room?.description, room?.name, room?.terminalShell]);
 
 
 

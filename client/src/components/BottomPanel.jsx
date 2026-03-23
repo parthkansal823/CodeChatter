@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
   Copy,
-  Keyboard,
   Play,
   TerminalSquare,
   TriangleAlert
@@ -17,6 +16,19 @@ const TABS = [
   { id: "terminal", label: "Terminal", icon: TerminalSquare }
 ];
 
+const ANSI_ESCAPE_PATTERN = new RegExp(String.raw`\u001b\[[0-9;]*m`, "g");
+
+function getInitialPanelState(runResult, defaultMinimized) {
+  const hasCompleted = runResult && runResult.status !== "running";
+  const hasErrors = hasCompleted
+    && (runResult.exitCode !== 0 || (runResult.stderr && runResult.stderr.trim().length > 0));
+
+  return {
+    activeTab: hasErrors ? "errors" : "console",
+    isMinimized: hasCompleted ? false : defaultMinimized,
+  };
+}
+
 export default function BottomPanel({
   runResult,
   stdin,
@@ -24,23 +36,14 @@ export default function BottomPanel({
   onStdinChange,
   defaultMinimized = false
 }) {
-  const [activeTab, setActiveTab] = useState("console");
-  const [isMinimized, setIsMinimized] = useState(defaultMinimized);
-
-  useEffect(() => {
-    if (runResult && runResult.status !== "running") {
-      if (runResult.exitCode !== 0 || (runResult.stderr && runResult.stderr.trim().length > 0)) {
-        setActiveTab("errors");
-        setIsMinimized(false);
-      } else {
-        setActiveTab("console");
-        setIsMinimized(false);
-      }
-    }
-  }, [runResult]);
+  const initialPanelState = getInitialPanelState(runResult, defaultMinimized);
+  const [activeTab, setActiveTab] = useState(initialPanelState.activeTab);
+  const [isMinimized, setIsMinimized] = useState(initialPanelState.isMinimized);
 
   const handleCopy = async () => {
-    const content = activeTab === "console" ? getPanelContent("output", runResult) : getPanelContent(activeTab, runResult);
+    const content = activeTab === "console"
+      ? getPanelContent("output", runResult)
+      : getPanelContent(activeTab, runResult);
 
     try {
       await navigator.clipboard.writeText(content);
@@ -92,11 +95,11 @@ export default function BottomPanel({
               )}
               {runResult.exitCode === 0 ? (
                 <span className="inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-500/15 dark:text-green-400">
-                  ✓ Success
+                  Success
                 </span>
               ) : runResult.exitCode !== null ? (
                 <span className="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-500/15 dark:text-red-400">
-                  ✗ Exit {runResult.exitCode}
+                  Exit {runResult.exitCode}
                 </span>
               ) : null}
             </div>
@@ -125,7 +128,9 @@ export default function BottomPanel({
           {activeTab === "console" ? (
             <div className="flex h-full min-h-[120px] w-full flex-col gap-4 sm:flex-row">
               <div className="flex flex-1 flex-col">
-                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Standard Input</label>
+                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  Standard Input
+                </label>
                 <textarea
                   value={stdin}
                   onChange={(event) => onStdinChange?.(event.target.value)}
@@ -134,9 +139,13 @@ export default function BottomPanel({
                 />
               </div>
               <div className="flex flex-1 flex-col">
-                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Execution Output</label>
+                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  Execution Output
+                </label>
                 <div className="flex-1 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs dark:border-zinc-800 dark:bg-zinc-900">
-                  <pre className="whitespace-pre-wrap break-words">{getPanelContent("output", runResult)}</pre>
+                  <pre className="whitespace-pre-wrap break-words">
+                    {getPanelContent("output", runResult)}
+                  </pre>
                 </div>
               </div>
             </div>
@@ -153,10 +162,13 @@ export default function BottomPanel({
   );
 }
 
-const stripAnsi = (str) => {
-  if (typeof str !== "string") return str;
-  return str.replace(/\x1b\[[0-9;]*m/g, "");
-};
+function stripAnsi(str) {
+  if (typeof str !== "string") {
+    return str;
+  }
+
+  return str.replace(ANSI_ESCAPE_PATTERN, "");
+}
 
 function getPanelContent(tabId, runResult) {
   if (!runResult) {

@@ -77,7 +77,7 @@ export default function XTerminal({ roomId }) {
 
         ws.onopen = () => {
           xterm.clear();
-          xterm.writeln("\x1b[32m\u2714 Connected to workspace terminal\x1b[0m");
+          xterm.writeln("\x1b[32m[ok] Connected to workspace terminal\x1b[0m");
           xterm.writeln("");
           setIsDisconnected(false);
           const dims = { cols: xterm.cols, rows: xterm.rows };
@@ -90,7 +90,7 @@ export default function XTerminal({ roomId }) {
 
         ws.onclose = () => {
           if (!isCleanup) {
-            xterm.writeln("\r\n\x1b[33m\u25C9 Terminal disconnected\x1b[0m");
+            xterm.writeln("\r\n\x1b[33m[i] Terminal disconnected\x1b[0m");
             setIsDisconnected(true);
           }
         };

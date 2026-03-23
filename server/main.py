@@ -1410,7 +1410,6 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
     if os.name == "nt":
         try:
             import winpty
-            import os.path
 
             git_bash = r"C:\Program Files\Git\bin\bash.exe"
             if terminal_shell == "bash" and os.path.exists(git_bash):
