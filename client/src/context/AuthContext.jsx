@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   clearSecureData,
   getSecureToken,
@@ -21,8 +21,7 @@ import {
   storeJWT,
   validateJWTBeforeUse,
 } from "../utils/jwt";
-
-export const AuthContext = createContext(null);
+import { AuthContext } from "./auth-context";
 
 const loginLimiter = new RateLimiter(5, 15 * 60 * 1000);
 const signupLimiter = new RateLimiter(3, 60 * 60 * 1000);
@@ -91,6 +90,17 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
 
+    const handleAuthExpired = () => {
+      if (!isMounted) {
+        return;
+      }
+
+      clearData();
+      window.location.href = "/auth";
+    };
+
+    window.addEventListener("codechatter:auth-expired", handleAuthExpired);
+
     const initializeAuth = async () => {
       try {
         const storedToken = getStoredAuthToken();
@@ -147,6 +157,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       isMounted = false;
+      window.removeEventListener("codechatter:auth-expired", handleAuthExpired);
     };
   }, []);
 
@@ -177,10 +188,10 @@ export function AuthProvider({ children }) {
         };
       }
 
-      if (!validatePassword(password)) {
+      if (password.length < 8) {
         return {
           success: false,
-          error: "Password must be at least 8 characters with uppercase, lowercase, number, and special character",
+          error: "Password must be at least 8 characters",
         };
       }
 
@@ -296,6 +307,24 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const deleteAccount = async () => {
+    try {
+      if (!token) {
+        throw new Error("You are not logged in");
+      }
+
+      await secureFetch(API_ENDPOINTS.DELETE_ACCOUNT, { method: "DELETE" }, token);
+      clearData();
+      return { success: true };
+    } catch (error) {
+      console.error("Delete account error:", error);
+      return {
+        success: false,
+        error: error.message || "Could not delete account",
+      };
+    }
+  };
+
   const oauthLogin = async (oauthToken, userData) => {
     try {
       if (!oauthToken || !userData?.username) {
@@ -322,6 +351,7 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
+    deleteAccount,
     oauthLogin,
   };
 

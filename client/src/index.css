@@ -8,9 +8,17 @@
 
 /* Gradient background shift (Home page hero) */
 @keyframes meshMove {
-  0%, 100% { background-position: 0% 50%; }
-  50%       { background-position: 100% 50%; }
+
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
 }
+
 .animate-mesh {
   background-size: 200% 200%;
   animation: meshMove 15s ease infinite;
@@ -18,10 +26,19 @@
 
 /* Slow-float for decorative blobs */
 @keyframes floatSlow {
-  0%   { transform: translateY(0); }
-  50%  { transform: translateY(40px); }
-  100% { transform: translateY(0); }
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(40px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
 }
+
 .animate-floatSlow {
   animation: floatSlow 20s ease-in-out infinite;
 }
@@ -33,10 +50,19 @@
 
 /* Gradient shift (Auth page background) */
 @keyframes bgShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
 }
+
 .animate-bgShift {
   background-size: 200% 200%;
   animation: bgShift 20s ease infinite;
@@ -44,47 +70,88 @@
 
 /* Slow rotation for glow rings */
 @keyframes rotateSlow {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
+
 .animate-rotateSlow {
   animation: rotateSlow 120s linear infinite;
 }
 
 /* Floating blob movement */
 @keyframes floatBlob {
-  0%   { transform: translate(0, 0); }
-  50%  { transform: translate(40px, -60px); }
-  100% { transform: translate(0, 0); }
+  0% {
+    transform: translate(0, 0);
+  }
+
+  50% {
+    transform: translate(40px, -60px);
+  }
+
+  100% {
+    transform: translate(0, 0);
+  }
 }
+
 .animate-floatBlob {
   animation: floatBlob 35s ease-in-out infinite;
 }
 
 /* Scrolling grid background */
 @keyframes gridMove {
-  0%   { background-position: 0 0; }
-  100% { background-position: 50px 50px; }
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 50px 50px;
+  }
 }
+
 .animate-gridMove {
   animation: gridMove 40s linear infinite;
 }
 
 /* Floating dots */
 @keyframes dotFloat {
-  0%   { transform: translateY(0); opacity: 0.4; }
-  50%  { transform: translateY(-20px); opacity: 0.8; }
-  100% { transform: translateY(0); opacity: 0.4; }
+  0% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+
+  50% {
+    transform: translateY(-20px);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
 }
+
 .animate-dotFloat {
   animation: dotFloat 8s ease-in-out infinite;
 }
 
 /* Blinking cursor */
 @keyframes cursorBlink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
 }
+
 .animate-cursor {
   animation: cursorBlink 1s infinite;
 }
@@ -98,13 +165,16 @@
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #d4d4d8;
   border-radius: 99px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #a1a1aa;
 }
@@ -113,6 +183,7 @@
 .dark ::-webkit-scrollbar-thumb {
   background: #3f3f46;
 }
+
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
 }
@@ -122,6 +193,7 @@
   scrollbar-width: thin;
   scrollbar-color: #d4d4d8 transparent;
 }
+
 .dark * {
   scrollbar-color: #3f3f46 transparent;
-}
+}

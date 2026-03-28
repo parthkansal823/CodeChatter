@@ -7,7 +7,7 @@ import {
   useState
 } from "react";
 import { FilePlus2, FolderPlus, LoaderCircle } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 
 import Navbar from "../components/Navbar";
@@ -44,6 +44,7 @@ import {
 
 export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const { roomId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const [room, setRoom] = useState(null);
@@ -84,6 +85,8 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const collaborationHeartbeatIntervalRef = useRef(null);
   const typingStopTimeoutRef = useRef(null);
   const lastTypingBroadcastAtRef = useRef(0);
+  const lastCursorBroadcastRef = useRef(null);
+  const lastPresenceFilePathRef = useRef(null);
 
   const workspaceEntries = useMemo(() => flattenWorkspaceTree(workspaceTree), [workspaceTree]);
   const activeFileEntry = workspaceEntries.find((entry) => {
@@ -95,6 +98,9 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     : focusedEntry?.parentId || null;
   const activeCode = activeFileEntry?.node?.content || "";
   const activeFilePath = activeFileEntry?.path || null;
+  const inviteToken = useMemo(() => {
+    return new URLSearchParams(location.search).get("invite")?.trim() || null;
+  }, [location.search]);
 
   const openFiles = useMemo(() => {
     return Array.from(openFileIds)
@@ -153,6 +159,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
   useEffect(() => {
     activeFilePathRef.current = activeFilePath;
+    lastCursorBroadcastRef.current = null;
   }, [activeFilePath]);
 
   useEffect(() => {
@@ -359,14 +366,6 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       hasHydratedWorkspaceRef.current = false;
 
       try {
-        await secureFetch(
-          API_ENDPOINTS.JOIN_ROOM,
-          {
-            method: "POST",
-            body: JSON.stringify({ roomId }),
-          },
-          token
-        );
         const roomData = await secureFetch(API_ENDPOINTS.GET_ROOM(roomId), {}, token);
 
         if (isMounted) {
@@ -374,6 +373,37 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
           setRoomAccessReady(true);
         }
       } catch (error) {
+        const shouldAttemptInviteJoin = inviteToken
+          && (error.status === 403 || /access|private|invite/i.test(error.message || ""));
+
+        if (shouldAttemptInviteJoin) {
+          try {
+            await secureFetch(
+              API_ENDPOINTS.JOIN_ROOM,
+              {
+                method: "POST",
+                body: JSON.stringify({ roomId, inviteToken }),
+              },
+              token
+            );
+
+            const roomData = await secureFetch(API_ENDPOINTS.GET_ROOM(roomId), {}, token);
+
+            if (isMounted) {
+              applyRoomData(roomData);
+              setRoomAccessReady(true);
+            }
+            return;
+          } catch (joinError) {
+            if (isMounted) {
+              toast.error(joinError.message || "Could not open room");
+              setRoomAccessReady(false);
+              navigate("/home", { replace: true });
+            }
+            return;
+          }
+        }
+
         if (isMounted) {
           toast.error(error.message || "Could not open room");
           setRoomAccessReady(false);
@@ -391,7 +421,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     return () => {
       isMounted = false;
     };
-  }, [applyRoomData, navigate, roomId, token]);
+  }, [applyRoomData, inviteToken, navigate, roomId, token]);
 
   useEffect(() => {
     if (!token || !roomId || !roomAccessReady) {
@@ -495,7 +525,11 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      if (event.code === 1008) {
+        shouldReconnect = false;
+      }
+
       clearHeartbeat();
 
       if (collaborationSocketRef.current === socket) {
@@ -650,9 +684,15 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
   useEffect(() => {
     if (!isRealtimeConnected) {
+      lastPresenceFilePathRef.current = null;
       return;
     }
 
+    if (lastPresenceFilePathRef.current === activeFilePath) {
+      return;
+    }
+
+    lastPresenceFilePathRef.current = activeFilePath;
     sendCollaborationMessage({
       type: "presence_update",
       activeFilePath,
@@ -789,7 +829,19 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       return;
     }
 
-    setWorkspaceTree((currentTree) => renameNode(currentTree, nodeId, cleanedName));
+    setWorkspaceTree((currentTree) => {
+      const currentEntries = flattenWorkspaceTree(currentTree);
+      const targetEntry = currentEntries.find((entry) => entry.id === nodeId);
+      if (!targetEntry) {
+        return currentTree;
+      }
+
+      const siblings = getFolderChildren(currentTree, targetEntry.parentId)
+        .filter((node) => node.id !== nodeId);
+      const uniqueName = buildUniqueName(siblings, cleanedName);
+
+      return renameNode(currentTree, nodeId, uniqueName);
+    });
     setModifiedFileIds((prev) => new Set([...prev, nodeId]));
   };
 
@@ -843,22 +895,29 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       return;
     }
 
+    const nextSignature = `${activeFilePathRef.current || ""}:${nextCursor.line}:${nextCursor.column}`;
+    if (lastCursorBroadcastRef.current === nextSignature) {
+      return;
+    }
+
     if (cursorBroadcastTimeoutRef.current) {
       window.clearTimeout(cursorBroadcastTimeoutRef.current);
     }
 
     cursorBroadcastTimeoutRef.current = window.setTimeout(() => {
+      lastCursorBroadcastRef.current = nextSignature;
       sendCollaborationMessage({
         type: "cursor_update",
         activeFilePath: activeFilePathRef.current,
         line: nextCursor.line,
         column: nextCursor.column,
       });
-    }, 50);
+    }, 90);
   }, [isRealtimeConnected, sendCollaborationMessage]);
 
   const handleCopyInvite = async () => {
-    const roomLink = `${window.location.origin}/room/${roomId}`;
+    const inviteQuery = room?.inviteToken ? `?invite=${encodeURIComponent(room.inviteToken)}` : "";
+    const roomLink = `${window.location.origin}/room/${roomId}${inviteQuery}`;
 
     try {
       await navigator.clipboard.writeText(roomLink);
@@ -986,6 +1045,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
             isRunning={runResult?.status === "running"}
             saveStatus={saveStatus}
             liveConnected={isRealtimeConnected}
+            canManageRoom={room?.ownerId === user?.id}
             onOpenSettings={() => setIsSettingsOpen(true)}
           />
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 import logging
 import os
 import re
@@ -13,6 +14,28 @@ from typing import Any
 from pymongo import ASCENDING, DESCENDING, MongoClient
 
 logger = logging.getLogger("codechatter.database")
+
+MAX_WORKSPACE_NODES = 500
+MAX_WORKSPACE_TOTAL_CONTENT_CHARS = 600_000
+
+DSA_LANGUAGE_OPTIONS: list[dict[str, str]] = [
+  {"id": "python", "label": "Python"},
+  {"id": "javascript", "label": "JavaScript"},
+  {"id": "typescript", "label": "TypeScript"},
+  {"id": "cpp", "label": "C++"},
+  {"id": "c", "label": "C"},
+  {"id": "java", "label": "Java"},
+  {"id": "go", "label": "Go"},
+  {"id": "rust", "label": "Rust"},
+  {"id": "php", "label": "PHP"},
+  {"id": "ruby", "label": "Ruby"},
+  {"id": "shell", "label": "Shell"},
+  {"id": "lua", "label": "Lua"},
+  {"id": "perl", "label": "Perl"},
+  {"id": "swift", "label": "Swift"},
+  {"id": "kotlin", "label": "Kotlin"},
+]
+DSA_LANGUAGE_IDS = {option["id"] for option in DSA_LANGUAGE_OPTIONS}
 
 
 def _node_id() -> str:
@@ -43,19 +66,18 @@ def _folder(name: str, children: list[dict[str, Any]] | None = None) -> dict[str
 # ------------------------------------------------------------------
 
 def _dsa_starter(language: str = "python") -> list:
-  """Return workspace file nodes for the chosen DSA language."""
   lang = (language or "python").lower()
 
   common = [
     _file(
       "README.md",
       "# DSA Practice\n\n"
-      "Use this room for coding interviews, pair problem solving, and dry runs.\n\n"
-      "Suggested flow:\n"
-      "1. Read the prompt in `problem.md`\n"
-      "2. Discuss edge cases in `notes.md`\n"
-      "3. Implement in the solution file\n"
-      "4. Run the selected file inside the room\n",
+      "Use this room for interviews, pair problem-solving, and timed practice.\n\n"
+      "Recommended flow:\n"
+      "1. Read `problem.md`\n"
+      "2. Capture constraints and edge cases in `notes.md`\n"
+      "3. Implement the answer in the starter file\n"
+      "4. Verify with `test_cases.txt`\n",
     ),
     _file(
       "problem.md",
@@ -72,9 +94,10 @@ def _dsa_starter(language: str = "python") -> list:
     _file(
       "notes.md",
       "# Notes\n\n"
-      "- Clarify brute-force vs optimized approach.\n"
-      "- Track time and space complexity.\n"
-      "- List edge cases before coding.\n",
+      "- Brute force: nested loop, O(n^2)\n"
+      "- Optimized: hash map, O(n)\n"
+      "- Edge cases: duplicates, negative values, short arrays\n"
+      "- Explain why each number can only be used once\n",
     ),
     _file(
       "test_cases.txt",
@@ -115,7 +138,7 @@ def _dsa_starter(language: str = "python") -> list:
     "typescript": _file(
       "solution.ts",
       "function twoSum(nums: number[], target: number): number[] {\n"
-      "  const seen = new Map();\n"
+      "  const seen = new Map<number, number>();\n"
       "  for (let i = 0; i < nums.length; i++) {\n"
       "    const need = target - nums[i];\n"
       "    if (seen.has(need)) return [seen.get(need), i];\n"
@@ -229,6 +252,119 @@ def _dsa_starter(language: str = "python") -> list:
       "    println!(\"{:?}\", two_sum(vec![2, 7, 11, 15], 9));\n"
       "}\n",
     ),
+    "php": _file(
+      "solution.php",
+      "<?php\n"
+      "function twoSum(array $nums, int $target): array {\n"
+      "    $seen = [];\n"
+      "    foreach ($nums as $index => $value) {\n"
+      "        $need = $target - $value;\n"
+      "        if (array_key_exists($need, $seen)) {\n"
+      "            return [$seen[$need], $index];\n"
+      "        }\n"
+      "        $seen[$value] = $index;\n"
+      "    }\n"
+      "    return [];\n"
+      "}\n\n"
+      "print_r(twoSum([2, 7, 11, 15], 9));\n",
+    ),
+    "ruby": _file(
+      "solution.rb",
+      "def two_sum(nums, target)\n"
+      "  seen = {}\n"
+      "  nums.each_with_index do |value, index|\n"
+      "    need = target - value\n"
+      "    return [seen[need], index] if seen.key?(need)\n"
+      "    seen[value] = index\n"
+      "  end\n"
+      "  []\n"
+      "end\n\n"
+      "p two_sum([2, 7, 11, 15], 9)\n",
+    ),
+    "shell": _file(
+      "solution.sh",
+      "#!/usr/bin/env bash\n"
+      "nums='2 7 11 15'\n"
+      "target=9\n"
+      "set -- $nums\n"
+      "index_i=0\n\n"
+      "for first in \"$@\"; do\n"
+      "  index_j=0\n"
+      "  for second in \"$@\"; do\n"
+      "    if [ \"$index_i\" -lt \"$index_j\" ] && [ $((first + second)) -eq \"$target\" ]; then\n"
+      "      echo \"$index_i $index_j\"\n"
+      "      exit 0\n"
+      "    fi\n"
+      "    index_j=$((index_j + 1))\n"
+      "  done\n"
+      "  index_i=$((index_i + 1))\n"
+      "done\n",
+    ),
+    "lua": _file(
+      "solution.lua",
+      "local function two_sum(nums, target)\n"
+      "  local seen = {}\n"
+      "  for index, value in ipairs(nums) do\n"
+      "    local need = target - value\n"
+      "    if seen[need] ~= nil then\n"
+      "      return { seen[need], index - 1 }\n"
+      "    end\n"
+      "    seen[value] = index - 1\n"
+      "  end\n"
+      "  return {}\n"
+      "end\n\n"
+      "local answer = two_sum({2, 7, 11, 15}, 9)\n"
+      "print(answer[1], answer[2])\n",
+    ),
+    "perl": _file(
+      "solution.pl",
+      "use strict;\n"
+      "use warnings;\n\n"
+      "sub two_sum {\n"
+      "  my ($nums_ref, $target) = @_;\n"
+      "  my %seen;\n"
+      "  for my $index (0 .. $#$nums_ref) {\n"
+      "    my $value = $nums_ref->[$index];\n"
+      "    my $need = $target - $value;\n"
+      "    return [$seen{$need}, $index] if exists $seen{$need};\n"
+      "    $seen{$value} = $index;\n"
+      "  }\n"
+      "  return [];\n"
+      "}\n\n"
+      "my $answer = two_sum([2, 7, 11, 15], 9);\n"
+      "print join(' ', @$answer), \"\\n\";\n",
+    ),
+    "swift": _file(
+      "solution.swift",
+      "import Foundation\n\n"
+      "func twoSum(_ nums: [Int], _ target: Int) -> [Int] {\n"
+      "    var seen: [Int: Int] = [:]\n"
+      "    for (index, value) in nums.enumerated() {\n"
+      "        let need = target - value\n"
+      "        if let match = seen[need] {\n"
+      "            return [match, index]\n"
+      "        }\n"
+      "        seen[value] = index\n"
+      "    }\n"
+      "    return []\n"
+      "}\n\n"
+      "print(twoSum([2, 7, 11, 15], 9))\n",
+    ),
+    "kotlin": _file(
+      "solution.kt",
+      "fun twoSum(nums: IntArray, target: Int): IntArray {\n"
+      "    val seen = mutableMapOf<Int, Int>()\n"
+      "    nums.forEachIndexed { index, value ->\n"
+      "        val need = target - value\n"
+      "        seen[need]?.let { return intArrayOf(it, index) }\n"
+      "        seen[value] = index\n"
+      "    }\n"
+      "    return intArrayOf()\n"
+      "}\n\n"
+      "fun main() {\n"
+      "    println(twoSum(intArrayOf(2, 7, 11, 15), 9).joinToString(\" \"))\n"
+      "}\n",
+    ),
   }
 
   return common + [starters.get(lang, starters["python"])]
@@ -238,43 +374,158 @@ ROOM_TEMPLATE_DEFINITIONS: dict[str, dict] = {
   "blank": {
     "id": "blank",
     "name": "Blank Workspace",
-    "description": "Start with an empty project. Create your own files and folders from scratch.",
+    "description": "A clean room with no starter files.",
     "category": "Empty",
     "starterLanguage": "any",
+    "featured": True,
+    "priority": 10,
     "build": lambda **kw: [],
   },
   "python-starter": {
     "id": "python-starter",
-    "name": "Python Script",
-    "description": "A clean Python workspace for scripts, algorithms, and quick practice.",
+    "name": "Python Sandbox",
+    "description": "A tiny Python setup for scripts, notes, and quick experiments.",
     "category": "Backend",
     "starterLanguage": "python",
+    "featured": True,
+    "priority": 30,
     "build": lambda **kw: [
-      _file("main.py", "def main() -> None:\n    print(\"Hello from CodeChatter\")\n\n\nif __name__ == \"__main__\":\n    main()\n"),
-      _file("README.md", "# Python Script\n\nRun `python main.py` to execute the starter script.\n"),
+      _file(
+        "main.py",
+        "def main() -> None:\n"
+        "    message = \"Hello from CodeChatter\"\n"
+        "    print(message)\n\n\n"
+        "if __name__ == \"__main__\":\n"
+        "    main()\n",
+      ),
+      _file(
+        "README.md",
+        "# Python Sandbox\n\n"
+        "- Keep quick scripts in `main.py`\n"
+        "- Add scratch notes beside your code\n"
+        "- Run the active file from the room toolbar\n",
+      ),
     ],
   },
   "dsa-practice": {
     "id": "dsa-practice",
     "name": "DSA Practice",
-    "description": "Interview-style workspace with a prompt, notes, test cases, and a starter solution in your chosen language.",
+    "description": "Problem prompt, notes, test cases, and one language-specific starter file.",
     "category": "Practice",
     "starterLanguage": "python",
+    "featured": True,
+    "priority": 20,
+    "supportedLanguages": deepcopy(DSA_LANGUAGE_OPTIONS),
+    "defaultLanguage": "python",
     "build": lambda language="python", **kw: _dsa_starter(language),
   },
   "web-starter": {
     "id": "web-starter",
-    "name": "HTML / CSS / JS",
-    "description": "A front-end starter with separated HTML, CSS, and JavaScript files.",
+    "name": "Web Prototype",
+    "description": "A simple landing page starter with structure, styles, and one interaction.",
     "category": "Frontend",
     "starterLanguage": "html",
+    "featured": True,
+    "priority": 40,
     "build": lambda **kw: [
-      _file("index.html", "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>CodeChatter Web</title>\n    <link rel=\"stylesheet\" href=\"styles/main.css\" />\n  </head>\n  <body>\n    <main class=\"app\">\n      <h1>CodeChatter Web Starter</h1>\n      <p>Edit this project together.</p>\n      <button id=\"hello-button\">Click me</button>\n    </main>\n    <script src=\"scripts/main.js\"></script>\n  </body>\n</html>\n"),
+      _file(
+        "index.html",
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "  <head>\n"
+        "    <meta charset=\"UTF-8\" />\n"
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"
+        "    <title>CodeChatter Prototype</title>\n"
+        "    <link rel=\"stylesheet\" href=\"styles/main.css\" />\n"
+        "  </head>\n"
+        "  <body>\n"
+        "    <main class=\"shell\">\n"
+        "      <p class=\"eyebrow\">Collaborative web room</p>\n"
+        "      <h1>Ship an idea fast.</h1>\n"
+        "      <p class=\"copy\">Start with one page, one script, and a design that is easy to grow together.</p>\n"
+        "      <button id=\"hello-button\">Preview interaction</button>\n"
+        "    </main>\n"
+        "    <script src=\"scripts/main.js\"></script>\n"
+        "  </body>\n"
+        "</html>\n",
+      ),
       _folder("styles", [
-        _file("main.css", "body {\n  margin: 0;\n  font-family: system-ui, sans-serif;\n  background: #111827;\n  color: #f9fafb;\n}\n\n.app {\n  max-width: 720px;\n  margin: 0 auto;\n  padding: 4rem 1.5rem;\n}\n\nbutton {\n  margin-top: 1rem;\n  padding: 0.6rem 1.4rem;\n  background: #6366f1;\n  color: white;\n  border: none;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 1rem;\n}\n"),
+        _file(
+          "main.css",
+          ":root {\n"
+          "  color-scheme: light;\n"
+          "  --bg: #f6f3ef;\n"
+          "  --card: rgba(255, 255, 255, 0.78);\n"
+          "  --ink: #18181b;\n"
+          "  --muted: #5b5568;\n"
+          "  --accent: #0f766e;\n"
+          "}\n\n"
+          "* { box-sizing: border-box; }\n\n"
+          "body {\n"
+          "  margin: 0;\n"
+          "  min-height: 100vh;\n"
+          "  display: grid;\n"
+          "  place-items: center;\n"
+          "  padding: 24px;\n"
+          "  font-family: Georgia, 'Times New Roman', serif;\n"
+          "  background:\n"
+          "    radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 32%),\n"
+          "    radial-gradient(circle at bottom right, rgba(234, 179, 8, 0.16), transparent 28%),\n"
+          "    var(--bg);\n"
+          "  color: var(--ink);\n"
+          "}\n\n"
+          ".shell {\n"
+          "  width: min(720px, 100%);\n"
+          "  padding: 56px 32px;\n"
+          "  border-radius: 28px;\n"
+          "  background: var(--card);\n"
+          "  backdrop-filter: blur(18px);\n"
+          "  box-shadow: 0 28px 90px rgba(24, 24, 27, 0.14);\n"
+          "}\n\n"
+          ".eyebrow {\n"
+          "  margin: 0 0 10px;\n"
+          "  font-size: 0.78rem;\n"
+          "  letter-spacing: 0.18em;\n"
+          "  text-transform: uppercase;\n"
+          "  color: var(--accent);\n"
+          "}\n\n"
+          "h1 {\n"
+          "  margin: 0;\n"
+          "  font-size: clamp(2.5rem, 5vw, 4.25rem);\n"
+          "  line-height: 0.95;\n"
+          "}\n\n"
+          ".copy {\n"
+          "  max-width: 42rem;\n"
+          "  margin: 18px 0 0;\n"
+          "  font-size: 1.05rem;\n"
+          "  line-height: 1.7;\n"
+          "  color: var(--muted);\n"
+          "}\n\n"
+          "button {\n"
+          "  margin-top: 28px;\n"
+          "  padding: 0.9rem 1.35rem;\n"
+          "  border: 0;\n"
+          "  border-radius: 999px;\n"
+          "  background: var(--ink);\n"
+          "  color: white;\n"
+          "  cursor: pointer;\n"
+          "  font: inherit;\n"
+          "}\n",
+        ),
       ]),
       _folder("scripts", [
-        _file("main.js", "const button = document.getElementById(\"hello-button\");\n\nbutton?.addEventListener(\"click\", () => {\n  button.textContent = \"Build something fun!\";\n});\n"),
+        _file(
+          "main.js",
+          "const button = document.getElementById(\"hello-button\");\n\n"
+          "button?.addEventListener(\"click\", () => {\n"
+          "  button.textContent = \"Prototype moving\";\n"
+          "  button.disabled = true;\n"
+          "  window.setTimeout(() => {\n"
+          "    button.textContent = \"Preview interaction\";\n"
+          "    button.disabled = false;\n"
+          "  }, 1200);\n"
+          "});\n",
+        ),
       ]),
     ],
   },
@@ -284,6 +535,8 @@ ROOM_TEMPLATE_DEFINITIONS: dict[str, dict] = {
     "description": "A lightweight Express API server with a clean project structure.",
     "category": "Backend",
     "starterLanguage": "javascript",
+    "featured": False,
+    "priority": 90,
     "build": lambda **kw: [
       _folder("src", [
         _file("index.js", "const express = require('express');\nconst app = express();\n\napp.use(express.json());\n\napp.get('/', (req, res) => {\n  res.json({ message: 'Hello from Express!' });\n});\n\napp.listen(3000, () => {\n  console.log('Server running on http://localhost:3000');\n});\n"),
@@ -344,6 +597,15 @@ class MongoRepository:
     }
 
   def list_room_templates(self) -> list[dict[str, Any]]:
+    featured_templates = sorted(
+      (
+        template
+        for template in ROOM_TEMPLATE_DEFINITIONS.values()
+        if template.get("featured", True)
+      ),
+      key=lambda template: (template.get("priority", 100), template["name"].lower()),
+    )
+
     return [
       {
         "id": template["id"],
@@ -351,8 +613,10 @@ class MongoRepository:
         "description": template["description"],
         "category": template["category"],
         "starterLanguage": template["starterLanguage"],
+        "defaultLanguage": template.get("defaultLanguage"),
+        "supportedLanguages": deepcopy(template.get("supportedLanguages", [])),
       }
-      for template in ROOM_TEMPLATE_DEFINITIONS.values()
+      for template in featured_templates
     ]
 
   def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
@@ -391,6 +655,23 @@ class MongoRepository:
     }
     self._users.insert_one(document)
     return self._strip_mongo_id(document)
+
+  def delete_user_account(self, user_id: str) -> None:
+    self.initialize()
+    user = self.get_user_by_id(user_id)
+
+    if user is None:
+      raise ValueError("User not found")
+
+    self._rooms.delete_many({"owner_id": user_id})
+    self._rooms.update_many(
+      {"participant_ids": user_id},
+      {
+        "$pull": {"participant_ids": user_id},
+        "$set": {"updated_at": self._utc_now()},
+      },
+    )
+    self._users.delete_one({"id": user_id})
 
   def upsert_oauth_user(
     self,
@@ -476,6 +757,7 @@ class MongoRepository:
       "name": name or f"{template_definition['name']} Room",
       "description": description or template_definition["description"],
       "is_public": is_public,
+      "invite_token": self.generate_invite_token(),
       "owner_id": owner_id,
       "participant_ids": [owner_id],
       "template_id": selected_template_id,
@@ -485,7 +767,7 @@ class MongoRepository:
       "updated_at": timestamp,
     }
     self._rooms.insert_one(document)
-    return self.serialize_room(document, include_workspace=True)
+    return self.serialize_room(document, include_workspace=True, viewer_user_id=owner_id)
 
   def get_room_by_id(self, room_id: str) -> dict[str, Any] | None:
     self.initialize()
@@ -501,14 +783,30 @@ class MongoRepository:
     if not self.user_can_access_room(user_id, room):
       return None
 
-    return self.serialize_room(room, include_workspace=True)
+    return self.serialize_room(room, include_workspace=True, viewer_user_id=user_id)
 
-  def join_room(self, user_id: str, room_id: str) -> dict[str, Any]:
+  def join_room(
+    self,
+    user_id: str,
+    room_id: str,
+    invite_token: str | None = None,
+  ) -> dict[str, Any]:
     self.initialize()
     room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
 
     if room is None:
       raise ValueError("Room not found")
+
+    if room.get("owner_id") != user_id and user_id not in room.get("participant_ids", []):
+      room_is_public = bool(room.get("is_public", False))
+      expected_invite_token = str(room.get("invite_token", "")).strip()
+      has_valid_invite = bool(invite_token) and expected_invite_token and hmac.compare_digest(
+        expected_invite_token,
+        invite_token,
+      )
+
+      if not room_is_public and not has_valid_invite:
+        raise PermissionError("This room is private. Join with a valid invite link.")
 
     timestamp = self._utc_now()
     self._rooms.update_one(
@@ -523,7 +821,7 @@ class MongoRepository:
       },
     )
     updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
-    return self.serialize_room(updated_room, include_workspace=True)
+    return self.serialize_room(updated_room, include_workspace=True, viewer_user_id=user_id)
 
   def delete_room(self, user_id: str, room_id: str) -> None:
     self.initialize()
@@ -549,8 +847,8 @@ class MongoRepository:
     if room is None:
       raise ValueError("Room not found")
 
-    if not self.user_can_access_room(user_id, room):
-      raise PermissionError("You do not have access to this room")
+    if room.get("owner_id") != user_id:
+      raise PermissionError("Only the room owner can change settings")
 
     normalized_tree = self.normalize_workspace_tree(workspace_tree)
     timestamp = self._utc_now()
@@ -565,7 +863,7 @@ class MongoRepository:
     )
 
     updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
-    return self.serialize_room(updated_room, include_workspace=True)
+    return self.serialize_room(updated_room, include_workspace=True, viewer_user_id=user_id)
 
   def update_room_settings(
     self,
@@ -595,7 +893,7 @@ class MongoRepository:
     self._rooms.update_one({"id": room_id}, {"$set": updates})
 
     updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
-    return self.serialize_room(updated_room, include_workspace=True)
+    return self.serialize_room(updated_room, include_workspace=True, viewer_user_id=user_id)
 
   def touch_room(self, room_id: str) -> None:
     self.initialize()
@@ -621,7 +919,7 @@ class MongoRepository:
         }
       ).sort("updated_at", DESCENDING)
     ]
-    return [self.serialize_room(room) for room in rooms]
+    return [self.serialize_room(room, viewer_user_id=user_id) for room in rooms]
 
   def list_public_rooms(self) -> list[dict[str, Any]]:
     self.initialize()
@@ -691,6 +989,10 @@ class MongoRepository:
       if self._rooms.find_one({"id": candidate}) is None:
         return candidate
 
+  @staticmethod
+  def generate_invite_token() -> str:
+    return secrets.token_urlsafe(18)
+
   def build_workspace_from_template(self, template_id: str, dsa_language: str = "python") -> list[dict[str, Any]]:
     template_definition = ROOM_TEMPLATE_DEFINITIONS.get(template_id or "blank")
 
@@ -723,6 +1025,7 @@ class MongoRepository:
     self,
     room: dict[str, Any],
     include_workspace: bool = False,
+    viewer_user_id: str | None = None,
   ) -> dict[str, Any]:
     participant_ids = room.get("participant_ids", [])
 
@@ -762,6 +1065,12 @@ class MongoRepository:
       "fileCount": self.count_workspace_files(workspace_tree),
     }
 
+    if viewer_user_id and (
+      room.get("owner_id") == viewer_user_id
+      or viewer_user_id in participant_ids
+    ):
+      serialized_room["inviteToken"] = str(room.get("invite_token", "")).strip()
+
     if include_workspace:
       serialized_room["workspaceTree"] = deepcopy(workspace_tree)
 
@@ -771,11 +1080,16 @@ class MongoRepository:
     self,
     nodes: list[dict[str, Any]],
     depth: int = 0,
+    stats: dict[str, int] | None = None,
   ) -> list[dict[str, Any]]:
+    if stats is None:
+      stats = {"nodes": 0, "characters": 0}
+
     if depth > 12:
       raise ValueError("Workspace nesting is too deep")
 
     normalized_nodes: list[dict[str, Any]] = []
+    sibling_names: set[str] = set()
 
     for raw_node in nodes:
       node_type = str(raw_node.get("type", "")).strip().lower()
@@ -784,6 +1098,12 @@ class MongoRepository:
       if not node_name:
         continue
 
+      node_name = self._build_unique_node_name(sibling_names, node_name)
+      stats["nodes"] += 1
+
+      if stats["nodes"] > MAX_WORKSPACE_NODES:
+        raise ValueError("Workspace is too large")
+
       if node_type == "folder":
         normalized_nodes.append(
           {
@@ -791,20 +1111,27 @@ class MongoRepository:
             "type": "folder",
             "name": node_name,
             "children": self.normalize_workspace_tree(
-              list(raw_node.get("children", [])),
+              list(raw_node.get("children", [])) if isinstance(raw_node.get("children", []), list) else [],
               depth + 1,
+              stats,
             ),
           }
         )
         continue
 
       if node_type == "file":
+        content = str(raw_node.get("content", ""))[:250_000]
+        stats["characters"] += len(content)
+
+        if stats["characters"] > MAX_WORKSPACE_TOTAL_CONTENT_CHARS:
+          raise ValueError("Workspace content is too large")
+
         normalized_nodes.append(
           {
             "id": str(raw_node.get("id") or _node_id()),
             "type": "file",
             "name": node_name,
-            "content": str(raw_node.get("content", ""))[:250_000],
+            "content": content,
           }
         )
 
@@ -896,6 +1223,7 @@ class MongoRepository:
           "name": room.get("name"),
           "description": room.get("description", ""),
           "is_public": bool(room.get("is_public", False)),
+          "invite_token": str(room.get("invite_token") or self.generate_invite_token()),
           "owner_id": room.get("owner_id", "system"),
           "participant_ids": list(room.get("participant_ids", [])),
           "template_id": room.get("template_id") or "blank",
@@ -918,6 +1246,7 @@ class MongoRepository:
           "name": "Frontend Jam",
           "description": "Build UI ideas together and compare approaches.",
           "is_public": True,
+          "invite_token": self.generate_invite_token(),
           "owner_id": "system",
           "participant_ids": [],
           "template_id": "web-starter",
@@ -931,6 +1260,7 @@ class MongoRepository:
           "name": "Python Practice",
           "description": "Share snippets, notes, and interview drills.",
           "is_public": True,
+          "invite_token": self.generate_invite_token(),
           "owner_id": "system",
           "participant_ids": [],
           "template_id": "python-starter",
@@ -961,6 +1291,21 @@ class MongoRepository:
       },
     )
 
+    self._rooms.update_many(
+      {
+        "$or": [
+          {"invite_token": {"$exists": False}},
+          {"invite_token": ""},
+        ],
+      },
+      {
+        "$set": {
+          "invite_token": self.generate_invite_token(),
+          "updated_at": self._utc_now(),
+        }
+      },
+    )
+
   @staticmethod
   def _normalize_node_name(value: Any) -> str:
     name = str(value or "").strip()
@@ -969,6 +1314,29 @@ class MongoRepository:
       return ""
 
     return name[:120]
+
+  @staticmethod
+  def _build_unique_node_name(existing_names: set[str], node_name: str) -> str:
+    lowered_name = node_name.lower()
+
+    if lowered_name not in existing_names:
+      existing_names.add(lowered_name)
+      return node_name
+
+    dot_index = node_name.rfind(".")
+    base_name = node_name if dot_index <= 0 else node_name[:dot_index]
+    suffix = "" if dot_index <= 0 else node_name[dot_index:]
+    counter = 2
+
+    while True:
+      candidate = f"{base_name}-{counter}{suffix}"[:120]
+      lowered_candidate = candidate.lower()
+
+      if lowered_candidate not in existing_names:
+        existing_names.add(lowered_candidate)
+        return candidate
+
+      counter += 1
 
   @staticmethod
   def _parse_datetime(value: Any) -> datetime:

@@ -1,5 +1,6 @@
 import { Copy, Home, PanelLeft, PanelRight, Play, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import UserAvatar from "./UserAvatar";
 
 function StatusText({ saveStatus, liveConnected }) {
   if (saveStatus === "saving") {
@@ -31,7 +32,8 @@ export default function TopBar({
   isRunning,
   saveStatus = "saved",
   liveConnected = false,
-  onOpenSettings
+  onOpenSettings,
+  canManageRoom = false,
 }) {
   const navigate = useNavigate();
   const visibleCollaborators = activeCollaborators.length > 0 ? activeCollaborators : collaborators;
@@ -43,11 +45,10 @@ export default function TopBar({
         <div className="flex min-w-0 items-center gap-2">
           <button
             onClick={onToggleExplorer}
-            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition-colors ${
-              explorerOpen
-                ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
-                : "text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
-            }`}
+            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition-colors ${explorerOpen
+              ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
+              : "text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+              }`}
             title="Toggle files"
           >
             <PanelLeft size={16} />
@@ -86,30 +87,25 @@ export default function TopBar({
                 const activeTarget = collaborator.typing?.filePath || collaborator.activeFilePath;
 
                 return (
-                <div
-                  key={collaborator.userId || collaborator.id}
-                  className={`relative -ml-2 first:ml-0 ${isTyping ? "z-10" : ""}`}
-                  title={
-                    activeTarget
-                      ? `${collaborator.username} ${isTyping ? "is typing in" : "editing"} ${activeTarget}`
-                      : collaborator.username
-                  }
-                >
-                  {isTyping && (
-                    <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-amber-400 shadow-[0_0_0_4px_rgba(251,191,36,0.18)] dark:border-zinc-950" />
-                  )}
-                  <img
-                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(collaborator.username || "U")}&background=random&color=fff&size=128`}
-                    alt={collaborator.username}
-                    className={`h-8 w-8 rounded-full border-2 border-white bg-zinc-100 object-cover transition-all dark:border-zinc-950 dark:bg-zinc-800 ${isTyping ? "scale-110 ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950" : ""}`}
-                    style={{
-                      boxShadow: collaborator.color
-                        ? `${isTyping ? "0 0 0 2px rgba(251,191,36,0.45), " : ""}0 0 0 1px ${collaborator.color}`
-                        : undefined,
-                    }}
-                  />
-                </div>
-              );
+                  <div
+                    key={collaborator.userId || collaborator.id}
+                    className={`relative -ml-2 first:ml-0 ${isTyping ? "z-10" : ""}`}
+                    title={
+                      activeTarget
+                        ? `${collaborator.username} ${isTyping ? "is typing in" : "editing"} ${activeTarget}`
+                        : collaborator.username
+                    }
+                  >
+                    {isTyping && (
+                      <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-amber-400 shadow-[0_0_0_4px_rgba(251,191,36,0.18)] dark:border-zinc-950" />
+                    )}
+                    <UserAvatar
+                      username={collaborator.username}
+                      size="base"
+                      className={`border-2 border-white bg-zinc-100 transition-all dark:border-zinc-950 dark:bg-zinc-800 ${isTyping ? "scale-110 ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950" : ""}`}
+                    />
+                  </div>
+                );
               })}
             </div>
           </div>
@@ -141,22 +137,23 @@ export default function TopBar({
             <span className="hidden sm:inline">Home</span>
           </button>
 
-          <button
-            onClick={onOpenSettings}
-            className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
-            title="Room Settings"
-          >
-            <Settings size={15} />
-            <span className="hidden sm:inline">Settings</span>
-          </button>
+          {canManageRoom && (
+            <button
+              onClick={onOpenSettings}
+              className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+              title="Room Settings"
+            >
+              <Settings size={15} />
+              <span className="hidden sm:inline">Settings</span>
+            </button>
+          )}
 
           <button
             onClick={onToggleSidebar}
-            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition-colors ${
-              sidebarOpen
-                ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
-                : "text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
-            }`}
+            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition-colors ${sidebarOpen
+              ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
+              : "text-zinc-500 hover:bg-zinc-200/50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+              }`}
             title="Toggle tools"
           >
             <PanelRight size={16} />

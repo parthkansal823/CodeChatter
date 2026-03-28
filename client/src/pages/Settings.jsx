@@ -6,7 +6,7 @@ import {
 import { useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
-import { usePreferences } from "../context/PreferencesContext";
+import { usePreferences } from "../hooks/usePreferences";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
@@ -14,14 +14,14 @@ import { Button } from "../components/ui/Button";
 import UserAvatar from "../components/UserAvatar";
 
 const NAV = [
-  { id: "profile",    label: "Profile",       icon: UserRound },
-  { id: "editor",     label: "Editor",         icon: Code2 },
-  { id: "appearance", label: "Appearance",     icon: Palette },
-  { id: "collab",     label: "Collaboration",  icon: Users },
-  { id: "notifs",     label: "Notifications",  icon: Bell },
-  { id: "privacy",    label: "Privacy",        icon: Shield },
-  { id: "shortcuts",  label: "Shortcuts",      icon: Zap },
-  { id: "danger",     label: "Account Actions",icon: LockKeyhole },
+  { id: "profile", label: "Profile", icon: UserRound },
+  { id: "editor", label: "Editor", icon: Code2 },
+  { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "collab", label: "Collaboration", icon: Users },
+  { id: "notifs", label: "Notifications", icon: Bell },
+  { id: "privacy", label: "Privacy", icon: Shield },
+  { id: "shortcuts", label: "Shortcuts", icon: Zap },
+  { id: "danger", label: "Account Actions", icon: LockKeyhole },
 ];
 
 const SHORTCUTS = [
@@ -40,14 +40,12 @@ function Toggle({ checked, onChange }) {
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none ${
-        checked ? "bg-violet-600" : "bg-zinc-300 dark:bg-zinc-700"
-      }`}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none ${checked ? "bg-violet-600" : "bg-zinc-300 dark:bg-zinc-700"
+        }`}
     >
       <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-4.5" : "translate-x-0.5"
-        }`}
+        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4.5" : "translate-x-0.5"
+          }`}
       />
     </button>
   );
@@ -72,7 +70,7 @@ function Row({ label, hint, action }) {
 }
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const { preferences, updatePreference, updateNotification, updatePrivacy } = usePreferences();
   const [activeSection, setActiveSection] = useState("profile");
@@ -92,6 +90,19 @@ export default function Settings() {
     logout();
     navigate("/");
     toast.success("Logged out successfully");
+  };
+
+  const confirmDeleteAccount = async () => {
+    setShowDeleteConfirm(false);
+    const result = await deleteAccount();
+
+    if (!result.success) {
+      toast.error(result.error || "Could not delete account");
+      return;
+    }
+
+    toast.success("Account deleted");
+    navigate("/", { replace: true });
   };
 
   const handleThemeChange = (newTheme) => {
@@ -210,11 +221,10 @@ export default function Settings() {
                   key={id}
                   type="button"
                   onClick={() => handleThemeChange(id)}
-                  className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all ${
-                    preferences.theme === id
+                  className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all ${preferences.theme === id
                       ? "border-violet-500 bg-violet-50 dark:border-violet-400 dark:bg-violet-900/10"
                       : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/50"
-                  }`}
+                    }`}
                 >
                   <div className={`rounded-lg p-2 ${preferences.theme === id ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"}`}>
                     <Icon size={16} />
@@ -351,11 +361,10 @@ export default function Settings() {
                   key={id}
                   type="button"
                   onClick={() => setActiveSection(id)}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                    activeSection === id
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${activeSection === id
                       ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
                       : "text-zinc-600 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
-                  }`}
+                    }`}
                 >
                   <Icon size={15} />
                   {label}
@@ -389,7 +398,7 @@ export default function Settings() {
       <ConfirmModal isOpen={showDeleteConfirm} title="Delete Account"
         description="This permanently deletes your account and all data. This cannot be undone."
         confirmText="Delete Account" cancelText="Cancel" isDestructive
-        onConfirm={() => { setShowDeleteConfirm(false); toast.error("Account deletion not yet implemented"); }}
+        onConfirm={confirmDeleteAccount}
         onCancel={() => setShowDeleteConfirm(false)} />
     </div>
   );

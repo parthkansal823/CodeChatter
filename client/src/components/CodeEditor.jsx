@@ -7,7 +7,7 @@ import { ChevronRight } from "lucide-react";
 import "../utils/monaco";
 import { detectLanguageFromName } from "../utils/workspace";
 import { getFileVisual } from "../utils/fileIcons";
-import { usePreferences } from "../context/PreferencesContext";
+import { usePreferences } from "../hooks/usePreferences";
 
 function Breadcrumb({ filePath, fileName }) {
   if (!filePath) return null;

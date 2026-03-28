@@ -1,0 +1,58 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.swp
+*.tmp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+server/ws-debug.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+client/.env
+client/.env.local
+client/src/.env
+server/.env
+server/.env.local
+!.env.example
+!client/.env.example
+!server/.env.example
+
+# Node / frontend
+node_modules/
+client/node_modules/
+client/dist/
+dist/
+
+# Python / backend
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+server/venv/
+server/__pycache__/
+
+# Local app data
+server/data/
+!server/data/.gitkeep
+
+# Coverage / temp
+coverage/
+htmlcov/
+tmp/
+temp/

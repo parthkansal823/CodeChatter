@@ -116,7 +116,7 @@ export default function FileItem({
             : "text-zinc-700 hover:bg-zinc-100/60 border-transparent dark:text-zinc-300 dark:hover:bg-zinc-900/40"
       }`}
       style={{ paddingLeft: `${depth * 16 + 3}px` }}
-      onClick={(e) => {
+      onClick={() => {
         if (!isRenaming) {
           if (isFolder) onToggleFolder?.(node.id);
           onSelect?.(node);

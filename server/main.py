@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections import defaultdict, deque
 import hashlib
 import hmac
 import logging
+import math
 import os
 import re
 import secrets
@@ -13,6 +15,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
+from threading import Lock
+import time
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
@@ -29,11 +33,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
 try:
-  from .database import MongoRepository
+  from .database import DSA_LANGUAGE_IDS, MongoRepository, ROOM_TEMPLATE_DEFINITIONS
 except ImportError:
-  from database import MongoRepository
+  from database import DSA_LANGUAGE_IDS, MongoRepository, ROOM_TEMPLATE_DEFINITIONS
 
-load_dotenv()
+APP_DIR = Path(__file__).resolve().parent
+load_dotenv(APP_DIR / ".env.local")
+load_dotenv(APP_DIR / ".env")
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("codechatter.server")
@@ -65,7 +71,6 @@ GEMINI_API_BASE_URL = os.getenv(
   "https://generativelanguage.googleapis.com/v1beta",
 ).rstrip("/")
 
-APP_DIR = Path(__file__).resolve().parent
 CLIENT_DIST_DIR = APP_DIR.parent / "client" / "dist"
 CLIENT_INDEX_FILE = CLIENT_DIST_DIR / "index.html"
 repository = MongoRepository(
@@ -79,7 +84,17 @@ USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
 ROOM_ID_PATTERN = re.compile(r"^[A-Z0-9]{6,20}$")
 TEMPLATE_ID_PATTERN = re.compile(r"^[a-z0-9-]{3,40}$")
 TERMINAL_SHELL_PATTERN = re.compile(r"^(bash|powershell|cmd|sh)$")
+INVITE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{12,120}$")
 _UNSET = object()
+ALLOWED_ORIGIN_SET = {
+  parsed_origin
+  for parsed_origin in {
+    urlparse(origin).scheme and f"{urlparse(origin).scheme}://{urlparse(origin).netloc}"
+    for origin in [*ALLOWED_ORIGINS, DEFAULT_FRONTEND_URL]
+    if origin.strip()
+  }
+  if parsed_origin
+}
 
 
 @asynccontextmanager
@@ -105,6 +120,31 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
       response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
     return response
+
+
+class SlidingWindowRateLimiter:
+  def __init__(self) -> None:
+    self._requests: dict[str, deque[float]] = defaultdict(deque)
+    self._lock = Lock()
+
+  def hit(self, key: str, *, limit: int, window_seconds: int) -> float | None:
+    now = time.monotonic()
+
+    with self._lock:
+      attempts = self._requests[key]
+
+      while attempts and now - attempts[0] >= window_seconds:
+        attempts.popleft()
+
+      if len(attempts) >= limit:
+        retry_after = max(0.0, window_seconds - (now - attempts[0]))
+        return retry_after
+
+      attempts.append(now)
+      return None
+
+
+rate_limiter = SlidingWindowRateLimiter()
 
 
 class CollaborationManager:
@@ -182,22 +222,27 @@ class CollaborationManager:
     active_file_path: str | None | object = _UNSET,
     cursor: dict[str, Any] | None | object = _UNSET,
     typing: dict[str, Any] | None | object = _UNSET,
-  ) -> list[dict[str, Any]]:
+  ) -> tuple[list[dict[str, Any]], bool]:
     async with self._lock:
       room_connections = self._rooms.get(room_id, {})
       connection = room_connections.get(session_id)
 
       if connection is None:
-        return []
+        return [], False
 
-      if active_file_path is not _UNSET:
+      changed = False
+
+      if active_file_path is not _UNSET and connection.get("active_file_path") != active_file_path:
         connection["active_file_path"] = active_file_path
+        changed = True
 
-      if cursor is not _UNSET:
+      if cursor is not _UNSET and connection.get("cursor") != cursor:
         connection["cursor"] = cursor
+        changed = True
 
-      if typing is not _UNSET:
+      if typing is not _UNSET and connection.get("typing") != typing:
         connection["typing"] = typing
+        changed = True
 
       presence = [
         self._serialize_connection(item)
@@ -205,7 +250,7 @@ class CollaborationManager:
       ]
 
     presence.sort(key=lambda item: (item["username"].lower(), item["sessionId"]))
-    return presence
+    return presence, changed
 
   async def broadcast(
     self,
@@ -319,6 +364,67 @@ def normalize_terminal_shell(value: str | None) -> str:
   return normalized
 
 
+def normalize_invite_token(value: str | None) -> str | None:
+  if value is None:
+    return None
+
+  normalized = value.strip()
+
+  if not normalized:
+    return None
+
+  if not INVITE_TOKEN_PATTERN.fullmatch(normalized):
+    raise ValueError("Invalid invite token")
+
+  return normalized
+
+
+def get_client_identifier(request: Request) -> str:
+  forwarded_for = request.headers.get("x-forwarded-for", "")
+  if forwarded_for:
+    first_hop = forwarded_for.split(",")[0].strip()
+    if first_hop:
+      return first_hop
+
+  return request.client.host if request.client else "unknown-client"
+
+
+def enforce_rate_limit(*, bucket: str, key: str, limit: int, window_seconds: int) -> None:
+  retry_after = rate_limiter.hit(
+    f"{bucket}:{key}",
+    limit=limit,
+    window_seconds=window_seconds,
+  )
+
+  if retry_after is not None:
+    retry_seconds = max(1, math.ceil(retry_after))
+    raise HTTPException(
+      status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+      detail=f"Too many requests. Try again in {retry_seconds} seconds.",
+    )
+
+
+def is_allowed_origin(origin: str | None) -> bool:
+  if not origin:
+    return ENVIRONMENT != "production"
+
+  parsed_origin = urlparse(origin)
+  normalized_origin = f"{parsed_origin.scheme}://{parsed_origin.netloc}".rstrip("/")
+  return normalized_origin in ALLOWED_ORIGIN_SET
+
+
+def validate_websocket_origin(websocket: WebSocket) -> None:
+  origin = websocket.headers.get("origin")
+
+  if is_allowed_origin(origin):
+    return
+
+  raise HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="WebSocket origin is not allowed",
+  )
+
+
 class LoginRequest(BaseModel):
   email: str = Field(min_length=3, max_length=254)
   password: str = Field(min_length=8, max_length=128)
@@ -391,12 +497,14 @@ class RoomCreateRequest(BaseModel):
   @field_validator("dsaLanguage")
   @classmethod
   def validate_dsa_language(cls, value: str | None) -> str:
-    allowed = {"python","javascript","typescript","cpp","java","c","go","rust"}
     if not value:
       return "python"
-    if value.lower() not in allowed:
-      raise ValueError(f"Unsupported DSA language. Choose from: {', '.join(sorted(allowed))}")
-    return value.lower()
+    normalized = value.lower()
+    if normalized not in DSA_LANGUAGE_IDS:
+      raise ValueError(
+        f"Unsupported DSA language. Choose from: {', '.join(sorted(DSA_LANGUAGE_IDS))}"
+      )
+    return normalized
 
   @field_validator("name", "description")
   @classmethod
@@ -412,7 +520,7 @@ class RoomCreateRequest(BaseModel):
   def normalize_template_id(cls, value: str | None) -> str:
     normalized = (value or "blank").strip().lower()
 
-    if not TEMPLATE_ID_PATTERN.fullmatch(normalized):
+    if not TEMPLATE_ID_PATTERN.fullmatch(normalized) or normalized not in ROOM_TEMPLATE_DEFINITIONS:
       raise ValueError("Invalid room template")
 
     return normalized
@@ -425,6 +533,7 @@ class RoomCreateRequest(BaseModel):
 
 class RoomJoinRequest(BaseModel):
   roomId: str = Field(min_length=6, max_length=20)
+  inviteToken: str | None = Field(default=None, max_length=120)
 
   @field_validator("roomId")
   @classmethod
@@ -435,6 +544,11 @@ class RoomJoinRequest(BaseModel):
       raise ValueError("Room ID must be 6-20 uppercase letters or numbers")
 
     return normalized
+
+  @field_validator("inviteToken")
+  @classmethod
+  def validate_invite_token(cls, value: str | None) -> str | None:
+    return normalize_invite_token(value)
 
 
 class RoomSettingsUpdateRequest(BaseModel):
@@ -1184,7 +1298,14 @@ def health() -> dict[str, Any]:
 
 
 @app.post("/api/auth/signup")
-def signup(payload: SignupRequest) -> dict[str, Any]:
+def signup(payload: SignupRequest, request: Request) -> dict[str, Any]:
+  enforce_rate_limit(
+    bucket="signup",
+    key=get_client_identifier(request),
+    limit=6,
+    window_seconds=60 * 60,
+  )
+
   if repository.get_user_by_email(payload.email):
     raise HTTPException(
       status_code=status.HTTP_409_CONFLICT,
@@ -1212,7 +1333,14 @@ def signup(payload: SignupRequest) -> dict[str, Any]:
 
 
 @app.post("/api/auth/login")
-def login(payload: LoginRequest) -> dict[str, Any]:
+def login(payload: LoginRequest, request: Request) -> dict[str, Any]:
+  enforce_rate_limit(
+    bucket="login",
+    key=f"{get_client_identifier(request)}:{payload.email.lower()}",
+    limit=10,
+    window_seconds=15 * 60,
+  )
+
   user = (
     repository.get_user_by_email(payload.email)
     if "@" in payload.email
@@ -1240,6 +1368,19 @@ def logout(_: dict[str, Any] = Depends(get_current_user)) -> dict[str, bool]:
   return {"success": True}
 
 
+@app.delete("/api/auth/account")
+def delete_account(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, bool]:
+  try:
+    repository.delete_user_account(current_user["id"])
+  except ValueError as error:
+    raise HTTPException(
+      status_code=status.HTTP_404_NOT_FOUND,
+      detail=str(error),
+    ) from error
+
+  return {"success": True}
+
+
 @app.get("/api/auth/me")
 def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
   return repository.serialize_user(current_user)
@@ -1253,8 +1394,16 @@ def get_room_templates() -> list[dict[str, Any]]:
 @app.post("/api/rooms/create")
 def create_room(
   payload: RoomCreateRequest,
+  request: Request,
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
+  enforce_rate_limit(
+    bucket="room-create",
+    key=f"{current_user['id']}:{get_client_identifier(request)}",
+    limit=12,
+    window_seconds=60,
+  )
+
   try:
     return repository.create_room(
       owner_id=current_user["id"],
@@ -1275,16 +1424,30 @@ def create_room(
 @app.post("/api/rooms/join")
 def join_room(
   payload: RoomJoinRequest,
+  request: Request,
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
+  enforce_rate_limit(
+    bucket="room-join",
+    key=f"{current_user['id']}:{get_client_identifier(request)}",
+    limit=25,
+    window_seconds=60,
+  )
+
   try:
     return repository.join_room(
       user_id=current_user["id"],
       room_id=payload.roomId,
+      invite_token=payload.inviteToken,
     )
   except ValueError as error:
     raise HTTPException(
       status_code=status.HTTP_404_NOT_FOUND,
+      detail=str(error),
+    ) from error
+  except PermissionError as error:
+    raise HTTPException(
+      status_code=status.HTTP_403_FORBIDDEN,
       detail=str(error),
     ) from error
 
@@ -1398,6 +1561,13 @@ def run_room_file(
   payload: RoomRunRequest,
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
+  enforce_rate_limit(
+    bucket="room-run",
+    key=current_user["id"],
+    limit=20,
+    window_seconds=60,
+  )
+
   normalized_room_id = validate_room_id_value(room_id)
   room = repository.get_room_by_id(normalized_room_id)
 
@@ -1427,6 +1597,13 @@ async def assist_with_gemini(
   payload: GeminiAssistRequest,
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
+  enforce_rate_limit(
+    bucket="ai-assist",
+    key=current_user["id"],
+    limit=12,
+    window_seconds=60,
+  )
+
   if payload.roomId:
     room = repository.get_room_by_id(payload.roomId)
 
@@ -1466,38 +1643,41 @@ async def assist_with_gemini(
 
 @app.websocket("/api/rooms/{room_id}/collaborate")
 async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str):
-  await websocket.accept()
+  connection: dict[str, Any] | None = None
+  normalized_room_id: str | None = None
 
   try:
+    validate_websocket_origin(websocket)
     current_user = get_current_user_from_token(token)
+    normalized_room_id = validate_room_id_value(room_id)
+    room = repository.get_room_by_id(normalized_room_id)
+
+    if room is None:
+      raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Room not found",
+      )
+
+    if not repository.user_can_access_room(current_user["id"], room):
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this room",
+      )
+
+    await websocket.accept()
+    connection = await collaboration_manager.connect(normalized_room_id, websocket, current_user)
   except HTTPException as error:
     try:
-      await websocket.send_json({"type": "error", "detail": error.detail})
-      await websocket.close(code=1008)
+      await websocket.close(code=1008, reason=str(error.detail))
     except Exception:
       pass
     return
-
-  normalized_room_id = validate_room_id_value(room_id)
-  room = repository.get_room_by_id(normalized_room_id)
-
-  if room is None:
+  except Exception:
     try:
-      await websocket.send_json({"type": "error", "detail": "Room not found"})
       await websocket.close(code=1008)
     except Exception:
       pass
     return
-
-  if not repository.user_can_access_room(current_user["id"], room):
-    try:
-      await websocket.send_json({"type": "error", "detail": "You do not have access to this room"})
-      await websocket.close(code=1008)
-    except Exception:
-      pass
-    return
-
-  connection = await collaboration_manager.connect(normalized_room_id, websocket, current_user)
 
   try:
     initial_room = repository.get_room_for_user(current_user["id"], normalized_room_id)
@@ -1534,18 +1714,19 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
           await websocket.send_json({"type": "error", "detail": str(error)})
           continue
 
-        presence = await collaboration_manager.update_presence(
+        presence, changed = await collaboration_manager.update_presence(
           normalized_room_id,
           connection["session_id"],
           active_file_path=active_file_path,
         )
-        await collaboration_manager.broadcast(
-          normalized_room_id,
-          {
-            "type": "presence_snapshot",
-            "presence": presence,
-          },
-        )
+        if changed:
+          await collaboration_manager.broadcast(
+            normalized_room_id,
+            {
+              "type": "presence_snapshot",
+              "presence": presence,
+            },
+          )
         continue
 
       if message_type == "cursor_update":
@@ -1556,19 +1737,20 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
           await websocket.send_json({"type": "error", "detail": str(error)})
           continue
 
-        presence = await collaboration_manager.update_presence(
+        presence, changed = await collaboration_manager.update_presence(
           normalized_room_id,
           connection["session_id"],
           active_file_path=active_file_path,
           cursor=cursor,
         )
-        await collaboration_manager.broadcast(
-          normalized_room_id,
-          {
-            "type": "presence_snapshot",
-            "presence": presence,
-          },
-        )
+        if changed:
+          await collaboration_manager.broadcast(
+            normalized_room_id,
+            {
+              "type": "presence_snapshot",
+              "presence": presence,
+            },
+          )
         continue
 
       if message_type == "typing_update":
@@ -1583,19 +1765,20 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
           "filePath": active_file_path,
           "updatedAt": utc_now().isoformat(),
         }
-        presence = await collaboration_manager.update_presence(
+        presence, changed = await collaboration_manager.update_presence(
           normalized_room_id,
           connection["session_id"],
           active_file_path=active_file_path,
           typing=typing_payload,
         )
-        await collaboration_manager.broadcast(
-          normalized_room_id,
-          {
-            "type": "presence_snapshot",
-            "presence": presence,
-          },
-        )
+        if changed:
+          await collaboration_manager.broadcast(
+            normalized_room_id,
+            {
+              "type": "presence_snapshot",
+              "presence": presence,
+            },
+          )
         continue
 
       if message_type == "workspace_update":
@@ -1621,7 +1804,7 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
           await websocket.send_json({"type": "error", "detail": str(error)})
           continue
 
-        presence = await collaboration_manager.update_presence(
+        presence, changed = await collaboration_manager.update_presence(
           normalized_room_id,
           connection["session_id"],
           active_file_path=active_file_path,
@@ -1644,13 +1827,14 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
           },
           exclude_session_id=connection["session_id"],
         )
-        await collaboration_manager.broadcast(
-          normalized_room_id,
-          {
-            "type": "presence_snapshot",
-            "presence": presence,
-          },
-        )
+        if changed:
+          await collaboration_manager.broadcast(
+            normalized_room_id,
+            {
+              "type": "presence_snapshot",
+              "presence": presence,
+            },
+          )
         continue
 
       if message_type == "ping":
@@ -1668,37 +1852,42 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
   except Exception as error:
     logger.exception("Collaboration websocket error for room %s: %s", normalized_room_id, error)
   finally:
-    await collaboration_manager.disconnect(normalized_room_id, connection["session_id"])
-    await collaboration_manager.broadcast(
-      normalized_room_id,
-      {
-        "type": "presence_snapshot",
-        "presence": await collaboration_manager.list_presence(normalized_room_id),
-      },
-    )
+    if connection and normalized_room_id:
+      await collaboration_manager.disconnect(normalized_room_id, connection["session_id"])
+      await collaboration_manager.broadcast(
+        normalized_room_id,
+        {
+          "type": "presence_snapshot",
+          "presence": await collaboration_manager.list_presence(normalized_room_id),
+        },
+      )
 
 
 @app.websocket("/api/rooms/{room_id}/terminal")
 async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
-    await websocket.accept()
-    
-    # Authenticate token manually for websocket
     try:
+        validate_websocket_origin(websocket)
         current_user = get_current_user_from_token(token)
         user_id = current_user["id"]
+        normalized_room_id = validate_room_id_value(room_id)
     except Exception:
         try:
-            await websocket.send_text("\r\n\x1b[31mx Authentication failed \x1b[0m\r\n")
-            await websocket.close()
+            await websocket.close(code=1008)
         except Exception:
             pass
         return
 
-    normalized_room_id = validate_room_id_value(room_id)
-    room = repository.get_room_by_id(normalized_room_id)
-    if not room or not repository.user_can_access_room(user_id, room):
-        try:
+    await websocket.accept()
+
+    try:
+        room = repository.get_room_by_id(normalized_room_id)
+        if not room or not repository.user_can_access_room(user_id, room):
             await websocket.send_text("\r\n\x1b[31mx Room access denied \x1b[0m\r\n")
+            await websocket.close()
+            return
+    except Exception:
+        try:
+            await websocket.send_text("\r\n\x1b[31mx Authentication failed \x1b[0m\r\n")
             await websocket.close()
         except Exception:
             pass

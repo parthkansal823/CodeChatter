@@ -7,9 +7,7 @@ import {
   Link2,
   MoreVertical,
   Plus,
-  Settings2,
   Trash2,
-  Terminal,
   Users
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -36,24 +34,27 @@ const SkeletonCard = () => (
   </div>
 );
 
-function extractRoomId(rawValue) {
+function parseRoomInvite(rawValue) {
   const trimmedValue = rawValue.trim();
 
   if (!trimmedValue) {
-    return "";
+    return { roomId: "", inviteToken: null };
   }
 
   if (/^https?:\/\//i.test(trimmedValue)) {
     try {
       const url = new URL(trimmedValue);
       const segments = url.pathname.split("/").filter(Boolean);
-      return (segments.at(-1) || "").toUpperCase();
+      return {
+        roomId: (segments.at(-1) || "").toUpperCase(),
+        inviteToken: url.searchParams.get("invite")?.trim() || null,
+      };
     } catch {
-      return trimmedValue.toUpperCase();
+      return { roomId: trimmedValue.toUpperCase(), inviteToken: null };
     }
   }
 
-  return trimmedValue.toUpperCase();
+  return { roomId: trimmedValue.toUpperCase(), inviteToken: null };
 }
 
 const containerVariants = {
@@ -90,21 +91,27 @@ export default function Home() {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
 
-  const DSA_LANGUAGES = [
-    { id: "python",     label: "Python" },
-    { id: "javascript", label: "JS" },
-    { id: "typescript", label: "TS" },
-    { id: "cpp",        label: "C++" },
-    { id: "java",       label: "Java" },
-    { id: "c",          label: "C" },
-    { id: "go",         label: "Go" },
-    { id: "rust",       label: "Rust" },
-  ];
-
   const selectedTemplate = useMemo(
     () => roomTemplates.find((t) => t.id === selectedTemplateId) || null,
     [roomTemplates, selectedTemplateId]
   );
+  const selectedTemplateLanguages = useMemo(
+    () => selectedTemplate?.supportedLanguages || [],
+    [selectedTemplate]
+  );
+
+  useEffect(() => {
+    if (selectedTemplateId !== "dsa-practice") {
+      return;
+    }
+
+    const supportedLanguageIds = new Set(selectedTemplateLanguages.map((language) => language.id));
+    const preferredLanguage = selectedTemplate?.defaultLanguage || selectedTemplateLanguages[0]?.id || "python";
+
+    if (!supportedLanguageIds.has(dsaLanguage)) {
+      setDsaLanguage(preferredLanguage);
+    }
+  }, [dsaLanguage, selectedTemplate, selectedTemplateId, selectedTemplateLanguages]);
 
   useEffect(() => {
     if (!token) {
@@ -162,7 +169,7 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleJoinById = async (roomId) => {
+  const handleJoinById = async (roomId, inviteToken = null) => {
     if (!roomId) {
       toast.error("Enter a room ID or invite link");
       return;
@@ -180,7 +187,7 @@ export default function Home() {
         API_ENDPOINTS.JOIN_ROOM,
         {
           method: "POST",
-          body: JSON.stringify({ roomId }),
+          body: JSON.stringify({ roomId, inviteToken }),
         },
         token
       );
@@ -276,7 +283,7 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-zinc-50 to-white text-black dark:from-zinc-950 dark:to-zinc-950/90 dark:text-white">
-      <Motion.div 
+      <Motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -328,7 +335,8 @@ export default function Home() {
             variants={itemVariants}
             onSubmit={(event) => {
               event.preventDefault();
-              handleJoinById(extractRoomId(joinRoomValue));
+              const { roomId, inviteToken } = parseRoomInvite(joinRoomValue);
+              handleJoinById(roomId, inviteToken);
             }}
             className="rounded-2xl border border-zinc-200 bg-white/70 p-6 transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
           >
@@ -399,11 +407,10 @@ export default function Home() {
                               e.stopPropagation();
                               setOpenMenuId(openMenuId === room.id ? null : room.id);
                             }}
-                            className={`rounded-lg p-1.5 transition-colors ${
-                              openMenuId === room.id
-                                ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
-                                : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                            }`}
+                            className={`rounded-lg p-1.5 transition-colors ${openMenuId === room.id
+                              ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+                              : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                              }`}
                             title="Workspace settings"
                           >
                             <MoreVertical size={16} />
@@ -432,7 +439,10 @@ export default function Home() {
 
                                 <button
                                   onClick={() => {
-                                    const url = `${window.location.origin}/room/${room.id}`;
+                                    const inviteQuery = room.inviteToken
+                                      ? `?invite=${encodeURIComponent(room.inviteToken)}`
+                                      : "";
+                                    const url = `${window.location.origin}/room/${room.id}${inviteQuery}`;
                                     navigator.clipboard.writeText(url);
                                     toast.success("Invite link copied!");
                                     setOpenMenuId(null);
@@ -456,11 +466,10 @@ export default function Home() {
                                       <button
                                         key={shell.id}
                                         onClick={() => { handleUpdateShell(room, shell.id); setOpenMenuId(null); }}
-                                        className={`rounded-lg py-1.5 text-[11px] font-bold tracking-wide transition-all ${
-                                          isActive
-                                            ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
-                                            : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                                        }`}
+                                        className={`rounded-lg py-1.5 text-[11px] font-bold tracking-wide transition-all ${isActive
+                                          ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
+                                          : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                                          }`}
                                         title={shell.label}
                                       >
                                         {shell.shortLabel}
@@ -586,20 +595,19 @@ export default function Home() {
                       {terminalShellOptions.find((shell) => shell.id === selectedShell)?.description}
                     </p>
                     <div className="grid grid-cols-3 gap-2">
-                    {terminalShellOptions.map((shell) => (
-                      <button
-                        key={shell.id}
-                        type="button"
-                        onClick={() => setSelectedShell(shell.id)}
-                        className={`rounded-lg border px-3 py-2 text-center text-sm font-medium transition-colors ${
-                          selectedShell === shell.id
+                      {terminalShellOptions.map((shell) => (
+                        <button
+                          key={shell.id}
+                          type="button"
+                          onClick={() => setSelectedShell(shell.id)}
+                          className={`rounded-lg border px-3 py-2 text-center text-sm font-medium transition-colors ${selectedShell === shell.id
                             ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-950 shadow-sm"
                             : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700"
-                        }`}
-                      >
-                        {shell.label}
-                      </button>
-                    ))}
+                            }`}
+                        >
+                          {shell.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -621,19 +629,17 @@ export default function Home() {
                         key={template.id}
                         type="button"
                         onClick={() => setSelectedTemplateId(template.id)}
-                        className={`rounded-xl border p-4 text-left transition-colors ${
-                          selectedTemplateId === template.id
-                            ? "border-violet-600 bg-violet-50 dark:border-violet-400 dark:bg-violet-900/10"
-                            : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
-                        }`}
+                        className={`rounded-xl border p-4 text-left transition-colors ${selectedTemplateId === template.id
+                          ? "border-violet-600 bg-violet-50 dark:border-violet-400 dark:bg-violet-900/10"
+                          : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                          }`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <p className={`font-medium text-sm ${selectedTemplateId === template.id ? "text-violet-700 dark:text-violet-300" : ""}`}>{template.name}</p>
-                          <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${
-                            selectedTemplateId === template.id
-                              ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-                              : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-                          }`}>
+                          <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${selectedTemplateId === template.id
+                            ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                            }`}>
                             {template.category}
                           </span>
                         </div>
@@ -651,23 +657,22 @@ export default function Home() {
                         Starter Language
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {DSA_LANGUAGES.map((lang) => (
+                        {selectedTemplateLanguages.map((lang) => (
                           <button
                             key={lang.id}
                             type="button"
                             onClick={() => setDsaLanguage(lang.id)}
-                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              dsaLanguage === lang.id
-                                ? "border-violet-600 bg-violet-600 text-white dark:border-violet-400 dark:bg-violet-400 dark:text-zinc-900"
-                                : "border-zinc-200 bg-white text-zinc-600 hover:border-violet-300 hover:text-violet-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
-                            }`}
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${dsaLanguage === lang.id
+                              ? "border-violet-600 bg-violet-600 text-white dark:border-violet-400 dark:bg-violet-400 dark:text-zinc-900"
+                              : "border-zinc-200 bg-white text-zinc-600 hover:border-violet-300 hover:text-violet-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+                              }`}
                           >
                             {lang.label}
                           </button>
                         ))}
                       </div>
                       <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        A <strong>{DSA_LANGUAGES.find(l => l.id === dsaLanguage)?.label}</strong> starter solution will be added to your workspace.
+                        A <strong>{selectedTemplateLanguages.find((language) => language.id === dsaLanguage)?.label || "Python"}</strong> starter solution will be added to your workspace.
                       </p>
                     </div>
                   )}

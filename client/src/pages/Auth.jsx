@@ -115,23 +115,20 @@ export default function Auth() {
 
         <div className="relative flex p-1 mb-8 bg-black/40 border border-white/5 rounded-xl overflow-hidden">
           <div
-            className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white/10 border border-white/10 rounded-lg shadow-sm transition-transform duration-300 ease-out ${
-              mode === "signup" ? "translate-x-[calc(100%+0px)]" : "translate-x-0"
-            }`}
+            className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white/10 border border-white/10 rounded-lg shadow-sm transition-transform duration-300 ease-out ${mode === "signup" ? "translate-x-[calc(100%+0px)]" : "translate-x-0"
+              }`}
           />
           <button
             onClick={() => setMode("login")}
-            className={`relative w-1/2 py-2.5 text-sm font-semibold tracking-wide transition-colors z-10 ${
-              mode === "login" ? "text-white" : "text-gray-400 hover:text-white"
-            }`}
+            className={`relative w-1/2 py-2.5 text-sm font-semibold tracking-wide transition-colors z-10 ${mode === "login" ? "text-white" : "text-gray-400 hover:text-white"
+              }`}
           >
             Login
           </button>
           <button
             onClick={() => setMode("signup")}
-            className={`relative w-1/2 py-2.5 text-sm font-semibold tracking-wide transition-colors z-10 ${
-              mode === "signup" ? "text-white" : "text-gray-400 hover:text-white"
-            }`}
+            className={`relative w-1/2 py-2.5 text-sm font-semibold tracking-wide transition-colors z-10 ${mode === "signup" ? "text-white" : "text-gray-400 hover:text-white"
+              }`}
           >
             Sign Up
           </button>

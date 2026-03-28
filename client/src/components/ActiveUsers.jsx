@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import UserAvatar from "./UserAvatar";
 
 export default function ActiveUsers({ users = [] }) {
 
@@ -20,31 +21,20 @@ export default function ActiveUsers({ users = [] }) {
 
       {sortedUsers.map((user, index) => {
 
-        const color = colors[index % colors.length];
-
-        return (
-          <div
-            key={user.name}
-            title={user.name}
-            className={`relative w-8 h-8 rounded-full flex items-center justify-center
-            text-white text-xs font-semibold
-            ${color}
-            ${user.active ? "ring-2 ring-green-400" : "opacity-40"}
-            border-2 border-white dark:border-zinc-950`}
-          >
-
-            {user.name.charAt(0)}
-
-            {user.active && (
-              <span
-                className="absolute bottom-0 right-0 w-2.5 h-2.5
+        <div key={user.name} className="relative">
+          <UserAvatar
+            username={user.name}
+            size="base"
+            className={`border-2 border-white dark:border-zinc-950 ${user.active ? "ring-2 ring-green-400" : "opacity-40"}`}
+          />
+          {user.active && (
+            <span
+              className="absolute bottom-0 right-0 w-2.5 h-2.5
                 bg-green-400 border-2 border-white dark:border-zinc-950
                 rounded-full"
-              />
-            )}
-
-          </div>
-        );
+            />
+          )}
+        </div>
 
       })}
 

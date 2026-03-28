@@ -37,6 +37,7 @@ export const API_ENDPOINTS = {
   SIGNUP: `${API_BASE_URL}/api/auth/signup`,
   LOGOUT: `${API_BASE_URL}/api/auth/logout`,
   ME: `${API_BASE_URL}/api/auth/me`,
+  DELETE_ACCOUNT: `${API_BASE_URL}/api/auth/account`,
 
   // Rooms
   CREATE_ROOM: `${API_BASE_URL}/api/rooms/create`,

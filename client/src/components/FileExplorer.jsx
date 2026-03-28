@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronRight, FilePlus2, FolderPlus, X } from "lucide-react";
 
 import FileItem from "./FileItem";
@@ -104,6 +104,7 @@ export default function FileExplorer({
   const isCollapsed = !mobile && !isOpen;
   const explorerEntries = useMemo(() => flattenWorkspaceTree(tree), [tree]);
   const folderIds = useMemo(() => collectFolderIds(tree), [tree]);
+  const folderIdSet = useMemo(() => new Set(folderIds), [folderIds]);
   const activeFolderCount = folderIds.length;
   const activeFileCount = useMemo(() => countFiles(tree), [tree]);
   const focusedEntry = explorerEntries.find((entry) => entry.id === focusedNodeId) || null;
@@ -111,37 +112,17 @@ export default function FileExplorer({
     ? focusedEntry.id
     : focusedEntry?.parentId || null;
 
-  useEffect(() => {
-    setCollapsedFolders((current) => {
-      return new Set([...current].filter((folderId) => folderIds.includes(folderId)));
-    });
-  }, [folderIds]);
+  const visibleCollapsedFolders = useMemo(() => {
+    const next = new Set([...collapsedFolders].filter((folderId) => folderIdSet.has(folderId)));
 
-  useEffect(() => {
     if (!focusedNodeId) {
-      return;
+      return next;
     }
 
-    const ancestorIds = findAncestorFolderIds(tree, focusedNodeId);
-
-    if (!ancestorIds?.length) {
-      return;
-    }
-
-    setCollapsedFolders((current) => {
-      const next = new Set(current);
-      let changed = false;
-
-      ancestorIds.forEach((folderId) => {
-        if (next.has(folderId)) {
-          next.delete(folderId);
-          changed = true;
-        }
-      });
-
-      return changed ? next : current;
-    });
-  }, [focusedNodeId, tree]);
+    const ancestorIds = findAncestorFolderIds(tree, focusedNodeId) || [];
+    ancestorIds.forEach((folderId) => next.delete(folderId));
+    return next;
+  }, [collapsedFolders, folderIdSet, focusedNodeId, tree]);
 
   if (mobile && !isOpen) {
     return null;
@@ -233,7 +214,7 @@ export default function FileExplorer({
 
   const renderNodes = (nodes, depth = 0) => {
     return sortNodes(nodes).map((node) => {
-      const isExpanded = node.type === "folder" ? !collapsedFolders.has(node.id) : false;
+      const isExpanded = node.type === "folder" ? !visibleCollapsedFolders.has(node.id) : false;
 
       return (
         <div key={node.id}>

@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useEffect } from "react";
-
-const PreferencesContext = createContext();
+import { useState, useEffect } from "react";
+import { PreferencesContext } from "./preferences-context";
 
 const DEFAULT_PREFERENCES = {
   // Editor preferences
@@ -10,10 +9,10 @@ const DEFAULT_PREFERENCES = {
   minimap: true,
   wordWrap: true,
   fontLigatures: true,
-  
+
   // Theme
   theme: "vs-dark",
-  
+
   // Notifications
   notifications: {
     pushNotifications: true,
@@ -21,7 +20,7 @@ const DEFAULT_PREFERENCES = {
     codeChanges: true,
     emailDigest: false,
   },
-  
+
   // Privacy
   privacy: {
     profileVisibility: true,
@@ -106,10 +105,3 @@ export function PreferencesProvider({ children }) {
   );
 }
 
-export function usePreferences() {
-  const context = useContext(PreferencesContext);
-  if (!context) {
-    throw new Error("usePreferences must be used within a PreferencesProvider");
-  }
-  return context;
-}

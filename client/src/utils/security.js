@@ -166,18 +166,24 @@ export const setupCSP = () => {
   const connectSources = Array.from(new Set([
     "'self'",
     new URL(API_BASE_URL).origin,
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "ws:",
-    "wss:",
-    "https:",
-  ]));
+    import.meta.env.DEV ? "http://localhost:8000" : null,
+    import.meta.env.DEV ? "http://127.0.0.1:8000" : null,
+    new URL(API_BASE_URL.replace(/^http/, "ws")).origin,
+    "https://accounts.google.com",
+  ].filter(Boolean)));
+
+  const scriptSources = [
+    "'self'",
+    import.meta.env.DEV ? "'unsafe-inline'" : null,
+    import.meta.env.DEV ? "'unsafe-eval'" : null,
+    "https://accounts.google.com",
+  ].filter(Boolean);
 
   const meta = document.createElement('meta');
   meta.httpEquiv = 'Content-Security-Policy';
   meta.content = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com",
+    `script-src ${scriptSources.join(" ")}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
@@ -185,6 +191,8 @@ export const setupCSP = () => {
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
     "frame-src 'self' https://accounts.google.com",
+    "object-src 'none'",
+    "base-uri 'self'",
   ].join('; ');
 
   document.head.appendChild(meta);
@@ -232,6 +240,7 @@ export class RateLimiter {
  */
 export const secureFetch = async (url, options = {}, token = null) => {
   const timeout = options.timeout || 10000;
+  let timeoutId = null;
 
   try {
     const resolvedUrl = new URL(
@@ -244,7 +253,7 @@ export const secureFetch = async (url, options = {}, token = null) => {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    timeoutId = setTimeout(() => controller.abort(), timeout);
 
     const headers = getSecureHeaders(token);
     const response = await fetch(resolvedUrl.toString(), {
@@ -271,8 +280,18 @@ export const secureFetch = async (url, options = {}, token = null) => {
 
       if (response.status === 401) {
         clearSecureData();
+        if (token && typeof window !== "undefined") {
+          window.dispatchEvent(new Event("codechatter:auth-expired"));
+        }
       }
-      throw new Error(errorMessage);
+
+      const requestError = new Error(errorMessage);
+      requestError.status = response.status;
+      throw requestError;
+    }
+
+    if (response.status === 204) {
+      return null;
     }
 
     return await response.json();
@@ -281,5 +300,9 @@ export const secureFetch = async (url, options = {}, token = null) => {
       throw new Error('Request timeout');
     }
     throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 };

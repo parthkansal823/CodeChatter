@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { AnimatePresence } from "framer-motion";
 import { Search, FolderGit2, Home, Settings, LogOut, Sun, Moon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -31,8 +31,7 @@ export default function CommandPalette({ theme, onThemeChange }) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
-  // Derived commands based on context
-  const allCommands = [
+  const allCommands = useMemo(() => ([
     ...COMMANDS,
     {
       id: "theme",
@@ -51,17 +50,19 @@ export default function CommandPalette({ theme, onThemeChange }) {
         navigate("/auth");
       },
     },
-  ];
+  ]), [logout, navigate, onThemeChange, theme]);
 
-  const filtered = query.trim() === ""
-    ? allCommands
-    : allCommands.filter((cmd) => cmd.title.toLowerCase().includes(query.toLowerCase()));
+  const filtered = useMemo(() => (
+    query.trim() === ""
+      ? allCommands
+      : allCommands.filter((cmd) => cmd.title.toLowerCase().includes(query.toLowerCase()))
+  ), [allCommands, query]);
 
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+  const normalizedSelectedIndex = filtered.length
+    ? Math.min(selectedIndex, filtered.length - 1)
+    : 0;
 
-  const handleSelect = (command) => {
+  const handleSelect = useCallback((command) => {
     if (command.path) {
       navigate(command.path);
     } else if (command.action) {
@@ -69,12 +70,16 @@ export default function CommandPalette({ theme, onThemeChange }) {
     }
     setIsOpen(false);
     setQuery("");
-  };
+    setSelectedIndex(0);
+  }, [navigate]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKey = (e) => {
+      if (!filtered.length) {
+        return;
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelectedIndex((prev) => (prev + 1) % filtered.length);
@@ -83,13 +88,13 @@ export default function CommandPalette({ theme, onThemeChange }) {
         setSelectedIndex((prev) => (prev - 1 + filtered.length) % filtered.length);
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (filtered[selectedIndex]) handleSelect(filtered[selectedIndex]);
+        if (filtered[normalizedSelectedIndex]) handleSelect(filtered[normalizedSelectedIndex]);
       }
     };
 
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [isOpen, filtered, selectedIndex]);
+  }, [isOpen, filtered, normalizedSelectedIndex, handleSelect]);
 
   // Focus input on open
   useEffect(() => {
@@ -102,26 +107,14 @@ export default function CommandPalette({ theme, onThemeChange }) {
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
+        <div 
           className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]"
         >
           {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm"
-            onClick={() => setIsOpen(false)}
-          />
+          <div className="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
 
           {/* Palette Modal */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -20 }}
-            transition={{ type: "spring", bounce: 0.4, duration: 0.5 }}
-            className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-zinc-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#09090b]/80"
-          >
+          <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-zinc-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#09090b]/80">
             <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-white/10">
               <Search className="text-zinc-400 dark:text-zinc-500" size={20} />
               <input
@@ -144,7 +137,7 @@ export default function CommandPalette({ theme, onThemeChange }) {
               ) : (
                 <div className="space-y-1">
                   {filtered.map((cmd, idx) => {
-                    const isSelected = idx === selectedIndex;
+                    const isSelected = idx === normalizedSelectedIndex;
                     return (
                       <button
                         key={cmd.id}
@@ -185,8 +178,8 @@ export default function CommandPalette({ theme, onThemeChange }) {
             <div className="border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-white/10 dark:bg-[#050505] dark:text-zinc-400">
               <span className="font-semibold text-zinc-900 dark:text-zinc-300">Tip:</span> Use arrows to navigate and enter to select.
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
     </AnimatePresence>
   );
