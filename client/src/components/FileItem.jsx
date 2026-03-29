@@ -12,6 +12,7 @@ import { getFileVisual, getFolderVisual } from "../utils/fileIcons";
 export default function FileItem({
   node,
   depth = 0,
+  canEdit = true,
   isActive = false,
   isFocused = false,
   isExpanded = false,
@@ -62,10 +63,10 @@ export default function FileItem({
   };
 
   const handleItemKeyDown = (e) => {
-    if (e.key === "F2") {
+    if (canEdit && e.key === "F2") {
       e.preventDefault();
       setIsRenaming(true);
-    } else if (e.key === "Delete") {
+    } else if (canEdit && e.key === "Delete") {
       e.preventDefault();
       onDelete?.(node);
     } else if (e.key === "Enter" && !isRenaming) {
@@ -81,7 +82,7 @@ export default function FileItem({
   };
 
   const handleDragOver = (e) => {
-    if (isFolder) {
+    if (canEdit && isFolder) {
       e.preventDefault();
     }
   };
@@ -89,7 +90,7 @@ export default function FileItem({
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isFolder) return;
+    if (!canEdit || !isFolder) return;
     const draggedNodeId = e.dataTransfer.getData("nodeId");
     if (draggedNodeId && draggedNodeId !== node.id) {
       onMove?.(draggedNodeId, node.id);
@@ -99,14 +100,16 @@ export default function FileItem({
   return (
     <div
       tabIndex={0}
-      draggable={!isRenaming}
+      draggable={canEdit && !isRenaming}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onKeyDown={handleItemKeyDown}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        setIsRenaming(true);
+        if (canEdit) {
+          setIsRenaming(true);
+        }
       }}
       className={`group flex items-center gap-1 transition-colors cursor-pointer outline-none border-l-[3px] select-none ${
         isActive
@@ -165,58 +168,60 @@ export default function FileItem({
         )}
       </div>
 
-      <div className="mr-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100">
-        {isFolder && (
-          <>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onCreateFile?.(node.id);
-              }}
-              className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
-              title={`New file in ${node.name}`}
-            >
-              <FilePlus2 size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onCreateFolder?.(node.id);
-              }}
-              className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
-              title={`New folder in ${node.name}`}
-            >
-              <FolderPlus size={13} />
-            </button>
-          </>
-        )}
+      {canEdit && (
+        <div className="mr-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100">
+          {isFolder && (
+            <>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCreateFile?.(node.id);
+                }}
+                className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                title={`New file in ${node.name}`}
+              >
+                <FilePlus2 size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCreateFolder?.(node.id);
+                }}
+                className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                title={`New folder in ${node.name}`}
+              >
+                <FolderPlus size={13} />
+              </button>
+            </>
+          )}
 
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            setIsRenaming(true);
-          }}
-          className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-400"
-          title={`Rename ${node.name} (F2)`}
-        >
-          <Pencil size={13} />
-        </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsRenaming(true);
+            }}
+            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-400"
+            title={`Rename ${node.name} (F2)`}
+          >
+            <Pencil size={13} />
+          </button>
 
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete?.(node);
-          }}
-          className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-zinc-800 dark:hover:text-red-400"
-          title={`Delete ${node.name} (Del)`}
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete?.(node);
+            }}
+            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-zinc-800 dark:hover:text-red-400"
+            title={`Delete ${node.name} (Del)`}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

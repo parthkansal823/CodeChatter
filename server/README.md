@@ -38,6 +38,7 @@ GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
+CODECHATTER_DATA_DIR=/absolute/path/for/runtime-data
 ```
 
 For local mock validation only:
@@ -54,6 +55,16 @@ cd server
 .\venv\Scripts\python -m uvicorn main:app --reload
 ```
 
+## Backend Layout
+
+```text
+core/      config, middleware, security, request schemas
+routes/    HTTP and websocket entrypoints
+services/  AI, collaboration, frontend helpers, runtime execution
+database.py
+main.py
+```
+
 ## First Startup Behavior
 
 On first startup, the server will:
@@ -66,3 +77,6 @@ On first startup, the server will:
 
 - Keep real credentials in `server/.env.local` or your deployment secret manager.
 - Do not commit `server/.env.local`, `server/data/`, or virtual environment folders.
+- Route handlers stay thin now; shared logic lives in `core/` and `services/`.
+- Invite links can now create pending join requests that the room owner approves once.
+- Runtime workspace snapshots live under `server/data/workspaces/` by default, or under `CODECHATTER_DATA_DIR` if you set it.

@@ -1,7 +1,7 @@
 import {
   LockKeyhole, Palette, UserRound, Code2, Bell, Users,
   Zap, Shield, LogOut, Trash2, Github, Mail, Copy, Check,
-  ChevronRight, Moon, Sun, AlignLeft, Type, Wand2,
+  ChevronRight, Moon, Sun,
 } from "lucide-react";
 import { useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
@@ -40,11 +40,11 @@ function Toggle({ checked, onChange }) {
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none ${checked ? "bg-violet-600" : "bg-zinc-300 dark:bg-zinc-700"
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-[2px] transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/40 ${checked ? "bg-violet-600" : "bg-zinc-300 dark:bg-zinc-700"
         }`}
     >
       <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4.5" : "translate-x-0.5"
+        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"
           }`}
       />
     </button>
@@ -59,8 +59,8 @@ function SectionTitle({ children }) {
 
 function Row({ label, hint, action }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3.5 border-b border-zinc-100 dark:border-zinc-800/60 last:border-0">
-      <div className="min-w-0">
+    <div className="flex flex-col items-start gap-3 border-b border-zinc-100 py-3.5 dark:border-zinc-800/60 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{label}</p>
         {hint && <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-500">{hint}</p>}
       </div>

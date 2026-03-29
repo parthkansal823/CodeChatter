@@ -36,6 +36,7 @@ DSA_LANGUAGE_OPTIONS: list[dict[str, str]] = [
   {"id": "kotlin", "label": "Kotlin"},
 ]
 DSA_LANGUAGE_IDS = {option["id"] for option in DSA_LANGUAGE_OPTIONS}
+ASSIGNABLE_ROOM_ACCESS_ROLES = {"viewer", "editor", "runner"}
 
 
 def _node_id() -> str:
@@ -576,6 +577,7 @@ class MongoRepository:
     self._database = self._client[self.database_name]
     self._users = self._database["users"]
     self._rooms = self._database["rooms"]
+    self._room_messages = self._database["room_messages"]
 
     self._ensure_indexes()
     self._bootstrap_data()
@@ -742,6 +744,7 @@ class MongoRepository:
     template_id: str | None = None,
     terminal_shell: str | None = None,
     dsa_language: str | None = None,
+    require_join_approval: bool | None = None,
   ) -> dict[str, Any]:
     self.initialize()
     selected_template_id = template_id or "blank"
@@ -757,6 +760,7 @@ class MongoRepository:
       "name": name or f"{template_definition['name']} Room",
       "description": description or template_definition["description"],
       "is_public": is_public,
+      "require_join_approval": require_join_approval if require_join_approval is not None else False,
       "invite_token": self.generate_invite_token(),
       "owner_id": owner_id,
       "participant_ids": [owner_id],
@@ -792,36 +796,235 @@ class MongoRepository:
     invite_token: str | None = None,
   ) -> dict[str, Any]:
     self.initialize()
+    user = self.get_user_by_id(user_id)
     room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
 
     if room is None:
       raise ValueError("Room not found")
 
-    if room.get("owner_id") != user_id and user_id not in room.get("participant_ids", []):
-      room_is_public = bool(room.get("is_public", False))
-      expected_invite_token = str(room.get("invite_token", "")).strip()
-      has_valid_invite = bool(invite_token) and expected_invite_token and hmac.compare_digest(
-        expected_invite_token,
-        invite_token,
-      )
+    # Already a participant or owner — just return the room
+    if room.get("owner_id") == user_id or user_id in room.get("participant_ids", []):
+      return self.serialize_room(room, include_workspace=True, viewer_user_id=user_id)
 
-      if not room_is_public and not has_valid_invite:
-        raise PermissionError("This room is private. Join with a valid invite link.")
+    room_is_public = bool(room.get("is_public", False))
+    expected_invite_token = str(room.get("invite_token", "")).strip()
+    has_valid_invite = bool(invite_token) and expected_invite_token and hmac.compare_digest(
+      expected_invite_token,
+      invite_token,
+    )
+
+    if not room_is_public and not has_valid_invite:
+      raise PermissionError("This room is private. Join with a valid invite link.")
+
+    # Check if a pending join request already exists for this user
+    existing_requests = room.get("join_requests", [])
+    existing = next((r for r in existing_requests if r.get("user_id") == user_id and r.get("status") == "pending"), None)
+    if existing:
+      return {
+        "status": "pending_approval",
+        "roomName": room.get("name"),
+        "accessRole": existing.get("access_role", "editor"),
+        "requestedAt": existing.get("requested_at").isoformat() if isinstance(existing.get("requested_at"), datetime) else existing.get("requested_at"),
+        "message": "You already have a pending join request. The owner will let you in soon.",
+      }
+
+    # Public rooms without approval requirement → direct join
+    if room_is_public and not room.get("require_join_approval", False):
+      timestamp = self._utc_now()
+      self._rooms.update_one(
+        {"id": room_id},
+        {
+          "$addToSet": {"participant_ids": user_id},
+          "$set": {"updated_at": timestamp},
+        },
+      )
+      updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+      return self.serialize_room(updated_room, include_workspace=True, viewer_user_id=user_id)
+
+    # Invite link without approval requirement → direct join
+    if has_valid_invite and not room.get("require_join_approval", False):
+      timestamp = self._utc_now()
+      self._rooms.update_one(
+        {"id": room_id},
+        {
+          "$addToSet": {"participant_ids": user_id},
+          "$set": {"updated_at": timestamp},
+        },
+      )
+      updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+      return self.serialize_room(updated_room, include_workspace=True, viewer_user_id=user_id)
+
+    # Approval required → create a pending join request
+    timestamp = self._utc_now()
+    join_request = {
+      "id": secrets.token_hex(8),
+      "user_id": user_id,
+      "username": user.get("username", "") if user else "",
+      "email": user.get("email", "") if user else "",
+      "access_role": "editor",
+      "status": "pending",
+      "requested_at": timestamp,
+    }
+    self._rooms.update_one(
+      {"id": room_id},
+      {
+        "$push": {"join_requests": join_request},
+        "$set": {"updated_at": timestamp},
+      },
+    )
+    return {
+      "status": "pending_approval",
+      "roomName": room.get("name"),
+      "accessRole": "editor",
+      "requestedAt": timestamp.isoformat(),
+      "message": "Your join request has been sent. The owner will review it shortly.",
+    }
+
+  def get_room_join_status(self, user_id: str, room_id: str) -> dict[str, Any]:
+    self.initialize()
+    room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+
+    if room is None:
+      raise ValueError("Room not found")
+
+    # Owner
+    if room.get("owner_id") == user_id:
+      return {"status": "approved", "accessRole": "owner"}
+
+    # Already a participant
+    if user_id in room.get("participant_ids", []):
+      member_roles = room.get("member_access_roles", {})
+      role = member_roles.get(user_id, "editor")
+      return {"status": "approved", "accessRole": role}
+
+    # Check pending/rejected join requests
+    join_requests = room.get("join_requests", [])
+    user_request = next(
+      (r for r in reversed(join_requests) if r.get("user_id") == user_id),
+      None,
+    )
+
+    if user_request:
+      status = user_request.get("status", "pending")
+      requested_at = user_request.get("requested_at")
+      return {
+        "status": "pending_approval" if status == "pending" else "rejected",
+        "roomName": room.get("name"),
+        "accessRole": user_request.get("access_role", "editor"),
+        "requestedAt": requested_at.isoformat() if isinstance(requested_at, datetime) else requested_at,
+        "message": (
+          "Your join request is waiting for approval."
+          if status == "pending"
+          else "Your join request was rejected. Contact the owner for a fresh invite."
+        ),
+      }
+
+    return {"status": "not_requested"}
+
+  def approve_room_join_request(
+    self,
+    owner_id: str,
+    room_id: str,
+    request_id: str,
+    access_role: str = "editor",
+  ) -> dict[str, Any]:
+    self.initialize()
+    room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+
+    if room is None:
+      raise ValueError("Room not found")
+
+    if room.get("owner_id") != owner_id:
+      raise PermissionError("Only the room owner can approve join requests")
+
+    join_requests = room.get("join_requests", [])
+    request = next((r for r in join_requests if r.get("id") == request_id), None)
+
+    if request is None:
+      raise ValueError("Join request not found")
+
+    user_id = request["user_id"]
+    timestamp = self._utc_now()
+
+    # Mark request approved and add user to participants + role map
+    self._rooms.update_one(
+      {"id": room_id, "join_requests.id": request_id},
+      {
+        "$set": {
+          "join_requests.$.status": "approved",
+          f"member_access_roles.{user_id}": access_role,
+          "updated_at": timestamp,
+        },
+        "$addToSet": {"participant_ids": user_id},
+      },
+    )
+
+    updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+    return self.serialize_room(updated_room, include_workspace=False, viewer_user_id=owner_id)
+
+  def reject_room_join_request(
+    self,
+    owner_id: str,
+    room_id: str,
+    request_id: str,
+  ) -> dict[str, Any]:
+    self.initialize()
+    room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+
+    if room is None:
+      raise ValueError("Room not found")
+
+    if room.get("owner_id") != owner_id:
+      raise PermissionError("Only the room owner can reject join requests")
+
+    timestamp = self._utc_now()
+    self._rooms.update_one(
+      {"id": room_id, "join_requests.id": request_id},
+      {
+        "$set": {
+          "join_requests.$.status": "rejected",
+          "updated_at": timestamp,
+        }
+      },
+    )
+
+    updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+    return self.serialize_room(updated_room, include_workspace=False, viewer_user_id=owner_id)
+
+  def update_room_member_access(
+    self,
+    owner_id: str,
+    room_id: str,
+    member_id: str,
+    access_role: str,
+  ) -> dict[str, Any]:
+    self.initialize()
+    room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+
+    if room is None:
+      raise ValueError("Room not found")
+
+    if room.get("owner_id") != owner_id:
+      raise PermissionError("Only the room owner can change member access")
+
+    if member_id not in room.get("participant_ids", []):
+      raise ValueError("User is not a member of this room")
 
     timestamp = self._utc_now()
     self._rooms.update_one(
       {"id": room_id},
       {
-        "$addToSet": {
-          "participant_ids": user_id,
-        },
         "$set": {
+          f"member_access_roles.{member_id}": access_role,
           "updated_at": timestamp,
-        },
+        }
       },
     )
+
     updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
-    return self.serialize_room(updated_room, include_workspace=True, viewer_user_id=user_id)
+    return self.serialize_room(updated_room, include_workspace=False, viewer_user_id=owner_id)
+
+
 
   def delete_room(self, user_id: str, room_id: str) -> None:
     self.initialize()
@@ -872,6 +1075,7 @@ class MongoRepository:
     name: str | None = None,
     description: str | None = None,
     terminal_shell: str | None = None,
+    require_join_approval: bool | None = None,
   ) -> dict[str, Any]:
     self.initialize()
     room = self.get_room_by_id(room_id)
@@ -889,6 +1093,8 @@ class MongoRepository:
       updates["description"] = description
     if terminal_shell is not None:
       updates["terminal_shell"] = terminal_shell
+    if require_join_approval is not None:
+      updates["require_join_approval"] = require_join_approval
 
     self._rooms.update_one({"id": room_id}, {"$set": updates})
 
@@ -1008,6 +1214,24 @@ class MongoRepository:
       or bool(room.get("is_public", False))
     )
 
+  def user_can_edit_room(self, user_id: str, room: dict[str, Any]) -> bool:
+    """Owner always can edit. Members with 'editor' role can edit. Viewers/runners cannot."""
+    if room.get("owner_id") == user_id:
+      return True
+    if user_id in room.get("participant_ids", []):
+      member_roles = room.get("member_access_roles", {})
+      return member_roles.get(user_id, "editor") == "editor"
+    return False
+
+  def _get_viewer_role(self, user_id: str, room: dict[str, Any]) -> str:
+    """Return the effective access role string for a viewer."""
+    if room.get("owner_id") == user_id:
+      return "owner"
+    if user_id in room.get("participant_ids", []):
+      member_roles = room.get("member_access_roles", {})
+      return member_roles.get(user_id, "editor")
+    return "viewer"
+
   def serialize_user(self, user: dict[str, Any]) -> dict[str, Any]:
     return {
       "id": user["id"],
@@ -1015,10 +1239,11 @@ class MongoRepository:
       "username": user["username"],
     }
 
-  def serialize_collaborator(self, user: dict[str, Any]) -> dict[str, Any]:
+  def serialize_collaborator(self, user: dict[str, Any], access_role: str = "editor") -> dict[str, Any]:
     return {
       **self.serialize_user(user),
       "active": True,
+      "accessRole": access_role,
     }
 
   def serialize_room(
@@ -1028,6 +1253,8 @@ class MongoRepository:
     viewer_user_id: str | None = None,
   ) -> dict[str, Any]:
     participant_ids = room.get("participant_ids", [])
+    owner_id = room.get("owner_id")
+    member_roles: dict[str, str] = room.get("member_access_roles") or {}
 
     if participant_ids:
       users = list(self._users.find({"id": {"$in": participant_ids}}))
@@ -1039,9 +1266,12 @@ class MongoRepository:
       users_by_id = {}
 
     collaborators = [
-      self.serialize_collaborator(users_by_id[participant_id])
-      for participant_id in participant_ids
-      if participant_id in users_by_id
+      self.serialize_collaborator(
+        users_by_id[pid],
+        access_role="owner" if pid == owner_id else member_roles.get(pid, "editor"),
+      )
+      for pid in participant_ids
+      if pid in users_by_id
     ]
 
     updated_at = room.get("updated_at")
@@ -1050,6 +1280,31 @@ class MongoRepository:
     template_definition = ROOM_TEMPLATE_DEFINITIONS.get(template_id, ROOM_TEMPLATE_DEFINITIONS["blank"])
     workspace_tree = room.get("workspace_tree", [])
 
+    # — Compute per-viewer permission flags —
+    viewer_role = self._get_viewer_role(viewer_user_id, room) if viewer_user_id else "viewer"
+    is_owner = viewer_role == "owner"
+    is_editor = viewer_role == "editor"
+    is_runner = viewer_role == "runner"
+    can_edit = is_owner or is_editor
+    can_manage = is_owner
+    can_use_terminal = is_owner or is_editor or is_runner
+
+    # — Pending join requests (admin only) —
+    all_requests = room.get("join_requests") or []
+    pending_requests = []
+    if is_owner:
+      for req in all_requests:
+        if req.get("status") == "pending":
+          req_time = req.get("requested_at")
+          pending_requests.append({
+            "id": req.get("id"),
+            "userId": req.get("user_id"),
+            "username": req.get("username", ""),
+            "email": req.get("email", ""),
+            "accessRole": req.get("access_role", "editor"),
+            "requestedAt": req_time.isoformat() if isinstance(req_time, datetime) else req_time,
+          })
+
     serialized_room = {
       "id": room["id"],
       "name": room.get("name") or f"Room {room['id']}",
@@ -1057,16 +1312,25 @@ class MongoRepository:
       "participantCount": len(collaborators),
       "collaborators": collaborators,
       "isPublic": room.get("is_public", False),
+      "requireJoinApproval": room.get("require_join_approval", False),
       "updatedAt": updated_at_iso,
-      "ownerId": room.get("owner_id"),
+      "ownerId": owner_id,
       "templateId": template_id,
       "templateName": template_definition["name"],
       "terminalShell": room.get("terminal_shell") or ("powershell" if os.name == "nt" else "bash"),
       "fileCount": self.count_workspace_files(workspace_tree),
+      # Permission flags for the current viewer
+      "accessRole": viewer_role,
+      "canEdit": can_edit,
+      "canManage": can_manage,
+      "canUseTerminal": can_use_terminal,
+      # Admin-only fields
+      "pendingJoinRequests": pending_requests,
+      "pendingJoinRequestCount": len(pending_requests),
     }
 
     if viewer_user_id and (
-      room.get("owner_id") == viewer_user_id
+      owner_id == viewer_user_id
       or viewer_user_id in participant_ids
     ):
       serialized_room["inviteToken"] = str(room.get("invite_token", "")).strip()
@@ -1148,6 +1412,38 @@ class MongoRepository:
 
     return count
 
+  def insert_room_message(self, room_id: str, message: dict[str, Any]) -> dict[str, Any]:
+    self.initialize()
+    timestamp = self._utc_now()
+    document = {
+      "id": message.get("id") or secrets.token_hex(16),
+      "room_id": room_id,
+      "userId": message.get("userId"),
+      "sender": message.get("sender"),
+      "text": message.get("text", ""),
+      "msgType": message.get("msgType") or message.get("type", "text"),
+      "fileUrl": message.get("fileUrl"),
+      "fileName": message.get("fileName"),
+      "fileSize": message.get("fileSize"),
+      "created_at": timestamp,
+    }
+    self._room_messages.insert_one(document)
+    result = self._strip_mongo_id(document)
+    if isinstance(result.get("created_at"), datetime):
+      result["time"] = result["created_at"].strftime("%I:%M %p")
+      result["created_at"] = result["created_at"].isoformat()
+    return result
+
+  def get_room_messages(self, room_id: str, limit: int = 200) -> list[dict[str, Any]]:
+    self.initialize()
+    cursor = self._room_messages.find({"room_id": room_id}).sort("created_at", ASCENDING).limit(limit)
+    messages = [self._strip_mongo_id(msg) for msg in cursor]
+    for msg in messages:
+      if isinstance(msg.get("created_at"), datetime):
+        msg["time"] = msg["created_at"].strftime("%I:%M %p")
+        msg["created_at"] = msg["created_at"].isoformat()
+    return messages
+
   def _create_client(self):
     if self._is_mock:
       import mongomock
@@ -1170,7 +1466,11 @@ class MongoRepository:
     self._rooms.create_index([("id", ASCENDING)], unique=True)
     self._rooms.create_index([("owner_id", ASCENDING), ("updated_at", DESCENDING)])
     self._rooms.create_index([("participant_ids", ASCENDING)])
+    self._rooms.create_index([("join_requests.user_id", ASCENDING)])
     self._rooms.create_index([("is_public", ASCENDING), ("updated_at", DESCENDING)])
+
+    self._room_messages.create_index([("id", ASCENDING)], unique=True)
+    self._room_messages.create_index([("room_id", ASCENDING), ("created_at", ASCENDING)])
 
   def _bootstrap_data(self) -> None:
     has_users = self._users.count_documents({}) > 0
@@ -1271,6 +1571,7 @@ class MongoRepository:
         },
       ]
     )
+
 
   def _repair_seeded_rooms(self) -> None:
     python_starter_workspace = self.build_workspace_from_template("python-starter")

@@ -48,8 +48,9 @@ server/venv/
 server/__pycache__/
 
 # Local app data
-server/data/
+server/data/*
 !server/data/.gitkeep
+!server/data/README.md
 
 # Coverage / temp
 coverage/

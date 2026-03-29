@@ -130,9 +130,27 @@ export default function XTerminal({ roomId }) {
 
     window.addEventListener("resize", handleResize);
 
+    let resizeObserver = null;
+    if (terminalRef.current && typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        if (fitAddonRef.current && xtermRef.current) {
+          fitAddonRef.current.fit();
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: "resize",
+              cols: xtermRef.current.cols,
+              rows: xtermRef.current.rows,
+            }));
+          }
+        }
+      });
+      resizeObserver.observe(terminalRef.current);
+    }
+
     return () => {
       isCleanup = true;
       window.removeEventListener("resize", handleResize);
+      resizeObserver?.disconnect();
       if (wsRef.current) {
         wsRef.current.close();
       }

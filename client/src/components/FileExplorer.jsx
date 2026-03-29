@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react";
-import { ChevronRight, FilePlus2, FolderPlus, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, FilePlus2, FolderPlus, Search, X } from "lucide-react";
 
 import FileItem from "./FileItem";
 import { countFiles, flattenWorkspaceTree } from "../utils/workspace";
+
+const EXPLORER_DEFAULT_WIDTH = 272;
+const EXPLORER_MIN_WIDTH = 220;
+const EXPLORER_MAX_WIDTH = 420;
+const EXPLORER_WIDTH_STORAGE_KEY = "codechatter-explorer-width";
 
 function collectFolderIds(nodes) {
   return nodes.flatMap((node) => {
@@ -83,6 +88,7 @@ function CreateNodeInput({
 export default function FileExplorer({
   workspaceLabel = "Workspace",
   tree = [],
+  canEdit = true,
   activeFileId,
   focusedNodeId,
   onSelectNode,
@@ -100,6 +106,20 @@ export default function FileExplorer({
   const [newNodeName, setNewNodeName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedFolders, setCollapsedFolders] = useState(() => new Set());
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return EXPLORER_DEFAULT_WIDTH;
+    }
+
+    const storedValue = Number(window.localStorage.getItem(EXPLORER_WIDTH_STORAGE_KEY));
+    if (!Number.isFinite(storedValue)) {
+      return EXPLORER_DEFAULT_WIDTH;
+    }
+
+    return Math.min(EXPLORER_MAX_WIDTH, Math.max(EXPLORER_MIN_WIDTH, storedValue));
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const panelRef = useRef(null);
 
   const isCollapsed = !mobile && !isOpen;
   const explorerEntries = useMemo(() => flattenWorkspaceTree(tree), [tree]);
@@ -123,6 +143,47 @@ export default function FileExplorer({
     ancestorIds.forEach((folderId) => next.delete(folderId));
     return next;
   }, [collapsedFolders, folderIdSet, focusedNodeId, tree]);
+
+  useEffect(() => {
+    if (mobile || typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(EXPLORER_WIDTH_STORAGE_KEY, String(sidebarWidth));
+  }, [mobile, sidebarWidth]);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback((event) => {
+    if (!panelRef.current) {
+      return;
+    }
+
+    const panelLeft = panelRef.current.getBoundingClientRect().left;
+    const nextWidth = event.clientX - panelLeft;
+    const boundedWidth = Math.min(EXPLORER_MAX_WIDTH, Math.max(EXPLORER_MIN_WIDTH, nextWidth));
+    setSidebarWidth(boundedWidth);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) {
+      return undefined;
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", resize);
+    window.addEventListener("mouseup", stopResizing);
+
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
 
   if (mobile && !isOpen) {
     return null;
@@ -157,6 +218,10 @@ export default function FileExplorer({
   };
 
   const startCreate = (type, parentId = defaultCreateParentId) => {
+    if (!canEdit) {
+      return;
+    }
+
     if (parentId) {
       expandToFolder(parentId);
     }
@@ -221,6 +286,7 @@ export default function FileExplorer({
           <FileItem
             node={node}
             depth={depth}
+            canEdit={canEdit}
             isActive={activeFileId === node.id}
             isFocused={focusedNodeId === node.id}
             isExpanded={isExpanded}
@@ -244,23 +310,37 @@ export default function FileExplorer({
     });
   };
 
+  const widthStyle = mobile
+    ? undefined
+    : isCollapsed
+      ? { width: "48px" }
+      : { width: `${sidebarWidth}px` };
+
   const panel = (
     <div
-      className={`flex h-full flex-col border-r border-zinc-100 bg-zinc-50/50 dark:border-white/[0.04] dark:bg-[#0a0a0a] ${
-        mobile
-          ? "w-[86vw] max-w-[340px] shadow-2xl shadow-zinc-950/20"
-          : isCollapsed
-            ? "w-12"
-            : "w-72"
-      }`}
+      ref={panelRef}
+      style={widthStyle}
+      className={`relative flex h-full flex-col border-r border-zinc-100 bg-[#0b0b0c] text-zinc-200 dark:border-white/[0.04] transition-[width] ${
+        isResizing ? "duration-0" : "duration-150"
+      } ${mobile ? "w-[86vw] max-w-[340px] shadow-2xl shadow-zinc-950/20" : ""}`}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-3 dark:border-white/[0.04]">
+      {!mobile && !isCollapsed && (
+        <div
+          onMouseDown={() => setIsResizing(true)}
+          onDoubleClick={() => setSidebarWidth(EXPLORER_DEFAULT_WIDTH)}
+          className="absolute right-0 top-0 z-30 h-full w-3 translate-x-1.5 cursor-col-resize"
+          title="Resize explorer"
+        >
+          <div className={`mx-auto h-full w-px transition-colors ${isResizing ? "bg-brand-500" : "bg-transparent hover:bg-zinc-600"}`} />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           {!mobile && (
             <button
               onClick={onToggle}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
               title={isCollapsed ? "Expand files" : "Collapse files"}
             >
               <ChevronRight size={16} className={`transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
@@ -269,7 +349,7 @@ export default function FileExplorer({
 
           {!isCollapsed && (
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-400">
                 Explorer
               </p>
             </div>
@@ -278,37 +358,41 @@ export default function FileExplorer({
 
         {!isCollapsed && (
           <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => startCreate("file")}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
-              title="New file"
-            >
-              <FilePlus2 size={15} />
-            </button>
+            {canEdit && (
+              <>
+                <button
+                  onClick={() => startCreate("file")}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  title="New file"
+                >
+                  <FilePlus2 size={15} />
+                </button>
 
-            <button
-              onClick={() => startCreate("folder")}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
-              title="New folder"
-            >
-              <FolderPlus size={15} />
-            </button>
+                <button
+                  onClick={() => startCreate("folder")}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  title="New folder"
+                >
+                  <FolderPlus size={15} />
+                </button>
+              </>
+            )}
 
             {activeFolderCount > 0 && (
               <>
                 <button
                   onClick={() => setCollapsedFolders(new Set())}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
                   title="Expand all"
                 >
                   <ChevronRight size={15} className="rotate-90" />
                 </button>
                 <button
                   onClick={() => setCollapsedFolders(new Set(folderIds))}
-                  className="hidden text-xs font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-white sm:block rounded-md px-2 py-1"
+                  className="hidden rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-white/5 hover:text-white sm:block"
                   title="Collapse all"
                 >
-                  ⋮
+                  Close
                 </button>
               </>
             )}
@@ -316,7 +400,7 @@ export default function FileExplorer({
             {mobile && (
               <button
                 onClick={onClose}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
                 title="Close"
               >
                 <X size={15} />
@@ -327,29 +411,35 @@ export default function FileExplorer({
       </div>
 
       {!isCollapsed && (
-        <div className="border-b border-zinc-100 px-3 py-2 text-xs uppercase tracking-widest text-zinc-500 dark:border-white/[0.04] dark:text-zinc-500">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <span className="truncate font-semibold text-zinc-600 dark:text-zinc-300">{workspaceLabel}</span>
-            <span className="whitespace-nowrap text-xs">
+        <div className="border-b border-white/[0.06] px-3 py-2">
+          <div className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500">
+            <span className="truncate font-semibold text-zinc-200">{workspaceLabel}</span>
+            <span className="whitespace-nowrap text-[11px]">
               {activeFileCount}F {activeFolderCount}D
             </span>
           </div>
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search files..."
-            className="w-full rounded border border-zinc-200 bg-white px-2 py-1.5 text-xs lowercase outline-none dark:border-white/10 dark:bg-white/5 dark:focus:border-purple-500/50 dark:focus:bg-zinc-900 transition-colors"
-          />
+
+          <div className="relative">
+            <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search files..."
+              className="w-full rounded-md border border-white/10 bg-white/[0.05] py-1.5 pl-8 pr-2 text-xs lowercase text-zinc-200 outline-none transition-colors placeholder:text-zinc-500 focus:border-brand-500/50 focus:bg-zinc-900"
+            />
+          </div>
         </div>
       )}
 
-      {/* Tree */}
-      <div 
-        className="flex-1 overflow-y-auto px-1 py-1.5 scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          const draggedNodeId = e.dataTransfer.getData("nodeId");
+      <div
+        className="flex-1 overflow-y-auto px-1 py-1.5 scrollbar-thin scrollbar-thumb-zinc-700"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          if (!canEdit) {
+            return;
+          }
+          const draggedNodeId = event.dataTransfer.getData("nodeId");
           if (draggedNodeId) {
             onMoveNode?.(draggedNodeId, null);
           }
@@ -357,21 +447,25 @@ export default function FileExplorer({
       >
         {isCollapsed ? (
           <div className="space-y-2 px-1">
-            <button
-              onClick={() => startCreate("file")}
-              className="flex h-8 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
-              title="New file"
-            >
-              <FilePlus2 size={16} />
-            </button>
-            <button
-              onClick={() => startCreate("folder")}
-              className="flex h-9 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
-              title="Create folder"
-            >
-              <FolderPlus size={16} />
-            </button>
-            <div className="mx-auto h-px w-6 bg-zinc-200 dark:bg-zinc-800" />
+            {canEdit && (
+              <>
+                <button
+                  onClick={() => startCreate("file")}
+                  className="flex h-8 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  title="New file"
+                >
+                  <FilePlus2 size={16} />
+                </button>
+                <button
+                  onClick={() => startCreate("folder")}
+                  className="flex h-9 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  title="Create folder"
+                >
+                  <FolderPlus size={16} />
+                </button>
+                <div className="mx-auto h-px w-6 bg-white/[0.08]" />
+              </>
+            )}
             {explorerEntries.filter((entry) => entry.type === "file").slice(0, 6).map((entry) => (
               <button
                 key={entry.id}
@@ -379,7 +473,7 @@ export default function FileExplorer({
                   onSelectNode?.(entry.node);
                   onToggle?.();
                 }}
-                className="flex h-9 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+                className="flex h-9 w-full items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
                 title={entry.name}
               >
                 {entry.name.charAt(0).toUpperCase()}
@@ -389,28 +483,27 @@ export default function FileExplorer({
         ) : tree.length || createDraft ? (
           <div className="space-y-0.5 pb-8">
             {renderCreateInput(0, null)}
-            {searchQuery.trim() ? (
-              explorerEntries
-                .filter(en => en.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(en => (
+            {searchQuery.trim()
+              ? explorerEntries
+                .filter((entry) => entry.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map((entry) => (
                   <FileItem
-                    key={en.id}
-                    node={en.node}
+                    key={entry.id}
+                    node={entry.node}
                     depth={0}
-                    isActive={activeFileId === en.id}
-                    isFocused={focusedNodeId === en.id}
+                    canEdit={canEdit}
+                    isActive={activeFileId === entry.id}
+                    isFocused={focusedNodeId === entry.id}
                     onSelect={onSelectNode}
                     onDelete={onDeleteNode}
                     onRename={onRenameNode}
                     onMove={onMoveNode}
                   />
                 ))
-            ) : (
-              renderNodes(tree)
-            )}
+              : renderNodes(tree)}
           </div>
         ) : (
-          <div className="mx-2 rounded-md border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+          <div className="mx-2 rounded-md border border-dashed border-white/[0.08] px-3 py-4 text-sm text-zinc-500">
             This room is empty. Create a file or folder to start.
           </div>
         )}

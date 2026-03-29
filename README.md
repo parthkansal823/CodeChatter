@@ -6,7 +6,7 @@ CodeChatter is a collaborative coding workspace with shared rooms, live presence
 
 - Real-time room collaboration with presence, typing state, and cursor sharing
 - Workspace-based coding with Monaco editor, file tree, tabs, and run output
-- Private room invite links and owner-only room settings
+- Private room invite links, one-time owner approval queues, and owner-only room settings
 - JWT auth plus Google and GitHub OAuth support
 - Starter templates for blank rooms, Python, web prototyping, and DSA practice
 - DSA starter language support for Python, JavaScript, TypeScript, C, C++, Java, Go, Rust, PHP, Ruby, Shell, Lua, Perl, Swift, and Kotlin
@@ -20,8 +20,21 @@ CodeChatter is a collaborative coding workspace with shared rooms, live presence
 ## Repository Structure
 
 ```text
-client/   React frontend
-server/   FastAPI backend
+client/
+  src/
+    components/
+      code-room/
+    hooks/
+      code-room/
+      ui/
+    utils/
+      room/
+server/
+  core/
+  routes/
+  services/
+  database.py
+  main.py
 ```
 
 ## Local Setup
@@ -48,6 +61,18 @@ Copy-Item .env.example .env.local
 The backend loads `server/.env.local` first, then `server/.env` if present.
 Vite will load `client/.env.local` automatically.
 
+## Docker Deploy
+
+```powershell
+Copy-Item server/.env.example server/.env.local
+docker compose up --build
+```
+
+This starts:
+
+- `app` on `http://localhost:8000`
+- `mongo` on `mongodb://localhost:27017`
+
 ## Environment Variables
 
 ### Frontend
@@ -72,6 +97,7 @@ SECRET_KEY=replace-with-a-long-random-secret
 SESSION_SECRET_KEY=replace-with-a-second-long-random-secret
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DB_NAME=codechatter
+CODECHATTER_DATA_DIR=/absolute/path/for/runtime-data
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GITHUB_CLIENT_ID=
@@ -83,7 +109,10 @@ GEMINI_API_KEY=
 
 - Set `FRONTEND_URL` and `ALLOWED_ORIGINS` correctly before deployment.
 - Keep all real credentials in `.env.local` or your hosting platform secret manager.
-- `server/data/`, `server/venv/`, `client/dist/`, local env files, and other generated output are ignored at the repo root now.
+- `CODECHATTER_DATA_DIR` can move runtime workspace snapshots outside the repo when you deploy.
+- `server/data/` is now treated as managed runtime storage, with docs in [server/data/README.md](/D:/Project_With_Niyati/New%20folder/CodeChatterNK/server/data/README.md).
+- The backend is now split into `core`, `services`, and `routes` folders so auth, runtime, and websocket logic are easier to trace.
+- The room UI is split into feature-level hooks/components under `client/src/hooks/code-room/` and `client/src/components/code-room/`.
 
 ## GitHub Readiness Checklist
 

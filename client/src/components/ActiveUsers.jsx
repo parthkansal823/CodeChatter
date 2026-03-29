@@ -18,26 +18,26 @@ export default function ActiveUsers({ users = [] }) {
 
   return (
     <div className="flex -space-x-2">
-
       {sortedUsers.map((user, index) => {
-
-        <div key={user.name} className="relative">
-          <UserAvatar
-            username={user.name}
-            size="base"
-            className={`border-2 border-white dark:border-zinc-950 ${user.active ? "ring-2 ring-green-400" : "opacity-40"}`}
-          />
-          {user.active && (
-            <span
-              className="absolute bottom-0 right-0 w-2.5 h-2.5
-                bg-green-400 border-2 border-white dark:border-zinc-950
-                rounded-full"
+        const colorClass = colors[index % colors.length];
+        
+        return (
+          <div key={user.name} className="relative transition-transform hover:-translate-y-1 hover:z-10 cursor-default" title={user.name}>
+            <UserAvatar
+              username={user.name}
+              size="base"
+              className={`border-2 border-zinc-950 shadow-md ${user.active ? `ring-2 ${colorClass.replace('bg-', 'ring-')}` : "opacity-40"}`}
             />
-          )}
-        </div>
-
+            {user.active && (
+              <span
+                className={`absolute bottom-0 right-0 w-3 h-3
+                  ${colorClass} border-2 border-zinc-50 dark:border-zinc-950
+                  rounded-full shadow-sm`}
+              />
+            )}
+          </div>
+        );
       })}
-
     </div>
   );
 }

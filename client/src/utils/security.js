@@ -63,9 +63,14 @@ export const sanitizeInput = (input) => {
   if (typeof input !== 'string') return '';
 
   return input
-    .replace(/[<>]/g, '')
-    .replace(/javascript:/gi, '')
+    .replace(/\0/g, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/vbscript\s*:/gi, '')
+    .replace(/data\s*:\s*text\s*\/\s*html/gi, '')
     .replace(/on\w+\s*=/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&#x?0*3[cCeE];?/gi, '')
+    .replace(/[<>]/g, '')
     .trim();
 };
 
@@ -243,10 +248,8 @@ export const secureFetch = async (url, options = {}, token = null) => {
   let timeoutId = null;
 
   try {
-    const resolvedUrl = new URL(
-      url,
-      typeof window !== "undefined" ? window.location.origin : undefined
-    );
+    // Ensure relative URLs are resolved against the Python backend API_BASE_URL, not window.location.origin
+    const resolvedUrl = new URL(url, API_BASE_URL);
 
     if (!["http:", "https:"].includes(resolvedUrl.protocol)) {
       throw new Error("Invalid URL protocol. Only http/https allowed.");

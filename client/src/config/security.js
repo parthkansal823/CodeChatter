@@ -13,14 +13,14 @@ const resolveApiBaseUrl = () => {
   }
 
   if (import.meta.env.DEV) {
-    return "http://localhost:8000";
+    return "http://127.0.0.1:8000";
   }
 
   if (typeof window !== "undefined" && window.location?.origin) {
     return trimTrailingSlash(window.location.origin);
   }
 
-  return "http://localhost:8000";
+  return "http://127.0.0.1:8000";
 };
 
 export const API_BASE_URL = resolveApiBaseUrl();
@@ -46,8 +46,12 @@ export const API_ENDPOINTS = {
   GET_ROOM_TEMPLATES: `${API_BASE_URL}/api/rooms/templates`,
   GET_PUBLIC_ROOMS: `${API_BASE_URL}/api/rooms/public`,
   GET_ROOM: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}`,
+  GET_ROOM_JOIN_STATUS: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/join-status`,
   UPDATE_ROOM_WORKSPACE: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/workspace`,
   UPDATE_ROOM_SETTINGS: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/settings`,
+  APPROVE_JOIN_REQUEST: (roomId, requestId) => `${API_BASE_URL}/api/rooms/${roomId}/join-requests/${requestId}/approve`,
+  REJECT_JOIN_REQUEST: (roomId, requestId) => `${API_BASE_URL}/api/rooms/${roomId}/join-requests/${requestId}/reject`,
+  UPDATE_MEMBER_ACCESS: (roomId, memberId) => `${API_BASE_URL}/api/rooms/${roomId}/members/${memberId}/access`,
   RUN_ROOM_FILE: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/run`,
   DELETE_ROOM: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}`,
 

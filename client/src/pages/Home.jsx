@@ -1,12 +1,15 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight,
   FolderGit2,
+  LayoutGrid,
   Link2,
+  List,
   MoreVertical,
   Plus,
+  Settings2,
   Trash2,
   Users
 } from "lucide-react";
@@ -15,9 +18,11 @@ import toast from "react-hot-toast";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import ConfirmModal from "../components/ConfirmModal";
+import RoomSettingsModal from "../components/RoomSettingsModal";
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch, validateRoomId } from "../utils/security";
+import { buildRoomInviteLink, parseRoomInvite } from "../utils/room/invite";
 import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/terminal";
 
 const SkeletonCard = () => (
@@ -33,29 +38,6 @@ const SkeletonCard = () => (
     </div>
   </div>
 );
-
-function parseRoomInvite(rawValue) {
-  const trimmedValue = rawValue.trim();
-
-  if (!trimmedValue) {
-    return { roomId: "", inviteToken: null };
-  }
-
-  if (/^https?:\/\//i.test(trimmedValue)) {
-    try {
-      const url = new URL(trimmedValue);
-      const segments = url.pathname.split("/").filter(Boolean);
-      return {
-        roomId: (segments.at(-1) || "").toUpperCase(),
-        inviteToken: url.searchParams.get("invite")?.trim() || null,
-      };
-    } catch {
-      return { roomId: trimmedValue.toUpperCase(), inviteToken: null };
-    }
-  }
-
-  return { roomId: trimmedValue.toUpperCase(), inviteToken: null };
-}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -90,6 +72,20 @@ export default function Home() {
   const [dsaLanguage, setDsaLanguage] = useState("python");
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [settingsRoomId, setSettingsRoomId] = useState(null);
+  const [settingsRoom, setSettingsRoom] = useState(null);
+  const [isRoomSettingsLoading, setIsRoomSettingsLoading] = useState(false);
+  const pendingRequestCountsRef = useRef({});
+  const [roomViewMode, setRoomViewMode] = useState(() => {
+    if (typeof window === "undefined") {
+      return "grid";
+    }
+
+    return window.localStorage.getItem("codechatter-home-room-view") === "list" ? "list" : "grid";
+  });
+
+  const isRoomSettingsOpen = Boolean(settingsRoomId);
+  const isListView = roomViewMode === "list";
 
   const selectedTemplate = useMemo(
     () => roomTemplates.find((t) => t.id === selectedTemplateId) || null,
@@ -136,7 +132,11 @@ export default function Home() {
         }
 
         startTransition(() => {
-          setRooms(roomsResult.status === "fulfilled" ? roomsResult.value || [] : []);
+          const nextRooms = roomsResult.status === "fulfilled" ? roomsResult.value || [] : [];
+          pendingRequestCountsRef.current = Object.fromEntries(
+            nextRooms.map((room) => [room.id, room.pendingJoinRequestCount || 0]),
+          );
+          setRooms(nextRooms);
           setCollaborators(
             collaboratorsResult.status === "fulfilled" ? collaboratorsResult.value || [] : []
           );
@@ -162,12 +162,80 @@ export default function Home() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (!token) {
+      pendingRequestCountsRef.current = {};
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const refreshRoomSummaries = async () => {
+      try {
+        const nextRooms = await secureFetch(API_ENDPOINTS.GET_ROOMS, {}, token);
+
+        if (isCancelled) {
+          return;
+        }
+
+        const nextCounts = Object.fromEntries(
+          (nextRooms || []).map((room) => [room.id, room.pendingJoinRequestCount || 0]),
+        );
+
+        const previousCounts = pendingRequestCountsRef.current;
+        const increasedRooms = (nextRooms || []).filter((room) => {
+          const previousCount = previousCounts[room.id] || 0;
+          return (room.pendingJoinRequestCount || 0) > previousCount;
+        });
+
+        if (Object.keys(previousCounts).length > 0 && increasedRooms.length > 0) {
+          toast.success(
+            increasedRooms.length === 1
+              ? `New join request in ${increasedRooms[0].name}.`
+              : `${increasedRooms.length} workspaces have new join requests.`,
+          );
+        }
+
+        pendingRequestCountsRef.current = nextCounts;
+        setRooms(nextRooms || []);
+
+        if (settingsRoomId) {
+          const matchingRoom = (nextRooms || []).find((room) => room.id === settingsRoomId);
+          if (matchingRoom) {
+            setSettingsRoom((currentRoom) => ({ ...(currentRoom || {}), ...matchingRoom }));
+          }
+        }
+      } catch {
+        // Ignore background refresh errors on the dashboard.
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshRoomSummaries();
+      }
+    }, 10000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [settingsRoomId, token]);
+
   // Close room action menus when clicking outside
   useEffect(() => {
     const handler = () => setOpenMenuId(null);
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem("codechatter-home-room-view", roomViewMode);
+  }, [roomViewMode]);
 
   const handleJoinById = async (roomId, inviteToken = null) => {
     if (!roomId) {
@@ -183,7 +251,7 @@ export default function Home() {
     setJoiningRoom(true);
 
     try {
-      await secureFetch(
+      const joinResult = await secureFetch(
         API_ENDPOINTS.JOIN_ROOM,
         {
           method: "POST",
@@ -191,6 +259,15 @@ export default function Home() {
         },
         token
       );
+
+      if (joinResult?.status === "pending_approval") {
+        toast.success(joinResult.message || "Join request sent");
+        setJoinRoomValue("");
+        navigate(
+          `/room/${roomId}${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ""}`,
+        );
+        return;
+      }
 
       navigate(`/room/${roomId}`);
     } catch (error) {
@@ -248,6 +325,37 @@ export default function Home() {
     setRoomToDelete(room);
   };
 
+  const closeRoomSettings = () => {
+    setSettingsRoomId(null);
+    setSettingsRoom(null);
+    setIsRoomSettingsLoading(false);
+  };
+
+  const handleOpenRoomSettings = async (room) => {
+    setOpenMenuId(null);
+    setSettingsRoomId(room.id);
+    setSettingsRoom(room);
+    setIsRoomSettingsLoading(true);
+
+    try {
+      const fullRoom = await secureFetch(API_ENDPOINTS.GET_ROOM(room.id), {}, token);
+      setSettingsRoom(fullRoom);
+    } catch (error) {
+      toast.error(error.message || "Could not load workspace settings");
+    } finally {
+      setIsRoomSettingsLoading(false);
+    }
+  };
+
+  const handleRoomSettingsUpdate = (updatedRoom) => {
+    setSettingsRoom(updatedRoom);
+    setRooms((currentRooms) =>
+      currentRooms.map((currentRoom) =>
+        currentRoom.id === updatedRoom.id ? { ...currentRoom, ...updatedRoom } : currentRoom
+      )
+    );
+  };
+
   const confirmDeleteRoom = async () => {
     if (!roomToDelete) return;
 
@@ -264,20 +372,6 @@ export default function Home() {
       toast.error(error.message || "Could not delete room");
     } finally {
       setRoomToDelete(null);
-    }
-  };
-
-  const handleUpdateShell = async (room, shell) => {
-    try {
-      await secureFetch(
-        API_ENDPOINTS.UPDATE_ROOM_SETTINGS(room.id),
-        { method: "PUT", body: JSON.stringify({ terminalShell: shell }) },
-        token
-      );
-      setRooms((currentRooms) => currentRooms.map((r) => r.id === room.id ? { ...r, terminalShell: shell } : r));
-      toast.success("Terminal shell updated");
-    } catch (error) {
-      toast.error(error.message || "Could not update terminal shell");
     }
   };
 
@@ -363,9 +457,39 @@ export default function Home() {
         </div>
 
         <section className="mt-10">
-          <Motion.div variants={itemVariants} className="mb-4 flex items-center justify-between gap-3">
+          <Motion.div variants={itemVariants} className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">Your rooms</h2>
-            <span className="text-sm text-zinc-500 dark:text-zinc-400">{rooms.length} total</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">{rooms.length} total</span>
+              <div className="inline-flex items-center rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
+                <button
+                  type="button"
+                  onClick={() => setRoomViewMode("grid")}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    !isListView
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                  title="Block view"
+                >
+                  <LayoutGrid size={14} />
+                  Blocks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoomViewMode("list")}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    isListView
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                  title="List view"
+                >
+                  <List size={14} />
+                  List
+                </button>
+              </div>
+            </div>
           </Motion.div>
 
           {isLoading ? (
@@ -375,7 +499,7 @@ export default function Home() {
               ))}
             </div>
           ) : rooms.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className={isListView ? "space-y-3" : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"}>
               <AnimatePresence mode="popLayout">
                 {rooms.map((room) => (
                   <Motion.div
@@ -385,7 +509,9 @@ export default function Home() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
                     whileHover={{ y: -4 }}
-                    className="group/card relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-violet-200 dark:hover:border-violet-900/50 hover:shadow-lg hover:shadow-violet-500/5"
+                    className={`group/card relative rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-violet-200 dark:hover:border-violet-900/50 hover:shadow-lg hover:shadow-violet-500/5 ${
+                      isListView ? "p-4" : "p-5"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button
@@ -396,11 +522,16 @@ export default function Home() {
                         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                           {room.templateName || "Blank Workspace"}
                         </p>
+                        {room.ownerId === user?.id && (room.pendingJoinRequestCount || 0) > 0 && (
+                          <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                            {room.pendingJoinRequestCount} request{room.pendingJoinRequestCount === 1 ? "" : "s"} waiting
+                          </span>
+                        )}
                       </button>
 
                       {room.ownerId === user?.id && (
                         <div className="relative">
-                          {/* Trigger — stopPropagation on BOTH mousedown AND click */}
+                          {/* Trigger - stopPropagation on both mousedown and click */}
                           <button
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
@@ -419,13 +550,8 @@ export default function Home() {
                           {openMenuId === room.id && (
                             <div
                               onMouseDown={(e) => e.stopPropagation()}
-                              className="absolute right-0 top-9 z-30 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-700/80 dark:bg-zinc-900"
+                              className="absolute right-0 top-10 z-30 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-700/80 dark:bg-zinc-900"
                             >
-                              {/* Room info header */}
-                              <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-                                <p className="truncate text-xs font-semibold text-zinc-800 dark:text-white">{room.name}</p>
-                                <p className="mt-0.5 font-mono text-[10px] text-zinc-400">{room.id}</p>
-                              </div>
 
                               {/* Actions */}
                               <div className="py-1">
@@ -438,11 +564,19 @@ export default function Home() {
                                 </button>
 
                                 <button
+                                  onClick={() => handleOpenRoomSettings(room)}
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                                >
+                                  <Settings2 size={14} className="text-zinc-400" />
+                                  Workspace settings
+                                </button>
+
+                                <button
                                   onClick={() => {
-                                    const inviteQuery = room.inviteToken
-                                      ? `?invite=${encodeURIComponent(room.inviteToken)}`
-                                      : "";
-                                    const url = `${window.location.origin}/room/${room.id}${inviteQuery}`;
+                                    const url = buildRoomInviteLink({
+                                      roomId: room.id,
+                                      inviteToken: room.inviteToken,
+                                    });
                                     navigator.clipboard.writeText(url);
                                     toast.success("Invite link copied!");
                                     setOpenMenuId(null);
@@ -452,42 +586,6 @@ export default function Home() {
                                   <Link2 size={14} className="text-zinc-400" />
                                   Copy invite link
                                 </button>
-                              </div>
-
-                              {/* Terminal shell */}
-                              <div className="border-t border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
-                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                  Terminal shell
-                                </p>
-                                <div className="grid grid-cols-3 gap-1">
-                                  {terminalShellOptions.map((shell) => {
-                                    const isActive = (room.terminalShell || "bash") === shell.id;
-                                    return (
-                                      <button
-                                        key={shell.id}
-                                        onClick={() => { handleUpdateShell(room, shell.id); setOpenMenuId(null); }}
-                                        className={`rounded-lg py-1.5 text-[11px] font-bold tracking-wide transition-all ${isActive
-                                          ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
-                                          : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                                          }`}
-                                        title={shell.label}
-                                      >
-                                        {shell.shortLabel}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
-                              {/* Collaborators info */}
-                              <div className="flex items-center gap-2 border-t border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
-                                <Users size={13} className="text-zinc-400" />
-                                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                                  {room.participantCount || 0} collaborator{room.participantCount !== 1 ? "s" : ""}
-                                </span>
-                                <span className="ml-auto text-xs text-zinc-400 dark:text-zinc-500">
-                                  {room.fileCount || 0} files
-                                </span>
                               </div>
 
                               {/* Delete */}
@@ -712,6 +810,14 @@ export default function Home() {
         isDestructive={true}
         onConfirm={confirmDeleteRoom}
         onCancel={() => setRoomToDelete(null)}
+      />
+
+      <RoomSettingsModal
+        room={settingsRoom}
+        isOpen={isRoomSettingsOpen}
+        isLoading={isRoomSettingsLoading}
+        onClose={closeRoomSettings}
+        onUpdate={handleRoomSettingsUpdate}
       />
     </div>
   );

@@ -37,7 +37,21 @@ npm run build
 npm run preview
 ```
 
+## Frontend Layout
+
+```text
+src/
+  components/
+    code-room/
+  hooks/
+    code-room/
+    ui/
+  utils/
+    room/
+```
+
 ## Notes
 
 - Keep local secrets and OAuth client IDs in `client/.env.local`.
 - Build output goes to `client/dist/` and should not be committed.
+- Room page logic is split into feature hooks so `pages/CodeRoom.jsx` stays readable.
