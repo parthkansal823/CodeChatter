@@ -2,40 +2,35 @@ import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function PasswordInput({ id, label, required = false, value, onChange, icon: Icon }) {
-  const [showPassword, setShowPassword] = useState(false);
+  const [show, setShow] = useState(false);
 
   return (
-    <div className="relative group">
-      {Icon && (
-        <div className="absolute left-4 top-[1.15rem] text-gray-400 group-focus-within:text-purple-400 transition-colors z-10">
-          <Icon size={20} />
-        </div>
-      )}
-      <input
-        id={id}
-        type={showPassword ? "text" : "password"}
-        placeholder=" "
-        required={required}
-        value={value}
-        onChange={onChange}
-        className={`peer w-full ${Icon ? "pl-11" : "px-4"} pr-11 pt-6 pb-2 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 focus:bg-white/10 outline-none transition-all duration-300 text-white placeholder-transparent`}
-      />
-      <label
-        htmlFor={id}
-        className={`absolute ${Icon ? "left-11" : "left-4"} top-4 text-gray-400 text-sm transition-all duration-300
-        peer-focus:top-2 peer-focus:text-[11px] peer-focus:text-purple-400 peer-focus:font-medium
-        peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm
-        peer-not-placeholder-shown:top-2 peer-not-placeholder-shown:text-[11px]
-        pointer-events-none`}
-      >
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-[13px] font-medium text-gray-300">
         {label}
       </label>
-
-      <div
-        onClick={() => setShowPassword(!showPassword)}
-        className="absolute right-4 top-[1.15rem] cursor-pointer text-gray-400 hover:text-white transition-colors z-10"
-      >
-        {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+      <div className="relative">
+        {Icon && (
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none">
+            <Icon size={15} />
+          </span>
+        )}
+        <input
+          id={id}
+          type={show ? "text" : "password"}
+          required={required}
+          value={value}
+          onChange={onChange}
+          placeholder="••••••••"
+          className={`w-full ${Icon ? "pl-10" : "pl-3.5"} pr-10 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-white text-sm placeholder-gray-600 outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/25 hover:border-white/20 transition-all duration-200`}
+        />
+        <button
+          type="button"
+          onClick={() => setShow(!show)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          {show ? <Eye size={15} /> : <EyeOff size={15} />}
+        </button>
       </div>
     </div>
   );

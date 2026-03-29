@@ -138,6 +138,8 @@ export default function VideoCall({ onBack, roomName, collaborators = [] }) {
     };
   }, []);
 
+  const remoteCollaborators = collaborators.filter(c => c.username !== user?.username);
+
   const toggleAudio = () => {
     if (!streamRef.current) return;
     streamRef.current.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
@@ -253,7 +255,7 @@ export default function VideoCall({ onBack, roomName, collaborators = [] }) {
           {/* Participants */}
           <div className="flex items-center gap-1.5 rounded-full bg-zinc-100 dark:bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
             <Users size={12} />
-            <span>{collaborators.length + 1}</span>
+            <span>{remoteCollaborators.length + 1}</span>
           </div>
 
           {/* Fullscreen */}
@@ -336,9 +338,9 @@ export default function VideoCall({ onBack, roomName, collaborators = [] }) {
         )}
 
         {/* Remote collaborators */}
-        {collaborators.map((c) => (
+        {remoteCollaborators.map((c, i) => (
           <div
-            key={c.id}
+            key={c.id ?? c.username ?? i}
             className="relative w-full aspect-video rounded-2xl overflow-hidden border border-zinc-700/50 bg-zinc-800 shadow-inner flex items-center justify-center"
           >
             <div className="flex flex-col items-center gap-2">
@@ -351,7 +353,7 @@ export default function VideoCall({ onBack, roomName, collaborators = [] }) {
           </div>
         ))}
 
-        {collaborators.length === 0 && hasPermissions === true && (
+        {remoteCollaborators.length === 0 && hasPermissions === true && (
           <div className="flex flex-col items-center justify-center p-4 text-center opacity-60">
             <Users size={22} className="mb-2 text-zinc-400" />
             <p className="text-xs text-zinc-500">Waiting for others to join…</p>

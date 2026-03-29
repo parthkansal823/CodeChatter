@@ -264,6 +264,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
         onConfirm={confirmDeleteNode}
         onCancel={() => setNodeToDelete(null)}
       />
+
     </div>
   );
 }

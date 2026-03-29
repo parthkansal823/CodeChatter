@@ -1,111 +1,140 @@
 import { motion as Motion } from "framer-motion";
-import { TypeAnimation } from "react-type-animation";
-
+import { Zap, Lock, Users, Terminal } from "lucide-react";
 import BrandLogo from "./BrandLogo";
 
-export default function AuthFormLayout({ children, onMouseMove, isSignup = false }) {
+const FEATURES = [
+  {
+    icon: Users,
+    label: "Real-time collaboration",
+    desc: "Code together with zero latency, live cursors included",
+  },
+  {
+    icon: Terminal,
+    label: "Monaco-powered editor",
+    desc: "Full VS Code experience right in your browser",
+  },
+  {
+    icon: Lock,
+    label: "End-to-end secure rooms",
+    desc: "Your sessions and code stay private by default",
+  },
+  {
+    icon: Zap,
+    label: "Instant room creation",
+    desc: "Share a link and start coding in seconds",
+  },
+];
+
+const AVATARS = ["#7c3aed", "#2563eb", "#0891b2", "#059669"];
+const INITIALS = ["A", "P", "N", "V"];
+
+export default function AuthFormLayout({ children }) {
   return (
-    <Motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.8 }}
-      onMouseMove={onMouseMove}
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050505] text-white"
-    >
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <Motion.div
-          animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.25, 0.45, 0.25],
-            x: [0, 100, 0],
-            y: [0, -50, 0],
-          }}
-          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -left-[10%] -top-[20%] h-[70vw] w-[70vw] max-h-[800px] max-w-[800px] rounded-full bg-purple-600/30 blur-[120px]"
-        />
-        <Motion.div
-          animate={{
-            scale: [1, 1.5, 1],
-            opacity: [0.15, 0.35, 0.15],
-            x: [0, -100, 0],
-            y: [0, 100, 0],
-          }}
-          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -right-[10%] bottom-[0%] h-[60vw] w-[60vw] max-h-[600px] max-w-[600px] rounded-full bg-blue-600/20 blur-[120px]"
-        />
-        <Motion.div
-          animate={{
-            scale: [1, 1.1, 1],
-            opacity: [0.15, 0.25, 0.15],
-            y: [0, -100, 0],
-          }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute right-[20%] top-[20%] h-[40vw] w-[40vw] max-h-[400px] max-w-[400px] rounded-full bg-cyan-500/10 blur-[100px]"
-        />
+    <div className="min-h-screen flex bg-[#08080f] text-white">
+      {/* Dot-grid background */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+
+      {/* Ambient light blobs */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-48 -left-48 w-[600px] h-[600px] rounded-full bg-purple-700/10 blur-[130px]" />
+        <div className="absolute -bottom-48 -right-24 w-[520px] h-[520px] rounded-full bg-indigo-700/8 blur-[130px]" />
       </div>
 
-      <div className="absolute inset-0 pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03]" />
+      {/* ── LEFT: Brand panel ── */}
+      <Motion.aside
+        initial={{ opacity: 0, x: -16 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.55, ease: "easeOut" }}
+        className="hidden lg:flex w-[440px] xl:w-[480px] shrink-0 flex-col justify-between p-10 xl:p-14 border-r border-white/[0.06] relative z-10"
+      >
+        {/* Logo */}
+        <BrandLogo size="lg" />
 
-      <div className="relative z-10 flex min-h-screen w-full max-w-7xl items-center">
-        <div className="relative hidden w-1/2 flex-col justify-center px-12 lg:flex xl:px-20">
+        {/* Hero copy + features */}
+        <div>
           <Motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.2 }}
+            transition={{ duration: 0.5, delay: 0.12 }}
           >
-            <BrandLogo size="xl" />
-
-            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-purple-300">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-              {isSignup ? "New Developer Access" : "Systems Operational"}
-            </div>
-
-            <h1 className="text-6xl font-extrabold leading-[1.1] tracking-tight xl:text-7xl">
-              <span className="block text-white">Code.</span>
-              <span className="block text-white/80">Connect.</span>
-              <span className="block bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                Create.
+            <h2 className="text-[2.4rem] xl:text-[2.7rem] font-bold leading-[1.18] tracking-tight mb-4">
+              Your workspace,{" "}
+              <span className="bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                multiplied.
               </span>
-            </h1>
-
-            <p className="mt-6 max-w-md text-lg font-light leading-relaxed text-gray-400">
-              Experience the next generation of real-time collaborative development. Secure, fast, and remarkably beautiful.
+            </h2>
+            <p className="text-gray-400 text-[0.93rem] leading-relaxed mb-10">
+              Collaborate, compile, and ship — all from one beautifully crafted
+              environment built for developers.
             </p>
-
-            <div className="group relative mt-12 overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-6 font-mono text-sm shadow-2xl backdrop-blur-md">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-blue-500/10 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-              <div className="mb-3 flex items-center gap-3 border-b border-white/5 pb-3">
-                <div className="flex gap-1.5">
-                  <div className="h-3 w-3 rounded-full bg-red-500" />
-                  <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                  <div className="h-3 w-3 rounded-full bg-green-500" />
-                </div>
-                <div className="text-xs text-gray-500">terminal ~ codechatter</div>
-              </div>
-              <div className="text-gray-300">
-                <span className="text-purple-400">&gt;</span> <span className="text-cyan-400">~</span>{" "}
-                <TypeAnimation
-                  sequence={[
-                    "connecting to secure node...",
-                    1000,
-                    "authenticating developer token...",
-                    1000,
-                    "workspace environment prepared.",
-                    3000,
-                  ]}
-                  wrapper="span"
-                  speed={60}
-                  repeat={Infinity}
-                />
-              </div>
-            </div>
           </Motion.div>
+
+          <div className="space-y-5">
+            {FEATURES.map(({ icon: Icon, label, desc }, i) => (
+              <Motion.div
+                key={label}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.38, delay: 0.18 + i * 0.07 }}
+                className="flex items-start gap-3.5"
+              >
+                <div className="mt-0.5 w-8 h-8 rounded-lg bg-white/[0.045] border border-white/[0.08] flex items-center justify-center flex-shrink-0">
+                  <Icon size={14} className="text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-[13.5px] font-medium text-gray-100">{label}</p>
+                  <p className="text-[12px] text-gray-500 mt-0.5">{desc}</p>
+                </div>
+              </Motion.div>
+            ))}
+          </div>
         </div>
 
-        <div className="relative z-20 flex w-full items-center justify-center p-6 sm:p-12 lg:w-1/2">
+        {/* Social proof */}
+        <Motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.55 }}
+          className="flex items-center gap-3 pt-6 border-t border-white/[0.06]"
+        >
+          <div className="flex -space-x-2">
+            {AVATARS.map((bg, i) => (
+              <div
+                key={i}
+                className="w-7 h-7 rounded-full border-2 border-[#08080f] flex items-center justify-center text-white text-[10px] font-bold"
+                style={{ background: bg }}
+              >
+                {INITIALS[i]}
+              </div>
+            ))}
+          </div>
+          <div>
+            <p className="text-[12.5px] font-medium text-white">
+              2,000+ developers
+            </p>
+            <p className="text-[11.5px] text-gray-500">already collaborating</p>
+          </div>
+        </Motion.div>
+      </Motion.aside>
+
+      {/* ── RIGHT: Form ── */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 relative z-10">
+        <Motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.08 }}
+          className="w-full max-w-[400px]"
+        >
           {children}
-        </div>
+        </Motion.div>
       </div>
-    </Motion.div>
+    </div>
   );
 }

@@ -175,6 +175,7 @@ export const setupCSP = () => {
     import.meta.env.DEV ? "http://127.0.0.1:8000" : null,
     new URL(API_BASE_URL.replace(/^http/, "ws")).origin,
     "https://accounts.google.com",
+    "https://cdn.tldraw.com",
   ].filter(Boolean)));
 
   const scriptSources = [
@@ -191,7 +192,7 @@ export const setupCSP = () => {
     `script-src ${scriptSources.join(" ")}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: blob: https:",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "font-src 'self' data: https://fonts.gstatic.com https://cdn.tldraw.com",
     `connect-src ${connectSources.join(" ")}`,
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
