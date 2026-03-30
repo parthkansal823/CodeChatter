@@ -2,12 +2,14 @@ import Editor from "@monaco-editor/react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronRight, FolderTree } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
+import { ChevronRight, Clock, Download, FolderTree } from "lucide-react";
 
 import "../utils/monaco";
 import { detectLanguageFromName } from "../utils/workspace";
 import { getFileVisual } from "../utils/fileIcons";
 import { usePreferences } from "../hooks/usePreferences";
+import FileVersionHistory, { saveFileVersion } from "./FileVersionHistory";
 
 function Breadcrumb({ filePath, fileName }) {
   if (!filePath) return null;
@@ -42,6 +44,7 @@ export default function CodeEditor({
   onCodeChange,
   onCursorChange,
   remoteCursors = [],
+  roomId,
 }) {
   const { preferences } = usePreferences();
   const editorRef = useRef(null);
@@ -50,6 +53,7 @@ export default function CodeEditor({
   const remoteCursorStyleRef = useRef(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
 
   const selectedLanguage = detectLanguageFromName(selectedFileName || "");
   const isMarkdown = selectedLanguage === "markdown";
@@ -79,8 +83,14 @@ export default function CodeEditor({
     try {
       editor.addCommand(
         monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+        () => { editor.getAction("editor.action.formatDocument")?.run(); }
+      );
+      // Ctrl+S → save version snapshot
+      editor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
         () => {
-          editor.getAction("editor.action.formatDocument")?.run();
+          const val = editor.getValue();
+          saveFileVersion(roomId, selectedFilePath, val);
         }
       );
     } catch {
@@ -256,21 +266,65 @@ export default function CodeEditor({
         )}
       </div>
 
-      {/* Minimal status pill — bottom left, compact overlay */}
+      {/* Status bar */}
       <div className="flex items-center gap-3 border-t border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] text-zinc-500 dark:border-zinc-800/60 dark:bg-[#0d0d10] dark:text-zinc-600">
         <span className="font-semibold uppercase tracking-wider text-zinc-500">
-          {readOnly ? (
-            <span className="text-amber-400">View only</span>
-          ) : isMarkdown ? (
-            "Markdown"
-          ) : (
-            selectedLanguage
-          )}
+          {readOnly ? <span className="text-amber-400">View only</span>
+            : isMarkdown ? "Markdown"
+            : selectedLanguage}
         </span>
         <span className="text-zinc-400 dark:text-zinc-700">·</span>
         <span>Ln {cursorPosition.line}, Col {cursorPosition.column}</span>
         <span className="ml-auto text-zinc-400 dark:text-zinc-700">{lineCount} lines · {characterCount} chars</span>
+        {selectedFileName && (
+          <button
+            onClick={() => {
+              const blob = new Blob([code], { type: "text/plain" });
+              const url  = URL.createObjectURL(blob);
+              const a    = document.createElement("a");
+              a.href = url; a.download = selectedFileName; a.click();
+              URL.revokeObjectURL(url);
+            }}
+            title="Download file"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
+          >
+            <Download size={11} />
+            <span>Download</span>
+          </button>
+        )}
+        {!readOnly && (
+          <button
+            onClick={() => setShowVersionHistory(v => !v)}
+            title="Version history (Ctrl+S to save)"
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors ${
+              showVersionHistory
+                ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+                : "hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
+            }`}
+          >
+            <Clock size={11} />
+            <span>History</span>
+          </button>
+        )}
       </div>
+
+      {/* Version history slide-out */}
+      <AnimatePresence>
+        {showVersionHistory && (
+          <div className="absolute bottom-9 right-0 top-0 z-20 overflow-hidden shadow-2xl">
+            <FileVersionHistory
+              roomId={roomId}
+              filePath={selectedFilePath}
+              fileName={selectedFileName}
+              onRestore={(content) => {
+                onCodeChange?.(content);
+                setShowVersionHistory(false);
+              }}
+              onClose={() => setShowVersionHistory(false)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
       {!isEditorReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-100/90 text-zinc-500 dark:bg-zinc-950/90 dark:text-zinc-400">

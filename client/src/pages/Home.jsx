@@ -3,15 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight,
+  Bookmark,
+  BookmarkCheck,
+  Clock,
   FolderGit2,
   LayoutGrid,
   Link2,
   List,
   MoreVertical,
   Plus,
+  Search,
   Settings2,
   Trash2,
-  Users
+  Users,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -24,6 +29,7 @@ import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch, validateRoomId } from "../utils/security";
 import { buildRoomInviteLink, parseRoomInvite } from "../utils/room/invite";
 import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/terminal";
+import { getBookmarks, getRecentRooms, isBookmarked, recordVisit, toggleBookmark } from "../utils/roomUtils";
 
 const SkeletonCard = () => (
   <div className="rounded-2xl border border-zinc-200 bg-white p-5 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
@@ -47,9 +53,11 @@ const containerVariants = {
   }
 };
 
+const SPRING = { type: "spring", stiffness: 340, damping: 28 };
+
 const itemVariants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } }
+  hidden:  { opacity: 0, y: 18, scale: 0.97 },
+  visible: { opacity: 1, y: 0,  scale: 1,    transition: { ...SPRING, opacity: { duration: 0.22 } } },
 };
 
 export default function Home() {
@@ -70,6 +78,9 @@ export default function Home() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
   const [selectedShell, setSelectedShell] = useState(defaultTerminalShell);
   const [dsaLanguage, setDsaLanguage] = useState("python");
+  const [roomSearch, setRoomSearch] = useState("");
+  const [bookmarks, setBookmarks] = useState(getBookmarks);
+  const [recentRooms, setRecentRooms] = useState(getRecentRooms);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [settingsRoomId, setSettingsRoomId] = useState(null);
@@ -304,6 +315,7 @@ export default function Home() {
       setSelectedShell(defaultTerminalShell);
       setDsaLanguage("python");
       toast.success("Room created");
+      recordVisit(room.id, room.name);
       navigate(`/room/${room.id}`);
     } catch (error) {
       toast.error(error.message || "Could not create room");
@@ -456,10 +468,63 @@ export default function Home() {
           </Motion.form>
         </div>
 
+        {/* Recently Visited */}
+        {recentRooms.length > 0 && (
+          <Motion.div variants={itemVariants} className="mt-8">
+            <div className="mb-3 flex items-center gap-2">
+              <Clock size={13} className="text-zinc-400" />
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
+                Recently visited
+              </h2>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentRooms.map(r => (
+                <button
+                  key={r.id}
+                  onClick={() => { recordVisit(r.id, r.name); navigate(`/room/${r.id}`); }}
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-sm transition-colors hover:border-violet-300 hover:bg-violet-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-700 dark:hover:bg-violet-900/10"
+                >
+                  <FolderGit2 size={13} className="text-zinc-400" />
+                  <span className="font-medium text-zinc-800 dark:text-zinc-200">{r.name}</span>
+                  <ArrowRight size={12} className="text-zinc-400" />
+                </button>
+              ))}
+            </div>
+          </Motion.div>
+        )}
+
         <section className="mt-10">
           <Motion.div variants={itemVariants} className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">Your rooms</h2>
             <div className="flex items-center gap-3">
+              {/* Search */}
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  value={roomSearch}
+                  onChange={e => setRoomSearch(e.target.value)}
+                  placeholder="Search rooms…"
+                  className="h-8 w-40 rounded-lg border border-zinc-200 bg-white pl-8 pr-7 text-xs text-zinc-700 outline-none transition focus:border-violet-400 focus:ring-1 focus:ring-violet-400/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 sm:w-52"
+                />
+                {roomSearch && (
+                  <button onClick={() => setRoomSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              {bookmarks.length > 0 && (
+                <button
+                  onClick={() => setRoomSearch(prev => prev === "__bookmarked__" ? "" : "__bookmarked__")}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    roomSearch === "__bookmarked__"
+                      ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+                      : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  <BookmarkCheck size={12} />
+                  Bookmarked ({bookmarks.length})
+                </button>
+              )}
               <span className="text-sm text-zinc-500 dark:text-zinc-400">{rooms.length} total</span>
               <div className="inline-flex items-center rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
                 <button
@@ -501,21 +566,28 @@ export default function Home() {
           ) : rooms.length > 0 ? (
             <div className={isListView ? "space-y-3" : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"}>
               <AnimatePresence mode="popLayout">
-                {rooms.map((room) => (
+                {rooms
+                  .filter(r => {
+                    if (roomSearch === "__bookmarked__") return bookmarks.includes(r.id);
+                    if (!roomSearch) return true;
+                    return r.name?.toLowerCase().includes(roomSearch.toLowerCase()) || r.id?.toLowerCase().includes(roomSearch.toLowerCase());
+                  })
+                  .map((room) => (
                   <Motion.div
                     key={room.id}
                     layout // helps smoothly reflow grid after deletion
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-                    whileHover={{ y: -4 }}
-                    className={`group/card relative rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-violet-200 dark:hover:border-violet-900/50 hover:shadow-lg hover:shadow-violet-500/5 ${
+                    whileHover={{ y: -5, scale: 1.01, transition: SPRING }}
+                    whileTap={{ scale: 0.99 }}
+                    className={`group/card relative rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-violet-200 dark:hover:border-violet-900/50 hover:shadow-xl hover:shadow-violet-500/8 ${
                       isListView ? "p-4" : "p-5"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button
-                        onClick={() => navigate(`/room/${room.id}`)}
+                        onClick={() => { recordVisit(room.id, room.name); setRecentRooms(getRecentRooms()); navigate(`/room/${room.id}`); }}
                         className="min-w-0 flex-1 text-left"
                       >
                         <h3 className="truncate text-base font-semibold text-zinc-900 dark:text-white transition-colors">{room.name}</h3>
@@ -527,6 +599,26 @@ export default function Home() {
                             {room.pendingJoinRequestCount} request{room.pendingJoinRequestCount === 1 ? "" : "s"} waiting
                           </span>
                         )}
+                      </button>
+
+                      {/* Bookmark toggle */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleBookmark(room.id);
+                          setBookmarks(getBookmarks());
+                        }}
+                        title={bookmarks.includes(room.id) ? "Remove bookmark" : "Bookmark room"}
+                        className={`shrink-0 rounded-lg p-1.5 transition-colors ${
+                          bookmarks.includes(room.id)
+                            ? "text-violet-600 dark:text-violet-400"
+                            : "text-zinc-300 hover:text-zinc-500 dark:text-zinc-700 dark:hover:text-zinc-400"
+                        }`}
+                      >
+                        {bookmarks.includes(room.id)
+                          ? <BookmarkCheck size={15} />
+                          : <Bookmark size={15} />
+                        }
                       </button>
 
                       {room.ownerId === user?.id && (
@@ -630,9 +722,13 @@ export default function Home() {
             </div>
           ) : (
             <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400">
+              <Motion.div
+                animate={{ y: [0, -5, 0] }}
+                transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400"
+              >
                 <FolderGit2 size={24} />
-              </div>
+              </Motion.div>
               <p className="text-base font-semibold text-zinc-700 dark:text-zinc-300">No rooms yet</p>
               <p className="mt-1.5 max-w-xs text-sm text-zinc-500 dark:text-zinc-400">
                 Create your first workspace and start coding instantly with a template.
@@ -652,10 +748,10 @@ export default function Home() {
         {createModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
             <Motion.form
-              initial={{ opacity: 0, y: 12, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.95, transition: { duration: 0.15 } }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              initial={{ opacity: 0, y: 20, scale: 0.96, filter: "blur(6px)" }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: 14, scale: 0.97, filter: "blur(4px)", transition: { duration: 0.16, ease: "easeIn" } }}
+              transition={{ type: "spring", stiffness: 360, damping: 28, filter: { duration: 0.22 }, opacity: { duration: 0.2 } }}
               onSubmit={handleCreateRoom}
               className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
             >
@@ -827,7 +923,9 @@ function SummaryCard({ label, value, icon }) {
   const IconComponent = icon;
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <Motion.div
+      whileHover={{ y: -3, scale: 1.02, transition: { type: "spring", stiffness: 400, damping: 24 } }}
+      className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex items-center gap-3">
         <div className="rounded-lg bg-zinc-100 p-2 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
           <IconComponent size={16} />
@@ -837,6 +935,6 @@ function SummaryCard({ label, value, icon }) {
           <p className="text-xl font-semibold">{value}</p>
         </div>
       </div>
-    </div>
+    </Motion.div>
   );
 }

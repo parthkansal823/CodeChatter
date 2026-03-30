@@ -139,7 +139,7 @@ export default function TopBar({
               className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
                 explorerOpen
                   ? "bg-violet-500/10 text-violet-400"
-                  : "text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-300"
+                  : "text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
               }`}
               title={explorerOpen ? "Hide files" : "Show files"}
             >

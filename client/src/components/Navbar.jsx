@@ -2,18 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import {
+  Bell,
+  Circle,
   Home,
   LogOut,
   Menu,
   Moon,
   Settings,
   Sun,
+  User,
   X
 } from "lucide-react";
 
 import { useAuth } from "../hooks/useAuth";
+import { useNotifications } from "../context/NotificationsContext";
 import BrandLogo from "./BrandLogo";
 import UserAvatar from "./UserAvatar";
+import NotificationsPanel from "./NotificationsPanel";
 
 export default function Navbar({
   theme,
@@ -26,20 +31,37 @@ export default function Navbar({
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [presence, setPresence] = useState(() => {
+    try { return localStorage.getItem("cc-presence") || "available"; } catch { return "available"; }
+  });
+  const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const notifRef = useRef(null);
 
   useEffect(() => {
     const handler = (event) => {
-      if (!dropdownRef.current?.contains(event.target)) {
-        setDropdownOpen(false);
-      }
+      if (!dropdownRef.current?.contains(event.target)) setDropdownOpen(false);
+      if (!notifRef.current?.contains(event.target)) setNotifOpen(false);
     };
-
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const PRESENCE_OPTIONS = [
+    { id: "available", label: "Available", color: "bg-emerald-500" },
+    { id: "busy",      label: "Busy",      color: "bg-amber-500"   },
+    { id: "away",      label: "Away",      color: "bg-zinc-400"    },
+    { id: "focus",     label: "Focus",     color: "bg-violet-500"  },
+  ];
+  const presenceColor = PRESENCE_OPTIONS.find(p => p.id === presence)?.color || "bg-emerald-500";
+
+  const setPresenceOption = (id) => {
+    setPresence(id);
+    try { localStorage.setItem("cc-presence", id); } catch { /* ignore */ }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -58,8 +80,8 @@ export default function Navbar({
   };
 
   const navItems = [
-    { label: "Dashboard", icon: Home, path: "/home" },
-    { label: "Settings", icon: Settings, path: "/settings" },
+    { label: "Dashboard", icon: Home,     path: "/home" },
+    { label: "Settings",  icon: Settings, path: "/settings" },
   ];
 
   return (
@@ -116,6 +138,23 @@ export default function Navbar({
 
         {/* Right controls */}
         <div className="flex items-center gap-2">
+          {/* Notifications bell */}
+          <div className="relative hidden sm:block" ref={notifRef}>
+            <button
+              onClick={() => { setNotifOpen(v => !v); setDropdownOpen(false); }}
+              className="relative inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 bg-white px-2.5 text-zinc-700 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-700"
+              title="Notifications"
+            >
+              <Bell size={15} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-600 text-[9px] font-bold text-white ring-2 ring-white dark:ring-zinc-950">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+            <NotificationsPanel isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
+          </div>
+
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
@@ -137,7 +176,10 @@ export default function Navbar({
               className="flex h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-1.5 text-left transition-colors hover:border-violet-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-700"
               title={user?.username}
             >
-              <UserAvatar username={user?.username} size="xs" />
+              <div className="relative">
+                <UserAvatar username={user?.username} size="xs" />
+                <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-white dark:ring-zinc-900 ${presenceColor}`} />
+              </div>
               {!minimal && (
                 <span className="hidden max-w-[120px] truncate text-sm text-zinc-800 dark:text-zinc-100 xl:block">
                   {user?.username}
@@ -176,6 +218,36 @@ export default function Navbar({
                       </div>
                     </div>
                   )}
+
+                  {/* Presence selector */}
+                  <div className="border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Status</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      {PRESENCE_OPTIONS.map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setPresenceOption(opt.id)}
+                          className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
+                            presence === opt.id
+                              ? "bg-zinc-100 font-semibold text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                              : "text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
+                          }`}
+                        >
+                          <span className={`h-2 w-2 flex-shrink-0 rounded-full ${opt.color}`} />
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Profile shortcut */}
+                  <button
+                    onClick={() => goTo("/profile")}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                  >
+                    <User size={15} className="text-zinc-400" />
+                    View Profile
+                  </button>
 
                   {/* Nav items */}
                   {navItems.map((item) => {

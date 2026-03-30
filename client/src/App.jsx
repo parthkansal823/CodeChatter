@@ -4,17 +4,20 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./context/AuthContext";
 import { PreferencesProvider } from "./context/PreferencesContext";
+import { NotificationsProvider } from "./context/NotificationsContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CommandPalette from "./components/CommandPalette";
+import OnboardingModal from "./components/OnboardingModal";
 import { useAuth } from "./hooks/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
 
-const Layout = lazy(() => import("./pages/Layout"));
-const Auth = lazy(() => import("./pages/Auth"));
+const Layout   = lazy(() => import("./pages/Layout"));
+const Auth     = lazy(() => import("./pages/Auth"));
 const OAuthCallback = lazy(() => import("./pages/OAuthCallback"));
 const CodeRoom = lazy(() => import("./pages/CodeRoom"));
-const Home = lazy(() => import("./pages/Home"));
+const Home     = lazy(() => import("./pages/Home"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Profile  = lazy(() => import("./pages/Profile"));
 
 function RouteFallback() {
   return (
@@ -44,13 +47,10 @@ function AppContent() {
       <Toaster
         position="top-center"
         toastOptions={{
-          style: {
-            background: "#18181b",
-            color: "#fff",
-            border: "1px solid #27272a"
-          }
+          style: { background: "#18181b", color: "#fff", border: "1px solid #27272a" }
         }}
       />
+      <OnboardingModal />
       <Suspense fallback={<RouteFallback />}>
         <CommandPalette theme={theme} onThemeChange={onThemeChange} />
         <Routes>
@@ -77,6 +77,17 @@ function AppContent() {
               <ProtectedRoute>
                 <Layout theme={theme} onThemeChange={onThemeChange}>
                   <Settings />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Layout theme={theme} onThemeChange={onThemeChange}>
+                  <Profile />
                 </Layout>
               </ProtectedRoute>
             }
@@ -112,7 +123,9 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <PreferencesProvider>
-          <AppContent />
+          <NotificationsProvider>
+            <AppContent />
+          </NotificationsProvider>
         </PreferencesProvider>
       </AuthProvider>
     </BrowserRouter>

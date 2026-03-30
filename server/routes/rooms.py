@@ -262,10 +262,10 @@ def run_room_file(
       detail="Room not found",
     )
 
-  if not repository.user_can_edit_room(current_user["id"], room):
+  if not repository.user_can_run_room(current_user["id"], room):
     raise HTTPException(
       status_code=status.HTTP_403_FORBIDDEN,
-      detail="You need edit access to run files in this room",
+      detail="You need at least runner access to execute files in this room",
     )
 
   result = execute_workspace_file(

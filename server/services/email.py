@@ -188,7 +188,7 @@ def send_otp_email(to_email: str, otp: str, action: str = "login") -> None:
           <tr>
             <td align="center" style="padding-top:28px;">
               <p style="margin:0 0 6px;font-size:12px;color:#374151;">Made with &#9829; for developers who build together.</p>
-              <p style="margin:0;font-size:11px;color:#1f2937;">© 2025 CodeChatter &nbsp;·&nbsp; All rights reserved</p>
+              <p style="margin:0;font-size:11px;color:#1f2937;">© 2026 CodeChatter &nbsp;·&nbsp; All rights reserved</p>
             </td>
           </tr>
 

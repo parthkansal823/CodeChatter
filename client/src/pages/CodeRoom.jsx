@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { motion as Motion, AnimatePresence } from "framer-motion";
+import { Minimize2 } from "lucide-react";
 
 import BottomPanel from "../components/BottomPanel";
 import CodeEditor from "../components/CodeEditor";
@@ -14,12 +17,28 @@ import TabBar from "../components/TabBar";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 import { useCodeRoomState } from "../hooks/code-room/useCodeRoomState";
+import { useRunNotifications, useCollaboratorNotifications } from "../hooks/useRunNotifications";
 
 export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const { roomId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const { token, user } = useAuth();
+  const [focusMode, setFocusMode] = useState(false);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "Z") {
+        e.preventDefault();
+        setFocusMode(v => !v);
+      }
+      if (e.key === "Escape" && focusMode) {
+        setFocusMode(false);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [focusMode]);
 
   const {
     room,
@@ -70,6 +89,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     toggleExplorer,
     refreshPendingAccess,
     canEditRoom,
+    canRunRoom,
     canUseTerminal,
     canManageRoom,
     chatMessages,
@@ -85,6 +105,10 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     token,
     user,
   });
+
+  // Auto-fire notifications after state is available
+  useRunNotifications(runResult, roomId, room?.name);
+  useCollaboratorNotifications(activeCollaborators, roomId, room?.name);
 
   if (isLoading) {
     return <LoadingRoomScreen />;
@@ -117,16 +141,35 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-zinc-50 text-black dark:bg-[#09090b] dark:text-white">
-      <Navbar
-        theme={theme}
-        onThemeChange={onThemeChange}
-        minimal
-        contextLabel="Room"
-        contextValue={room?.name || roomId || ""}
-      />
+      {!focusMode && (
+        <Navbar
+          theme={theme}
+          onThemeChange={onThemeChange}
+          minimal
+          contextLabel="Room"
+          contextValue={room?.name || roomId || ""}
+        />
+      )}
+
+      {/* Focus mode exit pill */}
+      <AnimatePresence>
+        {focusMode && (
+          <Motion.button
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            onClick={() => setFocusMode(false)}
+            className="absolute left-1/2 top-3 z-50 -translate-x-1/2 inline-flex items-center gap-2 rounded-full bg-zinc-900/80 px-4 py-1.5 text-xs font-medium text-zinc-300 shadow-xl backdrop-blur-sm hover:bg-zinc-800 dark:bg-zinc-100/10 dark:text-zinc-200"
+          >
+            <Minimize2 size={12} />
+            Focus mode — press Esc or Ctrl⇧Z to exit
+          </Motion.button>
+        )}
+      </AnimatePresence>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {!isMobileViewport && (
+        {!focusMode && !isMobileViewport && (
           <FileExplorer
             workspaceLabel={room?.name || "Workspace"}
             tree={workspaceTree}
@@ -145,28 +188,30 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar
-            room={room}
-            activePath={activeFileEntry?.path}
-            collaborators={room?.collaborators || []}
-            activeCollaborators={activeCollaborators}
-            explorerOpen={isMobileViewport ? isMobileExplorerOpen : isDesktopExplorerOpen}
-            onToggleExplorer={toggleExplorer}
-            sidebarOpen={isRightSidebarOpen}
-            onToggleSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
-            onCopyInvite={handleCopyInvite}
-            onRun={handleRun}
-            isRunning={runResult?.status === "running"}
-            saveStatus={saveStatus}
-            liveConnected={isRealtimeConnected}
-            canEdit={canEditRoom}
-            canRun={canUseTerminal}
-            canManageRoom={canManageRoom}
-            pendingJoinRequestCount={pendingJoinRequestCount}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-          />
+          {!focusMode && (
+            <TopBar
+              room={room}
+              activePath={activeFileEntry?.path}
+              collaborators={room?.collaborators || []}
+              activeCollaborators={activeCollaborators}
+              explorerOpen={isMobileViewport ? isMobileExplorerOpen : isDesktopExplorerOpen}
+              onToggleExplorer={toggleExplorer}
+              sidebarOpen={isRightSidebarOpen}
+              onToggleSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
+              onCopyInvite={handleCopyInvite}
+              onRun={handleRun}
+              isRunning={runResult?.status === "running"}
+              saveStatus={saveStatus}
+              liveConnected={isRealtimeConnected}
+              canEdit={canEditRoom}
+              canRun={canRunRoom}
+              canManageRoom={canManageRoom}
+              pendingJoinRequestCount={pendingJoinRequestCount}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+            />
+          )}
 
-          {openFiles.length > 0 && (
+          {!focusMode && openFiles.length > 0 && (
             <TabBar
               openFiles={openFiles}
               activeFileId={activeFileId}
@@ -188,6 +233,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                   onCursorChange={handleCursorChange}
                   remoteCursors={remoteCursors}
                   readOnly={!canEditRoom}
+                  roomId={roomId}
                 />
               ) : (
                 <EmptyWorkspaceState
@@ -197,38 +243,42 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
               )}
             </div>
 
-            <RightSidebar
-              isOpen={isRightSidebarOpen}
-              onToggle={() => setIsRightSidebarOpen((prev) => !prev)}
-              mobile={isMobileViewport}
-              onClose={() => setIsRightSidebarOpen(false)}
-              room={room}
-              roomId={roomId}
-              activeFilePath={activeFileEntry?.path}
-              activeCode={activeCode}
-              runResult={runResult}
-              activeCollaborators={activeCollaborators}
-              saveStatus={saveStatus}
-              liveConnected={isRealtimeConnected}
-              chatMessages={chatMessages}
-              sendChatMessage={sendChatMessage}
-              sendVideoSignal={sendVideoSignal}
-              setVideoSignalListener={setVideoSignalListener}
-              unreadChatMessagesCount={unreadChatMessagesCount}
-              setUnreadChatMessagesCount={setUnreadChatMessagesCount}
-            />
+            {!focusMode && (
+              <RightSidebar
+                isOpen={isRightSidebarOpen}
+                onToggle={() => setIsRightSidebarOpen((prev) => !prev)}
+                mobile={isMobileViewport}
+                onClose={() => setIsRightSidebarOpen(false)}
+                room={room}
+                roomId={roomId}
+                activeFilePath={activeFileEntry?.path}
+                activeCode={activeCode}
+                runResult={runResult}
+                activeCollaborators={activeCollaborators}
+                saveStatus={saveStatus}
+                liveConnected={isRealtimeConnected}
+                chatMessages={chatMessages}
+                sendChatMessage={sendChatMessage}
+                sendVideoSignal={sendVideoSignal}
+                setVideoSignalListener={setVideoSignalListener}
+                unreadChatMessagesCount={unreadChatMessagesCount}
+                setUnreadChatMessagesCount={setUnreadChatMessagesCount}
+              />
+            )}
           </div>
 
-          <BottomPanel
-            key={runPanelSignal || "idle"}
-            runResult={runResult}
-            stdin={stdin}
-            roomId={roomId}
-            onStdinChange={setStdin}
-            defaultMinimized={runPanelSignal === 0}
-            runEnabled={canEditRoom}
-            terminalEnabled={canUseTerminal}
-          />
+          {!focusMode && (
+            <BottomPanel
+              key={runPanelSignal || "idle"}
+              runResult={runResult}
+              stdin={stdin}
+              roomId={roomId}
+              onStdinChange={setStdin}
+              defaultMinimized={runPanelSignal === 0}
+              runEnabled={canRunRoom}
+              terminalEnabled={canUseTerminal}
+            />
+          )}
         </div>
       </div>
 

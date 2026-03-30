@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Check, Clock3, Eye, Loader2, PencilLine, Play, Settings2,
+  Check, Clock3, Crown, Eye, Loader2, PencilLine, Play, Settings2,
   Shield, ShieldCheck, Users, X, RefreshCw, Lock, Unlock,
   ChevronDown, AlertTriangle,
 } from "lucide-react";
@@ -29,36 +29,44 @@ const formatRequestedAt = (value) => {
 
 const ACCESS_ROLE_OPTIONS = [
   {
+    id: "owner",
+    label: "Owner",
+    sublabel: "Full access + manage",
+    description: "Full access — edit, run, manage room settings, and assign roles to others.",
+    icon: Crown,
+    color: "gold",
+  },
+  {
     id: "editor",
     label: "Editor",
-    sublabel: "Can edit & run code",
-    description: "Full workspace access — edit files, run code, use the terminal.",
+    sublabel: "Edit + run code",
+    description: "Can edit files and run/execute code, but cannot manage room settings.",
     icon: PencilLine,
     color: "violet",
   },
   {
     id: "runner",
     label: "Runner",
-    sublabel: "Can only run code",
-    description: "Can execute code and use the terminal, but cannot edit files.",
+    sublabel: "Execute only",
+    description: "Can run/execute code and use the terminal, but cannot edit files.",
     icon: Play,
     color: "amber",
   },
   {
     id: "viewer",
     label: "Viewer",
-    sublabel: "Read-only access",
-    description: "See files and follow collaboration in real time without editing.",
+    sublabel: "Read-only",
+    description: "See files and follow collaboration in real time without editing or running.",
     icon: Eye,
     color: "slate",
   },
 ];
 
 const ROLE_COLORS = {
-  owner: { pill: "bg-violet-500/15 text-violet-300 border-violet-500/30", dot: "bg-violet-400" },
+  owner:  { pill: "bg-yellow-500/15 text-yellow-300 border-yellow-500/30", dot: "bg-yellow-400" },
   editor: { pill: "bg-violet-500/10 text-violet-300 border-violet-500/20", dot: "bg-violet-400" },
-  runner: { pill: "bg-amber-500/10 text-amber-300 border-amber-500/20", dot: "bg-amber-400" },
-  viewer: { pill: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", dot: "bg-zinc-500" },
+  runner: { pill: "bg-amber-500/10 text-amber-300 border-amber-500/20",    dot: "bg-amber-400"  },
+  viewer: { pill: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",       dot: "bg-zinc-500"   },
 };
 
 function RoleBadge({ role }) {
@@ -79,6 +87,9 @@ function RoleSelector({ selectedRole, onChange, compact = false }) {
         const Icon = option.icon;
         const isSelected = selectedRole === option.id;
         const colorMap = {
+          gold: isSelected
+            ? "border-yellow-500 bg-yellow-950/60 text-yellow-100 shadow-yellow-500/10 shadow-lg"
+            : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300",
           violet: isSelected
             ? "border-violet-500 bg-violet-950/60 text-violet-100 shadow-violet-500/10 shadow-lg"
             : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300",

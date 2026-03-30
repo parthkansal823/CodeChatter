@@ -1,20 +1,31 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { AnimatePresence } from "framer-motion";
-import { Search, FolderGit2, Home, Settings, LogOut, Sun, Moon } from "lucide-react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
+import {
+  Activity, Bell, FolderGit2, Home, Keyboard, LogOut, Moon, Plus, Search, Settings, Sun, User,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useNotifications } from "../context/NotificationsContext";
+import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 
-const COMMANDS = [
-  { id: "home", title: "Go to Dashboard", icon: Home, section: "Navigation", path: "/home" },
-  { id: "settings", title: "Preferences", icon: Settings, section: "Navigation", path: "/settings" },
+const STATIC_COMMANDS = [
+  { id: "home",         title: "Go to Dashboard",     icon: Home,        section: "Navigation", path: "/home" },
+  { id: "profile",      title: "View Profile",         icon: User,        section: "Navigation", path: "/profile" },
+  { id: "settings",     title: "Preferences",          icon: Settings,    section: "Navigation", path: "/settings" },
+  { id: "create-room",  title: "Create New Room",      icon: Plus,        section: "Quick Actions", path: "/home" },
+  { id: "notifications",title: "Notifications",        icon: Bell,        section: "Quick Actions", path: "/profile" },
+  { id: "activity",     title: "View Activity Log",    icon: Activity,    section: "Quick Actions", path: "/home" },
+  { id: "shortcuts",    title: "Keyboard Shortcuts",   icon: Keyboard,    section: "Quick Actions" },
 ];
 
 export default function CommandPalette({ theme, onThemeChange }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -32,25 +43,29 @@ export default function CommandPalette({ theme, onThemeChange }) {
   }, [isOpen]);
 
   const allCommands = useMemo(() => ([
-    ...COMMANDS,
+    ...STATIC_COMMANDS.map(cmd =>
+      cmd.id === "notifications" && unreadCount > 0
+        ? { ...cmd, title: `Notifications (${unreadCount} unread)` }
+        : cmd
+    ),
     {
       id: "theme",
       title: `Switch to ${theme === "vs-dark" ? "Light" : "Dark"} Theme`,
       icon: theme === "vs-dark" ? Sun : Moon,
-      section: "Actions",
+      section: "Appearance",
       action: () => onThemeChange(theme === "vs-dark" ? "vs" : "vs-dark"),
     },
     {
       id: "logout",
-      title: "Logout securely",
+      title: "Sign out",
       icon: LogOut,
-      section: "Actions",
+      section: "Account",
       action: async () => {
         await logout();
         navigate("/auth");
       },
     },
-  ]), [logout, navigate, onThemeChange, theme]);
+  ]), [logout, navigate, onThemeChange, theme, unreadCount]);
 
   const filtered = useMemo(() => (
     query.trim() === ""
@@ -63,7 +78,9 @@ export default function CommandPalette({ theme, onThemeChange }) {
     : 0;
 
   const handleSelect = useCallback((command) => {
-    if (command.path) {
+    if (command.id === "shortcuts") {
+      setShortcutsOpen(true);
+    } else if (command.path) {
       navigate(command.path);
     } else if (command.action) {
       command.action();
@@ -105,6 +122,8 @@ export default function CommandPalette({ theme, onThemeChange }) {
   }, [isOpen]);
 
   return (
+    <>
+    <KeyboardShortcutsModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     <AnimatePresence>
       {isOpen && (
         <div 
@@ -132,47 +151,60 @@ export default function CommandPalette({ theme, onThemeChange }) {
             <div className="max-h-[60vh] overflow-y-auto p-2">
               {filtered.length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  No commands found for <span className="text-zinc-900 dark:text-white">"{query}"</span>
+                  No commands found for{" "}
+                  <span className="text-zinc-900 dark:text-white">"{query}"</span>
                 </div>
               ) : (
-                <div className="space-y-1">
-                  {filtered.map((cmd, idx) => {
-                    const isSelected = idx === normalizedSelectedIndex;
-                    return (
-                      <button
-                        key={cmd.id}
-                        onMouseEnter={() => setSelectedIndex(idx)}
-                        onClick={() => handleSelect(cmd)}
-                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${
-                          isSelected
-                            ? "bg-brand-600 text-white shadow-md shadow-brand-600/20"
-                            : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5"
-                        }`}
-                      >
-                        <div
-                          className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                            isSelected
-                              ? "bg-white/20 text-white"
-                              : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-                          }`}
-                        >
-                          <cmd.icon size={16} />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{cmd.title}</p>
-                          <p className={`text-[11px] ${isSelected ? "text-brand-200" : "text-zinc-500 dark:text-zinc-500"}`}>
-                            {cmd.section}
-                          </p>
-                        </div>
-                        {isSelected && (
-                          <div className="text-[10px] font-medium tracking-wider text-brand-200 opacity-80">
-                            ENTER
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                (() => {
+                  const sections = [];
+                  const seen = new Set();
+                  filtered.forEach(cmd => {
+                    if (!seen.has(cmd.section)) { seen.add(cmd.section); sections.push(cmd.section); }
+                  });
+                  return sections.map(section => (
+                    <div key={section} className="mb-1">
+                      <p className="mb-1 px-3 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
+                        {section}
+                      </p>
+                      {filtered
+                        .filter(cmd => cmd.section === section)
+                        .map(cmd => {
+                          const idx = filtered.indexOf(cmd);
+                          const isSelected = idx === normalizedSelectedIndex;
+                          return (
+                            <Motion.button
+                              key={cmd.id}
+                              onMouseEnter={() => setSelectedIndex(idx)}
+                              onClick={() => handleSelect(cmd)}
+                              whileHover={{ x: 2 }}
+                              transition={{ duration: 0.1 }}
+                              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                                isSelected
+                                  ? "bg-brand-600 text-white shadow-md shadow-brand-600/20"
+                                  : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5"
+                              }`}
+                            >
+                              <div
+                                className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                                  isSelected
+                                    ? "bg-white/20 text-white"
+                                    : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                                }`}
+                              >
+                                <cmd.icon size={15} />
+                              </div>
+                              <p className="flex-1 text-sm font-medium">{cmd.title}</p>
+                              {isSelected && (
+                                <kbd className="rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white/80">
+                                  ↵
+                                </kbd>
+                              )}
+                            </Motion.button>
+                          );
+                        })}
+                    </div>
+                  ));
+                })()
               )}
             </div>
             <div className="border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-white/10 dark:bg-[#050505] dark:text-zinc-400">
@@ -182,5 +214,6 @@ export default function CommandPalette({ theme, onThemeChange }) {
         </div>
       )}
     </AnimatePresence>
+    </>
   );
 }

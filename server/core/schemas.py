@@ -199,7 +199,7 @@ class RoomJoinRequestApprovalRequest(BaseModel):
     normalized = (value or "editor").strip().lower()
 
     if normalized not in ASSIGNABLE_ROOM_ACCESS_ROLES:
-      raise ValueError("Access role must be viewer, editor, or runner")
+      raise ValueError("Access role must be viewer, editor, runner, or owner")
 
     return normalized
 
@@ -213,7 +213,7 @@ class RoomMemberAccessUpdateRequest(BaseModel):
     normalized = value.strip().lower()
 
     if normalized not in ASSIGNABLE_ROOM_ACCESS_ROLES:
-      raise ValueError("Access role must be viewer, editor, or runner")
+      raise ValueError("Access role must be viewer, editor, runner, or owner")
 
     return normalized
 

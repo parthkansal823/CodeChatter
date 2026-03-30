@@ -1,22 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  CheckCircle,
   ChevronDown,
   ChevronUp,
+  Clock,
   Copy,
   Play,
   ShieldOff,
   TerminalSquare,
   TriangleAlert,
+  XCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import XTerminal from "./XTerminal";
 
 const TABS = [
-  { id: "console", label: "Console I/O", icon: Play },
-  { id: "errors", label: "Errors", icon: TriangleAlert },
-  { id: "terminal", label: "Terminal", icon: TerminalSquare },
+  { id: "console",  label: "Console I/O", icon: Play },
+  { id: "errors",   label: "Errors",      icon: TriangleAlert },
+  { id: "history",  label: "History",     icon: Clock },
+  { id: "terminal", label: "Terminal",    icon: TerminalSquare },
 ];
+
+const HISTORY_PREFIX = "cc-exec-history-";
+const MAX_HISTORY = 30;
 
 const ANSI_ESCAPE_PATTERN = new RegExp(String.raw`\u001b\[[0-9;]*m`, "g");
 const PANEL_DEFAULT_HEIGHT = 172;
@@ -60,7 +67,37 @@ export default function BottomPanel({
     return Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, storedValue));
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [execHistory, setExecHistory] = useState([]);
+  const [selectedHistory, setSelectedHistory] = useState(null);
   const panelRef = useRef(null);
+
+  // Load history from sessionStorage
+  useEffect(() => {
+    if (!roomId) return;
+    try {
+      const raw = sessionStorage.getItem(HISTORY_PREFIX + roomId);
+      setExecHistory(raw ? JSON.parse(raw) : []);
+    } catch { /* ignore */ }
+  }, [roomId]);
+
+  // Save completed runs to history
+  useEffect(() => {
+    if (!roomId || !runResult || runResult.status === "running") return;
+    const entry = {
+      id: `${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      exitCode: runResult.exitCode,
+      runtimeMs: runResult.runtimeMs,
+      stdout: runResult.stdout || "",
+      stderr: runResult.stderr || "",
+      command: runResult.command || "",
+    };
+    setExecHistory(prev => {
+      const updated = [entry, ...prev].slice(0, MAX_HISTORY);
+      try { sessionStorage.setItem(HISTORY_PREFIX + roomId, JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+  }, [roomId, runResult]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -227,6 +264,55 @@ export default function BottomPanel({
                   </pre>
                 </div>
               </div>
+            </div>
+          ) : activeTab === "history" ? (
+            <div className="h-full min-h-[96px] w-full">
+              {execHistory.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 text-center opacity-60">
+                  <Clock size={20} className="text-zinc-400" />
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">No execution history yet</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {execHistory.map((entry) => {
+                    const isSelected = selectedHistory?.id === entry.id;
+                    const ok = entry.exitCode === 0;
+                    const ts = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                    return (
+                      <button
+                        key={entry.id}
+                        onClick={() => setSelectedHistory(isSelected ? null : entry)}
+                        className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                          isSelected
+                            ? "border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-900/20"
+                            : "border-zinc-200 bg-zinc-50 hover:border-zinc-300 dark:border-white/[0.06] dark:bg-black/20 dark:hover:border-white/10"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {ok
+                              ? <CheckCircle size={12} className="shrink-0 text-green-500" />
+                              : <XCircle size={12} className="shrink-0 text-red-400" />
+                            }
+                            <span className="truncate text-[11px] font-mono text-zinc-600 dark:text-zinc-300">
+                              {entry.command || "code run"}
+                            </span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 text-[10px] text-zinc-400">
+                            {typeof entry.runtimeMs === "number" && <span>{entry.runtimeMs}ms</span>}
+                            <span>{ts}</span>
+                          </div>
+                        </div>
+                        {isSelected && (entry.stdout || entry.stderr) && (
+                          <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded border border-zinc-200 bg-white p-2 text-[10px] text-zinc-700 dark:border-white/[0.06] dark:bg-black/30 dark:text-zinc-300">
+                            {entry.stdout || entry.stderr}
+                          </pre>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : activeTab === "terminal" ? (
             <div className="h-full min-h-[96px] w-full">

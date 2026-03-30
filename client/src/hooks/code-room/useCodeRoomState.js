@@ -102,8 +102,9 @@ export function useCodeRoomState({
   const activeCode = activeFileEntry?.node?.content || "";
   const activeFilePath = activeFileEntry?.path || null;
   const canEditRoom = Boolean(room?.canEdit);
+  const canRunRoom = Boolean(room?.canRun ?? room?.canEdit);
   const canUseTerminal = Boolean(room?.canUseTerminal);
-  const canManageRoom = Boolean(room?.canManage ?? (room?.ownerId === user?.id));
+  const canManageRoom = Boolean(room?.canManage ?? (room?.ownerIds?.includes(user?.id) || room?.ownerId === user?.id));
 
   const openFiles = useMemo(() => {
     return Array.from(openFileIds)
@@ -1355,6 +1356,7 @@ export function useCodeRoomState({
     toggleExplorer,
     refreshPendingAccess,
     canEditRoom,
+    canRunRoom,
     canUseTerminal,
     canManageRoom,
   };

@@ -1,8 +1,11 @@
 import { useState, useCallback, useEffect } from "react";
 import {
+  Activity,
   Bot,
+  FileText,
   MessageCircleMore,
   PencilRuler,
+  Timer,
   Video,
   X,
   ChevronLeft,
@@ -13,6 +16,9 @@ import {
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import RoomChat from "./RoomChat";
 import AIHelper from "./AIHelper";
+import ActivityLog from "./ActivityLog";
+import QuickNotes from "./QuickNotes";
+import PomodoroTimer from "./PomodoroTimer";
 import Whiteboard from "./Whiteboard";
 import VideoCall from "./VideoCall";
 import UserAvatar from "./UserAvatar";
@@ -53,6 +59,33 @@ const TOOLS = [
     bg: "hover:bg-amber-500/10",
     activeBg: "bg-amber-500/10",
     activeBorder: "border-amber-500/40",
+  },
+  {
+    id: "activity",
+    name: "Activity",
+    icon: Activity,
+    color: "text-rose-400",
+    bg: "hover:bg-rose-500/10",
+    activeBg: "bg-rose-500/10",
+    activeBorder: "border-rose-500/40",
+  },
+  {
+    id: "notes",
+    name: "Quick Notes",
+    icon: FileText,
+    color: "text-amber-400",
+    bg: "hover:bg-amber-500/10",
+    activeBg: "bg-amber-500/10",
+    activeBorder: "border-amber-500/40",
+  },
+  {
+    id: "pomodoro",
+    name: "Pomodoro",
+    icon: Timer,
+    color: "text-rose-400",
+    bg: "hover:bg-rose-500/10",
+    activeBg: "bg-rose-500/10",
+    activeBorder: "border-rose-500/40",
   },
 ];
 
@@ -213,6 +246,21 @@ export default function RightSidebar({
             sendVideoSignal={sendVideoSignal}
             setVideoSignalListener={setVideoSignalListener}
           />
+        </Motion.div>
+      )}
+      {activeFeature === "activity" && (
+        <Motion.div key="activity" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col">
+          <ActivityLog roomId={roomId} />
+        </Motion.div>
+      )}
+      {activeFeature === "notes" && (
+        <Motion.div key="notes" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col">
+          <QuickNotes roomId={roomId} />
+        </Motion.div>
+      )}
+      {activeFeature === "pomodoro" && (
+        <Motion.div key="pomodoro" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col">
+          <PomodoroTimer />
         </Motion.div>
       )}
     </AnimatePresence>
