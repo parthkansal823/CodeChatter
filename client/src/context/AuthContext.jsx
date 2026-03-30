@@ -203,6 +203,15 @@ export function AuthProvider({ children }) {
         }),
       });
 
+      if (response?.requires_mfa) {
+        return {
+          success: true,
+          requires_mfa: true,
+          mfa_token: response.mfa_token,
+          masked_email: response.masked_email,
+        };
+      }
+
       if (!response?.token || !response?.user) {
         return {
           success: false,
@@ -274,6 +283,15 @@ export function AuthProvider({ children }) {
         }),
       });
 
+      if (response?.requires_mfa) {
+        return {
+          success: true,
+          requires_mfa: true,
+          mfa_token: response.mfa_token,
+          masked_email: response.masked_email,
+        };
+      }
+
       if (!response?.token || !response?.user) {
         return {
           success: false,
@@ -292,6 +310,35 @@ export function AuthProvider({ children }) {
       };
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async (mfaToken, otp) => {
+    try {
+      const response = await secureFetch(API_ENDPOINTS.VERIFY_OTP, {
+        method: "POST",
+        body: JSON.stringify({ mfa_token: mfaToken, otp }),
+      });
+
+      if (!response?.token || !response?.user) {
+        return { success: false, error: "Invalid response from server" };
+      }
+
+      return applyAuthenticatedState(response.token, response.user);
+    } catch (error) {
+      return { success: false, error: error.message || "Verification failed" };
+    }
+  };
+
+  const resendOtp = async (mfaToken) => {
+    try {
+      await secureFetch(API_ENDPOINTS.RESEND_OTP, {
+        method: "POST",
+        body: JSON.stringify({ mfa_token: mfaToken }),
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message || "Could not resend code" };
     }
   };
 
@@ -350,6 +397,8 @@ export function AuthProvider({ children }) {
     token,
     login,
     signup,
+    verifyOtp,
+    resendOtp,
     logout,
     deleteAccount,
     oauthLogin,

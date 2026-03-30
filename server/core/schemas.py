@@ -93,6 +93,22 @@ class SignupRequest(BaseModel):
     return value
 
 
+class VerifyOTPRequest(BaseModel):
+  mfa_token: str = Field(min_length=32, max_length=64)
+  otp: str = Field(min_length=6, max_length=6)
+
+  @field_validator("otp")
+  @classmethod
+  def validate_otp(cls, value: str) -> str:
+    if not value.isdigit():
+      raise ValueError("OTP must be a 6-digit number")
+    return value
+
+
+class ResendOTPRequest(BaseModel):
+  mfa_token: str = Field(min_length=32, max_length=64)
+
+
 class RoomCreateRequest(BaseModel):
   name: str | None = Field(default=None, max_length=80)
   description: str | None = Field(default=None, max_length=240)

@@ -563,6 +563,7 @@ class MongoRepository:
     self._database = None
     self._users = None
     self._rooms = None
+    self._otp_challenges = None
     self._is_mock = mongo_uri.startswith("mongomock://")
 
   def initialize(self) -> None:
@@ -578,6 +579,7 @@ class MongoRepository:
     self._users = self._database["users"]
     self._rooms = self._database["rooms"]
     self._room_messages = self._database["room_messages"]
+    self._otp_challenges = self._database["otp_challenges"]
 
     self._ensure_indexes()
     self._bootstrap_data()
@@ -674,6 +676,55 @@ class MongoRepository:
       },
     )
     self._users.delete_one({"id": user_id})
+
+  def store_otp_challenge(
+    self,
+    mfa_token: str,
+    challenge_type: str,
+    email: str,
+    otp_hash: str,
+    expires_at: datetime,
+    user_id: str | None = None,
+    pending_signup: dict | None = None,
+  ) -> None:
+    self.initialize()
+    self._otp_challenges.insert_one({
+      "mfa_token": mfa_token,
+      "type": challenge_type,
+      "email": email,
+      "otp_hash": otp_hash,
+      "expires_at": expires_at,
+      "attempts": 0,
+      "user_id": user_id,
+      "pending_signup": pending_signup,
+    })
+
+  def get_otp_challenge(self, mfa_token: str) -> dict | None:
+    self.initialize()
+    return self._strip_mongo_id(
+      self._otp_challenges.find_one({"mfa_token": mfa_token})
+    )
+
+  def increment_otp_attempts(self, mfa_token: str) -> int:
+    from pymongo import ReturnDocument
+    self.initialize()
+    result = self._otp_challenges.find_one_and_update(
+      {"mfa_token": mfa_token},
+      {"$inc": {"attempts": 1}},
+      return_document=ReturnDocument.AFTER,
+    )
+    return result["attempts"] if result else 0
+
+  def update_otp_challenge(self, mfa_token: str, otp_hash: str, expires_at: datetime) -> None:
+    self.initialize()
+    self._otp_challenges.update_one(
+      {"mfa_token": mfa_token},
+      {"$set": {"otp_hash": otp_hash, "expires_at": expires_at, "attempts": 0}},
+    )
+
+  def delete_otp_challenge(self, mfa_token: str) -> None:
+    self.initialize()
+    self._otp_challenges.delete_one({"mfa_token": mfa_token})
 
   def upsert_oauth_user(
     self,
@@ -1471,6 +1522,9 @@ class MongoRepository:
 
     self._room_messages.create_index([("id", ASCENDING)], unique=True)
     self._room_messages.create_index([("room_id", ASCENDING), ("created_at", ASCENDING)])
+
+    self._otp_challenges.create_index([("mfa_token", ASCENDING)], unique=True)
+    self._otp_challenges.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
 
   def _bootstrap_data(self) -> None:
     has_users = self._users.count_documents({}) > 0

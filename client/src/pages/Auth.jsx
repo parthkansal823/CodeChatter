@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
-import { Github, Mail, Lock, User } from "lucide-react";
+import { Github, Mail, Lock, User, ArrowLeft, RotateCcw, ShieldCheck } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import toast from "react-hot-toast";
 import FloatingInput from "../components/FloatingInput";
@@ -27,6 +27,70 @@ const slideVariant = {
   }),
 };
 
+const RESEND_COOLDOWN = 30; // seconds
+
+function OtpInput({ value, onChange }) {
+  const inputs = useRef([]);
+
+  const handleChange = (index, e) => {
+    const digit = e.target.value.replace(/\D/g, "").slice(-1);
+    const next = value.split("");
+    next[index] = digit;
+    const updated = next.join("");
+    onChange(updated);
+    if (digit && index < 5) {
+      inputs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === "Backspace") {
+      if (value[index]) {
+        const next = value.split("");
+        next[index] = "";
+        onChange(next.join(""));
+      } else if (index > 0) {
+        inputs.current[index - 1]?.focus();
+        const next = value.split("");
+        next[index - 1] = "";
+        onChange(next.join(""));
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      inputs.current[index - 1]?.focus();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      inputs.current[index + 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    onChange(pasted.padEnd(6, "").slice(0, 6));
+    const focusIdx = Math.min(pasted.length, 5);
+    inputs.current[focusIdx]?.focus();
+  };
+
+  return (
+    <div className="flex gap-3 justify-center" onPaste={handlePaste}>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <input
+          key={i}
+          ref={(el) => (inputs.current[i] = el)}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={value[i] || ""}
+          onChange={(e) => handleChange(i, e)}
+          onKeyDown={(e) => handleKeyDown(i, e)}
+          className="w-11 h-13 text-center text-xl font-bold rounded-lg bg-white/[0.05] border border-white/10 text-white focus:outline-none focus:border-purple-500 focus:bg-white/[0.08] transition-all duration-150 caret-transparent"
+          style={{ height: "3.25rem" }}
+          autoComplete="one-time-code"
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function Auth() {
   const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
@@ -39,19 +103,56 @@ export default function Auth() {
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirm, setSignupConfirm] = useState("");
 
+  // MFA step state
+  const [step, setStep] = useState("credentials"); // "credentials" | "otp"
+  const [mfaToken, setMfaToken] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = useRef(null);
+
   const navigate = useNavigate();
-  const { login, signup } = useAuth();
+  const { login, signup, verifyOtp, resendOtp } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
+  const startResendCooldown = () => {
+    setResendCooldown(RESEND_COOLDOWN);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const enterMfaStep = ({ mfa_token, masked_email }) => {
+    setMfaToken(mfa_token);
+    setMaskedEmail(masked_email);
+    setOtp("");
+    setStep("otp");
+    startResendCooldown();
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       const result = await login(loginEmail, loginPassword);
-      if (result.success) {
+      if (!result.success) {
+        toast.error(result.error || "Login failed");
+      } else if (result.requires_mfa) {
+        enterMfaStep(result);
+      } else {
         toast.success("Logged in successfully!");
         navigate("/home");
-      } else {
-        toast.error(result.error || "Login failed");
       }
     } finally {
       setLoading(false);
@@ -67,21 +168,138 @@ export default function Auth() {
     setLoading(true);
     try {
       const result = await signup(signupEmail, signupUsername, signupPassword);
-      if (result.success) {
+      if (!result.success) {
+        toast.error(result.error || "Signup failed");
+      } else if (result.requires_mfa) {
+        enterMfaStep(result);
+      } else {
         toast.success("Welcome to CodeChatter!");
         navigate("/home");
-      } else {
-        toast.error(result.error || "Signup failed");
       }
     } finally {
       setLoading(false);
     }
   };
 
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (otp.replace(/\D/g, "").length < 6) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await verifyOtp(mfaToken, otp.replace(/\D/g, ""));
+      if (result.success) {
+        toast.success(mode === "login" ? "Logged in successfully!" : "Welcome to CodeChatter!");
+        navigate("/home");
+      } else {
+        toast.error(result.error || "Incorrect code");
+        if (result.error?.includes("sign in again") || result.error?.includes("expired")) {
+          setStep("credentials");
+          setOtp("");
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0) return;
+    const result = await resendOtp(mfaToken);
+    if (result.success) {
+      toast.success("New code sent!");
+      startResendCooldown();
+    } else {
+      toast.error(result.error || "Could not resend code");
+    }
+  };
+
+  const handleBackToCredentials = () => {
+    setStep("credentials");
+    setOtp("");
+    setMfaToken("");
+    setMaskedEmail("");
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setResendCooldown(0);
+  };
+
   const startOAuth = (url) => {
     const redirectUri = `${window.location.origin}/auth/callback`;
     window.location.href = `${url}?redirect_uri=${encodeURIComponent(redirectUri)}`;
   };
+
+  if (step === "otp") {
+    return (
+      <AuthFormLayout>
+        <div className="lg:hidden mb-8">
+          <BrandLogo size="md" />
+        </div>
+
+        <Motion.div
+          key="otp-step"
+          initial={{ opacity: 0, x: 16, filter: "blur(4px)" }}
+          animate={{ opacity: 1, x: 0, filter: "blur(0px)", transition: { duration: 0.32, ease: "easeOut" } }}
+          className="w-full"
+        >
+          {/* Back button */}
+          <button
+            onClick={handleBackToCredentials}
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors mb-8"
+          >
+            <ArrowLeft size={15} />
+            Back
+          </button>
+
+          {/* Icon + heading */}
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4">
+              <ShieldCheck size={26} className="text-purple-400" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Check your email</h1>
+            <p className="text-[13px] text-gray-400 mt-1.5 max-w-xs leading-relaxed">
+              We sent a 6-digit code to{" "}
+              <span className="text-gray-200 font-medium">{maskedEmail}</span>
+            </p>
+          </div>
+
+          {/* OTP form */}
+          <form onSubmit={handleVerifyOtp} className="space-y-6">
+            <OtpInput value={otp} onChange={setOtp} />
+
+            <Motion.button
+              whileHover={{ scale: 1.015, y: -1 }}
+              whileTap={{ scale: 0.985 }}
+              type="submit"
+              disabled={loading || otp.replace(/\D/g, "").length < 6}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] hover:shadow-[0_0_28px_rgba(124,58,237,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? "Verifying…" : "Verify code"}
+            </Motion.button>
+          </form>
+
+          {/* Resend */}
+          <div className="flex items-center justify-center gap-1.5 mt-6 text-[12.5px] text-gray-500">
+            <span>Didn't receive it?</span>
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resendCooldown > 0}
+              className="flex items-center gap-1 text-gray-300 hover:text-purple-400 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors font-medium"
+            >
+              <RotateCcw size={11} />
+              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+            </button>
+          </div>
+
+          <p className="text-center text-[11px] text-gray-600 mt-5">
+            Code expires in 5 minutes
+          </p>
+        </Motion.div>
+      </AuthFormLayout>
+    );
+  }
 
   return (
     <AuthFormLayout>

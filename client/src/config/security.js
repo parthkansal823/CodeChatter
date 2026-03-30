@@ -62,6 +62,10 @@ export const API_ENDPOINTS = {
   // AI
   AI_ASSIST: `${API_BASE_URL}/api/ai/gemini`,
 
+  // MFA
+  VERIFY_OTP: `${API_BASE_URL}/api/auth/verify-otp`,
+  RESEND_OTP: `${API_BASE_URL}/api/auth/resend-otp`,
+
   // OAuth
   GOOGLE_LOGIN: `${API_BASE_URL}/auth/google`,
   GITHUB_LOGIN: `${API_BASE_URL}/auth/github`,
