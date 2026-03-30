@@ -28,24 +28,28 @@ const DEFAULT_PREFERENCES = {
   },
 };
 
-export function PreferencesProvider({ children }) {
-  const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
-  const [isLoading, setIsLoading] = useState(true);
+function loadInitialPreferences() {
+  try {
+    const saved = localStorage.getItem("app_preferences");
+    if (saved) return { ...DEFAULT_PREFERENCES, ...JSON.parse(saved) };
+  } catch {
+    // ignore
+  }
+  return DEFAULT_PREFERENCES;
+}
 
-  // Load preferences from localStorage on mount
+export function PreferencesProvider({ children }) {
+  const [preferences, setPreferences] = useState(loadInitialPreferences);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Apply dark class whenever theme preference changes
   useEffect(() => {
-    try {
-      const savedPreferences = localStorage.getItem("app_preferences");
-      if (savedPreferences) {
-        const parsed = JSON.parse(savedPreferences);
-        setPreferences((prev) => ({ ...prev, ...parsed }));
-      }
-    } catch (error) {
-      console.error("Failed to load preferences:", error);
-    } finally {
-      setIsLoading(false);
+    if (preferences.theme === "vs-dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
     }
-  }, []);
+  }, [preferences.theme]);
 
   // Save preferences to localStorage whenever they change
   useEffect(() => {

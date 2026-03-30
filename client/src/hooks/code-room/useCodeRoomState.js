@@ -70,6 +70,8 @@ export function useCodeRoomState({
   const isMobileViewport = useResponsiveViewport();
   const inviteToken = useMemo(() => getInviteTokenFromSearch(locationSearch), [locationSearch]);
 
+  const videoSignalListenerRef = useRef(null);
+
   const saveSnapshotRef = useRef("");
   const latestWorkspaceSnapshotRef = useRef("");
   const hasHydratedWorkspaceRef = useRef(false);
@@ -186,6 +188,14 @@ export function useCodeRoomState({
 
     socket.send(JSON.stringify(payload));
     return true;
+  }, []);
+
+  const sendVideoSignal = useCallback((payload) => {
+    sendCollaborationMessage(payload);
+  }, [sendCollaborationMessage]);
+
+  const setVideoSignalListener = useCallback((fn) => {
+    videoSignalListenerRef.current = fn;
   }, []);
 
   const sendChatMessage = useCallback(async (msgData) => {
@@ -683,6 +693,17 @@ export function useCodeRoomState({
 
       if (message.type === "workspace_ack") {
         handleWorkspaceAck(message);
+        return;
+      }
+
+      if (
+        message.type === "video_join" ||
+        message.type === "video_leave" ||
+        message.type === "video_offer" ||
+        message.type === "video_answer" ||
+        message.type === "video_ice_candidate"
+      ) {
+        videoSignalListenerRef.current?.(message);
         return;
       }
 
@@ -1315,6 +1336,8 @@ export function useCodeRoomState({
     unreadChatMessagesCount,
     setUnreadChatMessagesCount,
     sendChatMessage,
+    sendVideoSignal,
+    setVideoSignalListener,
     handleSelectNode,
     handleOpenFile,
     handleCloseFile,

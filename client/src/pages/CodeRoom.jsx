@@ -74,6 +74,8 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     canManageRoom,
     chatMessages,
     sendChatMessage,
+    sendVideoSignal,
+    setVideoSignalListener,
     unreadChatMessagesCount,
     setUnreadChatMessagesCount,
   } = useCodeRoomState({
@@ -210,6 +212,8 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
               liveConnected={isRealtimeConnected}
               chatMessages={chatMessages}
               sendChatMessage={sendChatMessage}
+              sendVideoSignal={sendVideoSignal}
+              setVideoSignalListener={setVideoSignalListener}
               unreadChatMessagesCount={unreadChatMessagesCount}
               setUnreadChatMessagesCount={setUnreadChatMessagesCount}
             />

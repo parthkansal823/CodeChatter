@@ -45,7 +45,7 @@ export default function TabBar({
   }
 
   return (
-    <div className="flex items-center border-b border-zinc-800 bg-[#18181b]">
+    <div className="flex items-center border-b border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-[#18181b]">
       {canScrollLeft && (
         <button
           onClick={() => scroll("left")}
@@ -74,8 +74,8 @@ export default function TabBar({
               onKeyDown={(e) => e.key === "Enter" && onSelectFile?.(file)}
               className={`group relative flex min-w-[120px] max-w-[220px] cursor-pointer items-center gap-2 border-t-2 px-3 py-1.5 text-sm transition-colors ${
                 isActive
-                  ? "border-t-brand-500 bg-[#1e1e1e] text-white"
-                  : "border-t-transparent bg-[#18181b] text-zinc-500 hover:bg-[#1d1d20] dark:text-zinc-400"
+                  ? "border-t-brand-500 bg-white text-zinc-900 dark:bg-[#1e1e1e] dark:text-white"
+                  : "border-t-transparent bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-[#18181b] dark:text-zinc-400 dark:hover:bg-[#1d1d20]"
               }`}
               title={file.name}
             >
@@ -94,7 +94,7 @@ export default function TabBar({
                   e.stopPropagation();
                   onCloseFile?.(file);
                 }}
-                className="ml-auto flex-shrink-0 rounded-sm p-0.5 text-zinc-400 opacity-0 transition-all hover:bg-zinc-800 hover:text-zinc-200 group-hover:opacity-100"
+                className="ml-auto flex-shrink-0 rounded-sm p-0.5 text-zinc-400 opacity-0 transition-all hover:bg-zinc-200 hover:text-zinc-700 group-hover:opacity-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                 title="Close file"
               >
                 <X size={14} />

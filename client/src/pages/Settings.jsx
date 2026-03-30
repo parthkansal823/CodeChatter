@@ -107,12 +107,6 @@ export default function Settings() {
 
   const handleThemeChange = (newTheme) => {
     updatePreference("theme", newTheme);
-    if (newTheme === "vs-dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-    localStorage.setItem("theme", newTheme);
     toast.success("Theme updated");
   };
 

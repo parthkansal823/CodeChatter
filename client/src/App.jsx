@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
 import { Toaster } from "react-hot-toast";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
@@ -7,6 +7,7 @@ import { PreferencesProvider } from "./context/PreferencesContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CommandPalette from "./components/CommandPalette";
 import { useAuth } from "./hooks/useAuth";
+import { usePreferences } from "./hooks/usePreferences";
 
 const Layout = lazy(() => import("./pages/Layout"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -33,88 +34,85 @@ function RootRedirect() {
   return <Navigate to={isAuthenticated ? "/home" : "/auth"} replace />;
 }
 
+function AppContent() {
+  const { preferences, updatePreference } = usePreferences();
+  const theme = preferences.theme;
+  const onThemeChange = (newTheme) => updatePreference("theme", newTheme);
+
+  return (
+    <>
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: "#18181b",
+            color: "#fff",
+            border: "1px solid #27272a"
+          }
+        }}
+      />
+      <Suspense fallback={<RouteFallback />}>
+        <CommandPalette theme={theme} onThemeChange={onThemeChange} />
+        <Routes>
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/auth/callback" element={<OAuthCallback />} />
+          <Route path="/login" element={<Navigate to="/auth" replace />} />
+          <Route path="/signup" element={<Navigate to="/auth" replace />} />
+          <Route path="/" element={<RootRedirect />} />
+
+          <Route
+            path="/home"
+            element={
+              <ProtectedRoute>
+                <Layout theme={theme} onThemeChange={onThemeChange}>
+                  <Home />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Layout theme={theme} onThemeChange={onThemeChange}>
+                  <Settings />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/room"
+            element={
+              <ProtectedRoute>
+                <CodeRoom theme={theme} onThemeChange={onThemeChange} />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/room/:roomId"
+            element={
+              <ProtectedRoute>
+                <CodeRoom theme={theme} onThemeChange={onThemeChange} />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="*" element={<RootRedirect />} />
+        </Routes>
+      </Suspense>
+    </>
+  );
+}
+
 function App() {
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem("theme") || "vs-dark";
-  });
-
-  useEffect(() => {
-    if (theme === "vs-dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-
-    localStorage.setItem("theme", theme);
-  }, [theme]);
-
   return (
     <BrowserRouter>
       <AuthProvider>
         <PreferencesProvider>
-          <Toaster
-            position="top-center"
-            toastOptions={{
-              style: {
-                background: "#18181b",
-                color: "#fff",
-                border: "1px solid #27272a"
-              }
-            }}
-          />
-
-        <Suspense fallback={<RouteFallback />}>
-          <CommandPalette theme={theme} onThemeChange={setTheme} />
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/auth/callback" element={<OAuthCallback />} />
-            <Route path="/login" element={<Navigate to="/auth" replace />} />
-            <Route path="/signup" element={<Navigate to="/auth" replace />} />
-            <Route path="/" element={<RootRedirect />} />
-
-            <Route
-              path="/home"
-              element={
-                <ProtectedRoute>
-                  <Layout theme={theme} onThemeChange={setTheme}>
-                    <Home />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <Layout theme={theme} onThemeChange={setTheme}>
-                    <Settings />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/room"
-              element={
-                <ProtectedRoute>
-                  <CodeRoom theme={theme} onThemeChange={setTheme} />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/room/:roomId"
-              element={
-                <ProtectedRoute>
-                  <CodeRoom theme={theme} onThemeChange={setTheme} />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route path="*" element={<RootRedirect />} />
-          </Routes>
-        </Suspense>
+          <AppContent />
         </PreferencesProvider>
       </AuthProvider>
     </BrowserRouter>

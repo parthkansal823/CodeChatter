@@ -159,4 +159,29 @@ class CollaborationManager:
         )
 
 
+  async def send_to_session(
+    self,
+    room_id: str,
+    session_id: str,
+    payload: dict[str, Any],
+  ) -> None:
+    async with self._lock:
+      room_connections = self._rooms.get(room_id, {})
+      connection = room_connections.get(session_id)
+
+    if connection is None:
+      return
+
+    try:
+      await connection["websocket"].send_json(payload)
+    except Exception as error:
+      logger.warning(
+        "Could not send to session %s in room %s: %s",
+        session_id,
+        room_id,
+        error,
+      )
+      await self.disconnect(room_id, session_id)
+
+
 collaboration_manager = CollaborationManager()

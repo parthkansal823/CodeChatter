@@ -122,9 +122,9 @@ export default function BottomPanel({
     <div
       ref={panelRef}
       style={heightStyle}
-      className={`relative flex flex-col border-t border-zinc-100 bg-[#0d0d10] transition-[height] ${
+      className={`relative flex flex-col border-t border-zinc-200 bg-zinc-50 transition-[height] ${
         isResizing ? "duration-0" : "duration-200"
-      } dark:border-white/[0.04]`}
+      } dark:border-white/[0.04] dark:bg-[#0d0d10]`}
     >
       {!isMinimized && (
         <div
@@ -137,7 +137,7 @@ export default function BottomPanel({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.05] px-3 py-1.5">
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-3 py-1.5 dark:border-white/[0.05]">
         <div className="flex items-center gap-1 overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -148,8 +148,8 @@ export default function BottomPanel({
                 onClick={() => setActiveTab(tab.id)}
                 className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
                   activeTab === tab.id
-                    ? "bg-white/[0.08] text-white"
-                    : "text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100"
+                    ? "bg-zinc-200 text-zinc-900 dark:bg-white/[0.08] dark:text-white"
+                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-white/[0.05] dark:hover:text-zinc-100"
                 }`}
               >
                 <Icon size={14} />
@@ -185,7 +185,7 @@ export default function BottomPanel({
 
           <button
             onClick={handleCopy}
-            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-100"
+            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.05] dark:hover:text-zinc-100"
             title="Copy panel content"
           >
             <Copy size={15} />
@@ -193,7 +193,7 @@ export default function BottomPanel({
 
           <button
             onClick={() => setIsMinimized((current) => !current)}
-            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-100"
+            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.05] dark:hover:text-zinc-100"
             title={isMinimized ? "Expand panel" : "Minimize panel"}
           >
             {isMinimized ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -202,7 +202,7 @@ export default function BottomPanel({
       </div>
 
       {!isMinimized && (
-        <div className="min-h-0 flex-1 overflow-auto bg-[#111114] px-4 py-3 font-mono text-xs leading-6 text-zinc-300">
+        <div className="min-h-0 flex-1 overflow-auto bg-white px-4 py-3 font-mono text-xs leading-6 text-zinc-700 dark:bg-[#111114] dark:text-zinc-300">
           {activeTab === "console" ? (
             <div className="flex h-full min-h-[96px] w-full flex-col gap-4 sm:flex-row">
               <div className="flex flex-1 flex-col">
@@ -214,14 +214,14 @@ export default function BottomPanel({
                   onChange={(event) => onStdinChange?.(event.target.value)}
                   placeholder="Optional stdin for the active file..."
                   disabled={!runEnabled}
-                  className="w-full flex-1 resize-none rounded-md border border-white/[0.08] bg-black/20 px-3 py-3 font-mono text-xs outline-none transition focus:border-zinc-500"
+                  className="w-full flex-1 resize-none rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs outline-none transition focus:border-zinc-400 dark:border-white/[0.08] dark:bg-black/20 dark:focus:border-zinc-500"
                 />
               </div>
               <div className="flex flex-1 flex-col">
                 <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                   Execution Output
                 </label>
-                <div className="flex-1 overflow-auto rounded-md border border-white/[0.08] bg-black/20 px-3 py-3 font-mono text-xs">
+                <div className="flex-1 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs dark:border-white/[0.08] dark:bg-black/20">
                   <pre className="whitespace-pre-wrap break-words">
                     {getPanelContent("output", runResult)}
                   </pre>
@@ -233,12 +233,12 @@ export default function BottomPanel({
               {terminalEnabled ? (
                 <XTerminal roomId={roomId} />
               ) : (
-                <div className="flex h-full min-h-[96px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-white/[0.08] bg-black/20 px-6 py-4 text-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-500">
+                <div className="flex h-full min-h-[96px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-zinc-200 bg-zinc-50 px-6 py-4 text-center dark:border-white/[0.08] dark:bg-black/20">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800">
                     <ShieldOff size={20} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-semibold text-zinc-300">Terminal Access Restricted</p>
+                    <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Terminal Access Restricted</p>
                     <p className="text-xs text-zinc-500 max-w-[260px]">
                       You don&apos;t have terminal permission for this workspace. Ask the room owner to grant you editor access.
                     </p>

@@ -267,6 +267,34 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
         )
         continue
 
+      if message_type in ("video_join", "video_leave"):
+        await collaboration_manager.broadcast(
+          normalized_room_id,
+          {
+            "type": message_type,
+            "fromSessionId": connection["session_id"],
+            "username": current_user["username"],
+          },
+          exclude_session_id=connection["session_id"],
+        )
+        continue
+
+      if message_type in ("video_offer", "video_answer", "video_ice_candidate"):
+        target_session_id = str(message.get("targetSessionId", "")).strip()
+        if not target_session_id:
+          continue
+        await collaboration_manager.send_to_session(
+          normalized_room_id,
+          target_session_id,
+          {
+            "type": message_type,
+            "fromSessionId": connection["session_id"],
+            "username": current_user["username"],
+            "payload": message.get("payload"),
+          },
+        )
+        continue
+
       if message_type == "ping":
         await websocket.send_json({"type": "pong"})
         continue

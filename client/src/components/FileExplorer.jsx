@@ -320,7 +320,7 @@ export default function FileExplorer({
     <div
       ref={panelRef}
       style={widthStyle}
-      className={`relative flex h-full flex-col border-r border-zinc-100 bg-[#0b0b0c] text-zinc-200 dark:border-white/[0.04] transition-[width] ${
+      className={`relative flex h-full flex-col border-r border-zinc-200 bg-zinc-50 text-zinc-700 transition-[width] dark:border-white/[0.04] dark:bg-[#0b0b0c] dark:text-zinc-200 ${
         isResizing ? "duration-0" : "duration-150"
       } ${mobile ? "w-[86vw] max-w-[340px] shadow-2xl shadow-zinc-950/20" : ""}`}
     >
@@ -331,16 +331,16 @@ export default function FileExplorer({
           className="absolute right-0 top-0 z-30 h-full w-3 translate-x-1.5 cursor-col-resize"
           title="Resize explorer"
         >
-          <div className={`mx-auto h-full w-px transition-colors ${isResizing ? "bg-brand-500" : "bg-transparent hover:bg-zinc-600"}`} />
+          <div className={`mx-auto h-full w-px transition-colors ${isResizing ? "bg-brand-500" : "bg-transparent hover:bg-zinc-300 dark:hover:bg-zinc-600"}`} />
         </div>
       )}
 
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-white/[0.06]">
         <div className="flex min-w-0 items-center gap-2.5">
           {!mobile && (
             <button
               onClick={onToggle}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
               title={isCollapsed ? "Expand files" : "Collapse files"}
             >
               <ChevronRight size={16} className={`transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
@@ -349,7 +349,7 @@ export default function FileExplorer({
 
           {!isCollapsed && (
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
                 Explorer
               </p>
             </div>
@@ -362,7 +362,7 @@ export default function FileExplorer({
               <>
                 <button
                   onClick={() => startCreate("file")}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
                   title="New file"
                 >
                   <FilePlus2 size={15} />
@@ -370,7 +370,7 @@ export default function FileExplorer({
 
                 <button
                   onClick={() => startCreate("folder")}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
                   title="New folder"
                 >
                   <FolderPlus size={15} />
@@ -382,14 +382,14 @@ export default function FileExplorer({
               <>
                 <button
                   onClick={() => setCollapsedFolders(new Set())}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
                   title="Expand all"
                 >
                   <ChevronRight size={15} className="rotate-90" />
                 </button>
                 <button
                   onClick={() => setCollapsedFolders(new Set(folderIds))}
-                  className="hidden rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-white/5 hover:text-white sm:block"
+                  className="hidden rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white sm:block"
                   title="Collapse all"
                 >
                   Close
@@ -411,9 +411,9 @@ export default function FileExplorer({
       </div>
 
       {!isCollapsed && (
-        <div className="border-b border-white/[0.06] px-3 py-2">
+        <div className="border-b border-zinc-200 px-3 py-2 dark:border-white/[0.06]">
           <div className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500">
-            <span className="truncate font-semibold text-zinc-200">{workspaceLabel}</span>
+            <span className="truncate font-semibold text-zinc-700 dark:text-zinc-200">{workspaceLabel}</span>
             <span className="whitespace-nowrap text-[11px]">
               {activeFileCount}F {activeFolderCount}D
             </span>
@@ -425,14 +425,14 @@ export default function FileExplorer({
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search files..."
-              className="w-full rounded-md border border-white/10 bg-white/[0.05] py-1.5 pl-8 pr-2 text-xs lowercase text-zinc-200 outline-none transition-colors placeholder:text-zinc-500 focus:border-brand-500/50 focus:bg-zinc-900"
+              className="w-full rounded-md border border-zinc-200 bg-white py-1.5 pl-8 pr-2 text-xs lowercase text-zinc-700 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand-500/50 focus:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-900"
             />
           </div>
         </div>
       )}
 
       <div
-        className="flex-1 overflow-y-auto px-1 py-1.5 scrollbar-thin scrollbar-thumb-zinc-700"
+        className="flex-1 overflow-y-auto px-1 py-1.5 scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
@@ -451,7 +451,7 @@ export default function FileExplorer({
               <>
                 <button
                   onClick={() => startCreate("file")}
-                  className="flex h-8 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex h-8 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
                   title="New file"
                 >
                   <FilePlus2 size={16} />
@@ -463,7 +463,7 @@ export default function FileExplorer({
                 >
                   <FolderPlus size={16} />
                 </button>
-                <div className="mx-auto h-px w-6 bg-white/[0.08]" />
+                <div className="mx-auto h-px w-6 bg-zinc-200 dark:bg-white/[0.08]" />
               </>
             )}
             {explorerEntries.filter((entry) => entry.type === "file").slice(0, 6).map((entry) => (
@@ -473,7 +473,7 @@ export default function FileExplorer({
                   onSelectNode?.(entry.node);
                   onToggle?.();
                 }}
-                className="flex h-9 w-full items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+                className="flex h-9 w-full items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
                 title={entry.name}
               >
                 {entry.name.charAt(0).toUpperCase()}
@@ -503,7 +503,7 @@ export default function FileExplorer({
               : renderNodes(tree)}
           </div>
         ) : (
-          <div className="mx-2 rounded-md border border-dashed border-white/[0.08] px-3 py-4 text-sm text-zinc-500">
+          <div className="mx-2 rounded-md border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-400 dark:border-white/[0.08] dark:text-zinc-500">
             This room is empty. Create a file or folder to start.
           </div>
         )}

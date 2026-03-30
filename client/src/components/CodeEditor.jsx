@@ -16,7 +16,7 @@ function Breadcrumb({ filePath, fileName }) {
   const { Icon, className: iconClassName } = getFileVisual(fileName);
 
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b border-zinc-800 bg-[#111114] px-3 py-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[11px] text-zinc-500 dark:border-zinc-800 dark:bg-[#111114] dark:text-zinc-400">
       <FolderTree size={13} className="flex-shrink-0" />
       {parts.slice(0, -1).map((part, idx) => (
         <div key={idx} className="flex items-center gap-1">
@@ -192,7 +192,7 @@ export default function CodeEditor({
   }, []);
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[#1e1e1e] dark:bg-zinc-950">
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-100 dark:bg-zinc-950">
       <Breadcrumb filePath={selectedFilePath} fileName={selectedFileName} />
 
       <div className={`flex min-h-0 flex-1 ${isMarkdown ? "flex-col xl:flex-row" : ""}`}>
@@ -244,7 +244,7 @@ export default function CodeEditor({
         </div>
 
         {isMarkdown && (
-          <div className="min-h-[45%] border-t border-zinc-800 bg-zinc-950 xl:min-h-0 xl:w-[42%] xl:border-l xl:border-t-0">
+          <div className="min-h-[45%] border-t border-zinc-200 bg-zinc-50 xl:min-h-0 xl:w-[42%] xl:border-l xl:border-t-0 dark:border-zinc-800 dark:bg-zinc-950">
             <div className={`h-full overflow-auto p-6 ${
               theme === "vs-dark"
                 ? "prose prose-invert"
@@ -257,7 +257,7 @@ export default function CodeEditor({
       </div>
 
       {/* Minimal status pill — bottom left, compact overlay */}
-      <div className="flex items-center gap-3 border-t border-zinc-800/60 bg-[#0d0d10] px-3 py-1 text-[11px] text-zinc-600">
+      <div className="flex items-center gap-3 border-t border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] text-zinc-500 dark:border-zinc-800/60 dark:bg-[#0d0d10] dark:text-zinc-600">
         <span className="font-semibold uppercase tracking-wider text-zinc-500">
           {readOnly ? (
             <span className="text-amber-400">View only</span>
@@ -267,13 +267,13 @@ export default function CodeEditor({
             selectedLanguage
           )}
         </span>
-        <span className="text-zinc-700">·</span>
+        <span className="text-zinc-400 dark:text-zinc-700">·</span>
         <span>Ln {cursorPosition.line}, Col {cursorPosition.column}</span>
-        <span className="ml-auto text-zinc-700">{lineCount} lines · {characterCount} chars</span>
+        <span className="ml-auto text-zinc-400 dark:text-zinc-700">{lineCount} lines · {characterCount} chars</span>
       </div>
 
       {!isEditorReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e]/90 text-zinc-500 dark:bg-zinc-950/90 dark:text-zinc-400">
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-100/90 text-zinc-500 dark:bg-zinc-950/90 dark:text-zinc-400">
           Loading editor...
         </div>
       )}

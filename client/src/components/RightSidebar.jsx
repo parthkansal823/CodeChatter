@@ -76,6 +76,8 @@ export default function RightSidebar({
   liveConnected = false,
   chatMessages = [],
   sendChatMessage = () => {},
+  sendVideoSignal,
+  setVideoSignalListener,
   unreadChatMessagesCount = 0,
   setUnreadChatMessagesCount,
 }) {
@@ -208,6 +210,8 @@ export default function RightSidebar({
             onBack={closeTool}
             roomName={room?.name}
             collaborators={activeCollaborators}
+            sendVideoSignal={sendVideoSignal}
+            setVideoSignalListener={setVideoSignalListener}
           />
         </Motion.div>
       )}
@@ -218,18 +222,18 @@ export default function RightSidebar({
   const iconRail = (
     <div
       style={{ width: `${RAIL_WIDTH}px` }}
-      className="flex h-full shrink-0 flex-col border-l border-white/[0.06] bg-[#0d0d10]"
+      className="flex h-full shrink-0 flex-col border-l border-zinc-200 bg-zinc-50 dark:border-white/[0.06] dark:bg-[#0d0d10]"
     >
       {/* Collapse / expand toggle */}
       <button
         onClick={onToggle}
-        className="flex h-11 w-full items-center justify-center text-zinc-600 transition hover:text-zinc-300"
+        className="flex h-11 w-full items-center justify-center text-zinc-500 transition hover:text-zinc-700 dark:text-zinc-600 dark:hover:text-zinc-300"
         title={isOpen ? "Collapse sidebar" : "Expand sidebar"}
       >
         {isOpen ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
       </button>
 
-      <div className="h-px w-full bg-white/[0.05]" />
+      <div className="h-px w-full bg-zinc-200 dark:bg-white/[0.05]" />
 
       {/* Tool icons */}
       <div className="flex flex-col items-center gap-1 py-3">
@@ -254,7 +258,7 @@ export default function RightSidebar({
             >
               <Icon size={17} />
               {badge && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-[#0d0d10]">
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-zinc-50 dark:ring-[#0d0d10]">
                   {badge > 9 ? "9+" : badge}
                 </span>
               )}
@@ -264,10 +268,10 @@ export default function RightSidebar({
       </div>
 
       <div className="mt-auto">
-        <div className="h-px w-full bg-white/[0.05]" />
+        <div className="h-px w-full bg-zinc-200 dark:bg-white/[0.05]" />
         {/* Live presence avatars — mini stack */}
         <div className="flex flex-col items-center gap-1.5 py-3">
-          <div className="flex items-center gap-1 text-[10px] text-zinc-700">
+          <div className="flex items-center gap-1 text-[10px] text-zinc-400 dark:text-zinc-700">
             <Radio size={9} className={liveConnected ? "text-emerald-500" : ""} />
             {liveCount > 0 ? liveCount : ""}
           </div>
@@ -280,7 +284,7 @@ export default function RightSidebar({
             </div>
           ))}
           {allCollaborators.length > 4 && (
-            <span className="text-[10px] text-zinc-700">+{allCollaborators.length - 4}</span>
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-700">+{allCollaborators.length - 4}</span>
           )}
         </div>
       </div>
@@ -293,11 +297,11 @@ export default function RightSidebar({
     return (
       <div className="fixed inset-0 z-50 flex justify-end lg:hidden">
         <button className="flex-1 bg-zinc-950/60 backdrop-blur-sm" onClick={onClose} aria-label="Close tools" />
-        <div className="flex h-full w-[82vw] max-w-[380px] flex-col border-l border-white/[0.06] bg-[#0d0d10] shadow-2xl">
+        <div className="flex h-full w-[82vw] max-w-[380px] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-white/[0.06] dark:bg-[#0d0d10]">
           {/* Mobile header */}
-          <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-            <p className="text-sm font-semibold text-white">Workspace Tools</p>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200">
+          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-white/[0.06]">
+            <p className="text-sm font-semibold text-zinc-900 dark:text-white">Workspace Tools</p>
+            <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200">
               <X size={16} />
             </button>
           </div>
@@ -311,10 +315,10 @@ export default function RightSidebar({
                   <button
                     key={tool.id}
                     onClick={() => openTool(tool.id)}
-                    className={`flex w-full items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-left transition hover:bg-white/[0.05]`}
+                    className={`flex w-full items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-left transition hover:bg-zinc-100 dark:border-white/[0.07] dark:bg-white/[0.02] dark:hover:bg-white/[0.05]`}
                   >
                     <Icon size={18} className={tool.color} />
-                    <span className="text-sm font-medium text-zinc-200">{tool.name}</span>
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{tool.name}</span>
                   </button>
                 );
               })}
@@ -340,7 +344,7 @@ export default function RightSidebar({
       {/* Main content panel */}
       <div
         style={{ width: `${sidebarWidth}px` }}
-        className="relative flex h-full flex-col border-l border-white/[0.06] bg-[#0d0d10]"
+        className="relative flex h-full flex-col border-l border-zinc-200 bg-white dark:border-white/[0.06] dark:bg-[#0d0d10]"
       >
         {/* Resize handle */}
         <div
@@ -359,19 +363,19 @@ export default function RightSidebar({
         ) : (
           /* Default state: tool launcher grid */
           <div className="flex h-full flex-col">
-            <div className="border-b border-white/[0.06] px-4 py-3.5">
-              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-600">Workspace Tools</p>
+            <div className="border-b border-zinc-200 px-4 py-3.5 dark:border-white/[0.06]">
+              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-600">Workspace Tools</p>
             </div>
 
             {/* Live presence bar */}
-            <div className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3">
+            <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-white/[0.06]">
               <div className="flex items-center gap-1.5">
-                <Radio size={11} className={liveConnected ? "text-emerald-500" : "text-zinc-600"} />
+                <Radio size={11} className={liveConnected ? "text-emerald-500" : "text-zinc-400 dark:text-zinc-600"} />
                 <span className="text-xs text-zinc-500">{liveConnected ? "Live" : "Offline"}</span>
               </div>
               {allCollaborators.length > 0 && (
                 <>
-                  <div className="h-3.5 w-px bg-white/[0.06]" />
+                  <div className="h-3.5 w-px bg-zinc-200 dark:bg-white/[0.06]" />
                   <div className="flex items-center gap-1.5">
                     <div className="flex -space-x-1.5">
                       {allCollaborators.slice(0, 5).map((c) => (
@@ -383,7 +387,7 @@ export default function RightSidebar({
                         </div>
                       ))}
                     </div>
-                    <span className="text-xs text-zinc-600">
+                    <span className="text-xs text-zinc-500 dark:text-zinc-600">
                       {liveCount > 0 ? `${liveCount} active` : `${allCollaborators.length} members`}
                     </span>
                   </div>
@@ -401,14 +405,14 @@ export default function RightSidebar({
                     <button
                       key={tool.id}
                       onClick={() => openTool(tool.id)}
-                      className={`group relative flex flex-col items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-5 text-center transition-all hover:border-white/[0.12] hover:bg-white/[0.05]`}
+                      className={`group relative flex flex-col items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-5 text-center transition-all hover:border-zinc-300 hover:bg-zinc-100 dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.05]`}
                     >
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04] transition group-hover:scale-110 ${tool.color}`}>
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 transition group-hover:scale-110 dark:bg-white/[0.04] ${tool.color}`}>
                         <Icon size={20} />
                       </div>
-                      <span className="text-xs font-semibold text-zinc-300">{tool.name}</span>
+                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">{tool.name}</span>
                       {badge && (
-                        <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#0d0d10]">
+                        <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-zinc-50 dark:ring-[#0d0d10]">
                           {badge > 99 ? "99+" : badge}
                         </span>
                       )}
