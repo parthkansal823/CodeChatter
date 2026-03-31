@@ -344,6 +344,7 @@ export function useCodeRoomState({
     ) {
       setSaveStatus("saved");
       setModifiedFileIds(new Set());
+      window.dispatchEvent(new CustomEvent("cc-workspace-saved"));
     } else {
       setSaveStatus("saving");
     }
@@ -381,6 +382,7 @@ export function useCodeRoomState({
         || latestWorkspaceSnapshotRef.current === persistedSnapshot
       ) {
         setModifiedFileIds(new Set());
+        window.dispatchEvent(new CustomEvent("cc-workspace-saved"));
       }
 
       return savedRoom;
@@ -901,6 +903,23 @@ export function useCodeRoomState({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [isRealtimeConnected, roomAccessReady, roomId, token]);
+
+  // Reload workspace when GitHub import fires cc-workspace-reload
+  useEffect(() => {
+    if (!token || !roomId || !roomAccessReady) return undefined;
+
+    const handleWorkspaceReload = async () => {
+      try {
+        const roomData = await secureFetch(API_ENDPOINTS.GET_ROOM(roomId), {}, token);
+        if (roomData) applyRoomData(roomData, { preserveSelection: true });
+      } catch {
+        // silently ignore
+      }
+    };
+
+    window.addEventListener("cc-workspace-reload", handleWorkspaceReload);
+    return () => window.removeEventListener("cc-workspace-reload", handleWorkspaceReload);
+  }, [applyRoomData, roomAccessReady, roomId, token]);
 
   useEffect(() => {
     if (!hasHydratedWorkspaceRef.current || !roomId || !token || !canEditRoom) {

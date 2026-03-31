@@ -48,6 +48,9 @@ export function getFileVisual(name = "") {
   if (name === "tailwind.config.js" || name === "tailwind.config.ts") return { Icon: SiTailwindcss, className: "text-cyan-500" };
   if (name === "next.config.js" || name === "next.config.ts") return { Icon: SiNextdotjs, className: "text-zinc-900 dark:text-white" };
   
+  // Notebook files
+  if (extension === "nb") return { Icon: FileCode2, className: "text-violet-500" };
+
   // JSON files
   if (extension === "json") return { Icon: VscJson, className: "text-yellow-500" };
 

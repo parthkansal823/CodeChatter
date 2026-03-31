@@ -18,6 +18,7 @@ try:
     RoomRunRequest,
     RoomSettingsUpdateRequest,
     RoomWorkspaceUpdateRequest,
+    RunSnippetRequest,
   )
   from ..core.security import (
     enforce_rate_limit,
@@ -28,7 +29,7 @@ try:
     validate_room_id_value,
   )
   from ..core.settings import GEMINI_MODEL, repository
-  from ..services.workspace_runtime import clear_room_workspace_snapshot, execute_workspace_file
+  from ..services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 except ImportError:
   from services.ai import build_gemini_prompt, request_gemini_completion
   from core.schemas import (
@@ -40,6 +41,7 @@ except ImportError:
     RoomRunRequest,
     RoomSettingsUpdateRequest,
     RoomWorkspaceUpdateRequest,
+    RunSnippetRequest,
   )
   from core.security import (
     enforce_rate_limit,
@@ -50,7 +52,7 @@ except ImportError:
     validate_room_id_value,
   )
   from core.settings import GEMINI_MODEL, repository
-  from services.workspace_runtime import clear_room_workspace_snapshot, execute_workspace_file
+  from services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 
 router = APIRouter()
 
@@ -271,6 +273,41 @@ def run_room_file(
   result = execute_workspace_file(
     room.get("workspace_tree", []),
     payload.filePath,
+    payload.stdin or "",
+  )
+  repository.touch_room(normalized_room_id)
+  return result
+
+
+@router.post("/api/rooms/{room_id}/run-snippet")
+def run_snippet(
+  room_id: str,
+  payload: RunSnippetRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  """Execute a code snippet directly (used by notebook cells)."""
+  enforce_rate_limit(
+    bucket="room-run",
+    key=current_user["id"],
+    limit=20,
+    window_seconds=60,
+  )
+
+  normalized_room_id = validate_room_id_value(room_id)
+  room = repository.get_room_by_id(normalized_room_id)
+
+  if room is None:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+  if not repository.user_can_run_room(current_user["id"], room):
+    raise HTTPException(
+      status_code=status.HTTP_403_FORBIDDEN,
+      detail="You need at least runner access to execute code in this room",
+    )
+
+  result = execute_code_snippet(
+    payload.code,
+    payload.language,
     payload.stdin or "",
   )
   repository.touch_room(normalized_room_id)

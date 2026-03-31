@@ -3,6 +3,7 @@ import {
   Activity,
   Bot,
   FileText,
+  Github,
   MessageCircleMore,
   PencilRuler,
   Timer,
@@ -17,11 +18,13 @@ import { motion as Motion, AnimatePresence } from "framer-motion";
 import RoomChat from "./RoomChat";
 import AIHelper from "./AIHelper";
 import ActivityLog from "./ActivityLog";
+import GitHubPanel from "./GitHubPanel";
 import QuickNotes from "./QuickNotes";
 import PomodoroTimer from "./PomodoroTimer";
 import Whiteboard from "./Whiteboard";
 import VideoCall from "./VideoCall";
 import UserAvatar from "./UserAvatar";
+import { useAuth } from "../hooks/useAuth";
 
 const TOOLS = [
   {
@@ -87,6 +90,15 @@ const TOOLS = [
     activeBg: "bg-rose-500/10",
     activeBorder: "border-rose-500/40",
   },
+  {
+    id: "github",
+    name: "GitHub",
+    icon: Github,
+    color: "text-zinc-500 dark:text-zinc-400",
+    bg: "hover:bg-zinc-500/10",
+    activeBg: "bg-zinc-500/10",
+    activeBorder: "border-zinc-500/40",
+  },
 ];
 
 // Collapsed icon rail width
@@ -125,6 +137,7 @@ export default function RightSidebar({
     }
   });
 
+  const { user } = useAuth();
   const allCollaborators = room?.collaborators || [];
   const liveCount = activeCollaborators.length;
 
@@ -263,6 +276,11 @@ export default function RightSidebar({
           <PomodoroTimer />
         </Motion.div>
       )}
+      {activeFeature === "github" && (
+        <Motion.div key="github" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col overflow-hidden">
+          <GitHubPanel roomId={roomId} activeFilePath={activeFilePath} activeCode={activeCode} />
+        </Motion.div>
+      )}
     </AnimatePresence>
   );
 
@@ -289,6 +307,7 @@ export default function RightSidebar({
           const Icon = tool.icon;
           const isActive = activeFeature === tool.id;
           const badge = tool.id === "chat" && unreadChatMessagesCount > 0 ? unreadChatMessagesCount : null;
+          const showGithubDot = tool.id === "github" && user?.githubConnected;
 
           return (
             <button
@@ -309,6 +328,9 @@ export default function RightSidebar({
                 <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-zinc-50 dark:ring-[#0d0d10]">
                   {badge > 9 ? "9+" : badge}
                 </span>
+              )}
+              {showGithubDot && (
+                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-zinc-50 bg-emerald-500 dark:border-[#0d0d10]" />
               )}
             </button>
           );
@@ -415,31 +437,62 @@ export default function RightSidebar({
               <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-600">Workspace Tools</p>
             </div>
 
-            {/* Live presence bar */}
-            <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-white/[0.06]">
-              <div className="flex items-center gap-1.5">
-                <Radio size={11} className={liveConnected ? "text-emerald-500" : "text-zinc-400 dark:text-zinc-600"} />
-                <span className="text-xs text-zinc-500">{liveConnected ? "Live" : "Offline"}</span>
-              </div>
-              {allCollaborators.length > 0 && (
-                <>
-                  <div className="h-3.5 w-px bg-zinc-200 dark:bg-white/[0.06]" />
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex -space-x-1.5">
-                      {allCollaborators.slice(0, 5).map((c) => (
-                        <div key={c.id} className="relative" title={c.username}>
-                          <UserAvatar username={c.username} size="xs" className="ring-1 ring-[#0d0d10]" />
-                          {activeCollaborators.some((a) => a.userId === c.id || a.id === c.id) && (
-                            <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-[#0d0d10] bg-emerald-500" />
-                          )}
-                        </div>
-                      ))}
+            {/* Live presence bar + member list */}
+            <div className="border-b border-zinc-200 dark:border-white/[0.06]">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  <Radio size={11} className={liveConnected ? "text-emerald-500" : "text-zinc-400 dark:text-zinc-600"} />
+                  <span className="text-xs text-zinc-500">{liveConnected ? "Live" : "Offline"}</span>
+                </div>
+                {allCollaborators.length > 0 && (
+                  <>
+                    <div className="h-3.5 w-px bg-zinc-200 dark:bg-white/[0.06]" />
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex -space-x-1.5">
+                        {allCollaborators.slice(0, 5).map((c) => (
+                          <div key={c.id} className="relative" title={`${c.username} · ${c.accessRole || "member"}`}>
+                            <UserAvatar username={c.username} size="xs" className="ring-1 ring-[#0d0d10]" />
+                            {activeCollaborators.some((a) => a.userId === c.id || a.id === c.id) && (
+                              <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-[#0d0d10] bg-emerald-500" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-600">
+                        {liveCount > 0 ? `${liveCount} active` : `${allCollaborators.length} members`}
+                      </span>
                     </div>
-                    <span className="text-xs text-zinc-500 dark:text-zinc-600">
-                      {liveCount > 0 ? `${liveCount} active` : `${allCollaborators.length} members`}
-                    </span>
-                  </div>
-                </>
+                  </>
+                )}
+              </div>
+              {/* Member role list */}
+              {allCollaborators.length > 0 && (
+                <div className="px-4 pb-3 space-y-1">
+                  {allCollaborators.map((c) => {
+                    const isLive = activeCollaborators.some((a) => a.userId === c.id || a.id === c.id);
+                    const roleDot = { owner: "bg-yellow-400", editor: "bg-violet-400", runner: "bg-amber-400", viewer: "bg-zinc-500" };
+                    const roleLabel = { owner: "Owner", editor: "Editor", runner: "Runner", viewer: "Viewer" };
+                    const role = c.accessRole || "editor";
+                    return (
+                      <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-white/[0.04]">
+                        <div className="relative shrink-0">
+                          <UserAvatar username={c.username} size="xs" />
+                          {isLive && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-white bg-emerald-500 dark:border-[#0d0d10]" />}
+                        </div>
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">{c.username}</span>
+                        <span className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                          role === "owner"  ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-300" :
+                          role === "editor" ? "bg-violet-500/10 text-violet-600 dark:text-violet-300" :
+                          role === "runner" ? "bg-amber-500/10 text-amber-600 dark:text-amber-300" :
+                          "bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+                        }`}>
+                          <span className={`h-1 w-1 rounded-full ${roleDot[role] || "bg-zinc-500"}`} />
+                          {roleLabel[role] || role}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 

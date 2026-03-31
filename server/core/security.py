@@ -221,6 +221,14 @@ def get_current_user_from_token(token: str) -> dict[str, Any]:
   return user
 
 
+def decode_access_token(token: str) -> dict[str, Any]:
+  """Decode a JWT without fetching the user from the database."""
+  try:
+    return jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+  except JWTError as error:
+    raise ValueError("Invalid or expired token") from error
+
+
 def normalize_workspace_path(value: str) -> str:
   raw_value = value.strip().replace("\\", "/")
   path = PurePosixPath(raw_value)

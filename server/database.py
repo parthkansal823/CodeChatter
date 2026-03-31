@@ -732,6 +732,9 @@ class MongoRepository:
     provider_user_id: str,
     email: str,
     preferred_username: str,
+    access_token: str | None = None,
+    provider_username: str | None = None,
+    provider_avatar_url: str | None = None,
   ) -> dict[str, Any]:
     self.initialize()
 
@@ -740,17 +743,20 @@ class MongoRepository:
       self._users.find_one({provider_key: provider_user_id})
     )
 
-    if existing_by_provider is not None:
-      updates: dict[str, Any] = {
-        "email": email.lower(),
-        "updated_at": self._utc_now(),
-      }
+    extra: dict[str, Any] = {"updated_at": self._utc_now()}
+    if access_token:
+      extra[f"oauth_tokens.{provider}"] = access_token
+    if provider_username:
+      extra[f"oauth_usernames.{provider}"] = provider_username
+    if provider_avatar_url:
+      extra[f"oauth_avatars.{provider}"] = provider_avatar_url
 
+    if existing_by_provider is not None:
+      updates: dict[str, Any] = {"email": email.lower(), **extra}
       if not existing_by_provider.get("username"):
         unique_username = self.build_unique_username(preferred_username)
         updates["username"] = unique_username
         updates["username_lower"] = unique_username.lower()
-
       self._users.update_one({"id": existing_by_provider["id"]}, {"$set": updates})
       return self.get_user_by_id(existing_by_provider["id"])
 
@@ -762,7 +768,7 @@ class MongoRepository:
         {
           "$set": {
             provider_key: provider_user_id,
-            "updated_at": self._utc_now(),
+            **extra,
           }
         },
       )
@@ -770,21 +776,121 @@ class MongoRepository:
 
     timestamp = self._utc_now()
     unique_username = self.build_unique_username(preferred_username)
-    document = {
+    document: dict[str, Any] = {
       "id": secrets.token_hex(8),
       "email": email.lower(),
       "username": unique_username,
       "username_lower": unique_username.lower(),
       "password_hash": "",
       "password_salt": "",
-      "oauth_accounts": {
-        provider: provider_user_id,
-      },
+      "oauth_accounts": {provider: provider_user_id},
+      "oauth_tokens": {},
+      "oauth_usernames": {},
+      "oauth_avatars": {},
       "created_at": timestamp,
       "updated_at": timestamp,
     }
+    if access_token:
+      document["oauth_tokens"][provider] = access_token
+    if provider_username:
+      document["oauth_usernames"][provider] = provider_username
+    if provider_avatar_url:
+      document["oauth_avatars"][provider] = provider_avatar_url
     self._users.insert_one(document)
     return self._strip_mongo_id(document)
+
+  def connect_oauth_to_user(
+    self,
+    user_id: str,
+    provider: str,
+    provider_user_id: str,
+    access_token: str | None = None,
+    provider_username: str | None = None,
+    provider_avatar_url: str | None = None,
+  ) -> dict[str, Any]:
+    """Link an OAuth provider to an existing authenticated account."""
+    self.initialize()
+    provider_key = f"oauth_accounts.{provider}"
+
+    # Ensure this provider ID isn't already linked to another account
+    existing = self._strip_mongo_id(self._users.find_one({provider_key: provider_user_id}))
+    if existing and existing["id"] != user_id:
+      raise ValueError(f"This {provider} account is already linked to another user")
+
+    updates: dict[str, Any] = {
+      provider_key: provider_user_id,
+      "updated_at": self._utc_now(),
+    }
+    if access_token:
+      updates[f"oauth_tokens.{provider}"] = access_token
+    if provider_username:
+      updates[f"oauth_usernames.{provider}"] = provider_username
+    if provider_avatar_url:
+      updates[f"oauth_avatars.{provider}"] = provider_avatar_url
+
+    self._users.update_one({"id": user_id}, {"$set": updates})
+    return self.get_user_by_id(user_id)
+
+  def disconnect_oauth_from_user(self, user_id: str, provider: str) -> dict[str, Any]:
+    """Unlink an OAuth provider from a user account."""
+    self.initialize()
+    self._users.update_one(
+      {"id": user_id},
+      {
+        "$unset": {
+          f"oauth_accounts.{provider}": "",
+          f"oauth_tokens.{provider}": "",
+          f"oauth_usernames.{provider}": "",
+          f"oauth_avatars.{provider}": "",
+        },
+        "$set": {"updated_at": self._utc_now()},
+      },
+    )
+    return self.get_user_by_id(user_id)
+
+  def get_oauth_token(self, user_id: str, provider: str) -> str | None:
+    """Return the stored OAuth access token for a provider."""
+    self.initialize()
+    user = self._users.find_one({"id": user_id}, {f"oauth_tokens.{provider}": 1})
+    if not user:
+      return None
+    return (user.get("oauth_tokens") or {}).get(provider)
+
+  # ── GitHub room link ─────────────────────────────────────────────────────
+
+  def set_room_github_link(self, room_id: str, user_id: str, link_data: dict) -> bool:
+    """Store a github_link on a room. Only owners may set this."""
+    self.initialize()
+    owner_filter = {"id": room_id, "$or": [{"owner_id": user_id}, {"owner_ids": user_id}]}
+    result = self._rooms.update_one(
+      owner_filter,
+      {"$set": {"github_link": link_data, "updated_at": self._utc_now()}},
+    )
+    return result.matched_count > 0
+
+  def clear_room_github_link(self, room_id: str, user_id: str) -> bool:
+    """Remove the github_link from a room. Only owners may do this."""
+    self.initialize()
+    owner_filter = {"id": room_id, "$or": [{"owner_id": user_id}, {"owner_ids": user_id}]}
+    result = self._rooms.update_one(
+      owner_filter,
+      {"$unset": {"github_link": ""}, "$set": {"updated_at": self._utc_now()}},
+    )
+    return result.matched_count > 0
+
+  def get_room_github_link(self, room_id: str) -> dict | None:
+    """Return the github_link dict for a room, or None."""
+    self.initialize()
+    doc = self._rooms.find_one({"id": room_id}, {"github_link": 1})
+    return (doc or {}).get("github_link")
+
+  def set_room_workspace_tree_raw(self, room_id: str, tree: list) -> None:
+    """Directly write workspace tree — no permission check (caller must verify)."""
+    self.initialize()
+    self._rooms.update_one(
+      {"id": room_id},
+      {"$set": {"workspace_tree": tree, "updated_at": self._utc_now()}},
+    )
 
   def create_room(
     self,
@@ -1350,10 +1456,18 @@ class MongoRepository:
     return "viewer"
 
   def serialize_user(self, user: dict[str, Any]) -> dict[str, Any]:
+    oauth_accounts = user.get("oauth_accounts") or {}
+    oauth_usernames = user.get("oauth_usernames") or {}
+    oauth_avatars = user.get("oauth_avatars") or {}
     return {
       "id": user["id"],
       "email": user["email"],
       "username": user["username"],
+      "githubConnected": bool(oauth_accounts.get("github")),
+      "githubUsername": oauth_usernames.get("github") or None,
+      "githubAvatarUrl": oauth_avatars.get("github") or None,
+      "googleConnected": bool(oauth_accounts.get("google")),
+      "hasPassword": bool(user.get("password_hash")),
     }
 
   def serialize_collaborator(self, user: dict[str, Any], access_role: str = "editor") -> dict[str, Any]:
@@ -1512,14 +1626,18 @@ class MongoRepository:
         if stats["characters"] > MAX_WORKSPACE_TOTAL_CONTENT_CHARS:
           raise ValueError("Workspace content is too large")
 
-        normalized_nodes.append(
-          {
-            "id": str(raw_node.get("id") or _node_id()),
-            "type": "file",
-            "name": node_name,
-            "content": content,
-          }
-        )
+        file_node: dict[str, Any] = {
+          "id": str(raw_node.get("id") or _node_id()),
+          "type": "file",
+          "name": node_name,
+          "content": content,
+        }
+        # Preserve GitHub sync metadata if present
+        if raw_node.get("githubPath"):
+          file_node["githubPath"] = str(raw_node["githubPath"])[:500]
+        if raw_node.get("githubSha"):
+          file_node["githubSha"] = str(raw_node["githubSha"])[:64]
+        normalized_nodes.append(file_node)
 
     return normalized_nodes
 

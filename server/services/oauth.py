@@ -33,7 +33,7 @@ def register_oauth_providers() -> None:
       access_token_url="https://github.com/login/oauth/access_token",
       authorize_url="https://github.com/login/oauth/authorize",
       api_base_url="https://api.github.com/",
-      client_kwargs={"scope": "user:email"},
+      client_kwargs={"scope": "user:email read:user repo gist"},
     )
     REGISTERED_OAUTH_PROVIDERS.add("github")
 

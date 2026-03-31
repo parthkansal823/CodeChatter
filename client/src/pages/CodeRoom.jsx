@@ -5,6 +5,7 @@ import { Minimize2 } from "lucide-react";
 
 import BottomPanel from "../components/BottomPanel";
 import CodeEditor from "../components/CodeEditor";
+import NotebookEditor from "../components/NotebookEditor";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyWorkspaceState from "../components/code-room/EmptyWorkspaceState";
 import LoadingRoomScreen from "../components/code-room/LoadingRoomScreen";
@@ -224,6 +225,14 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
           <div className="flex min-h-0 flex-1">
             <div className="flex min-w-0 flex-1 flex-col">
               {activeFileEntry ? (
+                activeFileEntry.name.endsWith(".nb") ? (
+                  <NotebookEditor
+                    code={activeCode}
+                    onCodeChange={handleCodeChange}
+                    readOnly={!canEditRoom}
+                    roomId={roomId}
+                  />
+                ) : (
                 <CodeEditor
                   selectedFileName={activeFileEntry.name}
                   selectedFilePath={activeFileEntry.path}
@@ -235,6 +244,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                   readOnly={!canEditRoom}
                   roomId={roomId}
                 />
+                )
               ) : (
                 <EmptyWorkspaceState
                   onCreateFile={() => handleQuickCreate("file")}

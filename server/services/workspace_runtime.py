@@ -340,3 +340,56 @@ def execute_workspace_file(
       run_result["compileCommand"] = " ".join(compile_command)
 
     return run_result
+
+
+LANGUAGE_EXTENSION_MAP = {
+  "python": ".py",
+  "javascript": ".js",
+  "typescript": ".ts",
+  "go": ".go",
+  "rust": ".rs",
+  "java": ".java",
+  "cpp": ".cpp",
+  "c": ".c",
+  "ruby": ".rb",
+  "php": ".php",
+  "shell": ".sh",
+  "lua": ".lua",
+  "perl": ".pl",
+  "swift": ".swift",
+  "kotlin": ".kt",
+}
+
+
+def execute_code_snippet(
+  code: str,
+  language: str,
+  stdin_text: str = "",
+) -> dict[str, Any]:
+  """Execute a code snippet directly without a workspace file.
+  Creates a temp file with the appropriate extension and runs it.
+  """
+  extension = LANGUAGE_EXTENSION_MAP.get(language.lower(), ".py")
+  filename = f"snippet{extension}"
+
+  with tempfile.TemporaryDirectory(prefix="codechatter-snippet-") as temp_dir:
+    workspace_root = Path(temp_dir)
+    snippet_file = workspace_root / filename
+    snippet_file.write_text(code, encoding="utf-8")
+
+    run_plan = build_run_plan(workspace_root, filename)
+    compile_command = run_plan["compile"]
+    run_command = run_plan["run"]
+    working_directory = run_plan["cwd"]
+
+    if compile_command is not None:
+      compile_result = run_process(compile_command, working_directory)
+      compile_result["phase"] = "compile"
+      compile_result["command"] = " ".join(compile_command)
+      if compile_result["exitCode"] not in {0, None}:
+        return compile_result
+
+    run_result = run_process(run_command, working_directory, stdin_text)
+    run_result["phase"] = "run"
+    run_result["command"] = " ".join(run_command)
+    return run_result

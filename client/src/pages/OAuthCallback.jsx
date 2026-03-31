@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 export default function OAuthCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { oauthLogin } = useAuth();
+  const { oauthLogin, refreshUser } = useAuth();
   const hasCalledRef = useRef(false);
 
   useEffect(() => {
@@ -15,17 +15,30 @@ export default function OAuthCallback() {
 
     const handleCallback = async () => {
       try {
-        const token = searchParams.get("token");
-        const username = searchParams.get("user");
-        const email = searchParams.get("email");
-        const id = searchParams.get("id");
         const error = searchParams.get("error");
-
         if (error) {
           toast.error(`OAuth Error: ${error}`);
           navigate("/auth");
           return;
         }
+
+        // ── GitHub connect flow (linking to existing account) ─────────
+        const githubLinked = searchParams.get("github_linked");
+        if (githubLinked === "1") {
+          const githubUsername = searchParams.get("githubUsername") || "";
+          await refreshUser();
+          toast.success(`GitHub connected${githubUsername ? ` as @${githubUsername}` : ""}!`);
+          navigate("/settings", { replace: true });
+          return;
+        }
+
+        // ── Normal OAuth sign-in ───────────────────────────────────────
+        const token = searchParams.get("token");
+        const username = searchParams.get("user");
+        const email = searchParams.get("email");
+        const id = searchParams.get("id");
+        const githubConnected = searchParams.get("githubConnected") === "1";
+        const githubUsername = searchParams.get("githubUsername") || null;
 
         if (!token || !username) {
           toast.error("Invalid OAuth response");
@@ -33,7 +46,7 @@ export default function OAuthCallback() {
           return;
         }
 
-        const userData = { id, email, username };
+        const userData = { id, email, username, githubConnected, githubUsername };
         const result = await oauthLogin(token, userData);
 
         if (result.success) {
@@ -51,7 +64,7 @@ export default function OAuthCallback() {
     };
 
     handleCallback();
-  }, [searchParams, navigate, oauthLogin]);
+  }, [searchParams, navigate, oauthLogin, refreshUser]);
 
   return (
     <div className="flex items-center justify-center h-screen bg-black">

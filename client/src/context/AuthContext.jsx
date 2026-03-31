@@ -390,6 +390,16 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const refreshUser = async () => {
+    if (!token) return;
+    try {
+      const userData = await secureFetch(API_ENDPOINTS.ME, {}, token);
+      if (userData) setUser(userData);
+    } catch {
+      // ignore silently
+    }
+  };
+
   const value = {
     user,
     isAuthenticated,
@@ -402,6 +412,7 @@ export function AuthProvider({ children }) {
     logout,
     deleteAccount,
     oauthLogin,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -339,8 +339,8 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
 
   try:
     room = repository.get_room_by_id(normalized_room_id)
-    if not room or not repository.user_can_edit_room(user_id, room):
-      await websocket.send_text("\r\n\x1b[31mx Terminal needs edit access in this workspace \x1b[0m\r\n")
+    if not room or not repository.user_can_run_room(user_id, room):
+      await websocket.send_text("\r\n\x1b[31mx Terminal requires at least runner access in this workspace \x1b[0m\r\n")
       await websocket.close()
       return
   except Exception:

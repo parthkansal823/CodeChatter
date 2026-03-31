@@ -284,3 +284,9 @@ class GeminiAssistRequest(BaseModel):
       return None
 
     return value
+
+
+class RunSnippetRequest(BaseModel):
+  code: str = Field(max_length=100_000)
+  language: str = Field(default="python", max_length=32)
+  stdin: str = Field(default="", max_length=10_000)

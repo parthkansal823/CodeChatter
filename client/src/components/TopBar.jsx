@@ -168,11 +168,20 @@ export default function TopBar({
                   <Radio size={12} />
                   {syncLabel}
                 </PresenceChip>
-                {!canEdit && (
-                  <PresenceChip className="bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                    View only
-                  </PresenceChip>
-                )}
+                {room?.accessRole && (() => {
+                  const roleStyles = {
+                    owner:  "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-300",
+                    editor: "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300",
+                    runner: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+                    viewer: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                  };
+                  const roleLabels = { owner: "Owner", editor: "Editor", runner: "Runner", viewer: "Viewer" };
+                  return (
+                    <PresenceChip className={roleStyles[room.accessRole] || roleStyles.viewer}>
+                      {roleLabels[room.accessRole] || room.accessRole}
+                    </PresenceChip>
+                  );
+                })()}
                 {canManageRoom && pendingJoinRequestCount > 0 && (
                   <button
                     onClick={onOpenSettings}

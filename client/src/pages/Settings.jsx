@@ -1,17 +1,19 @@
 import {
   LockKeyhole, Palette, UserRound, Code2, Bell, Users,
   Zap, Shield, LogOut, Trash2, Github, Mail, Copy, Check,
-  ChevronRight, Moon, Sun,
+  ChevronRight, Moon, Sun, ExternalLink, Link2, Link2Off, Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { usePreferences } from "../hooks/usePreferences";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { Button } from "../components/ui/Button";
 import UserAvatar from "../components/UserAvatar";
+import { secureFetch } from "../utils/security";
+import { API_ENDPOINTS } from "../config/security";
 
 const NAV = [
   { id: "profile", label: "Profile", icon: UserRound },
@@ -70,13 +72,24 @@ function Row({ label, hint, action }) {
 }
 
 export default function Settings() {
-  const { user, logout, deleteAccount } = useAuth();
+  const { user, token, logout, deleteAccount, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { preferences, updatePreference, updateNotification, updatePrivacy } = usePreferences();
   const [activeSection, setActiveSection] = useState("profile");
   const [copiedId, setCopiedId] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [disconnectingGitHub, setDisconnectingGitHub] = useState(false);
+
+  // Handle GitHub connect redirect
+  useEffect(() => {
+    if (searchParams.get("github_linked") === "1") {
+      refreshUser();
+      toast.success(`GitHub connected!`);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, refreshUser, setSearchParams]);
 
   const handleCopyUserId = () => {
     navigator.clipboard.writeText(user?.id || "");
@@ -110,6 +123,25 @@ export default function Settings() {
     toast.success("Theme updated");
   };
 
+  const handleConnectGitHub = () => {
+    const cb = `${window.location.origin}/auth/callback`;
+    const connectUrl = API_ENDPOINTS.GITHUB_CONNECT(token);
+    window.location.href = `${connectUrl}&redirect_uri=${encodeURIComponent(cb)}`;
+  };
+
+  const handleDisconnectGitHub = async () => {
+    setDisconnectingGitHub(true);
+    try {
+      await secureFetch(API_ENDPOINTS.GITHUB_DISCONNECT, { method: "DELETE" }, token);
+      await refreshUser();
+      toast.success("GitHub disconnected");
+    } catch (e) {
+      toast.error(e.message || "Failed to disconnect GitHub");
+    } finally {
+      setDisconnectingGitHub(false);
+    }
+  };
+
   const renderSection = () => {
     switch (activeSection) {
       case "profile":
@@ -139,18 +171,72 @@ export default function Settings() {
                 </button>
               }
             />
-            <Row label="Connected accounts" hint="Link GitHub or Google for faster sign-in"
+            {/* GitHub connected account */}
+            <Row
+              label="GitHub"
+              hint={user?.githubConnected
+                ? `Connected as @${user.githubUsername || "github"}`
+                : "Connect to import repos, push files, and create gists"}
               action={
-                <div className="flex gap-2">
-                  <button className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400 transition-colors">
-                    <Github size={12} /> GitHub
+                user?.githubConnected ? (
+                  <div className="flex items-center gap-2">
+                    {user.githubUsername && (
+                      <a
+                        href={`https://github.com/${user.githubUsername}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      >
+                        <ExternalLink size={11} />
+                      </a>
+                    )}
+                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Connected
+                    </span>
+                    <button
+                      onClick={handleDisconnectGitHub}
+                      disabled={disconnectingGitHub}
+                      className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition hover:border-rose-300 hover:text-rose-600 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-rose-500/40 dark:hover:text-rose-400"
+                    >
+                      {disconnectingGitHub ? <Loader2 size={11} className="animate-spin" /> : <Link2Off size={11} />}
+                      Disconnect
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleConnectGitHub}
+                    className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-white dark:hover:bg-white dark:hover:text-zinc-900"
+                  >
+                    <Github size={12} />
+                    Connect GitHub
                   </button>
-                  <button className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400 transition-colors">
-                    <Mail size={12} /> Google
-                  </button>
-                </div>
+                )
               }
             />
+
+            {/* GitHub features quick links (only if connected) */}
+            {user?.githubConnected && (
+              <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300">GitHub features available in the Code Editor</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { icon: "↓", label: "Import repos",    desc: "Pull files into workspace" },
+                    { icon: "↑", label: "Push files",      desc: "Commit active file to repo" },
+                    { icon: "#", label: "Create gists",    desc: "Share code as a gist" },
+                    { icon: "⊞", label: "Browse repos",    desc: "View all your repos" },
+                  ].map((f) => (
+                    <div key={f.label} className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-800/50">
+                      <span className="text-sm font-bold text-violet-500">{f.icon}</span>
+                      <div>
+                        <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{f.label}</p>
+                        <p className="text-[10px] text-zinc-500">{f.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         );
 

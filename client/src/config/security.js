@@ -69,4 +69,22 @@ export const API_ENDPOINTS = {
   // OAuth
   GOOGLE_LOGIN: `${API_BASE_URL}/auth/google`,
   GITHUB_LOGIN: `${API_BASE_URL}/auth/github`,
+  GITHUB_CONNECT: (connectToken) => `${API_BASE_URL}/auth/github?connect_token=${encodeURIComponent(connectToken)}`,
+
+  // GitHub Integration
+  GITHUB_STATUS: `${API_BASE_URL}/api/github/status`,
+  GITHUB_PROFILE: `${API_BASE_URL}/api/github/profile`,
+  GITHUB_REPOS: `${API_BASE_URL}/api/github/repos`,
+  GITHUB_REPO_TREE: (owner, repo) => `${API_BASE_URL}/api/github/repos/${owner}/${repo}/tree`,
+  GITHUB_REPO_BRANCHES: (owner, repo) => `${API_BASE_URL}/api/github/repos/${owner}/${repo}/branches`,
+  GITHUB_GISTS: `${API_BASE_URL}/api/github/gists`,
+  GITHUB_CREATE_GIST: `${API_BASE_URL}/api/github/gists`,
+  GITHUB_PUSH: `${API_BASE_URL}/api/github/push`,
+  GITHUB_IMPORT: (roomId) => `${API_BASE_URL}/api/github/rooms/${roomId}/import`,
+  GITHUB_DISCONNECT: `${API_BASE_URL}/api/github/disconnect`,
+  GITHUB_ROOM_LINK: (roomId) => `${API_BASE_URL}/api/github/rooms/${roomId}/link`,
+  GITHUB_ROOM_SYNC: (roomId) => `${API_BASE_URL}/api/github/rooms/${roomId}/sync`,
+
+  // Notebook cell execution
+  RUN_SNIPPET: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/run-snippet`,
 };

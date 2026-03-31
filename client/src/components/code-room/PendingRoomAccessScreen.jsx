@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Clock3, Eye, PencilLine, Play, RefreshCw, ShieldAlert, Wifi } from "lucide-react";
+import { ArrowLeft, Clock3, Crown, Eye, PencilLine, Play, RefreshCw, ShieldAlert, Wifi } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "../ui/Button";
 
 const ROLE_LABELS = {
-  editor: { label: "Editor", icon: PencilLine, text: "You'll be able to edit and run code" },
-  runner: { label: "Runner", icon: Play, text: "You'll be able to run code but not edit files" },
-  viewer: { label: "Viewer", icon: Eye, text: "You'll be able to view files in read-only mode" },
+  owner:  { label: "Owner",  icon: Crown,      text: "You'll have full access — edit, run, and manage the room" },
+  editor: { label: "Editor", icon: PencilLine, text: "You'll be able to edit files and run code" },
+  runner: { label: "Runner", icon: Play,       text: "You'll be able to execute code but not edit files" },
+  viewer: { label: "Viewer", icon: Eye,        text: "You'll be able to view files in read-only mode" },
 };
 
 function getStatusConfig(status) {
