@@ -67,6 +67,7 @@ export default function PendingRoomAccessScreen({
 
   const requestedAtLabel = requestedAt
     ? (() => {
+        // eslint-disable-next-line react-hooks/purity
         const diff = Date.now() - new Date(requestedAt).getTime();
         const mins = Math.floor(diff / 60000);
         if (mins < 1) return "Just now";

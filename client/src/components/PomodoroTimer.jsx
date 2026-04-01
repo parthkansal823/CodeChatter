@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   Bell, BellOff, CheckCircle2, ChevronRight,
@@ -43,7 +43,6 @@ function saveStats(stats) {
 
 function playBeep(type = "work") {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const AudioCtx = window.AudioContext || (/** @type {any} */ (window)).webkitAudioContext;
     const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
@@ -165,7 +164,7 @@ export default function PomodoroTimer() {
 
   // Today's stats
   const today     = todayKey();
-  const todayData = history[today] || { pomodoros: 0, focusMin: 0, sessions: [] };
+  const todayData = useMemo(() => history[today] || { pomodoros: 0, focusMin: 0, sessions: [] }, [history, today]);
   const todayMin  = todayData.focusMin || 0;
 
   // ── phase transition ───────────────────────────────────────────────────────
@@ -206,7 +205,7 @@ export default function PomodoroTimer() {
     if (soundOn) playBeep("break");
     sendNotif("⏰ Break over!", "Back to focus mode.");
     setRunning(autoStart);
-  }, [phase, totalPomodoros, history, today, todayData, cfg, task, soundOn, autoStart]);
+  }, [totalPomodoros, history, today, todayData, cfg, task, soundOn, autoStart]);
 
   // ── tick ───────────────────────────────────────────────────────────────────
 

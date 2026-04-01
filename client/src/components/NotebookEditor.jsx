@@ -30,6 +30,7 @@ const SUPPORTED_LANGUAGES = [
   "java", "cpp", "c", "ruby", "php", "shell", "lua",
 ];
 
+// eslint-disable-next-line no-control-regex
 const ANSI_STRIP = /\u001b\[[0-9;]*m/g;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -269,7 +270,7 @@ export default function NotebookEditor({
         return next;
       });
     }
-  }, [notebook.language, roomId, runningCells, token, updateCell]);
+  }, [roomId, runningCells, token, updateCell]);
 
   const handleRunAll = useCallback(async () => {
     if (runAll) return;
@@ -277,7 +278,6 @@ export default function NotebookEditor({
     clearOutputs();
     const codeCells = notebookRef.current.cells.filter((c) => c.type === "code");
     for (const cell of codeCells) {
-      // eslint-disable-next-line no-await-in-loop
       await runCell(cell.id, false);
     }
     setRunAll(false);

@@ -40,7 +40,7 @@ function loadInitialPreferences() {
 
 export function PreferencesProvider({ children }) {
   const [preferences, setPreferences] = useState(loadInitialPreferences);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
 
   // Apply dark class whenever theme preference changes
   useEffect(() => {

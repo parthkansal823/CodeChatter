@@ -115,7 +115,7 @@ export default function VideoCall({
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();
-    } catch (_) {}
+    } catch { /* ignored */ }
   }, []);
 
   const stopAudioAnalysis = useCallback(() => {
@@ -259,7 +259,7 @@ export default function VideoCall({
         if (pc && payload) {
           try {
             await pc.addIceCandidate(new RTCIceCandidate(payload));
-          } catch (_) {}
+          } catch { /* ignored */ }
         }
         return;
       }
@@ -299,7 +299,7 @@ export default function VideoCall({
         // Add tracks to any peer connections created before stream was ready
         for (const pc of peersRef.current.values()) {
           stream.getTracks().forEach((t) => {
-            try { pc.addTrack(t, stream); } catch (_) {}
+            try { pc.addTrack(t, stream); } catch { /* ignored */ }
           });
         }
 

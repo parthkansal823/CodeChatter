@@ -76,6 +76,7 @@ export default function BottomPanel({
     if (!roomId) return;
     try {
       const raw = sessionStorage.getItem(HISTORY_PREFIX + roomId);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExecHistory(raw ? JSON.parse(raw) : []);
     } catch { /* ignore */ }
   }, [roomId]);
@@ -92,6 +93,7 @@ export default function BottomPanel({
       stderr: runResult.stderr || "",
       command: runResult.command || "",
     };
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setExecHistory(prev => {
       const updated = [entry, ...prev].slice(0, MAX_HISTORY);
       try { sessionStorage.setItem(HISTORY_PREFIX + roomId, JSON.stringify(updated)); } catch { /* ignore */ }

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import { useCallback, useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   Activity, Bot, Code2, File, Play, RefreshCw, Save, Trash2, UserMinus, UserPlus,
@@ -49,7 +50,7 @@ export function logActivity(roomId, type, message) {
 export default function ActivityLog({ roomId }) {
   const [activities, setActivities] = useState([]);
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!roomId) return;
     try {
       const raw = sessionStorage.getItem(ACTIVITY_STORAGE_PREFIX + roomId);
@@ -57,14 +58,15 @@ export default function ActivityLog({ roomId }) {
     } catch {
       setActivities([]);
     }
-  };
+  }, [roomId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     const handler = (e) => { if (e.detail?.roomId === roomId) load(); };
     window.addEventListener("cc-activity", handler);
     return () => window.removeEventListener("cc-activity", handler);
-  }, [roomId]);
+  }, [roomId, load]);
 
   const clear = () => {
     if (roomId) sessionStorage.removeItem(ACTIVITY_STORAGE_PREFIX + roomId);

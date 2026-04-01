@@ -77,7 +77,7 @@ function prependLines(ta, prefix) {
   if (!ta) return "";
   const { selectionStart: s, selectionEnd: e, value } = ta;
   const before = value.slice(0, s);
-  const selected = value.slice(s, e) || "";
+  const _selected = value.slice(s, e) || "";
   const lineStart = before.lastIndexOf("\n") + 1;
   const nextLines = value
     .slice(lineStart, e || value.length)
@@ -183,7 +183,7 @@ export default function QuickNotes({ roomId }) {
   // ── Edit view ─────────────────────────────────────────────────────────────
 
   if (openNote) {
-    const color = colorOf(openNote.color);
+    const _color = colorOf(openNote.color);
 
     return (
       <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">

@@ -6,7 +6,9 @@
       "Bash(head -30 grep -n \"serialize_user\\\\|oauth_accounts\\\\|githubUsername\\\\|github\" \"d:/Project_With_Niyati/CodeChatterNK/server/database.py\")",
       "Bash(python -c \"import httpx; print\\(''httpx ok''\\)\")",
       "Bash(npm install:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -E \"^\\\\S.*\\\\.\\(jsx|js|ts|tsx\\)$\")"
     ]
   }
 }

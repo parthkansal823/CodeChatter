@@ -58,7 +58,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
       });
 
       e.target.value = null; // reset
-    } catch (_error) {
+    } catch {
       toast.error("Failed to upload file");
     } finally {
       setIsUploading(false);

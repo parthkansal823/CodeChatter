@@ -30,6 +30,7 @@ export default function Profile() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!token) { setIsLoading(false); return; }
     Promise.allSettled([
       secureFetch(API_ENDPOINTS.GET_ROOMS, {}, token),

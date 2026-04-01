@@ -29,7 +29,7 @@ import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch, validateRoomId } from "../utils/security";
 import { buildRoomInviteLink, parseRoomInvite } from "../utils/room/invite";
 import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/terminal";
-import { getBookmarks, getRecentRooms, isBookmarked, recordVisit, toggleBookmark } from "../utils/roomUtils";
+import { getBookmarks, getRecentRooms, recordVisit, toggleBookmark } from "../utils/roomUtils";
 
 const SkeletonCard = () => (
   <div className="rounded-2xl border border-zinc-200 bg-white p-5 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
