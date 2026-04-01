@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Copy,
   FileCode2,
@@ -6,6 +8,7 @@ import {
   Play,
   Radio,
   Settings,
+  Share2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -106,19 +109,42 @@ export default function TopBar({
   pendingJoinRequestCount = 0,
   explorerOpen,
   onToggleExplorer,
-  sidebarOpen,
-  onToggleSidebar,
   onCopyInvite,
   onRun,
   isRunning,
   saveStatus = "saved",
   liveConnected = false,
   onOpenSettings,
-  canEdit = true,
   canRun = true,
   canManageRoom = false,
 }) {
   const navigate = useNavigate();
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharePos, setSharePos] = useState({ top: 0, right: 0 });
+  const shareRef = useRef(null);
+  const shareBtnRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!shareRef.current?.contains(e.target) && !shareBtnRef.current?.contains(e.target)) {
+        setShareOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const openShare = () => {
+    if (!shareOpen && shareBtnRef.current) {
+      const rect = shareBtnRef.current.getBoundingClientRect();
+      setSharePos({
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setShareOpen((v) => !v);
+  };
+
   const hasLivePresence = activeCollaborators.length > 0;
   const visibleCollaborators = hasLivePresence ? activeCollaborators : collaborators;
   const fallbackOnly = !hasLivePresence && collaborators.length > 0;
@@ -266,14 +292,51 @@ export default function TopBar({
               <span>{isRunning ? "Running..." : "Run"}</span>
             </button>
 
-            <button
-              onClick={onCopyInvite}
-              className="inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
-              title="Copy invite link"
-            >
-              <Copy size={14} />
-              <span className="hidden sm:inline">Invite</span>
-            </button>
+            <div className="relative">
+              <button
+                ref={shareBtnRef}
+                onClick={openShare}
+                className="inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+                title="Share & Settings"
+              >
+                <Share2 size={14} />
+                <span className="hidden sm:inline">Share</span>
+              </button>
+
+              {shareOpen && createPortal(
+                <div
+                  ref={shareRef}
+                  style={{ position: "fixed", top: sharePos.top, right: sharePos.right }}
+                  className="z-[9999] w-72 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  {/* Invite link */}
+                  <div className="border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Invite Link</p>
+                    <button
+                      onClick={() => { onCopyInvite(); setShareOpen(false); }}
+                      className="flex w-full items-center gap-2.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <Copy size={13} className="shrink-0 text-zinc-400" />
+                      <span className="truncate">Copy invite link</span>
+                    </button>
+                  </div>
+
+                  {/* Room settings */}
+                  {canManageRoom && (
+                    <div className="border-t border-zinc-100 dark:border-zinc-800">
+                      <button
+                        onClick={() => { onOpenSettings(); setShareOpen(false); }}
+                        className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-zinc-600 transition-colors hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
+                      >
+                        <Settings size={13} />
+                        Room Settings
+                      </button>
+                    </div>
+                  )}
+                </div>,
+                document.body
+              )}
+            </div>
 
             <button
               onClick={() => navigate("/home")}
@@ -284,16 +347,6 @@ export default function TopBar({
               <span className="hidden sm:inline">Home</span>
             </button>
 
-            {canManageRoom && (
-              <button
-                onClick={onOpenSettings}
-                className="inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
-                title="Room settings"
-              >
-                <Settings size={14} />
-                <span className="hidden sm:inline">Settings</span>
-              </button>
-            )}
           </div>
         </div>
       </div>

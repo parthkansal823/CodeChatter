@@ -4,6 +4,7 @@ import {
   Bot,
   FileText,
   Github,
+  GitBranch,
   MessageCircleMore,
   PencilRuler,
   Timer,
@@ -17,6 +18,7 @@ import {
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import RoomChat from "./RoomChat";
 import AIHelper from "./AIHelper";
+import FlowchartPanel from "./FlowchartPanel";
 import ActivityLog from "./ActivityLog";
 import GitHubPanel from "./GitHubPanel";
 import QuickNotes from "./QuickNotes";
@@ -27,6 +29,7 @@ import UserAvatar from "./UserAvatar";
 import { useAuth } from "../hooks/useAuth";
 
 const TOOLS = [
+  // ── Core collaboration ──────────────────────────────
   {
     id: "chat",
     name: "Room Chat",
@@ -37,15 +40,6 @@ const TOOLS = [
     activeBorder: "border-emerald-500/40",
   },
   {
-    id: "video",
-    name: "Video Call",
-    icon: Video,
-    color: "text-sky-400",
-    bg: "hover:bg-sky-500/10",
-    activeBg: "bg-sky-500/10",
-    activeBorder: "border-sky-500/40",
-  },
-  {
     id: "ai",
     name: "AI Help",
     icon: Bot,
@@ -54,15 +48,26 @@ const TOOLS = [
     activeBg: "bg-violet-500/10",
     activeBorder: "border-violet-500/40",
   },
+  // ── Code tools ──────────────────────────────────────
   {
-    id: "whiteboard",
-    name: "Whiteboard",
-    icon: PencilRuler,
-    color: "text-amber-400",
-    bg: "hover:bg-amber-500/10",
-    activeBg: "bg-amber-500/10",
-    activeBorder: "border-amber-500/40",
+    id: "flowchart",
+    name: "Flowchart",
+    icon: GitBranch,
+    color: "text-cyan-400",
+    bg: "hover:bg-cyan-500/10",
+    activeBg: "bg-cyan-500/10",
+    activeBorder: "border-cyan-500/40",
   },
+  {
+    id: "github",
+    name: "GitHub",
+    icon: Github,
+    color: "text-zinc-500 dark:text-zinc-400",
+    bg: "hover:bg-zinc-500/10",
+    activeBg: "bg-zinc-500/10",
+    activeBorder: "border-zinc-500/40",
+  },
+  // ── Utilities ───────────────────────────────────────
   {
     id: "activity",
     name: "Activity",
@@ -82,6 +87,16 @@ const TOOLS = [
     activeBorder: "border-amber-500/40",
   },
   {
+    id: "whiteboard",
+    name: "Whiteboard",
+    icon: PencilRuler,
+    color: "text-orange-400",
+    bg: "hover:bg-orange-500/10",
+    activeBg: "bg-orange-500/10",
+    activeBorder: "border-orange-500/40",
+  },
+  // ── Focus / AV ──────────────────────────────────────
+  {
     id: "pomodoro",
     name: "Pomodoro",
     icon: Timer,
@@ -91,13 +106,13 @@ const TOOLS = [
     activeBorder: "border-rose-500/40",
   },
   {
-    id: "github",
-    name: "GitHub",
-    icon: Github,
-    color: "text-zinc-500 dark:text-zinc-400",
-    bg: "hover:bg-zinc-500/10",
-    activeBg: "bg-zinc-500/10",
-    activeBorder: "border-zinc-500/40",
+    id: "video",
+    name: "Video Call",
+    icon: Video,
+    color: "text-sky-400",
+    bg: "hover:bg-sky-500/10",
+    activeBg: "bg-sky-500/10",
+    activeBorder: "border-sky-500/40",
   },
 ];
 
@@ -117,7 +132,6 @@ export default function RightSidebar({
   activeCode,
   runResult,
   activeCollaborators = [],
-  saveStatus = "saved",
   liveConnected = false,
   chatMessages = [],
   sendChatMessage = () => {},
@@ -279,6 +293,16 @@ export default function RightSidebar({
       {activeFeature === "github" && (
         <Motion.div key="github" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col overflow-hidden">
           <GitHubPanel roomId={roomId} activeFilePath={activeFilePath} activeCode={activeCode} />
+        </Motion.div>
+      )}
+      {activeFeature === "flowchart" && (
+        <Motion.div key="flowchart" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col overflow-hidden">
+          <FlowchartPanel
+            onBack={closeTool}
+            roomId={roomId}
+            activeFilePath={activeFilePath}
+            activeCode={activeCode}
+          />
         </Motion.div>
       )}
     </AnimatePresence>

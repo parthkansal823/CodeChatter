@@ -178,7 +178,7 @@ export default function Navbar({
             >
               <div className="relative">
                 <UserAvatar username={user?.username} size="xs" />
-                <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-white dark:ring-zinc-900 ${presenceColor}`} />
+                <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-zinc-900 ${presenceColor}`} />
               </div>
               {!minimal && (
                 <span className="hidden max-w-[120px] truncate text-sm text-zinc-800 dark:text-zinc-100 xl:block">

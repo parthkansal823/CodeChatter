@@ -2,10 +2,12 @@ import {
   LockKeyhole, Palette, UserRound, Code2, Bell, Users,
   Zap, Shield, LogOut, Trash2, Github, Mail, Copy, Check,
   ChevronRight, Moon, Sun, ExternalLink, Link2, Link2Off, Loader2,
+  HelpCircle, RotateCcw,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
+import { openHomeTutorial, ROOM_TUTORIAL_KEY } from "../components/tutorialKeys";
 import { usePreferences } from "../hooks/usePreferences";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -23,6 +25,7 @@ const NAV = [
   { id: "notifs", label: "Notifications", icon: Bell },
   { id: "privacy", label: "Privacy", icon: Shield },
   { id: "shortcuts", label: "Shortcuts", icon: Zap },
+  { id: "help",   label: "Help & Tutorial", icon: HelpCircle },
   { id: "danger", label: "Account Actions", icon: LockKeyhole },
 ];
 
@@ -391,6 +394,41 @@ export default function Settings() {
                 </div>
               ))}
             </div>
+          </div>
+        );
+
+      case "help":
+        return (
+          <div>
+            <SectionTitle>Help & Tutorial</SectionTitle>
+            <Row
+              label="Home Page Tour"
+              hint="Replay the walkthrough that covers your dashboard, rooms, and sharing."
+              action={
+                <button
+                  onClick={() => { openHomeTutorial(); toast.success("Opening home tutorial…"); }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-600/40 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/40"
+                >
+                  <RotateCcw size={12} /> Restart
+                </button>
+              }
+            />
+            <Row
+              label="Code Room Tour"
+              hint="Replay the in-room tutorial covering the editor, tools, and shortcuts."
+              action={
+                <button
+                  onClick={() => {
+                    try { localStorage.removeItem(ROOM_TUTORIAL_KEY); } catch { /* */ }
+                    window.dispatchEvent(new CustomEvent("cc-open-room-tutorial"));
+                    toast.success("Opening room tutorial…");
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-600/40 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/40"
+                >
+                  <RotateCcw size={12} /> Restart
+                </button>
+              }
+            />
           </div>
         );
 

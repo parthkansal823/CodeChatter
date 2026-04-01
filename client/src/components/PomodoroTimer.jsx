@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
-  Bell, BellOff, CheckCircle2, ChevronRight, Coffee,
+  Bell, BellOff, CheckCircle2, ChevronRight,
   Flame, Pause, Play, RefreshCw, Settings, SkipForward,
   Target, Timer, Trophy, X, Zap,
 } from "lucide-react";
@@ -43,7 +43,9 @@ function saveStats(stats) {
 
 function playBeep(type = "work") {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const AudioCtx = window.AudioContext || (/** @type {any} */ (window)).webkitAudioContext;
+    const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -71,14 +73,6 @@ function playBeep(type = "work") {
 }
 
 // ── browser notification ──────────────────────────────────────────────────────
-
-async function requestNotifPermission() {
-  if (!("Notification" in window)) return false;
-  if (Notification.permission === "granted") return true;
-  if (Notification.permission === "denied") return false;
-  const result = await Notification.requestPermission();
-  return result === "granted";
-}
 
 function sendNotif(title, body) {
   if (typeof window !== "undefined" && Notification?.permission === "granted") {
@@ -177,8 +171,6 @@ export default function PomodoroTimer() {
   // ── phase transition ───────────────────────────────────────────────────────
 
   const switchPhase = useCallback((completedWork) => {
-    const isWork = phase === "work";
-
     if (completedWork) {
       // Record completed pomodoro
       const newTotal = totalPomodoros + 1;
@@ -317,18 +309,19 @@ export default function PomodoroTimer() {
 
       <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto px-4 py-5">
 
-        {/* Round indicators */}
+        {/* Round indicators — filled dots = completed pomodoros in current cycle */}
         <div className="flex items-center gap-1.5">
-          {Array.from({ length: LONG_BREAK_AFTER }).map((_, i) => (
-            <div
-              key={i}
-              className={`h-2 w-2 rounded-full transition-colors ${
-                i < (totalPomodoros % LONG_BREAK_AFTER || (totalPomodoros > 0 && totalPomodoros % LONG_BREAK_AFTER === 0 ? LONG_BREAK_AFTER : 0))
-                  ? "bg-violet-500"
-                  : "bg-zinc-200 dark:bg-zinc-700"
-              }`}
-            />
-          ))}
+          {Array.from({ length: LONG_BREAK_AFTER }).map((_, i) => {
+            const filledCount = totalPomodoros % LONG_BREAK_AFTER;
+            const allFull = totalPomodoros > 0 && filledCount === 0;
+            const filled = allFull ? LONG_BREAK_AFTER : filledCount;
+            return (
+              <div
+                key={i}
+                className={`h-2 w-2 rounded-full transition-colors ${i < filled ? "bg-violet-500" : "bg-zinc-200 dark:bg-zinc-700"}`}
+              />
+            );
+          })}
           <span className="ml-1 text-[10px] text-zinc-400">until long break</span>
         </div>
 
@@ -378,7 +371,14 @@ export default function PomodoroTimer() {
           <Motion.button
             whileHover={{ scale: 1.06 }}
             whileTap={{ scale: 0.94 }}
-            onClick={() => setRunning((v) => !v)}
+            onClick={() => {
+              setRunning((v) => {
+                if (!v && "Notification" in window && Notification.permission === "default") {
+                  Notification.requestPermission();
+                }
+                return !v;
+              });
+            }}
             className={`flex h-13 w-13 h-[52px] w-[52px] items-center justify-center rounded-full text-white shadow-lg transition-colors ${
               running
                 ? "bg-zinc-700 shadow-zinc-700/30 hover:bg-zinc-600"

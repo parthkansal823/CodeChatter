@@ -19,6 +19,7 @@ import TopBar from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 import { useCodeRoomState } from "../hooks/code-room/useCodeRoomState";
 import { useRunNotifications, useCollaboratorNotifications } from "../hooks/useRunNotifications";
+import RoomTutorial from "../components/RoomTutorial";
 
 export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const { roomId } = useParams();
@@ -197,14 +198,11 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
               activeCollaborators={activeCollaborators}
               explorerOpen={isMobileViewport ? isMobileExplorerOpen : isDesktopExplorerOpen}
               onToggleExplorer={toggleExplorer}
-              sidebarOpen={isRightSidebarOpen}
-              onToggleSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
               onCopyInvite={handleCopyInvite}
               onRun={handleRun}
               isRunning={runResult?.status === "running"}
               saveStatus={saveStatus}
               liveConnected={isRealtimeConnected}
-              canEdit={canEditRoom}
               canRun={canRunRoom}
               canManageRoom={canManageRoom}
               pendingJoinRequestCount={pendingJoinRequestCount}
@@ -265,7 +263,6 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                 activeCode={activeCode}
                 runResult={runResult}
                 activeCollaborators={activeCollaborators}
-                saveStatus={saveStatus}
                 liveConnected={isRealtimeConnected}
                 chatMessages={chatMessages}
                 sendChatMessage={sendChatMessage}
@@ -329,6 +326,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
         onCancel={() => setNodeToDelete(null)}
       />
 
+      <RoomTutorial />
     </div>
   );
 }

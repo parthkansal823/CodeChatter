@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Check, Clock3, Crown, Eye, Loader2, PencilLine, Play, Settings2,
-  Shield, ShieldCheck, Users, X, RefreshCw, Lock, Unlock,
-  ChevronDown, AlertTriangle,
+  Check, ChevronRight, Clock3, Crown, Eye, Loader2, PencilLine, Play,
+  Settings2, Shield, Users, X, Lock, Unlock,
 } from "lucide-react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
@@ -28,128 +27,57 @@ const formatRequestedAt = (value) => {
 };
 
 const ACCESS_ROLE_OPTIONS = [
-  {
-    id: "owner",
-    label: "Owner",
-    sublabel: "Full access + manage",
-    description: "Full access — edit, run, manage room settings, and assign roles to others.",
-    icon: Crown,
-    color: "gold",
-  },
-  {
-    id: "editor",
-    label: "Editor",
-    sublabel: "Edit + run code",
-    description: "Can edit files and run/execute code, but cannot manage room settings.",
-    icon: PencilLine,
-    color: "violet",
-  },
-  {
-    id: "runner",
-    label: "Runner",
-    sublabel: "Execute only",
-    description: "Can run/execute code and use the terminal, but cannot edit files.",
-    icon: Play,
-    color: "amber",
-  },
-  {
-    id: "viewer",
-    label: "Viewer",
-    sublabel: "Read-only",
-    description: "See files and follow collaboration in real time without editing or running.",
-    icon: Eye,
-    color: "slate",
-  },
+  { id: "owner",  label: "Owner",  sublabel: "Full access",  icon: Crown,      color: "yellow" },
+  { id: "editor", label: "Editor", sublabel: "Edit + run",   icon: PencilLine, color: "violet" },
+  { id: "runner", label: "Runner", sublabel: "Execute only", icon: Play,       color: "amber"  },
+  { id: "viewer", label: "Viewer", sublabel: "Read-only",    icon: Eye,        color: "zinc"   },
 ];
 
 const ROLE_COLORS = {
-  owner:  { pill: "bg-yellow-500/15 text-yellow-300 border-yellow-500/30", dot: "bg-yellow-400" },
-  editor: { pill: "bg-violet-500/10 text-violet-300 border-violet-500/20", dot: "bg-violet-400" },
-  runner: { pill: "bg-amber-500/10 text-amber-300 border-amber-500/20",    dot: "bg-amber-400"  },
-  viewer: { pill: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",       dot: "bg-zinc-500"   },
+  owner:  { pill: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-300 dark:border-yellow-500/20", dot: "bg-yellow-400" },
+  editor: { pill: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20", dot: "bg-violet-400" },
+  runner: { pill: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",       dot: "bg-amber-400"  },
+  viewer: { pill: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:border-zinc-500/20",            dot: "bg-zinc-400"   },
 };
 
 function RoleBadge({ role }) {
   const colors = ROLE_COLORS[role] || ROLE_COLORS.viewer;
   const labels = { owner: "Owner", editor: "Editor", runner: "Runner", viewer: "Viewer" };
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${colors.pill}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${colors.pill}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${colors.dot}`} />
       {labels[role] || role}
     </span>
   );
 }
 
-function RoleSelector({ selectedRole, onChange, compact = false }) {
+function Field({ label, children }) {
   return (
-    <div className={`grid gap-2 ${compact ? "grid-cols-3" : "grid-cols-1 sm:grid-cols-3"}`}>
-      {ACCESS_ROLE_OPTIONS.map((option) => {
-        const Icon = option.icon;
-        const isSelected = selectedRole === option.id;
-        const colorMap = {
-          gold: isSelected
-            ? "border-yellow-500 bg-yellow-950/60 text-yellow-100 shadow-yellow-500/10 shadow-lg"
-            : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300",
-          violet: isSelected
-            ? "border-violet-500 bg-violet-950/60 text-violet-100 shadow-violet-500/10 shadow-lg"
-            : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300",
-          amber: isSelected
-            ? "border-amber-500 bg-amber-950/60 text-amber-100 shadow-amber-500/10 shadow-lg"
-            : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300",
-          slate: isSelected
-            ? "border-zinc-500 bg-zinc-800/80 text-zinc-200 shadow-zinc-500/10 shadow-lg"
-            : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300",
-        };
-        return (
-          <button
-            key={option.id}
-            type="button"
-            onClick={() => onChange(option.id)}
-            className={`group rounded-xl border px-3 py-3 text-left transition-all duration-200 ${colorMap[option.color]}`}
-          >
-            <div className="flex items-center gap-2">
-              <Icon size={13} />
-              <p className="text-xs font-semibold">{option.label}</p>
-            </div>
-            {!compact && (
-              <p className="mt-1.5 text-[11px] leading-4 opacity-70">{option.sublabel}</p>
-            )}
-          </button>
-        );
-      })}
+    <div className="space-y-1">
+      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">{label}</label>
+      {children}
     </div>
   );
 }
 
-// ─── Tab navigation bar ───────────────────────────────────────────────────────
-function TabBar({ tabs, active, onChange, badgeCounts = {} }) {
+function RoleSelector({ selectedRole, onChange }) {
+  const colorMap = {
+    yellow: { on: "border-yellow-400 bg-yellow-50 text-yellow-700 dark:border-yellow-500/50 dark:bg-yellow-900/20 dark:text-yellow-300", off: "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400" },
+    violet: { on: "border-violet-500 bg-violet-50 text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/20 dark:text-violet-300", off: "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400" },
+    amber:  { on: "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-500/50 dark:bg-amber-900/20 dark:text-amber-300",       off: "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400" },
+    zinc:   { on: "border-zinc-400 bg-zinc-100 text-zinc-700 dark:border-zinc-500/50 dark:bg-zinc-800 dark:text-zinc-300",               off: "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400" },
+  };
   return (
-    <div className="flex gap-1 border-b border-white/[0.06] px-6">
-      {tabs.map((tab) => {
-        const count = badgeCounts[tab.id];
+    <div className="grid grid-cols-4 gap-1.5">
+      {ACCESS_ROLE_OPTIONS.map((option) => {
+        const Icon = option.icon;
+        const isSelected = selectedRole === option.id;
+        const cls = colorMap[option.color];
         return (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onChange(tab.id)}
-            className={`relative flex items-center gap-2 px-3 py-3.5 text-sm font-medium transition-colors ${
-              active === tab.id
-                ? "text-white"
-                : "text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            {tab.label}
-            {count > 0 && (
-              <span className="flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-violet-600 px-1 text-[10px] font-bold text-white leading-none">
-                {count}
-              </span>
-            )}
-            {active === tab.id && (
-              <Motion.span
-                layoutId="settings-tab-indicator"
-                className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-violet-500"
-              />
-            )}
+          <button key={option.id} type="button" onClick={() => onChange(option.id)}
+            className={`rounded-lg border px-2 py-2 text-left transition-all ${isSelected ? cls.on : cls.off}`}>
+            <div className="flex items-center gap-1.5"><Icon size={11} /><p className="text-[11px] font-semibold">{option.label}</p></div>
+            <p className="mt-0.5 text-[10px] opacity-60">{option.sublabel}</p>
           </button>
         );
       })}
@@ -162,13 +90,11 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const terminalShellOptions = getTerminalShellOptions();
   const defaultTerminalShell = getDefaultTerminalShell();
 
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeSection, setActiveSection] = useState("general");
   const [name, setName] = useState(room?.name || "");
   const [description, setDescription] = useState(room?.description || "");
   const [shell, setShell] = useState(room?.terminalShell || defaultTerminalShell);
-  const [requireJoinApproval, setRequireJoinApproval] = useState(
-    room?.requireJoinApproval ?? !room?.isPublic,
-  );
+  const [requireJoinApproval, setRequireJoinApproval] = useState(room?.requireJoinApproval ?? true);
   const [isSaving, setIsSaving] = useState(false);
   const [requestActionState, setRequestActionState] = useState({ requestId: null, action: null });
   const [requestRoles, setRequestRoles] = useState({});
@@ -177,50 +103,25 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const pendingJoinRequests = useMemo(() => room?.pendingJoinRequests || [], [room?.pendingJoinRequests]);
   const collaborators = useMemo(() => room?.collaborators || [], [room?.collaborators]);
   const ownerIds = useMemo(() => room?.ownerIds || (room?.ownerId ? [room.ownerId] : []), [room?.ownerIds, room?.ownerId]);
-  const ownerCollaborators = useMemo(
-    () => collaborators.filter((c) => ownerIds.includes(c.id)),
-    [collaborators, ownerIds],
-  );
-  const memberCollaborators = useMemo(
-    () => collaborators.filter((c) => !ownerIds.includes(c.id)),
-    [collaborators, ownerIds],
-  );
-  const activeShell = useMemo(
-    () => terminalShellOptions.find((option) => option.id === shell),
-    [shell, terminalShellOptions],
-  );
+  const ownerCollaborators = useMemo(() => collaborators.filter((c) => ownerIds.includes(c.id)), [collaborators, ownerIds]);
+  const memberCollaborators = useMemo(() => collaborators.filter((c) => !ownerIds.includes(c.id)), [collaborators, ownerIds]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setActiveTab("general");
-      return;
-    }
+    if (!isOpen) { setActiveSection("general"); return; }
     setName(room?.name || "");
     setDescription(room?.description || "");
     setShell(room?.terminalShell || defaultTerminalShell);
-    setRequireJoinApproval(room?.requireJoinApproval ?? !room?.isPublic);
-    setRequestRoles(
-      Object.fromEntries(
-        pendingJoinRequests.map((req) => [req.id, req.accessRole || "editor"]),
-      ),
-    );
+    setRequireJoinApproval(room?.requireJoinApproval ?? true);
+    setRequestRoles(Object.fromEntries(pendingJoinRequests.map((req) => [req.id, req.accessRole || "editor"])));
   }, [defaultTerminalShell, isOpen, pendingJoinRequests, room?.description, room?.isPublic, room?.name, room?.requireJoinApproval, room?.terminalShell]);
 
   const handleSave = async (event) => {
-    event.preventDefault();
+    event?.preventDefault();
     setIsSaving(true);
     try {
       const updatedRoom = await secureFetch(
         API_ENDPOINTS.UPDATE_ROOM_SETTINGS(room.id),
-        {
-          method: "PUT",
-          body: JSON.stringify({
-            name: sanitizeInput(name) || null,
-            description: sanitizeInput(description) || null,
-            terminalShell: shell,
-            requireJoinApproval,
-          }),
-        },
+        { method: "PUT", body: JSON.stringify({ name: sanitizeInput(name) || null, description: sanitizeInput(description) || null, terminalShell: shell, requireJoinApproval }) },
         token,
       );
       toast.success("Settings saved");
@@ -237,15 +138,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
     setRequestActionState({ requestId, action });
     try {
       const updatedRoom = await secureFetch(
-        action === "approve"
-          ? API_ENDPOINTS.APPROVE_JOIN_REQUEST(room.id, requestId)
-          : API_ENDPOINTS.REJECT_JOIN_REQUEST(room.id, requestId),
-        {
-          method: "POST",
-          body: JSON.stringify(
-            action === "approve" ? { accessRole: requestRoles[requestId] || "editor" } : {},
-          ),
-        },
+        action === "approve" ? API_ENDPOINTS.APPROVE_JOIN_REQUEST(room.id, requestId) : API_ENDPOINTS.REJECT_JOIN_REQUEST(room.id, requestId),
+        { method: "POST", body: JSON.stringify(action === "approve" ? { accessRole: requestRoles[requestId] || "editor" } : {}) },
         token,
       );
       onUpdate?.(updatedRoom);
@@ -274,12 +168,240 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
     }
   };
 
-  const tabs = [
-    { id: "general", label: "General" },
-    { id: "access", label: "Access" },
-    { id: "members", label: "Members" },
-    ...(pendingJoinRequests.length > 0 ? [{ id: "queue", label: "Queue" }] : []),
+  const NAV = [
+    { id: "general", label: "General", icon: Settings2 },
+    { id: "access",  label: "Access",  icon: Shield    },
+    { id: "members", label: "Members", icon: Users,  badge: collaborators.length },
+    ...(pendingJoinRequests.length > 0 ? [{ id: "queue", label: "Queue", icon: Clock3, badge: pendingJoinRequests.length }] : []),
   ];
+
+  const inputCls = "w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500 dark:focus:border-violet-500";
+
+  const renderSection = () => {
+    switch (activeSection) {
+      case "general":
+        return (
+          <form onSubmit={handleSave} className="flex h-full flex-col gap-4">
+            <Field label="Room Name">
+              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="My Workspace" className={inputCls} />
+            </Field>
+            <Field label="Description">
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What are you building?" rows={2} className={`${inputCls} resize-none`} />
+            </Field>
+            <Field label="Terminal Shell">
+              <div className="grid grid-cols-3 gap-1.5">
+                {terminalShellOptions.map((option) => (
+                  <button key={option.id} type="button" onClick={() => setShell(option.id)}
+                    className={`rounded-lg border px-3 py-2 text-left transition-all ${shell === option.id ? "border-violet-500 bg-violet-50 text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/20 dark:text-violet-300" : "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400"}`}>
+                    <p className="text-xs font-semibold">{option.label}</p>
+                    <p className="text-[10px] opacity-60">{option.shortLabel}</p>
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <div className="mt-auto flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={isSaving || !name.trim()} isLoading={isSaving}>Save</Button>
+            </div>
+          </form>
+        );
+
+      case "access":
+        return (
+          <div className="flex h-full flex-col gap-4">
+            <Field label="Join Mode">
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setRequireJoinApproval(true)}
+                  className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${requireJoinApproval ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200" : "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400"}`}>
+                  <Lock size={12} /><span className="text-sm font-medium">Require approval</span>
+                </button>
+                <button type="button" onClick={() => setRequireJoinApproval(false)}
+                  className={`flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${!requireJoinApproval ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-950/40 dark:text-emerald-200" : "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400"}`}>
+                  <Unlock size={12} /><span className="text-sm font-medium">Direct join</span>
+                </button>
+              </div>
+            </Field>
+
+            {room?.inviteToken && (
+              <Field label="Invite Link">
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/60">
+                  <p className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                    {`${window.location.origin}/room/${room.id}?token=${room.inviteToken}`}
+                  </p>
+                </div>
+              </Field>
+            )}
+
+            <Field label="Permission Matrix">
+              <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+                <table className="w-full text-xs">
+                  <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <tr>
+                      <th className="px-3 py-1.5 text-left font-medium text-zinc-500">Action</th>
+                      {["Owner","Editor","Runner","Viewer"].map((r) => (
+                        <th key={r} className="px-2 py-1.5 text-center font-semibold text-zinc-600 dark:text-zinc-300">{r}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {[
+                      { label: "View files",   owner: true,  editor: true,  runner: true,  viewer: true  },
+                      { label: "Edit files",   owner: true,  editor: true,  runner: false, viewer: false },
+                      { label: "Run code",     owner: true,  editor: true,  runner: true,  viewer: false },
+                      { label: "Terminal",     owner: true,  editor: true,  runner: true,  viewer: false },
+                      { label: "Manage room",  owner: true,  editor: false, runner: false, viewer: false },
+                      { label: "Assign roles", owner: true,  editor: false, runner: false, viewer: false },
+                    ].map((row) => (
+                      <tr key={row.label}>
+                        <td className="px-3 py-1.5 text-zinc-600 dark:text-zinc-400">{row.label}</td>
+                        {["owner","editor","runner","viewer"].map((role) => (
+                          <td key={role} className="px-2 py-1.5 text-center">
+                            {row[role] ? <span className="font-bold text-emerald-600 dark:text-emerald-400">✓</span> : <span className="text-zinc-300 dark:text-zinc-600">–</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Field>
+
+            <div className="mt-auto flex justify-end">
+              <Button onClick={handleSave} disabled={isSaving} isLoading={isSaving}>Save Access</Button>
+            </div>
+          </div>
+        );
+
+      case "members":
+        return (
+          <div className="flex h-full flex-col gap-3">
+            {collaborators.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/30">
+                <Users size={20} className="text-zinc-400" />
+                <p className="text-sm text-zinc-500">No members yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {ownerCollaborators.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                      <Crown size={10} className="text-yellow-500" /> Owners
+                    </p>
+                    <div className="space-y-1.5">
+                      {ownerCollaborators.map((member) => {
+                        const isBusy = memberActionState.memberId === member.id;
+                        const isLastOwner = ownerCollaborators.length === 1;
+                        return (
+                          <div key={member.id} className="flex items-center gap-2.5 rounded-lg border border-yellow-200 bg-yellow-50/50 p-2.5 dark:border-yellow-500/20 dark:bg-yellow-950/10">
+                            <UserAvatar username={member.username} size="xs" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">{member.username}</p>
+                              <p className="truncate text-[11px] text-zinc-500">{member.email}</p>
+                            </div>
+                            {isLastOwner ? <RoleBadge role="owner" /> : (
+                              <div className="flex items-center gap-1.5">
+                                {isBusy && <Loader2 size={12} className="animate-spin text-zinc-400" />}
+                                <select value="owner" disabled={isBusy} onChange={(e) => handleMemberAccessUpdate(member.id, e.target.value)}
+                                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 disabled:opacity-50">
+                                  <option value="owner">Owner</option>
+                                  <option value="editor">→ Editor</option>
+                                  <option value="runner">→ Runner</option>
+                                  <option value="viewer">→ Viewer</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {memberCollaborators.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                      <Users size={10} /> Members
+                    </p>
+                    <div className="space-y-1.5">
+                      {memberCollaborators.map((member) => {
+                        const isBusy = memberActionState.memberId === member.id;
+                        return (
+                          <div key={member.id} className="flex items-center gap-2.5 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-800/40">
+                            <UserAvatar username={member.username} size="xs" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">{member.username}</p>
+                              <p className="truncate text-[11px] text-zinc-500">{member.email}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {isBusy && <Loader2 size={12} className="animate-spin text-zinc-400" />}
+                              <select value={member.accessRole || "editor"} disabled={isBusy} onChange={(e) => handleMemberAccessUpdate(member.id, e.target.value)}
+                                className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 disabled:opacity-50">
+                                <option value="owner">→ Owner</option>
+                                <option value="editor">Editor</option>
+                                <option value="runner">Runner</option>
+                                <option value="viewer">Viewer</option>
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      case "queue":
+        return (
+          <div className="flex h-full flex-col gap-3">
+            {pendingJoinRequests.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/30">
+                <Clock3 size={20} className="text-zinc-400" />
+                <p className="text-sm text-zinc-500">No one waiting to join.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {pendingJoinRequests.map((request) => {
+                  const isBusy = requestActionState.requestId === request.id;
+                  const selectedRole = requestRoles[request.id] || "editor";
+                  return (
+                    <div key={request.id} className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800/40">
+                      <div className="flex items-center gap-2.5 px-3 py-2.5">
+                        <UserAvatar username={request.username} size="xs" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{request.username}</p>
+                          <p className="truncate text-[11px] text-zinc-500">{request.email}</p>
+                        </div>
+                        <span className="shrink-0 text-[11px] text-zinc-400">{formatRequestedAt(request.requestedAt)}</span>
+                      </div>
+                      <div className="border-t border-zinc-100 px-3 py-2 dark:border-zinc-700">
+                        <RoleSelector selectedRole={selectedRole} onChange={(role) => setRequestRoles((prev) => ({ ...prev, [request.id]: role }))} />
+                      </div>
+                      <div className="flex gap-2 border-t border-zinc-100 px-3 py-2 dark:border-zinc-700">
+                        <button type="button" disabled={isBusy} onClick={() => handleJoinRequestAction(request.id, "approve")}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50">
+                          {isBusy && requestActionState.action === "approve" ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                          Approve as {selectedRole}
+                        </button>
+                        <button type="button" disabled={isBusy} onClick={() => handleJoinRequestAction(request.id, "reject")}
+                          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-red-500/40 dark:hover:text-red-400">
+                          {isBusy && requestActionState.action === "reject" ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+                          Deny
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -289,456 +411,69 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
         >
           <Motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 16 }}
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 16 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
             onClick={(e) => e.stopPropagation()}
-            className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-2xl items-center"
+            className="flex h-[500px] w-full max-w-[680px] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 shadow-2xl shadow-black/20 dark:border-zinc-800 dark:bg-zinc-950"
           >
-            <div className="w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0f0f11] shadow-2xl shadow-black/60">
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600/20 text-violet-400">
-                    <Settings2 size={16} />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-white">Room Settings</h2>
-                    <p className="text-xs text-zinc-500">{room?.name || "Workspace"} · {room?.id}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-white/[0.06] hover:text-white"
-                >
-                  <X size={16} />
-                </button>
+            {/* Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-5 py-3.5 dark:border-zinc-800 dark:bg-zinc-900">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-600 dark:text-violet-400">Room Settings</p>
+                <h2 className="text-base font-bold text-zinc-900 dark:text-white">{room?.name || "Workspace"}</h2>
               </div>
-
-              {!room || isLoading ? (
-                <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
-                  <p className="text-sm text-zinc-500">Loading settings…</p>
-                </div>
-              ) : (
-                <>
-                  <TabBar
-                    tabs={tabs}
-                    active={activeTab}
-                    onChange={setActiveTab}
-                    badgeCounts={{ queue: pendingJoinRequests.length }}
-                  />
-
-                  <div className="max-h-[calc(100vh-16rem)] overflow-y-auto">
-                    {/* ── GENERAL TAB ─────────────────────────────── */}
-                    <AnimatePresence mode="wait">
-                      {activeTab === "general" && (
-                        <Motion.form
-                          key="general"
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          transition={{ duration: 0.15 }}
-                          onSubmit={handleSave}
-                        >
-                          <div className="space-y-5 px-6 py-6">
-                            {/* Room name */}
-                            <div>
-                              <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                                Room Name
-                              </label>
-                              <input
-                                required
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="My Workspace"
-                                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20"
-                              />
-                            </div>
-
-                            {/* Description */}
-                            <div>
-                              <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                                Description
-                              </label>
-                              <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                placeholder="What are you building here?"
-                                rows={3}
-                                className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20"
-                              />
-                            </div>
-
-                            {/* Terminal Shell */}
-                            <div>
-                              <label className="mb-3 block text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                                Terminal Shell
-                              </label>
-                              <div className="grid grid-cols-3 gap-2">
-                                {terminalShellOptions.map((option) => (
-                                  <button
-                                    key={option.id}
-                                    type="button"
-                                    onClick={() => setShell(option.id)}
-                                    className={`rounded-xl border px-3 py-3 text-left transition-all ${
-                                      shell === option.id
-                                        ? "border-violet-500/60 bg-violet-950/50 text-violet-200"
-                                        : "border-white/[0.06] bg-white/[0.02] text-zinc-400 hover:border-white/[0.12] hover:text-zinc-300"
-                                    }`}
-                                  >
-                                    <p className="text-xs font-semibold">{option.label}</p>
-                                    <p className="mt-0.5 text-[11px] opacity-60">{option.shortLabel}</p>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-3 border-t border-white/[0.06] px-6 py-4">
-                            <Button type="button" variant="ghost" onClick={onClose} className="text-zinc-400">
-                              Cancel
-                            </Button>
-                            <Button
-                              type="submit"
-                              disabled={isSaving || !name.trim()}
-                              isLoading={isSaving}
-                              className="bg-violet-600 hover:bg-violet-500"
-                            >
-                              Save Changes
-                            </Button>
-                          </div>
-                        </Motion.form>
-                      )}
-
-                      {/* ── ACCESS TAB ─────────────────────────────── */}
-                      {activeTab === "access" && (
-                        <Motion.div
-                          key="access"
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          transition={{ duration: 0.15 }}
-                          className="space-y-4 px-6 py-6"
-                        >
-                          {/* Invite link */}
-                          {room?.inviteToken && (
-                            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-                              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">Invite Link</p>
-                              <p className="mt-1 break-all font-mono text-xs text-zinc-400">
-                                {`${window.location.origin}/room/${room.id}?token=${room.inviteToken}`}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Join mode */}
-                          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-white">Join Approval</p>
-                                <p className="mt-1 text-xs text-zinc-500">
-                                  Control whether new participants join instantly or wait in a lobby.
-                                </p>
-                              </div>
-                              <span className={`mt-0.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                                requireJoinApproval
-                                  ? "bg-amber-500/10 text-amber-300"
-                                  : "bg-emerald-500/10 text-emerald-300"
-                              }`}>
-                                {requireJoinApproval ? "Approval required" : "Direct join"}
-                              </span>
-                            </div>
-
-                            <div className="mt-4 flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setRequireJoinApproval(true)}
-                                className={`flex flex-1 items-center gap-2 rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                                  requireJoinApproval
-                                    ? "border-amber-500/40 bg-amber-950/40 text-amber-200"
-                                    : "border-white/[0.06] bg-white/[0.02] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
-                                }`}
-                              >
-                                <Lock size={14} />
-                                <span className="font-medium">Require approval</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setRequireJoinApproval(false)}
-                                className={`flex flex-1 items-center gap-2 rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                                  !requireJoinApproval
-                                    ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-200"
-                                    : "border-white/[0.06] bg-white/[0.02] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
-                                }`}
-                              >
-                                <Unlock size={14} />
-                                <span className="font-medium">Allow direct join</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Permission matrix */}
-                          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-                            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">Permission Matrix</p>
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-xs">
-                                <thead>
-                                  <tr className="border-b border-white/[0.06]">
-                                    <th className="pb-2 text-left font-medium text-zinc-500">Permission</th>
-                                    {["Owner","Editor","Runner","Viewer"].map((r) => (
-                                      <th key={r} className="pb-2 text-center font-semibold text-zinc-300">{r}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/[0.04]">
-                                  {[
-                                    { label: "View files",        owner: true,  editor: true,  runner: true,  viewer: true  },
-                                    { label: "Edit files",        owner: true,  editor: true,  runner: false, viewer: false },
-                                    { label: "Run / Execute",     owner: true,  editor: true,  runner: true,  viewer: false },
-                                    { label: "Use terminal",      owner: true,  editor: true,  runner: true,  viewer: false },
-                                    { label: "Manage room",       owner: true,  editor: false, runner: false, viewer: false },
-                                    { label: "Assign roles",      owner: true,  editor: false, runner: false, viewer: false },
-                                    { label: "Approve requests",  owner: true,  editor: false, runner: false, viewer: false },
-                                  ].map((row) => (
-                                    <tr key={row.label}>
-                                      <td className="py-1.5 text-zinc-400">{row.label}</td>
-                                      {["owner","editor","runner","viewer"].map((role) => (
-                                        <td key={role} className="py-1.5 text-center">
-                                          {row[role]
-                                            ? <span className="inline-block h-3.5 w-3.5 rounded-full bg-emerald-500/20 text-emerald-400 leading-none text-[10px] font-bold">✓</span>
-                                            : <span className="inline-block h-3.5 w-3.5 rounded-full bg-zinc-800 text-zinc-600 leading-none text-[10px]">–</span>
-                                          }
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-
-                          <div className="flex justify-end border-t border-white/[0.06] pt-4">
-                            <Button
-                              type="button"
-                              onClick={handleSave}
-                              disabled={isSaving}
-                              isLoading={isSaving}
-                              className="bg-violet-600 hover:bg-violet-500"
-                            >
-                              Save Access Settings
-                            </Button>
-                          </div>
-                        </Motion.div>
-                      )}
-
-                      {/* ── MEMBERS TAB ─────────────────────────────── */}
-                      {activeTab === "members" && (
-                        <Motion.div
-                          key="members"
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          transition={{ duration: 0.15 }}
-                          className="px-6 py-6"
-                        >
-                          {collaborators.length === 0 ? (
-                            <div className="flex flex-col items-center gap-3 py-10 text-center">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04] text-zinc-600">
-                                <Users size={20} />
-                              </div>
-                              <p className="text-sm text-zinc-500">No members yet. Share the invite link to bring people in.</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-5">
-                              {/* ── Owners section ── */}
-                              {ownerCollaborators.length > 0 && (
-                                <div>
-                                  <div className="mb-2 flex items-center gap-2">
-                                    <Crown size={11} className="text-yellow-400" />
-                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Owners</p>
-                                  </div>
-                                  <div className="space-y-2">
-                                    {ownerCollaborators.map((member) => {
-                                      const isBusy = memberActionState.memberId === member.id;
-                                      const isLastOwner = ownerCollaborators.length === 1;
-                                      return (
-                                        <div key={member.id} className="flex items-center gap-3 rounded-xl border border-yellow-500/20 bg-yellow-950/10 p-3">
-                                          <UserAvatar username={member.username} size="base" />
-                                          <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium text-white">{member.username}</p>
-                                            <p className="truncate text-xs text-zinc-500">{member.email}</p>
-                                          </div>
-                                          {isLastOwner ? (
-                                            <RoleBadge role="owner" />
-                                          ) : (
-                                            <div className="flex items-center gap-2">
-                                              {isBusy && <Loader2 size={14} className="animate-spin text-zinc-500" />}
-                                              <select
-                                                value="owner"
-                                                disabled={isBusy}
-                                                onChange={(e) => handleMemberAccessUpdate(member.id, e.target.value)}
-                                                className="rounded-lg border border-white/[0.08] bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-300 outline-none transition hover:border-white/[0.16] focus:border-violet-500/50 disabled:opacity-50"
-                                              >
-                                                <option value="owner">Owner</option>
-                                                <option value="editor">Demote → Editor</option>
-                                                <option value="runner">Demote → Runner</option>
-                                                <option value="viewer">Demote → Viewer</option>
-                                              </select>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* ── Members section ── */}
-                              {memberCollaborators.length > 0 && (
-                                <div>
-                                  <div className="mb-2 flex items-center gap-2">
-                                    <Users size={11} className="text-zinc-500" />
-                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Members</p>
-                                  </div>
-                                  <div className="space-y-2">
-                                    {memberCollaborators.map((member) => {
-                                      const isBusy = memberActionState.memberId === member.id;
-                                      return (
-                                        <div key={member.id} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                                          <UserAvatar username={member.username} size="base" />
-                                          <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium text-white">{member.username}</p>
-                                            <p className="truncate text-xs text-zinc-500">{member.email}</p>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            {isBusy && <Loader2 size={14} className="animate-spin text-zinc-500" />}
-                                            <select
-                                              value={member.accessRole || "editor"}
-                                              disabled={isBusy}
-                                              onChange={(e) => handleMemberAccessUpdate(member.id, e.target.value)}
-                                              className="rounded-lg border border-white/[0.08] bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-300 outline-none transition hover:border-white/[0.16] focus:border-violet-500/50 disabled:opacity-50"
-                                            >
-                                              <option value="owner">Promote → Owner</option>
-                                              <option value="editor">Editor</option>
-                                              <option value="runner">Runner</option>
-                                              <option value="viewer">Viewer</option>
-                                            </select>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </Motion.div>
-                      )}
-
-                      {/* ── JOIN QUEUE TAB ─────────────────────────── */}
-                      {activeTab === "queue" && (
-                        <Motion.div
-                          key="queue"
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          transition={{ duration: 0.15 }}
-                          className="px-6 py-6"
-                        >
-                          {pendingJoinRequests.length === 0 ? (
-                            <div className="flex flex-col items-center gap-3 py-10 text-center">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04] text-zinc-600">
-                                <Clock3 size={20} />
-                              </div>
-                              <p className="text-sm text-zinc-500">No one is waiting to join right now.</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {pendingJoinRequests.map((request) => {
-                                const isBusy = requestActionState.requestId === request.id;
-                                const selectedRole = requestRoles[request.id] || "editor";
-
-                                return (
-                                  <div
-                                    key={request.id}
-                                    className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]"
-                                  >
-                                    {/* Request header */}
-                                    <div className="flex items-center gap-3 p-4">
-                                      <UserAvatar username={request.username} size="md" />
-                                      <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-semibold text-white">{request.username}</p>
-                                        <p className="truncate text-xs text-zinc-500">{request.email}</p>
-                                      </div>
-                                      <div className="shrink-0 text-right">
-                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300">
-                                          <Clock3 size={10} />
-                                          Waiting
-                                        </span>
-                                        <p className="mt-1 text-[11px] text-zinc-600">{formatRequestedAt(request.requestedAt)}</p>
-                                      </div>
-                                    </div>
-
-                                    {/* Role picker */}
-                                    <div className="border-t border-white/[0.06] px-4 py-3">
-                                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">
-                                        Grant access as
-                                      </p>
-                                      <RoleSelector
-                                        selectedRole={selectedRole}
-                                        onChange={(role) =>
-                                          setRequestRoles((prev) => ({ ...prev, [request.id]: role }))
-                                        }
-                                        compact
-                                      />
-                                    </div>
-
-                                    {/* Action buttons */}
-                                    <div className="flex gap-2 border-t border-white/[0.06] px-4 py-3">
-                                      <button
-                                        type="button"
-                                        disabled={isBusy}
-                                        onClick={() => handleJoinRequestAction(request.id, "approve")}
-                                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
-                                      >
-                                        {isBusy && requestActionState.action === "approve" ? (
-                                          <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                          <Check size={14} />
-                                        )}
-                                        Let them in as {selectedRole}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={isBusy}
-                                        onClick={() => handleJoinRequestAction(request.id, "reject")}
-                                        className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.06] px-4 py-2.5 text-sm font-medium text-zinc-400 transition hover:border-rose-500/40 hover:bg-rose-950/30 hover:text-rose-300 disabled:opacity-50"
-                                      >
-                                        {isBusy && requestActionState.action === "reject" ? (
-                                          <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                          <X size={14} />
-                                        )}
-                                        Deny
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </Motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </>
-              )}
+              <button type="button" onClick={onClose}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200">
+                <X size={15} />
+              </button>
             </div>
+
+            {!room || isLoading ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
+                <p className="text-sm text-zinc-500">Loading…</p>
+              </div>
+            ) : (
+              <div className="flex min-h-0 flex-1">
+                {/* Sidebar */}
+                <aside className="flex w-40 shrink-0 flex-col gap-0.5 border-r border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+                  {NAV.map(({ id, label, icon: Icon, badge }) => (
+                    <button key={id} type="button" onClick={() => setActiveSection(id)}
+                      className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-all ${activeSection === id ? "bg-violet-600 text-white shadow-sm" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"}`}>
+                      <Icon size={14} />
+                      {label}
+                      {badge > 0 && (
+                        <span className={`ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${activeSection === id ? "bg-white/25 text-white" : "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"}`}>
+                          {badge}
+                        </span>
+                      )}
+                      {activeSection === id && <ChevronRight size={11} className="ml-auto" />}
+                    </button>
+                  ))}
+                </aside>
+
+                {/* Content */}
+                <main className="min-w-0 flex-1 overflow-y-auto p-5">
+                  <AnimatePresence mode="wait">
+                    <Motion.div
+                      key={activeSection}
+                      initial={{ opacity: 0, x: 6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -6 }}
+                      transition={{ duration: 0.12 }}
+                      className="h-full"
+                    >
+                      {renderSection()}
+                    </Motion.div>
+                  </AnimatePresence>
+                </main>
+              </div>
+            )}
           </Motion.div>
         </Motion.div>
       )}
