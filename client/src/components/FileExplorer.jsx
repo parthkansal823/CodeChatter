@@ -322,7 +322,7 @@ export default function FileExplorer({
       style={widthStyle}
       className={`relative flex h-full flex-col border-r border-zinc-200 bg-zinc-50 text-zinc-700 transition-[width] dark:border-white/[0.04] dark:bg-[#0b0b0c] dark:text-zinc-200 ${
         isResizing ? "duration-0" : "duration-150"
-      } ${mobile ? "w-[86vw] max-w-[340px] shadow-2xl shadow-zinc-950/20" : ""}`}
+      } ${mobile ? "w-[88vw] max-w-[360px] shadow-2xl shadow-zinc-950/20" : ""}`}
     >
       {!mobile && !isCollapsed && (
         <div
@@ -425,7 +425,7 @@ export default function FileExplorer({
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search files..."
-              className="w-full rounded-md border border-zinc-200 bg-white py-1.5 pl-8 pr-2 text-xs lowercase text-zinc-700 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand-500/50 focus:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-900"
+              className="w-full rounded-md border border-zinc-200 bg-white py-1.5 pl-8 pr-2 text-xs text-zinc-700 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand-500/50 focus:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-900"
             />
           </div>
         </div>
@@ -501,6 +501,11 @@ export default function FileExplorer({
                   />
                 ))
               : renderNodes(tree)}
+            {searchQuery.trim() && explorerEntries.filter((entry) => entry.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+              <div className="mx-2 mt-2 rounded-md border border-dashed border-zinc-200 px-3 py-3 text-xs text-zinc-500 dark:border-white/[0.08] dark:text-zinc-500">
+                No files match "{searchQuery}".
+              </div>
+            )}
           </div>
         ) : (
           <div className="mx-2 rounded-md border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-400 dark:border-white/[0.08] dark:text-zinc-500">

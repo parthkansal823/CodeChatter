@@ -87,7 +87,7 @@ function OtpInput({ value, onChange }) {
   };
 
   return (
-    <div className="flex gap-3 justify-center" onPaste={handlePaste}>
+    <div className="flex justify-center gap-2 sm:gap-3" onPaste={handlePaste}>
       {Array.from({ length: 6 }).map((_, i) => (
         <Motion.div
           key={i}
@@ -103,8 +103,7 @@ function OtpInput({ value, onChange }) {
             value={value[i] || ""}
             onChange={(e) => handleChange(i, e)}
             onKeyDown={(e) => handleKeyDown(i, e)}
-            className="w-11 text-center text-xl font-bold rounded-xl bg-white/[0.05] border border-white/10 text-white focus:outline-none focus:border-purple-500 focus:bg-white/[0.09] focus:scale-105 transition-all duration-150 caret-transparent"
-            style={{ height: "3.25rem" }}
+            className="h-12 w-10 rounded-xl border border-white/10 bg-white/[0.05] text-center text-lg font-bold text-white caret-transparent transition-all duration-150 focus:scale-105 focus:border-purple-500 focus:bg-white/[0.09] focus:outline-none sm:h-[3.25rem] sm:w-11 sm:text-xl"
             autoComplete="one-time-code"
           />
         </Motion.div>
@@ -284,7 +283,6 @@ export default function Auth() {
                 transition={{ delay: 0.52, duration: 0.35, ease: EASE_EXPO }}
                 whileHover={{ scale: 1.03, y: -2, boxShadow: "0 0 28px rgba(124,58,237,0.45)" }}
                 whileTap={{ scale: 0.97 }}
-                transition_override={SPRING}
                 type="submit"
                 disabled={loading || otp.replace(/\D/g, "").length < 6}
                 className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -386,7 +384,7 @@ export default function Auth() {
       </AnimatePresence>
 
       {/* OAuth buttons */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {[
           { icon: Github,   label: "GitHub", color: "text-gray-300", action: () => startOAuth(API_ENDPOINTS.GITHUB_LOGIN) },
           { icon: FcGoogle, label: "Google", color: "",              action: () => startOAuth(API_ENDPOINTS.GOOGLE_LOGIN) },
@@ -398,7 +396,6 @@ export default function Auth() {
             transition={{ delay: 0.08 + i * 0.06, duration: 0.35, ease: EASE_EXPO }}
             whileHover={{ scale: 1.03, y: -2 }}
             whileTap={{ scale: 0.97 }}
-            transition2={SPRING}
             type="button"
             onClick={action}
             className="flex items-center justify-center gap-2.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20 transition-colors duration-200 group"

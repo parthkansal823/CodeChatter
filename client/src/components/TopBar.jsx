@@ -126,13 +126,43 @@ export default function TopBar({
 
   useEffect(() => {
     const handler = (e) => {
+      if (e.key === "Escape") {
+        setShareOpen(false);
+        return;
+      }
       if (!shareRef.current?.contains(e.target) && !shareBtnRef.current?.contains(e.target)) {
         setShareOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", handler);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!shareOpen || !shareBtnRef.current) {
+      return;
+    }
+
+    const updatePosition = () => {
+      const rect = shareBtnRef.current.getBoundingClientRect();
+      setSharePos({
+        top: rect.bottom + 6,
+        right: Math.max(window.innerWidth - rect.right, 8),
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [shareOpen]);
 
   const openShare = () => {
     if (!shareOpen && shareBtnRef.current) {
@@ -156,9 +186,9 @@ export default function TopBar({
 
   return (
     <div className="border-b border-zinc-100 bg-white/85 backdrop-blur-xl dark:border-white/[0.04] dark:bg-[#09090b]/90">
-      <div className="flex flex-col gap-2 px-3 py-2">
+      <div className="flex flex-col gap-2 px-2 py-2 sm:px-3">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-start gap-2 sm:items-center">
             {/* Single clean explorer toggle icon */}
             <button
               onClick={onToggleExplorer}
@@ -230,7 +260,7 @@ export default function TopBar({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 xl:justify-end">
             {activeCollaborators.length > 0 && (
               <PresenceChip className="bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
                 {activeCollaborators.length} live
@@ -285,7 +315,7 @@ export default function TopBar({
             <button
               onClick={onRun}
               disabled={isRunning || !canRun}
-              className="inline-flex h-8 items-center gap-2 rounded-lg bg-emerald-600 px-3.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-xs font-medium text-white shadow-sm transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500 sm:gap-2 sm:px-3.5 sm:text-sm"
               title={canRun ? "Run active file" : "You need at least runner access to run files"}
             >
               <Play size={13} fill="currentColor" />
@@ -296,7 +326,7 @@ export default function TopBar({
               <button
                 ref={shareBtnRef}
                 onClick={openShare}
-                className="inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
                 title="Share & Settings"
               >
                 <Share2 size={14} />
@@ -340,7 +370,7 @@ export default function TopBar({
 
             <button
               onClick={() => navigate("/home")}
-              className="inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
               title="Back to dashboard"
             >
               <Home size={14} />

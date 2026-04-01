@@ -29,7 +29,7 @@ function Breadcrumb({ filePath, fileName }) {
       <div className="flex flex-shrink-0 items-center gap-1">
         <ChevronRight size={12} />
         <Icon size={14} className={iconClassName} />
-        <span className="font-medium text-zinc-300">{fileName}</span>
+        <span className="font-medium text-zinc-700 dark:text-zinc-300">{fileName}</span>
       </div>
     </div>
   );
@@ -267,15 +267,15 @@ export default function CodeEditor({
       </div>
 
       {/* Status bar */}
-      <div className="flex items-center gap-3 border-t border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] text-zinc-500 dark:border-zinc-800/60 dark:bg-[#0d0d10] dark:text-zinc-600">
+      <div className="flex items-center gap-2 border-t border-zinc-200 bg-zinc-50 px-2 py-1 text-[10px] text-zinc-500 sm:gap-3 sm:px-3 sm:text-[11px] dark:border-zinc-800/60 dark:bg-[#0d0d10] dark:text-zinc-600">
         <span className="font-semibold uppercase tracking-wider text-zinc-500">
           {readOnly ? <span className="text-amber-400">View only</span>
             : isMarkdown ? "Markdown"
             : selectedLanguage}
         </span>
-        <span className="text-zinc-400 dark:text-zinc-700">·</span>
+        <span className="hidden text-zinc-400 dark:text-zinc-700 sm:inline">·</span>
         <span>Ln {cursorPosition.line}, Col {cursorPosition.column}</span>
-        <span className="ml-auto text-zinc-400 dark:text-zinc-700">{lineCount} lines · {characterCount} chars</span>
+        <span className="ml-auto hidden text-zinc-400 dark:text-zinc-700 md:inline">{lineCount} lines · {characterCount} chars</span>
         {selectedFileName && (
           <button
             onClick={() => {
@@ -289,7 +289,7 @@ export default function CodeEditor({
             className="flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
           >
             <Download size={11} />
-            <span>Download</span>
+            <span className="hidden sm:inline">Download</span>
           </button>
         )}
         {!readOnly && (
@@ -303,7 +303,7 @@ export default function CodeEditor({
             }`}
           >
             <Clock size={11} />
-            <span>History</span>
+            <span className="hidden sm:inline">History</span>
           </button>
         )}
       </div>

@@ -72,7 +72,7 @@ export default function TabBar({
               tabIndex={0}
               onClick={() => onSelectFile?.(file)}
               onKeyDown={(e) => e.key === "Enter" && onSelectFile?.(file)}
-              className={`group relative flex min-w-[120px] max-w-[220px] cursor-pointer items-center gap-2 border-t-2 px-3 py-1.5 text-sm transition-colors ${
+              className={`group relative flex min-w-[110px] max-w-[220px] cursor-pointer items-center gap-2 border-t-2 px-2.5 py-1.5 text-xs transition-colors sm:min-w-[120px] sm:px-3 sm:text-sm ${
                 isActive
                   ? "border-t-brand-500 bg-white text-zinc-900 dark:bg-[#1e1e1e] dark:text-white"
                   : "border-t-transparent bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-[#18181b] dark:text-zinc-400 dark:hover:bg-[#1d1d20]"
@@ -94,7 +94,7 @@ export default function TabBar({
                   e.stopPropagation();
                   onCloseFile?.(file);
                 }}
-                className="ml-auto flex-shrink-0 rounded-sm p-0.5 text-zinc-400 opacity-0 transition-all hover:bg-zinc-200 hover:text-zinc-700 group-hover:opacity-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                className={`ml-auto flex-shrink-0 rounded-sm p-0.5 text-zinc-400 transition-all hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                 title="Close file"
               >
                 <X size={14} />

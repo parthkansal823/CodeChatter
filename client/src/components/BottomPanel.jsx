@@ -70,6 +70,7 @@ export default function BottomPanel({
   const [execHistory, setExecHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState(null);
   const panelRef = useRef(null);
+  const lastSavedRunSignatureRef = useRef("");
 
   // Load history from sessionStorage
   useEffect(() => {
@@ -79,11 +80,23 @@ export default function BottomPanel({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setExecHistory(raw ? JSON.parse(raw) : []);
     } catch { /* ignore */ }
+    lastSavedRunSignatureRef.current = "";
   }, [roomId]);
 
   // Save completed runs to history
   useEffect(() => {
     if (!roomId || !runResult || runResult.status === "running") return;
+    const signature = [
+      runResult.command || "",
+      runResult.exitCode ?? "",
+      runResult.runtimeMs ?? "",
+      runResult.stdout || "",
+      runResult.stderr || "",
+    ].join("::");
+    if (signature === lastSavedRunSignatureRef.current) {
+      return;
+    }
+    lastSavedRunSignatureRef.current = signature;
     const entry = {
       id: `${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -176,7 +189,7 @@ export default function BottomPanel({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-3 py-1.5 dark:border-white/[0.05]">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2 py-1.5 sm:gap-3 sm:px-3 dark:border-white/[0.05]">
         <div className="flex items-center gap-1 overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -185,14 +198,14 @@ export default function BottomPanel({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors sm:gap-2 sm:px-2.5 sm:text-sm ${
                   activeTab === tab.id
                     ? "bg-zinc-200 text-zinc-900 dark:bg-white/[0.08] dark:text-white"
                     : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-white/[0.05] dark:hover:text-zinc-100"
                 }`}
               >
                 <Icon size={14} />
-                {tab.label}
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}

@@ -97,6 +97,22 @@ export default function Home() {
 
   const isRoomSettingsOpen = Boolean(settingsRoomId);
   const isListView = roomViewMode === "list";
+  const normalizedRoomSearch = roomSearch.trim().toLowerCase();
+  const filteredRooms = useMemo(
+    () => rooms.filter((room) => {
+      if (roomSearch === "__bookmarked__") {
+        return bookmarks.includes(room.id);
+      }
+      if (!normalizedRoomSearch) {
+        return true;
+      }
+      return (
+        room.name?.toLowerCase().includes(normalizedRoomSearch)
+        || room.id?.toLowerCase().includes(normalizedRoomSearch)
+      );
+    }),
+    [bookmarks, normalizedRoomSearch, roomSearch, rooms],
+  );
 
   const selectedTemplate = useMemo(
     () => roomTemplates.find((t) => t.id === selectedTemplateId) || null,
@@ -494,9 +510,9 @@ export default function Home() {
         )}
 
         <section className="mt-10">
-          <Motion.div variants={itemVariants} className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Motion.div variants={itemVariants} className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">Your rooms</h2>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {/* Search */}
               <div className="relative">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -525,7 +541,7 @@ export default function Home() {
                   Bookmarked ({bookmarks.length})
                 </button>
               )}
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">{rooms.length} total</span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 sm:text-sm">{rooms.length} total</span>
               <div className="inline-flex items-center rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
                 <button
                   type="button"
@@ -563,16 +579,10 @@ export default function Home() {
                 <SkeletonCard key={item} />
               ))}
             </div>
-          ) : rooms.length > 0 ? (
+          ) : filteredRooms.length > 0 ? (
             <div className={isListView ? "space-y-3" : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"}>
               <AnimatePresence mode="popLayout">
-                {rooms
-                  .filter(r => {
-                    if (roomSearch === "__bookmarked__") return bookmarks.includes(r.id);
-                    if (!roomSearch) return true;
-                    return r.name?.toLowerCase().includes(roomSearch.toLowerCase()) || r.id?.toLowerCase().includes(roomSearch.toLowerCase());
-                  })
-                  .map((room) => (
+                {filteredRooms.map((room) => (
                   <Motion.div
                     key={room.id}
                     layout // helps smoothly reflow grid after deletion
@@ -664,13 +674,17 @@ export default function Home() {
                                 </button>
 
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     const url = buildRoomInviteLink({
                                       roomId: room.id,
                                       inviteToken: room.inviteToken,
                                     });
-                                    navigator.clipboard.writeText(url);
-                                    toast.success("Invite link copied!");
+                                    try {
+                                      await navigator.clipboard.writeText(url);
+                                      toast.success("Invite link copied!");
+                                    } catch {
+                                      toast.error("Could not copy invite link");
+                                    }
                                     setOpenMenuId(null);
                                   }}
                                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
@@ -720,6 +734,20 @@ export default function Home() {
                 ))}
               </AnimatePresence>
             </div>
+          ) : rooms.length > 0 ? (
+            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
+              <Search size={22} className="text-zinc-400" />
+              <p className="mt-3 text-base font-semibold text-zinc-700 dark:text-zinc-300">No matching rooms</p>
+              <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+                Try a different name or room ID, or clear the filter to view all rooms.
+              </p>
+              <button
+                onClick={() => setRoomSearch("")}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Clear filter
+              </button>
+            </Motion.div>
           ) : (
             <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
               <Motion.div
@@ -753,14 +781,14 @@ export default function Home() {
               exit={{ opacity: 0, y: 14, scale: 0.97, filter: "blur(4px)", transition: { duration: 0.16, ease: "easeIn" } }}
               transition={{ type: "spring", stiffness: 360, damping: 28, filter: { duration: 0.22 }, opacity: { duration: 0.2 } }}
               onSubmit={handleCreateRoom}
-              className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+              className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <div className="border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+              <div className="border-b border-zinc-200 px-4 py-4 sm:px-6 dark:border-zinc-800">
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Create a room</p>
                 <h2 className="mt-1 text-2xl font-semibold">Choose how the workspace should start</h2>
               </div>
 
-              <div className="grid gap-6 p-6 lg:grid-cols-[1fr_1.4fr]">
+              <div className="grid max-h-[68vh] gap-6 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[1fr_1.4fr]">
                 <div className="space-y-4">
                   <div>
                     <label className="mb-2 block text-sm font-medium">Room name</label>

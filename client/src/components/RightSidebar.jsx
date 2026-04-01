@@ -119,6 +119,7 @@ const TOOLS = [
 // Collapsed icon rail width
 const RAIL_WIDTH = 52;
 const LAST_TOOL_STORAGE_KEY = "codechatter-last-active-tool";
+const SIDEBAR_WIDTH_STORAGE_KEY = "codechatter-right-sidebar-width";
 
 export default function RightSidebar({
   isOpen = true,
@@ -140,7 +141,16 @@ export default function RightSidebar({
   unreadChatMessagesCount = 0,
   setUnreadChatMessagesCount,
 }) {
-  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 340;
+    }
+    const storedValue = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
+    if (!Number.isFinite(storedValue)) {
+      return 340;
+    }
+    return Math.min(620, Math.max(300, storedValue));
+  });
   const [isResizing, setIsResizing] = useState(false);
   const [activeFeature, setActiveFeature] = useState(() => {
     try {
@@ -162,8 +172,8 @@ export default function RightSidebar({
     (e) => {
       if (isResizing) {
         let newWidth = document.body.clientWidth - e.clientX;
-        if (newWidth < 280) newWidth = 280;
-        if (newWidth > 700) newWidth = 700;
+        if (newWidth < 300) newWidth = 300;
+        if (newWidth > 620) newWidth = 620;
         setSidebarWidth(newWidth);
       }
     },
@@ -187,6 +197,26 @@ export default function RightSidebar({
       document.body.style.userSelect = "";
     };
   }, [resize, stopResizing, isResizing]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!mobile || !isOpen) {
+      return undefined;
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose?.();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, mobile, onClose]);
 
   useEffect(() => {
     if (activeFeature === "chat" && isOpen) {
@@ -391,7 +421,7 @@ export default function RightSidebar({
     return (
       <div className="fixed inset-0 z-50 flex justify-end lg:hidden">
         <button className="flex-1 bg-zinc-950/60 backdrop-blur-sm" onClick={onClose} aria-label="Close tools" />
-        <div className="flex h-full w-[82vw] max-w-[380px] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-white/[0.06] dark:bg-[#0d0d10]">
+        <div className="flex h-full w-[88vw] max-w-[400px] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-white/[0.06] dark:bg-[#0d0d10]">
           {/* Mobile header */}
           <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-white/[0.06]">
             <p className="text-sm font-semibold text-zinc-900 dark:text-white">Workspace Tools</p>
@@ -521,7 +551,7 @@ export default function RightSidebar({
             </div>
 
             {/* Tool cards */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               <div className="grid grid-cols-2 gap-2">
                 {TOOLS.map((tool) => {
                   const Icon = tool.icon;
