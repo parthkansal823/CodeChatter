@@ -67,7 +67,13 @@ async def login_google(request: Request, redirect_uri: str | None = None):
     return RedirectResponse(build_frontend_error_redirect("google_not_configured"))
 
   request.session["redirect_uri"] = get_safe_redirect_uri(redirect_uri)
-  redirect_url = request.url_for("auth_google_callback")
+  
+  # ── Build callback URL with proper scheme and host ──────────────────
+  # Use X-Forwarded-Proto and X-Forwarded-Host if behind a proxy
+  scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+  host = request.headers.get("x-forwarded-host", request.url.netloc)
+  redirect_url = f"{scheme}://{host}/auth/google/callback"
+  
   return await oauth.google.authorize_redirect(request, redirect_url)
 
 
@@ -78,7 +84,14 @@ async def auth_google_callback(request: Request):
 
   try:
     token = await oauth.google.authorize_access_token(request)
-    profile = token.get("userinfo", {})
+    
+    # ── Fetch user profile from Google's userinfo endpoint ──────────────
+    # Important: When using server_metadata_url, profile is not auto-included
+    userinfo_response = await oauth.google.get(
+      "https://openidconnect.googleapis.com/v1/userinfo",
+      token=token
+    )
+    profile = userinfo_response.json()
 
     email = str(profile.get("email", "")).strip().lower()
     name = str(profile.get("name", "")).strip()
@@ -113,7 +126,12 @@ async def login_github(
   else:
     request.session.pop("github_connect_token", None)
 
-  redirect_url = request.url_for("auth_github_callback")
+  # ── Build callback URL with proper scheme and host ──────────────────
+  # Use X-Forwarded-Proto and X-Forwarded-Host if behind a proxy
+  scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+  host = request.headers.get("x-forwarded-host", request.url.netloc)
+  redirect_url = f"{scheme}://{host}/auth/github/callback"
+  
   return await oauth.github.authorize_redirect(request, redirect_url)
 
 

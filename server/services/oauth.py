@@ -18,6 +18,9 @@ def register_oauth_providers() -> None:
       client_id=google_client_id,
       client_secret=google_client_secret,
       server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+      authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+      access_token_url="https://www.googleapis.com/oauth2/v4/token",
+      userinfo_url="https://openidconnect.googleapis.com/v1/userinfo",
       client_kwargs={"scope": "openid email profile"},
     )
     REGISTERED_OAUTH_PROVIDERS.add("google")
