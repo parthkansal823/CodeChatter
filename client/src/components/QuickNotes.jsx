@@ -123,7 +123,7 @@ function FormatToolbar({ taRef, onChange }) {
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export default function QuickNotes({ roomId }) {
+export default function QuickNotes({ roomId, onBack = null }) {
   const [notes, setNotes] = useState(() => loadNotes(roomId));
   const [openId, setOpenId] = useState(null);
   const [search, setSearch] = useState("");
@@ -286,6 +286,15 @@ export default function QuickNotes({ roomId }) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-white/[0.06]">
         <div className="flex items-center gap-2">
+          {onBack ? (
+            <button
+              onClick={onBack}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-white/[0.08]"
+              title="Back to tools"
+            >
+              <ArrowLeft size={14} />
+            </button>
+          ) : null}
           <StickyNote size={14} className="text-amber-400" />
           <span className="text-sm font-semibold text-zinc-900 dark:text-white">Notes</span>
           <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">

@@ -1,8 +1,15 @@
-import { FilePlus2, FolderPlus, Sparkles, Users } from "lucide-react";
+import { FilePlus2, FolderPlus, Lightbulb, Sparkles, Users } from "lucide-react";
 
 import { Button } from "../ui/Button";
 
-export default function EmptyWorkspaceState({ onCreateFile, onCreateFolder }) {
+const STARTER_FILES = ["README.md", "main.py", "index.js"];
+
+export default function EmptyWorkspaceState({
+  onCreateFile,
+  onCreateFolder,
+  onCreateStarterFile,
+  onOpenTutorial,
+}) {
   return (
     <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-white dark:bg-zinc-950">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.12),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.1),transparent_35%)]" />
@@ -29,6 +36,27 @@ export default function EmptyWorkspaceState({ onCreateFile, onCreateFolder }) {
               <FolderPlus size={16} className="mr-2" />
               Create Folder
             </Button>
+            <Button onClick={onOpenTutorial} variant="ghost">
+              <Lightbulb size={16} className="mr-2" />
+              Workspace Guide
+            </Button>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 p-4 text-left dark:border-zinc-800 dark:bg-zinc-900/50">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Quick starters
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {STARTER_FILES.map((fileName) => (
+                <button
+                  key={fileName}
+                  onClick={() => onCreateStarterFile?.(fileName)}
+                  className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                >
+                  {fileName}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">

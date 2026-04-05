@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ChevronLeft,
@@ -8,32 +8,36 @@ import {
   GitBranch,
   Loader2,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import mermaid from "mermaid";
 
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { secureFetch } from "../utils/security";
+import { logActivity } from "./ActivityLog";
 
 mermaid.initialize({
   startOnLoad: false,
   theme: "base",
   themeVariables: {
-    primaryColor: "#60a5fa",
+    primaryColor: "#4f46e5",
     primaryTextColor: "#ffffff",
-    primaryBorderColor: "#2563eb",
+    primaryBorderColor: "#4338ca",
     lineColor: "#94a3b8",
-    secondaryColor: "#a78bfa",
-    tertiaryColor: "#f1f5f9",
+    secondaryColor: "#22c55e",
+    tertiaryColor: "#0f172a",
+    clusterBkg: "#111827",
+    clusterBorder: "#334155",
   },
-  flowchart: { curve: "basis", padding: 20 },
+  flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
   fontFamily: "Inter, ui-sans-serif, sans-serif",
 });
 
-let _mermaidCounter = 0;
+let mermaidCounter = 0;
 
 async function renderMermaid(code) {
-  const id = `fc-${++_mermaidCounter}`;
+  const id = `fc-${++mermaidCounter}`;
   const { svg } = await mermaid.render(id, code);
   return svg;
 }
@@ -47,33 +51,41 @@ function extractMermaid(raw = "") {
     .trim();
 }
 
-// Replace any reserved-word classDef/class names Gemini may still produce
 const RESERVED_REMAP = {
   process: "cProc",
-  loop:    "cLoop",
-  error:   "cErr",
-  end:     "cStart",
+  loop: "cLoop",
+  error: "cErr",
+  end: "cStart",
   default: "cProc",
-  class:   "cProc",
+  class: "cProc",
 };
 
 function sanitizeClassNames(code = "") {
-  let out = code;
+  let output = code;
   for (const [bad, safe] of Object.entries(RESERVED_REMAP)) {
-    // classDef <bad> …
-    out = out.replace(new RegExp(`(classDef\\s+)${bad}\\b`, "gi"), `$1${safe}`);
-    // class NodeId <bad>
-    out = out.replace(new RegExp(`(class\\s+[\\w,]+\\s+)${bad}\\b`, "gi"), `$1${safe}`);
+    output = output.replace(new RegExp(`(classDef\\s+)${bad}\\b`, "gi"), `$1${safe}`);
+    output = output.replace(new RegExp(`(class\\s+[\\w,]+\\s+)${bad}\\b`, "gi"), `$1${safe}`);
   }
-  return out;
+  return output;
 }
 
 const LANG_MAP = {
-  py: "Python", js: "JavaScript", ts: "TypeScript",
-  jsx: "React JSX", tsx: "React TSX", java: "Java",
-  cs: "C#", cpp: "C++", c: "C", go: "Go",
-  rs: "Rust", rb: "Ruby", php: "PHP", kt: "Kotlin",
-  swift: "Swift", sh: "Shell",
+  py: "Python",
+  js: "JavaScript",
+  ts: "TypeScript",
+  jsx: "React JSX",
+  tsx: "React TSX",
+  java: "Java",
+  cs: "C#",
+  cpp: "C++",
+  c: "C",
+  go: "Go",
+  rs: "Rust",
+  rb: "Ruby",
+  php: "PHP",
+  kt: "Kotlin",
+  swift: "Swift",
+  sh: "Shell",
 };
 
 function detectLanguage(filePath) {
@@ -81,43 +93,74 @@ function detectLanguage(filePath) {
   return LANG_MAP[ext] || null;
 }
 
-// Class names must NOT be Mermaid reserved words (process, loop, error, end, default, class…)
-const CLASS = {
-  startEnd: "cStart",
-  process:  "cProc",
-  decision: "cDec",
-  func:     "cFunc",
-  loop:     "cLoop",
-  io:       "cIO",
-  error:    "cErr",
-};
-
 const LEGEND = [
-  { color: "#4ade80", cls: CLASS.startEnd, label: "Start / End" },
-  { color: "#60a5fa", cls: CLASS.process,  label: "Process"     },
-  { color: "#fbbf24", cls: CLASS.decision, label: "Decision"    },
-  { color: "#a78bfa", cls: CLASS.func,     label: "Function"    },
-  { color: "#fb923c", cls: CLASS.loop,     label: "Loop"        },
-  { color: "#34d399", cls: CLASS.io,       label: "I / O"       },
-  { color: "#f87171", cls: CLASS.error,    label: "Error"       },
+  { color: "#4ade80", label: "Start / End" },
+  { color: "#60a5fa", label: "Process" },
+  { color: "#fbbf24", label: "Decision" },
+  { color: "#a78bfa", label: "Function" },
+  { color: "#fb923c", label: "Loop" },
+  { color: "#34d399", label: "Input / Output" },
+  { color: "#f87171", label: "Error" },
 ];
+
+function formatTime(timestamp) {
+  if (!timestamp) return null;
+  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeCode }) {
   const { token } = useAuth();
   const [mermaidCode, setMermaidCode] = useState("");
-  const [svgHtml, setSvgHtml]         = useState("");
+  const [svgHtml, setSvgHtml] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [genError, setGenError]       = useState(null);
+  const [genError, setGenError] = useState(null);
   const [renderError, setRenderError] = useState(null);
-  const [detectedLang, setDetectedLang] = useState(null);
-  const [showSource, setShowSource]   = useState(false);
-  const lastGeneratedCodeRef          = useRef(null);
+  const [showSource, setShowSource] = useState(false);
+  const [generatedSignature, setGeneratedSignature] = useState(null);
+  const [generatedAt, setGeneratedAt] = useState(null);
+  const lastRenderedSignatureRef = useRef(null);
 
-  const generate = useCallback(async (code, filePath) => {
-    if (!code?.trim()) {
-      setGenError("Open a file to generate a flowchart.");
+  const detectedLang = useMemo(() => detectLanguage(activeFilePath) || "Code", [activeFilePath]);
+  const fileName = useMemo(() => activeFilePath?.split("/").pop() || null, [activeFilePath]);
+  const fileSignature = useMemo(() => {
+    if (!activeFilePath && !activeCode) return null;
+    return `${activeFilePath || "untitled"}::${activeCode || ""}`;
+  }, [activeCode, activeFilePath]);
+  const baseName = useMemo(
+    () => activeFilePath?.split("/").pop()?.replace(/\.[^.]+$/, "") || "flowchart",
+    [activeFilePath],
+  );
+  const needsGeneration = Boolean(activeCode?.trim()) && generatedSignature !== fileSignature;
+  const diagramReady = !isGenerating && svgHtml && !renderError && generatedSignature === fileSignature;
+
+  useEffect(() => {
+    if (!activeCode?.trim()) {
+      setMermaidCode("");
+      setSvgHtml("");
+      setShowSource(false);
+      setGenError(null);
+      setRenderError(null);
+      setGeneratedSignature(null);
+      setGeneratedAt(null);
+      lastRenderedSignatureRef.current = null;
       return;
     }
+
+    if (generatedSignature && generatedSignature !== fileSignature) {
+      setMermaidCode("");
+      setSvgHtml("");
+      setShowSource(false);
+      setGenError(null);
+      setRenderError(null);
+    }
+  }, [activeCode, fileSignature, generatedSignature]);
+
+  const generate = useCallback(async () => {
+    if (!activeCode?.trim()) {
+      setGenError("Open a file with code before generating a flowchart.");
+      return;
+    }
+
     setIsGenerating(true);
     setGenError(null);
     setRenderError(null);
@@ -125,46 +168,28 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
     setMermaidCode("");
     setShowSource(false);
 
-    const language = detectLanguage(filePath) || "code";
-    setDetectedLang(language);
-
     try {
+      const language = detectLanguage(activeFilePath) || "code";
       const prompt =
-        `Generate a colorful Mermaid flowchart for the ${language} code below.\n\n` +
-        `OUTPUT RULES:\n` +
-        `- Return ONLY raw Mermaid code — no markdown fences, no explanation\n` +
+        `Generate a polished Mermaid flowchart for this ${language} file.\n\n` +
+        `Rules:\n` +
+        `- Return only raw Mermaid code\n` +
+        `- No markdown fences, no explanation\n` +
         `- First line must be exactly: flowchart TD\n` +
-        `- Node IDs: short alphanumeric only (e.g. A, B, N1, CheckX)\n\n` +
-        `COPY THESE classDef LINES EXACTLY into your output (these names are intentionally prefixed with "c" to avoid reserved words):\n` +
-        `classDef cStart fill:#4ade80,stroke:#16a34a,color:#fff,stroke-width:2px\n` +
-        `classDef cProc  fill:#60a5fa,stroke:#2563eb,color:#fff,stroke-width:2px\n` +
-        `classDef cDec   fill:#fbbf24,stroke:#d97706,color:#000,stroke-width:2px\n` +
-        `classDef cFunc  fill:#a78bfa,stroke:#7c3aed,color:#fff,stroke-width:2px\n` +
-        `classDef cLoop  fill:#fb923c,stroke:#ea580c,color:#fff,stroke-width:2px\n` +
-        `classDef cIO    fill:#34d399,stroke:#059669,color:#fff,stroke-width:2px\n` +
-        `classDef cErr   fill:#f87171,stroke:#dc2626,color:#fff,stroke-width:2px\n\n` +
-        `APPLY classes to every node using:  class NodeId className\n` +
-        `  ([Label])  → class NodeId cStart\n` +
-        `  [Label]    → class NodeId cProc\n` +
-        `  {Label}    → class NodeId cDec\n` +
-        `  [[Label]]  → class NodeId cFunc\n` +
-        `  [/Label/]  → class NodeId cLoop  or  cIO\n\n` +
-        `EXAMPLE (follow this exact format):\n` +
-        `flowchart TD\n` +
-        `    classDef cStart fill:#4ade80,stroke:#16a34a,color:#fff,stroke-width:2px\n` +
-        `    classDef cProc fill:#60a5fa,stroke:#2563eb,color:#fff,stroke-width:2px\n` +
-        `    classDef cDec fill:#fbbf24,stroke:#d97706,color:#000,stroke-width:2px\n` +
-        `    S([Start]) --> R[/Read input/]\n` +
-        `    R --> C{Valid?}\n` +
-        `    C -->|Yes| P[Do work]\n` +
-        `    C -->|No| E([End])\n` +
-        `    P --> E\n` +
-        `    class S,E cStart\n` +
-        `    class R cIO\n` +
-        `    class C cDec\n` +
-        `    class P cProc\n\n` +
-        `Now generate the flowchart for this ${language} code:\n` +
-        `${code.slice(0, 4000)}`;
+        `- Keep the flow concise and readable\n` +
+        `- Prefer meaningful labels based on actual code behavior\n` +
+        `- Use short alphanumeric node ids only\n` +
+        `- Show decisions, loops, I/O, function boundaries, and error paths when present\n` +
+        `- Always include these classDefs exactly:\n` +
+        `classDef cStart fill:#4ade80,stroke:#16a34a,color:#ffffff,stroke-width:2px\n` +
+        `classDef cProc fill:#60a5fa,stroke:#2563eb,color:#ffffff,stroke-width:2px\n` +
+        `classDef cDec fill:#fbbf24,stroke:#d97706,color:#111827,stroke-width:2px\n` +
+        `classDef cFunc fill:#a78bfa,stroke:#7c3aed,color:#ffffff,stroke-width:2px\n` +
+        `classDef cLoop fill:#fb923c,stroke:#ea580c,color:#ffffff,stroke-width:2px\n` +
+        `classDef cIO fill:#34d399,stroke:#059669,color:#ffffff,stroke-width:2px\n` +
+        `classDef cErr fill:#f87171,stroke:#dc2626,color:#ffffff,stroke-width:2px\n` +
+        `- Apply a class to every node using Mermaid class statements\n\n` +
+        `Code:\n${activeCode.slice(0, 4500)}`;
 
       const response = await secureFetch(
         API_ENDPOINTS.AI_ASSIST,
@@ -172,221 +197,281 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         token,
       );
 
-      const raw     = response?.answer || response?.result || response?.text || "";
+      const raw = response?.answer || response?.result || response?.text || "";
       const cleaned = sanitizeClassNames(extractMermaid(raw));
-      if (!cleaned) throw new Error("AI returned an empty response — try regenerating.");
+      if (!cleaned) {
+        throw new Error("The AI did not return a usable Mermaid diagram.");
+      }
+
       setMermaidCode(cleaned);
-    } catch (e) {
-      setGenError(e.message || "Failed to generate flowchart.");
+      setGeneratedSignature(fileSignature);
+      setGeneratedAt(Date.now());
+      lastRenderedSignatureRef.current = fileSignature;
+      logActivity(roomId, "diagram_create", `Generated flowchart for ${fileName || "current file"}`);
+    } catch (error) {
+      setGenError(error.message || "Failed to generate a flowchart.");
     } finally {
       setIsGenerating(false);
     }
-  }, [roomId, token]);
+  }, [activeCode, activeFilePath, fileName, fileSignature, roomId, token]);
 
-  // Auto-generate when active file changes
-  useEffect(() => {
-    if (activeCode && activeCode !== lastGeneratedCodeRef.current) {
-      lastGeneratedCodeRef.current = activeCode;
-      generate(activeCode, activeFilePath);
-    }
-  }, [activeCode, activeFilePath, generate]);
-
-  // Render SVG whenever mermaidCode updates
   useEffect(() => {
     if (!mermaidCode) return;
     setRenderError(null);
+
     renderMermaid(mermaidCode)
       .then((svg) => setSvgHtml(svg))
-      .catch((err) => {
-        const msg = err?.message || String(err) || "Diagram syntax error.";
-        setRenderError(`Render failed: ${msg.slice(0, 200)}`);
+      .catch((error) => {
+        const message = error?.message || String(error) || "Diagram syntax error.";
+        setRenderError(`Render failed: ${message.slice(0, 220)}`);
       });
   }, [mermaidCode]);
 
-  const baseName = activeFilePath?.split("/").pop()?.replace(/\.[^.]+$/, "") || "flowchart";
-
   const downloadSVG = () => {
     if (!svgHtml) return;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([svgHtml], { type: "image/svg+xml" }));
-    a.download = `${baseName}.svg`;
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(new Blob([svgHtml], { type: "image/svg+xml" }));
+    anchor.download = `${baseName}.svg`;
+    anchor.click();
   };
 
   const downloadMMD = () => {
     if (!mermaidCode) return;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([mermaidCode], { type: "text/plain" }));
-    a.download = `${baseName}.mmd`;
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(new Blob([mermaidCode], { type: "text/plain" }));
+    anchor.download = `${baseName}.mmd`;
+    anchor.click();
   };
 
   const downloadPNG = () => {
     if (!svgHtml) return;
-    const img = new Image();
+    const image = new Image();
     const url = URL.createObjectURL(new Blob([svgHtml], { type: "image/svg+xml" }));
-    img.onload = () => {
+
+    image.onload = () => {
       const scale = 2;
       const canvas = document.createElement("canvas");
-      canvas.width  = img.naturalWidth  * scale;
-      canvas.height = img.naturalHeight * scale;
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.scale(scale, scale);
-      ctx.drawImage(img, 0, 0);
+      canvas.width = image.naturalWidth * scale;
+      canvas.height = image.naturalHeight * scale;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.scale(scale, scale);
+      context.drawImage(image, 0, 0);
       URL.revokeObjectURL(url);
-      const a = document.createElement("a");
-      a.download = `${baseName}.png`;
-      a.href = canvas.toDataURL("image/png");
-      a.click();
+
+      const anchor = document.createElement("a");
+      anchor.download = `${baseName}.png`;
+      anchor.href = canvas.toDataURL("image/png");
+      anchor.click();
     };
-    img.src = url;
+
+    image.src = url;
   };
 
-  const diagramReady = !isGenerating && svgHtml && !renderError;
-
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-[#09090b]">
-
-      {/* ── Header ───────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 px-3 py-2.5 dark:border-white/[0.04]">
+    <div className="flex h-full flex-col bg-white dark:bg-[#0a0a0f]">
+      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 px-3 py-3 dark:border-white/[0.06]">
         <button
           onClick={onBack}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-zinc-100"
+          title="Back to tools"
         >
           <ChevronLeft size={15} />
         </button>
-        <GitBranch size={14} className="text-cyan-500" />
-        <p className="flex-1 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Flowchart</p>
 
-        {/* Source toggle */}
-        {mermaidCode && (
+        <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-500">
+          <GitBranch size={16} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-zinc-900 dark:text-white">Flowchart</p>
+          <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+            {fileName || "Choose a file to map code flow"}
+          </p>
+        </div>
+
+        {mermaidCode ? (
           <button
-            onClick={() => setShowSource((v) => !v)}
-            title={showSource ? "Show diagram" : "View source"}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+            onClick={() => setShowSource((value) => !value)}
+            className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
               showSource
-                ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300"
-                : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
+                ? "bg-cyan-500/15 text-cyan-400"
+                : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-zinc-100"
             }`}
+            title={showSource ? "Show diagram" : "View Mermaid source"}
           >
-            <Code2 size={13} />
+            <Code2 size={14} />
           </button>
-        )}
+        ) : null}
 
-        {/* Regenerate */}
         <button
-          onClick={() => generate(activeCode, activeFilePath)}
-          disabled={isGenerating || !activeCode}
-          title="Regenerate"
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-40 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
+          onClick={generate}
+          disabled={isGenerating || !activeCode?.trim()}
+          className="inline-flex h-9 items-center gap-2 rounded-xl bg-cyan-500 px-3 text-xs font-semibold text-white transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          title={needsGeneration ? "Generate flowchart" : "Regenerate flowchart"}
         >
-          <RefreshCw size={13} className={isGenerating ? "animate-spin" : ""} />
+          {isGenerating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+          {needsGeneration || !generatedSignature ? "Generate" : "Refresh"}
         </button>
       </div>
 
-      {/* ── File pill ────────────────────────────────────── */}
-      {activeFilePath && (
-        <div className="flex shrink-0 items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-white/[0.04]">
-          <FileCode2 size={11} className="shrink-0 text-zinc-400" />
-          <p className="min-w-0 flex-1 truncate text-[11px] text-zinc-400 dark:text-zinc-500">
-            {activeFilePath.split("/").pop()}
-          </p>
-          {detectedLang && (
-            <span className="shrink-0 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-400">
-              {detectedLang}
+      {fileName ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 px-3 py-2 dark:border-white/[0.06]">
+          <FileCode2 size={12} className="text-zinc-400" />
+          <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{fileName}</span>
+          <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-600 dark:text-cyan-300">
+            {detectedLang}
+          </span>
+          {generatedAt ? (
+            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-white/[0.05] dark:text-zinc-400">
+              Generated {formatTime(generatedAt)}
             </span>
-          )}
+          ) : null}
         </div>
-      )}
+      ) : null}
 
-      {/* ── Body ─────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-
-        {/* Loading */}
-        {isGenerating && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3">
-            <Loader2 size={22} className="animate-spin text-cyan-500" />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Generating {detectedLang ? `${detectedLang} ` : ""}flowchart…
-            </p>
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!isGenerating && !activeCode && !genError && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-            <GitBranch size={26} className="text-zinc-300 dark:text-zinc-600" />
-            <p className="text-sm font-medium text-zinc-500">No file open</p>
-            <p className="text-xs text-zinc-400">Open a file in the editor to auto-generate its flowchart.</p>
-          </div>
-        )}
-
-        {/* Generation error */}
-        {!isGenerating && genError && (
-          <div className="m-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/20 dark:bg-amber-900/10">
-            <AlertCircle size={13} className="mt-0.5 shrink-0 text-amber-500" />
-            <div>
-              <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{genError}</p>
-              {activeCode && (
-                <button
-                  onClick={() => generate(activeCode, activeFilePath)}
-                  className="mt-1.5 text-[11px] font-semibold text-amber-600 underline underline-offset-2 hover:text-amber-800 dark:text-amber-400"
-                >
-                  Try again
-                </button>
-              )}
+        {!activeCode?.trim() ? (
+          <div className="flex flex-1 items-center justify-center p-5">
+            <div className="w-full max-w-sm rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-center dark:border-white/[0.1] dark:bg-white/[0.03]">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400">
+                <GitBranch size={20} />
+              </div>
+              <p className="mt-4 text-sm font-semibold text-zinc-900 dark:text-white">Open a file first</p>
+              <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                Flowcharts now generate only when you ask for them, so opening this panel no longer starts automatically.
+              </p>
             </div>
           </div>
-        )}
-
-        {/* Render error */}
-        {!isGenerating && renderError && (
-          <div className="m-3 space-y-2">
-            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-500/20 dark:bg-red-900/10">
-              <AlertCircle size={13} className="mt-0.5 shrink-0 text-red-500" />
-              <div>
-                <p className="text-xs font-medium text-red-700 dark:text-red-300">{renderError}</p>
+        ) : isGenerating ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6">
+            <Loader2 size={24} className="animate-spin text-cyan-500" />
+            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">Building flowchart</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Reading the {detectedLang} file and mapping its important steps.
+            </p>
+          </div>
+        ) : genError ? (
+          <div className="m-3 rounded-3xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+            <div className="flex items-start gap-3">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-500" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">{genError}</p>
+                <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-200/70">
+                  Try regenerating after saving the current file or simplifying the code region.
+                </p>
                 <button
-                  onClick={() => generate(activeCode, activeFilePath)}
-                  className="mt-1.5 text-[11px] font-semibold text-red-600 underline underline-offset-2 hover:text-red-800 dark:text-red-400"
+                  onClick={generate}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-400"
                 >
-                  Regenerate
+                  <RefreshCw size={12} />
+                  Try again
                 </button>
               </div>
             </div>
-            {/* Show source automatically on render error so user can see what went wrong */}
-            {mermaidCode && (
-              <pre className="overflow-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 font-mono text-[10px] leading-relaxed text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400">
+          </div>
+        ) : renderError ? (
+          <div className="m-3 space-y-3">
+            <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">{renderError}</p>
+                  <button
+                    onClick={generate}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-rose-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-400"
+                  >
+                    <RefreshCw size={12} />
+                    Regenerate
+                  </button>
+                </div>
+              </div>
+            </div>
+            {mermaidCode ? (
+              <pre className="overflow-auto rounded-3xl border border-zinc-200 bg-zinc-50 p-4 font-mono text-[11px] leading-6 text-zinc-700 dark:border-white/[0.06] dark:bg-black/30 dark:text-zinc-300">
                 {mermaidCode}
               </pre>
-            )}
+            ) : null}
           </div>
-        )}
+        ) : !mermaidCode ? (
+          <div className="flex flex-1 overflow-y-auto p-4">
+            <div className="w-full space-y-4">
+              <div className="rounded-[28px] border border-zinc-200 bg-zinc-50 p-5 dark:border-white/[0.06] dark:bg-gradient-to-br dark:from-cyan-500/10 dark:via-white/[0.04] dark:to-violet-500/10">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-400">
+                    <Sparkles size={20} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-lg font-semibold text-zinc-900 dark:text-white">Generate a clean code map</p>
+                    <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                      This turns the current file into a readable flow diagram with loops, decisions, functions, and I/O highlighted.
+                    </p>
+                  </div>
+                </div>
 
-        {/* Source view */}
-        {!isGenerating && showSource && mermaidCode && !renderError && (
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  {[
+                    { label: "Source", value: fileName || "Current file" },
+                    { label: "Language", value: detectedLang },
+                    { label: "Mode", value: "Manual generate" },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-zinc-200 bg-white px-3 py-3 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{item.label}</p>
+                      <p className="mt-1 truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={generate}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-cyan-400"
+                  >
+                    <GitBranch size={15} />
+                    Generate flowchart
+                  </button>
+                  <button
+                    onClick={() => setShowSource((value) => !value)}
+                    disabled
+                    className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 px-4 py-3 text-sm font-semibold text-zinc-400 dark:border-white/[0.06] dark:text-zinc-500"
+                  >
+                    <Code2 size={15} />
+                    Mermaid source
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-zinc-200 bg-white p-5 dark:border-white/[0.06] dark:bg-white/[0.02]">
+                <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-600">What improves here</p>
+                <div className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                  <p>Manual generation keeps the panel calm when you only want to inspect or compare files.</p>
+                  <p>Color-coded nodes make branches, loops, and helper functions easier to follow quickly.</p>
+                  <p>SVG, PNG, and Mermaid downloads stay available once a diagram is ready.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : showSource ? (
           <div className="flex-1 overflow-auto p-3">
-            <pre className="h-full overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 font-mono text-[11px] leading-relaxed text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300">
+            <pre className="h-full overflow-auto rounded-[28px] border border-zinc-200 bg-zinc-50 p-4 font-mono text-[11px] leading-6 text-zinc-700 dark:border-white/[0.06] dark:bg-black/30 dark:text-zinc-300">
               {mermaidCode}
             </pre>
           </div>
-        )}
-
-        {/* Diagram */}
-        {!isGenerating && !showSource && svgHtml && !renderError && (
+        ) : (
           <div className="flex-1 overflow-auto p-3">
-            <div
-              className="rounded-xl border border-zinc-100 bg-white p-4 dark:border-white/[0.04] dark:bg-white/[0.03]"
-              dangerouslySetInnerHTML={{ __html: svgHtml }}
-            />
-            {/* Legend */}
-            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5">
+            <div className="rounded-[28px] border border-zinc-200 bg-white p-4 dark:border-white/[0.06] dark:bg-[#101119]">
+              <div
+                className="overflow-auto rounded-[24px] bg-white p-3 dark:bg-[#0d1117]"
+                dangerouslySetInnerHTML={{ __html: svgHtml }}
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
               {LEGEND.map(({ color, label }) => (
-                <div key={label} className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color }} />
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{label}</span>
+                <div key={label} className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: color }} />
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</span>
                 </div>
               ))}
             </div>
@@ -394,28 +479,27 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         )}
       </div>
 
-      {/* ── Download bar ─────────────────────────────────── */}
-      {diagramReady && (
-        <div className="shrink-0 border-t border-zinc-100 p-3 dark:border-white/[0.04]">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Download</p>
-          <div className="grid grid-cols-3 gap-1.5">
+      {diagramReady ? (
+        <div className="shrink-0 border-t border-zinc-200/80 p-3 dark:border-white/[0.06]">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-600">Download</p>
+          <div className="grid grid-cols-3 gap-2">
             {[
-              { label: "SVG",  onClick: downloadSVG },
-              { label: "PNG",  onClick: downloadPNG },
+              { label: "SVG", onClick: downloadSVG },
+              { label: "PNG", onClick: downloadPNG },
               { label: ".mmd", onClick: downloadMMD },
             ].map(({ label, onClick }) => (
               <button
                 key={label}
                 onClick={onClick}
-                className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:border-zinc-600"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-200 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/10"
               >
-                <Download size={11} />
+                <Download size={12} />
                 {label}
               </button>
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

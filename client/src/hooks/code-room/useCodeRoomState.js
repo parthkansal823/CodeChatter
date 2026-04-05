@@ -1002,6 +1002,15 @@ export function useCodeRoomState({
     return false;
   }, [canEditRoom]);
 
+  const ensureRunAccess = useCallback(() => {
+    if (canRunRoom) {
+      return true;
+    }
+
+    toast.error("You need runner access to run files.");
+    return false;
+  }, [canRunRoom]);
+
   const handleSelectNode = (node) => {
     setFocusedNodeId(node.id);
 
@@ -1253,7 +1262,7 @@ export function useCodeRoomState({
   };
 
   const handleRun = async () => {
-    if (!ensureEditAccess("run files")) {
+    if (!ensureRunAccess()) {
       return;
     }
 

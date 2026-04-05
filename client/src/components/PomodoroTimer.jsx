@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
+  ArrowLeft,
   Bell, BellOff, CheckCircle2, ChevronRight,
   Flame, Pause, Play, RefreshCw, Settings, SkipForward,
   Target, Timer, Trophy, X, Zap,
@@ -138,7 +139,7 @@ function SettingsPanel({ custom, onChange, onClose }) {
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export default function PomodoroTimer() {
+export default function PomodoroTimer({ onBack = null }) {
   const [preset, setPreset]         = useState(0);
   const [custom, setCustom]         = useState(null); // null = use preset
   const [phase, setPhase]           = useState("work");
@@ -281,6 +282,15 @@ export default function PomodoroTimer() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-white/[0.06]">
         <div className="flex items-center gap-2">
+          {onBack ? (
+            <button
+              onClick={onBack}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200"
+              title="Back to tools"
+            >
+              <ArrowLeft size={13} />
+            </button>
+          ) : null}
           <Timer size={14} className="text-rose-400" />
           <span className="text-sm font-semibold text-zinc-900 dark:text-white">Pomodoro</span>
         </div>

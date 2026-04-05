@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { Minimize2 } from "lucide-react";
@@ -20,6 +20,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useCodeRoomState } from "../hooks/code-room/useCodeRoomState";
 import { useRunNotifications, useCollaboratorNotifications } from "../hooks/useRunNotifications";
 import RoomTutorial from "../components/RoomTutorial";
+import { countFiles, flattenWorkspaceTree } from "../utils/workspace";
 
 export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const { roomId } = useParams();
@@ -27,6 +28,10 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const [focusMode, setFocusMode] = useState(false);
+  const [requestedSidebarFeature, setRequestedSidebarFeature] = useState(null);
+  const handleOpenTutorial = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("cc-open-room-tutorial"));
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -107,6 +112,85 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     token,
     user,
   });
+  const workspaceEntries = useMemo(() => flattenWorkspaceTree(workspaceTree), [workspaceTree]);
+  const workspaceFileCount = useMemo(() => countFiles(workspaceTree), [workspaceTree]);
+  const workspaceFolderCount = useMemo(
+    () => workspaceEntries.filter((entry) => entry.type === "folder").length,
+    [workspaceEntries],
+  );
+  const workspaceFiles = useMemo(
+    () =>
+      workspaceEntries
+        .filter((entry) => entry.type === "file")
+        .map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          path: entry.path,
+          isActive: entry.id === activeFileId,
+          isOpen: openFiles.some((file) => file.id === entry.id),
+        })),
+    [activeFileId, openFiles, workspaceEntries],
+  );
+
+  const openSidebarTool = useCallback((toolId) => {
+    setIsRightSidebarOpen(true);
+    setRequestedSidebarFeature({ toolId, nonce: Date.now() });
+  }, [setIsRightSidebarOpen]);
+
+  useEffect(() => {
+    const openFileFromPalette = (fileId) => {
+      const entry = workspaceEntries.find((item) => item.id === fileId && item.type === "file");
+      if (entry) {
+        handleOpenFile(entry);
+      }
+    };
+
+    window.dispatchEvent(new CustomEvent("cc-room-command-context", {
+      detail: {
+        roomId,
+        roomName: room?.name || "Workspace",
+        canEdit: canEditRoom,
+        canRun: canRunRoom,
+        canManage: canManageRoom,
+        files: workspaceFiles,
+        actions: {
+          openFile: openFileFromPalette,
+          createFile: () => handleQuickCreate("file"),
+          createFolder: () => handleQuickCreate("folder"),
+          runActiveFile: handleRun,
+          copyInvite: handleCopyInvite,
+          openTutorial: handleOpenTutorial,
+          toggleExplorer,
+          toggleSidebar: () => setIsRightSidebarOpen((current) => !current),
+          openTool: openSidebarTool,
+          openSettings: () => setIsSettingsOpen(true),
+        },
+      },
+    }));
+  }, [
+    canEditRoom,
+    canManageRoom,
+    canRunRoom,
+    handleCopyInvite,
+    handleOpenFile,
+    handleOpenTutorial,
+    handleRun,
+    handleQuickCreate,
+    openSidebarTool,
+    room?.name,
+    roomId,
+    setIsSettingsOpen,
+    setIsRightSidebarOpen,
+    toggleExplorer,
+    workspaceEntries,
+    workspaceFiles,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      window.dispatchEvent(new CustomEvent("cc-room-command-context", { detail: null }));
+    };
+  }, []);
 
   // Auto-fire notifications after state is available
   useRunNotifications(runResult, roomId, room?.name);
@@ -192,23 +276,26 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
 
         <div className="flex min-w-0 flex-1 flex-col">
           {!focusMode && (
-            <TopBar
-              room={room}
-              activePath={activeFileEntry?.path}
-              collaborators={room?.collaborators || []}
-              activeCollaborators={activeCollaborators}
-              explorerOpen={isMobileViewport ? isMobileExplorerOpen : isDesktopExplorerOpen}
-              onToggleExplorer={toggleExplorer}
-              onCopyInvite={handleCopyInvite}
-              onRun={handleRun}
-              isRunning={runResult?.status === "running"}
-              saveStatus={saveStatus}
-              liveConnected={isRealtimeConnected}
-              canRun={canRunRoom}
-              canManageRoom={canManageRoom}
-              pendingJoinRequestCount={pendingJoinRequestCount}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-            />
+              <TopBar
+                room={room}
+                activePath={activeFileEntry?.path}
+                collaborators={room?.collaborators || []}
+                activeCollaborators={activeCollaborators}
+                fileCount={workspaceFileCount}
+                folderCount={workspaceFolderCount}
+                openFileCount={openFiles.length}
+                explorerOpen={isMobileViewport ? isMobileExplorerOpen : isDesktopExplorerOpen}
+                onToggleExplorer={toggleExplorer}
+                onCopyInvite={handleCopyInvite}
+                onRun={handleRun}
+                isRunning={runResult?.status === "running"}
+                saveStatus={saveStatus}
+                liveConnected={isRealtimeConnected}
+                canRun={canRunRoom}
+                canManageRoom={canManageRoom}
+                pendingJoinRequestCount={pendingJoinRequestCount}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+              />
           )}
 
           {!focusMode && openFiles.length > 0 && (
@@ -248,12 +335,15 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                 <EmptyWorkspaceState
                   onCreateFile={() => handleQuickCreate("file")}
                   onCreateFolder={() => handleQuickCreate("folder")}
+                  onCreateStarterFile={(name) => handleCreateFile(name, null)}
+                  onOpenTutorial={handleOpenTutorial}
                 />
               )}
             </div>
 
             {!focusMode && (
               <RightSidebar
+                key={requestedSidebarFeature?.nonce || "workspace-sidebar"}
                 isOpen={isRightSidebarOpen}
                 onToggle={() => setIsRightSidebarOpen((prev) => !prev)}
                 mobile={isMobileViewport}
@@ -265,12 +355,17 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                 runResult={runResult}
                 activeCollaborators={activeCollaborators}
                 liveConnected={isRealtimeConnected}
+                fileCount={workspaceFileCount}
+                folderCount={workspaceFolderCount}
+                openFileCount={openFiles.length}
+                accessRole={room?.accessRole}
                 chatMessages={chatMessages}
                 sendChatMessage={sendChatMessage}
                 sendVideoSignal={sendVideoSignal}
                 setVideoSignalListener={setVideoSignalListener}
                 unreadChatMessagesCount={unreadChatMessagesCount}
                 setUnreadChatMessagesCount={setUnreadChatMessagesCount}
+                initialFeature={requestedSidebarFeature?.toolId || null}
               />
             )}
           </div>

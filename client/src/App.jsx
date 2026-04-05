@@ -8,10 +8,10 @@ import { NotificationsProvider } from "./context/NotificationsContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CommandPalette from "./components/CommandPalette";
 import OnboardingModal from "./components/OnboardingModal";
-import { useAuth } from "./hooks/useAuth";
 import { usePreferences } from "./hooks/usePreferences";
 
 const Layout   = lazy(() => import("./pages/Layout"));
+const Landing  = lazy(() => import("./pages/Landing"));
 const Auth     = lazy(() => import("./pages/Auth"));
 const OAuthCallback = lazy(() => import("./pages/OAuthCallback"));
 const CodeRoom = lazy(() => import("./pages/CodeRoom"));
@@ -25,16 +25,6 @@ function RouteFallback() {
       <p className="text-sm tracking-wide text-zinc-400">Loading page...</p>
     </div>
   );
-}
-
-function RootRedirect() {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <RouteFallback />;
-  }
-
-  return <Navigate to={isAuthenticated ? "/home" : "/auth"} replace />;
 }
 
 function AppContent() {
@@ -54,11 +44,11 @@ function AppContent() {
       <Suspense fallback={<RouteFallback />}>
         <CommandPalette theme={theme} onThemeChange={onThemeChange} />
         <Routes>
+          <Route path="/" element={<Landing theme={theme} onThemeChange={onThemeChange} />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/auth/callback" element={<OAuthCallback />} />
           <Route path="/login" element={<Navigate to="/auth" replace />} />
           <Route path="/signup" element={<Navigate to="/auth" replace />} />
-          <Route path="/" element={<RootRedirect />} />
 
           <Route
             path="/home"
@@ -111,7 +101,7 @@ function AppContent() {
             }
           />
 
-          <Route path="*" element={<RootRedirect />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </>

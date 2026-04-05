@@ -32,6 +32,29 @@ const STATS = [
   { value: "99.9%",  label: "Uptime" },
 ];
 
+const PLATFORM_DETAILS = [
+  {
+    icon: Terminal,
+    title: "Code, run, and debug in one room",
+    desc: "Every workspace can include files, a Monaco editor, terminal access, and starter templates so teams can begin working immediately.",
+  },
+  {
+    icon: Users,
+    title: "Built for pair programming and team sessions",
+    desc: "Invite collaborators by link, review code together, and keep presence, chat, and participation connected to the room itself.",
+  },
+  {
+    icon: Shield,
+    title: "Private by default",
+    desc: "Room ownership, invite links, and approval flows help keep each workspace scoped to the right people and project.",
+  },
+  {
+    icon: Bot,
+    title: "Helpful when you need momentum",
+    desc: "Use integrated AI assistance for explanations, quick iteration, and faster onboarding without leaving the workspace.",
+  },
+];
+
 const ICON_COLOR = {
   purple: "bg-purple-500/10 border-purple-500/20 text-purple-500 dark:text-purple-400",
   blue:   "bg-blue-500/10   border-blue-500/20   text-blue-500   dark:text-blue-400",
@@ -160,7 +183,7 @@ export default function Landing({ theme, onThemeChange }) {
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6 ml-8 text-[13.5px] font-medium">
-            {[["Features","#features"],["How it works","#how-it-works"]].map(([label, href]) => (
+            {[["Features","#features"],["Platform","#platform"],["How it works","#how-it-works"]].map(([label, href]) => (
               <a key={label} href={href} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
                 {label}
               </a>
@@ -203,7 +226,7 @@ export default function Landing({ theme, onThemeChange }) {
         {/* Mobile menu */}
         {mobileOpen && (
           <div className="absolute top-14 left-0 right-0 bg-white dark:bg-[#0d0d18] border-b border-gray-200 dark:border-white/[0.06] px-5 py-4 flex flex-col gap-3 md:hidden">
-            {[["Features","#features"],["How it works","#how-it-works"]].map(([label,href]) => (
+            {[["Features","#features"],["Platform","#platform"],["How it works","#how-it-works"]].map(([label,href]) => (
               <a key={label} href={href} onClick={() => setMobileOpen(false)}
                 className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 {label}
@@ -332,6 +355,32 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ╔══════════════════════════════════════════════════════════════════╗ */}
       {/* ║  HOW IT WORKS                                                    ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
+      <section id="platform" className="pb-24 px-5">
+        <div className="max-w-7xl mx-auto">
+          <FadeUp className="text-center mb-14">
+            <p className="text-[13px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-3">Platform overview</p>
+            <h2 className="text-4xl font-extrabold tracking-tight">More than a login page</h2>
+            <p className="mt-4 text-gray-500 dark:text-gray-400 max-w-2xl mx-auto text-[15px] leading-relaxed">
+              CodeChatter gives your team a full website experience from the start: a clear product page, guided authentication, and dedicated collaborative rooms for actual work.
+            </p>
+          </FadeUp>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            {PLATFORM_DETAILS.map(({ icon: Icon, title, desc }, i) => (
+              <FadeUp key={title} delay={i * 0.08}>
+                <div className="h-full rounded-2xl border border-gray-200 bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-white/[0.07] dark:bg-white/[0.025]">
+                  <div className="w-10 h-10 rounded-xl border border-purple-500/20 bg-purple-500/10 text-purple-500 dark:text-purple-300 flex items-center justify-center mb-4">
+                    <Icon size={18} />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+                </div>
+              </FadeUp>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section id="how-it-works" className="py-24 px-5 bg-gray-50 dark:bg-white/[0.015]">
         <div className="max-w-7xl mx-auto">
           <FadeUp className="text-center mb-16">
@@ -385,9 +434,9 @@ export default function Landing({ theme, onThemeChange }) {
             © {new Date().getFullYear()} CodeChatter — built for developers, by developers.
           </p>
           <div className="flex gap-6 text-[13px] text-gray-400">
-            {["Privacy", "Terms", "GitHub"].map(l => (
-              <a key={l} href="#" className="hover:text-gray-700 dark:hover:text-white transition-colors">{l}</a>
-            ))}
+            <a href="#features" className="hover:text-gray-700 dark:hover:text-white transition-colors">Features</a>
+            <a href="#platform" className="hover:text-gray-700 dark:hover:text-white transition-colors">Platform</a>
+            <Link to="/auth" className="hover:text-gray-700 dark:hover:text-white transition-colors">Auth</Link>
           </div>
         </div>
       </footer>

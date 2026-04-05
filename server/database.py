@@ -6,12 +6,14 @@ import logging
 import os
 import re
 import secrets
+import time
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from pymongo import ASCENDING, DESCENDING, MongoClient
+from pymongo.errors import AutoReconnect, ConnectionFailure, NetworkTimeout, ServerSelectionTimeoutError
 
 logger = logging.getLogger("codechatter.database")
 
@@ -566,6 +568,27 @@ class MongoRepository:
     self._otp_challenges = None
     self._is_mock = mongo_uri.startswith("mongomock://")
 
+  def _ping_client(self, client: MongoClient | Any, retries: int = 3) -> None:
+    last_error = None
+
+    for attempt in range(1, retries + 1):
+      try:
+        client.admin.command("ping")
+        return
+      except (AutoReconnect, ConnectionFailure, NetworkTimeout, ServerSelectionTimeoutError) as error:
+        last_error = error
+        logger.warning(
+          "Mongo ping failed (attempt %s/%s): %s",
+          attempt,
+          retries,
+          error,
+        )
+        if attempt < retries:
+          time.sleep(0.6 * attempt)
+
+    if last_error is not None:
+      raise last_error
+
   def initialize(self) -> None:
     if self._client is not None:
       return
@@ -573,7 +596,12 @@ class MongoRepository:
     self._client = self._create_client()
 
     if not self._is_mock:
-      self._client.admin.command("ping")
+      try:
+        self._ping_client(self._client)
+      except Exception:
+        self._client.close()
+        self._client = None
+        raise
 
     self._database = self._client[self.database_name]
     self._users = self._database["users"]
@@ -593,7 +621,7 @@ class MongoRepository:
     self.initialize()
 
     if not self._is_mock:
-      self._client.admin.command("ping")
+      self._ping_client(self._client)
 
     return {
       "database": self.database_name,
@@ -993,7 +1021,7 @@ class MongoRepository:
         {"id": room_id},
         {
           "$addToSet": {"participant_ids": user_id},
-          "$set": {"updated_at": timestamp},
+            "$set": {"updated_at": timestamp},
         },
       )
       updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
@@ -1006,7 +1034,7 @@ class MongoRepository:
         {"id": room_id},
         {
           "$addToSet": {"participant_ids": user_id},
-          "$set": {"updated_at": timestamp},
+            "$set": {"updated_at": timestamp},
         },
       )
       updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
@@ -1287,8 +1315,8 @@ class MongoRepository:
     if room is None:
       raise ValueError("Room not found")
 
-    if not self.user_can_access_room(user_id, room):
-      raise PermissionError("You do not have access to this room")
+    if user_id not in self._get_owner_ids(room):
+      raise PermissionError("Only a room owner can update room settings")
 
     updates = {"updated_at": self._utc_now()}
     if name is not None:
@@ -1692,7 +1720,16 @@ class MongoRepository:
 
     return MongoClient(
       self.mongo_uri,
-      serverSelectionTimeoutMS=5000,
+      appname="CodeChatter",
+      serverSelectionTimeoutMS=8000,
+      connectTimeoutMS=10000,
+      socketTimeoutMS=15000,
+      heartbeatFrequencyMS=10000,
+      maxIdleTimeMS=60000,
+      maxPoolSize=30,
+      minPoolSize=1,
+      retryWrites=True,
+      retryReads=True,
       tz_aware=True,
     )
 

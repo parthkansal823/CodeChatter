@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 import os
 from pathlib import Path
 
@@ -24,10 +25,15 @@ except ImportError:
   from routes.realtime import router as realtime_router
   from routes.rooms import router as rooms_router
 
+logger = logging.getLogger("codechatter.server")
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-  repository.initialize()
+  try:
+    repository.initialize()
+  except Exception as error:
+    logger.warning("Database initialization deferred until first request: %s", error)
   yield
   repository.close()
 

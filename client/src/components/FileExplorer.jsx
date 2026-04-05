@@ -143,6 +143,14 @@ export default function FileExplorer({
     ancestorIds.forEach((folderId) => next.delete(folderId));
     return next;
   }, [collapsedFolders, folderIdSet, focusedNodeId, tree]);
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredEntries = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return [];
+    }
+
+    return explorerEntries.filter((entry) => entry.name.toLowerCase().includes(normalizedSearchQuery));
+  }, [explorerEntries, normalizedSearchQuery]);
 
   useEffect(() => {
     if (mobile || typeof window === "undefined") {
@@ -358,45 +366,6 @@ export default function FileExplorer({
 
         {!isCollapsed && (
           <div className="flex items-center gap-0.5">
-            {canEdit && (
-              <>
-                <button
-                  onClick={() => startCreate("file")}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
-                  title="New file"
-                >
-                  <FilePlus2 size={15} />
-                </button>
-
-                <button
-                  onClick={() => startCreate("folder")}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
-                  title="New folder"
-                >
-                  <FolderPlus size={15} />
-                </button>
-              </>
-            )}
-
-            {activeFolderCount > 0 && (
-              <>
-                <button
-                  onClick={() => setCollapsedFolders(new Set())}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
-                  title="Expand all"
-                >
-                  <ChevronRight size={15} className="rotate-90" />
-                </button>
-                <button
-                  onClick={() => setCollapsedFolders(new Set(folderIds))}
-                  className="hidden rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white sm:block"
-                  title="Collapse all"
-                >
-                  Close
-                </button>
-              </>
-            )}
-
             {mobile && (
               <button
                 onClick={onClose}
@@ -419,6 +388,25 @@ export default function FileExplorer({
             </span>
           </div>
 
+          {canEdit && (
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => startCreate("file")}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
+              >
+                <FilePlus2 size={13} />
+                File
+              </button>
+              <button
+                onClick={() => startCreate("folder")}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
+              >
+                <FolderPlus size={13} />
+                Folder
+              </button>
+            </div>
+          )}
+
           <div className="relative">
             <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
@@ -427,6 +415,31 @@ export default function FileExplorer({
               placeholder="Search files..."
               className="w-full rounded-md border border-zinc-200 bg-white py-1.5 pl-8 pr-2 text-xs text-zinc-700 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand-500/50 focus:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-900"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+                title="Clear search"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+            <span>
+              {normalizedSearchQuery
+                ? `${filteredEntries.length} matching item${filteredEntries.length === 1 ? "" : "s"}`
+                : "Tip: F2 rename, Del delete, drag to move"}
+            </span>
+            {activeFolderCount > 0 && (
+              <button
+                onClick={() => setCollapsedFolders(new Set())}
+                className="font-medium transition-colors hover:text-zinc-800 dark:hover:text-zinc-100"
+              >
+                Expand all
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -483,9 +496,8 @@ export default function FileExplorer({
         ) : tree.length || createDraft ? (
           <div className="space-y-0.5 pb-8">
             {renderCreateInput(0, null)}
-            {searchQuery.trim()
-              ? explorerEntries
-                .filter((entry) => entry.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            {normalizedSearchQuery
+              ? filteredEntries
                 .map((entry) => (
                   <FileItem
                     key={entry.id}
@@ -501,7 +513,7 @@ export default function FileExplorer({
                   />
                 ))
               : renderNodes(tree)}
-            {searchQuery.trim() && explorerEntries.filter((entry) => entry.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+            {normalizedSearchQuery && filteredEntries.length === 0 && (
               <div className="mx-2 mt-2 rounded-md border border-dashed border-zinc-200 px-3 py-3 text-xs text-zinc-500 dark:border-white/[0.08] dark:text-zinc-500">
                 No files match "{searchQuery}".
               </div>

@@ -106,6 +106,9 @@ export default function TopBar({
   activePath,
   collaborators = [],
   activeCollaborators = [],
+  fileCount = 0,
+  folderCount = 0,
+  openFileCount = 0,
   pendingJoinRequestCount = 0,
   explorerOpen,
   onToggleExplorer,
@@ -183,6 +186,11 @@ export default function TopBar({
   const extraCollaborators = Math.max(visibleCollaborators.length - shownCollaborators.length, 0);
   const syncLabel = getSyncLabel(saveStatus, liveConnected);
   const activeFileLabel = formatPathLabel(activePath);
+  const workspaceStats = [
+    { label: "Files", value: fileCount },
+    { label: "Folders", value: folderCount },
+    { label: "Open tabs", value: openFileCount },
+  ];
 
   return (
     <div className="border-b border-zinc-100 bg-white/85 backdrop-blur-xl dark:border-white/[0.04] dark:bg-[#09090b]/90">
@@ -378,6 +386,23 @@ export default function TopBar({
             </button>
 
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 px-1 pb-0.5">
+          {workspaceStats.map((stat) => (
+            <PresenceChip
+              key={stat.label}
+              className="bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+            >
+              <span className="font-semibold text-zinc-800 dark:text-zinc-100">{stat.value}</span>
+              <span>{stat.label}</span>
+            </PresenceChip>
+          ))}
+          {room?.description && (
+            <span className="max-w-full truncate text-xs text-zinc-500 dark:text-zinc-400">
+              {room.description}
+            </span>
+          )}
         </div>
       </div>
     </div>

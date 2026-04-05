@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
-  Activity, Bot, Code2, File, Play, RefreshCw, Save, Trash2, UserMinus, UserPlus,
+  Activity, ArrowLeft, Bot, Code2, File, Play, RefreshCw, Save, Trash2, UserMinus, UserPlus,
 } from "lucide-react";
 
 export const ACTIVITY_STORAGE_PREFIX = "cc-activity-";
@@ -47,7 +47,7 @@ export function logActivity(roomId, type, message) {
   } catch { /* ignore */ }
 }
 
-export default function ActivityLog({ roomId }) {
+export default function ActivityLog({ roomId, onBack = null }) {
   const [activities, setActivities] = useState([]);
 
   const load = useCallback(() => {
@@ -78,6 +78,15 @@ export default function ActivityLog({ roomId }) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-white/[0.06]">
         <div className="flex items-center gap-2">
+          {onBack ? (
+            <button
+              onClick={onBack}
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
+              title="Back to tools"
+            >
+              <ArrowLeft size={13} />
+            </button>
+          ) : null}
           <Activity size={14} className="text-violet-400" />
           <span className="text-sm font-semibold text-zinc-900 dark:text-white">Activity Log</span>
           {activities.length > 0 && (

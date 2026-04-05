@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { Github, Mail, Lock, User, ArrowLeft, RotateCcw, ShieldCheck } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
@@ -114,7 +114,10 @@ function OtpInput({ value, onChange }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Auth() {
-  const [mode, setMode]               = useState("login");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [mode, setMode]               = useState(
+    () => (searchParams.get("mode") === "signup" ? "signup" : "login")
+  );
   const [loading, setLoading]         = useState(false);
   const [loginEmail, setLoginEmail]   = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -133,8 +136,26 @@ export default function Auth() {
   const { login, signup, verifyOtp, resendOtp } = useAuth();
 
   useEffect(() => {
+    const requestedMode = searchParams.get("mode") === "signup" ? "signup" : "login";
+    setMode((currentMode) => (currentMode === requestedMode ? currentMode : requestedMode));
+  }, [searchParams]);
+
+  useEffect(() => {
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
   }, []);
+
+  const changeMode = (nextMode) => {
+    setMode(nextMode);
+    const nextSearchParams = new URLSearchParams(searchParams);
+
+    if (nextMode === "signup") {
+      nextSearchParams.set("mode", "signup");
+    } else {
+      nextSearchParams.delete("mode");
+    }
+
+    setSearchParams(nextSearchParams, { replace: true });
+  };
 
   const startResendCooldown = () => {
     setResendCooldown(RESEND_COOLDOWN);
@@ -344,7 +365,7 @@ export default function Auth() {
         ].map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setMode(key)}
+            onClick={() => changeMode(key)}
             className={`pb-3 text-sm font-semibold transition-colors duration-200 relative ${
               mode === key ? "text-white" : "text-gray-500 hover:text-gray-300"
             }`}
@@ -534,14 +555,14 @@ export default function Auth() {
         {mode === "login" ? (
           <>
             No account?{" "}
-            <button onClick={() => setMode("signup")} className="text-gray-200 hover:text-purple-400 font-medium transition-colors">
+            <button onClick={() => changeMode("signup")} className="text-gray-200 hover:text-purple-400 font-medium transition-colors">
               Sign up for free
             </button>
           </>
         ) : (
           <>
             Already have an account?{" "}
-            <button onClick={() => setMode("login")} className="text-gray-200 hover:text-purple-400 font-medium transition-colors">
+            <button onClick={() => changeMode("login")} className="text-gray-200 hover:text-purple-400 font-medium transition-colors">
               Sign in
             </button>
           </>
