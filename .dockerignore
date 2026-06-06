@@ -1,0 +1,17 @@
+.git
+.gitignore
+
+client/node_modules
+client/dist
+client/.env
+client/.env.local
+client/src/.env
+
+server/venv
+server/.env
+server/.env.local
+server/data
+server/__pycache__
+
+**/__pycache__
+*.pyc
