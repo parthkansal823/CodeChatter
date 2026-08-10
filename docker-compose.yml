@@ -1,11 +1,11 @@
-version: "3.9"
-
 services:
   app:
     build:
       context: .
+    restart: unless-stopped
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     env_file:
       - ./server/.env.local
     environment:
@@ -14,10 +14,13 @@ services:
       ALLOWED_ORIGINS: http://localhost:8000
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB_NAME: codechatter
+      CODECHATTER_DATA_DIR: /data
     ports:
       - "8000:8000"
     volumes:
-      - ./server/data:/app/server/data
+      # Named volume so workspace snapshots and chat uploads survive rebuilds
+      # and stay writable by the non-root runtime user.
+      - app-data:/data
 
   mongo:
     image: mongo:7
@@ -26,6 +29,15 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    healthcheck:
+      # Gate the app on Mongo actually accepting connections, not just on the
+      # container having been created.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
 volumes:
   mongo-data:
+  app-data:

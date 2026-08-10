@@ -17,8 +17,8 @@ try:
     validate_room_id_value,
     validate_websocket_origin,
   )
-  from ..services.collaboration import collaboration_manager
   from ..core.settings import logger, repository
+  from ..services.collaboration import collaboration_manager
   from ..services.workspace_runtime import sync_workspace_to_disk
 except ImportError:
   from core.security import (
@@ -30,8 +30,8 @@ except ImportError:
     validate_room_id_value,
     validate_websocket_origin,
   )
-  from services.collaboration import collaboration_manager
   from core.settings import logger, repository
+  from services.collaboration import collaboration_manager
   from services.workspace_runtime import sync_workspace_to_disk
 
 router = APIRouter()
@@ -90,9 +90,9 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
 
   try:
     validate_websocket_origin(websocket)
-    current_user = get_current_user_from_token(token)
+    current_user = await asyncio.to_thread(get_current_user_from_token, token)
     normalized_room_id = validate_room_id_value(room_id)
-    room = repository.get_room_by_id(normalized_room_id)
+    room = await asyncio.to_thread(repository.get_room_by_id, normalized_room_id)
 
     if room is None:
       raise HTTPException(
@@ -125,7 +125,9 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
     return
 
   try:
-    initial_room = repository.get_room_for_user(current_user["id"], normalized_room_id)
+    initial_room = await asyncio.to_thread(
+      repository.get_room_for_user, current_user["id"], normalized_room_id
+    )
     if initial_room is None:
       await websocket.send_json({"type": "error", "detail": "Room not found"})
       await websocket.close(code=1008)
@@ -240,7 +242,11 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
 
         try:
           active_file_path = normalize_optional_workspace_path(message.get("activeFilePath"))
-          updated_room = repository.update_room_workspace(
+          # PyMongo is synchronous. Called directly this would block the event
+          # loop — and therefore every other room's websocket — for the whole
+          # round trip, on the hottest path in the app.
+          updated_room = await asyncio.to_thread(
+            repository.update_room_workspace,
             user_id=current_user["id"],
             room_id=normalized_room_id,
             workspace_tree=workspace_tree,

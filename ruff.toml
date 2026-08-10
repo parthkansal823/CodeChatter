@@ -28,11 +28,18 @@ ignore = [
   "B008",
   # Long, readable string literals (SQL-free) are fine at our line length.
   "E501",
+  # Websocket/subprocess teardown is best-effort: the socket may already be
+  # closed and there is no useful recovery, so `except Exception: pass` is
+  # deliberate in those cleanup paths.
+  "S110",
 ]
 
 [lint.per-file-ignores]
 # Starter templates embed example code that is not executed by the server.
 "server/database.py" = ["E501"]
+# pytest is built on bare `assert`, and tests reach into private repository
+# attributes on purpose to reset state between cases.
+"server/tests/*" = ["S101", "SLF001"]
 
 [format]
 indent-style = "space"

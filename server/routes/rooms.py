@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from typing import Any
 import secrets
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 try:
-  from ..services.ai import build_gemini_prompt, request_gemini_completion
   from ..core.schemas import (
     GeminiAssistRequest,
     RoomCreateRequest,
-    RoomJoinRequestApprovalRequest,
     RoomJoinRequest,
+    RoomJoinRequestApprovalRequest,
     RoomMemberAccessUpdateRequest,
     RoomRunRequest,
     RoomSettingsUpdateRequest,
@@ -34,14 +33,14 @@ try:
     UPLOADS_DIR,
     repository,
   )
+  from ..services.ai import build_gemini_prompt, request_gemini_completion
   from ..services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 except ImportError:
-  from services.ai import build_gemini_prompt, request_gemini_completion
   from core.schemas import (
     GeminiAssistRequest,
     RoomCreateRequest,
-    RoomJoinRequestApprovalRequest,
     RoomJoinRequest,
+    RoomJoinRequestApprovalRequest,
     RoomMemberAccessUpdateRequest,
     RoomRunRequest,
     RoomSettingsUpdateRequest,
@@ -63,6 +62,7 @@ except ImportError:
     UPLOADS_DIR,
     repository,
   )
+  from services.ai import build_gemini_prompt, request_gemini_completion
   from services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 
 router = APIRouter()
@@ -356,7 +356,7 @@ async def assist_with_gemini(
     active_file_path = normalize_optional_workspace_path(payload.activeFilePath)
   except ValueError as error:
     raise HTTPException(
-      status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+      status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
       detail=str(error),
     ) from error
 
@@ -492,7 +492,7 @@ def upload_room_message_file(
         written += len(chunk)
         if written > MAX_UPLOAD_BYTES:
           raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"Files must be {MAX_UPLOAD_BYTES // (1024 * 1024)} MB or smaller.",
           )
         buffer.write(chunk)

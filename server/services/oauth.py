@@ -7,6 +7,10 @@ from authlib.integrations.starlette_client import OAuth
 oauth = OAuth()
 REGISTERED_OAUTH_PROVIDERS: set[str] = set()
 
+# `access_token_url` below is a provider endpoint URL, not a credential; the
+# linter's hardcoded-password heuristic only matches on the parameter name.
+# ruff: noqa: S106
+
 
 def register_oauth_providers() -> None:
   google_client_id = os.getenv("GOOGLE_CLIENT_ID")

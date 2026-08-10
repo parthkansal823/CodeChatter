@@ -35,13 +35,13 @@ _BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]{1,255}$")
 
 def _validate_repo_ref(owner: str, repo: str, branch: str = "") -> None:
   if not _OWNER_PATTERN.fullmatch(owner or ""):
-    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid repository owner")
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid repository owner")
 
   if not _REPO_PATTERN.fullmatch(repo or "") or repo in {".", ".."}:
-    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid repository name")
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid repository name")
 
   if branch and (not _BRANCH_PATTERN.fullmatch(branch) or ".." in branch):
-    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid branch name")
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid branch name")
 
 
 # ── low-level helpers ───────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ async def _gh_put(path: str, token: str, payload: dict) -> Any:
 def _git_blob_sha(content: str) -> str:
   r"""Compute the git blob SHA1 that GitHub uses — sha1("blob N\0content")."""
   data = content.encode("utf-8")
-  header = f"blob {len(data)}\0".encode("utf-8")
+  header = f"blob {len(data)}\0".encode()
   return hashlib.sha1(header + data).hexdigest()  # noqa: S324 (git standard)
 
 

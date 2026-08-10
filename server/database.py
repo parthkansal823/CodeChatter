@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import json
 import hmac
+import json
 import logging
 import os
 import re
 import secrets
 import time
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -1737,7 +1737,15 @@ class MongoRepository:
     # Take the newest `limit` messages, then flip back to chronological order —
     # sorting ascending first would pin the transcript to the oldest messages
     # and never show recent chat once a room passes the limit.
-    cursor = self._room_messages.find({"room_id": room_id}).sort("created_at", DESCENDING).limit(limit)
+    #
+    # `_id` breaks ties: timestamps have millisecond resolution at best, so
+    # messages sent in the same tick would otherwise come back in arbitrary
+    # order. ObjectIds increase monotonically, giving a stable insertion order.
+    cursor = (
+      self._room_messages.find({"room_id": room_id})
+      .sort([("created_at", DESCENDING), ("_id", DESCENDING)])
+      .limit(limit)
+    )
     messages = [self._strip_mongo_id(msg) for msg in reversed(list(cursor))]
     for msg in messages:
       if isinstance(msg.get("created_at"), datetime):
@@ -1780,7 +1788,9 @@ class MongoRepository:
     self._rooms.create_index([("is_public", ASCENDING), ("updated_at", DESCENDING)])
 
     self._room_messages.create_index([("id", ASCENDING)], unique=True)
-    self._room_messages.create_index([("room_id", ASCENDING), ("created_at", ASCENDING)])
+    self._room_messages.create_index(
+      [("room_id", ASCENDING), ("created_at", DESCENDING), ("_id", DESCENDING)]
+    )
 
     self._otp_challenges.create_index([("mfa_token", ASCENDING)], unique=True)
     self._otp_challenges.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
@@ -1963,12 +1973,12 @@ class MongoRepository:
   @staticmethod
   def _parse_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
-      return value.astimezone(timezone.utc)
+      return value.astimezone(UTC)
 
     if isinstance(value, str) and value:
-      return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+      return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
   @staticmethod
   def _strip_mongo_id(document: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -1981,4 +1991,4 @@ class MongoRepository:
 
   @staticmethod
   def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)

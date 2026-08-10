@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
 import os
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -68,7 +68,11 @@ def run_process(
   start_time = utc_now()
 
   try:
-    completed = subprocess.run(
+    # Running user-submitted code is the point of this endpoint. `command` is
+    # always built by build_run_plan() from a resolved interpreter path plus a
+    # normalized workspace path, never from a raw user string, and shell=False
+    # keeps the arguments from being re-parsed by a shell.
+    completed = subprocess.run(  # noqa: S603
       command,
       cwd=cwd,
       input=stdin_text,
@@ -301,7 +305,7 @@ def execute_workspace_file(
 ) -> dict[str, Any]:
   normalized_path = normalize_workspace_path(file_path)
   workspace_files = iter_workspace_files(workspace_tree)
-  file_lookup = {relative_path: content for relative_path, content in workspace_files}
+  file_lookup = dict(workspace_files)
 
   if normalized_path not in file_lookup:
     raise HTTPException(

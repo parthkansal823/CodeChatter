@@ -24,6 +24,20 @@ export default defineConfig({
           if (id.includes('node_modules/@xterm')) {
             return 'xterm';
           }
+          // Whiteboard — only pulled in when the panel is opened
+          if (id.includes('node_modules/tldraw') || id.includes('node_modules/@tldraw')) {
+            return 'tldraw';
+          }
+          // Diagram rendering — same, plus its heavy parser/layout deps
+          if (
+            id.includes('node_modules/mermaid') ||
+            id.includes('node_modules/dagre') ||
+            id.includes('node_modules/cytoscape') ||
+            id.includes('node_modules/katex') ||
+            id.includes('node_modules/d3')
+          ) {
+            return 'mermaid';
+          }
           // Framer Motion
           if (id.includes('node_modules/framer-motion')) {
             return 'framer-motion';

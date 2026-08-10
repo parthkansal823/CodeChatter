@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import math
 import os
-from pathlib import PurePosixPath
 import re
-from threading import Lock
 import time
+from collections import defaultdict, deque
+from datetime import UTC, datetime, timedelta
+from pathlib import PurePosixPath
+from threading import Lock
 from typing import Any
 from urllib.parse import urlparse
 
@@ -69,7 +69,7 @@ rate_limiter = SlidingWindowRateLimiter()
 
 
 def utc_now() -> datetime:
-  return datetime.now(timezone.utc)
+  return datetime.now(UTC)
 
 
 def get_default_terminal_shell() -> str:
@@ -283,7 +283,7 @@ def validate_room_id_value(room_id: str) -> str:
 
   if not ROOM_ID_PATTERN.fullmatch(normalized):
     raise HTTPException(
-      status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+      status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
       detail="Room ID must be 6-20 uppercase letters or numbers",
     )
 

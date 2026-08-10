@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import {
   Activity,
   Bot,
@@ -19,15 +19,28 @@ import {
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import RoomChat from "./RoomChat";
 import AIHelper from "./AIHelper";
-import FlowchartPanel from "./FlowchartPanel";
 import ActivityLog from "./ActivityLog";
 import GitHubPanel from "./GitHubPanel";
 import QuickNotes from "./QuickNotes";
 import PomodoroTimer from "./PomodoroTimer";
-import Whiteboard from "./Whiteboard";
-import VideoCall from "./VideoCall";
 import UserAvatar from "./UserAvatar";
 import { useAuth } from "../hooks/useAuth";
+
+// These three panels carry the heaviest dependencies in the app (tldraw,
+// mermaid, and the WebRTC stack). Loading them on demand keeps several
+// megabytes out of the bundle that every room entry has to download.
+const Whiteboard = lazy(() => import("./Whiteboard"));
+const FlowchartPanel = lazy(() => import("./FlowchartPanel"));
+const VideoCall = lazy(() => import("./VideoCall"));
+
+function PanelFallback({ label }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-400">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-600 border-t-violet-500" />
+      <p className="text-xs tracking-wide">Loading {label}...</p>
+    </div>
+  );
+}
 
 const TOOLS = [
   // ── Core collaboration ──────────────────────────────
@@ -561,7 +574,9 @@ export default function RightSidebar({
           transition={{ duration: 0.15 }}
           className="flex h-full flex-col"
         >
-          <Whiteboard onBack={closeTool} />
+          <Suspense fallback={<PanelFallback label="whiteboard" />}>
+            <Whiteboard onBack={closeTool} />
+          </Suspense>
         </Motion.div>
       )}
       {activeFeature === "video" && (
@@ -573,13 +588,15 @@ export default function RightSidebar({
           transition={{ duration: 0.15 }}
           className="flex h-full flex-col"
         >
-          <VideoCall
-            onBack={closeTool}
-            roomName={room?.name}
-            collaborators={activeCollaborators}
-            sendVideoSignal={sendVideoSignal}
-            setVideoSignalListener={setVideoSignalListener}
-          />
+          <Suspense fallback={<PanelFallback label="video call" />}>
+            <VideoCall
+              onBack={closeTool}
+              roomName={room?.name}
+              collaborators={activeCollaborators}
+              sendVideoSignal={sendVideoSignal}
+              setVideoSignalListener={setVideoSignalListener}
+            />
+          </Suspense>
         </Motion.div>
       )}
       {activeFeature === "activity" && (
@@ -612,12 +629,14 @@ export default function RightSidebar({
       )}
       {activeFeature === "flowchart" && (
         <Motion.div key="flowchart" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col overflow-hidden">
-          <FlowchartPanel
-            onBack={closeTool}
-            roomId={roomId}
-            activeFilePath={activeFilePath}
-            activeCode={activeCode}
-          />
+          <Suspense fallback={<PanelFallback label="flowchart" />}>
+            <FlowchartPanel
+              onBack={closeTool}
+              roomId={roomId}
+              activeFilePath={activeFilePath}
+              activeCode={activeCode}
+            />
+          </Suspense>
         </Motion.div>
       )}
     </AnimatePresence>

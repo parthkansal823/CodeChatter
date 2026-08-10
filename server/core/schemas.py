@@ -10,6 +10,7 @@ try:
     DSA_LANGUAGE_IDS,
     ROOM_TEMPLATE_DEFINITIONS,
   )
+  from ..services.workspace_runtime import LANGUAGE_EXTENSION_MAP
   from .security import (
     EMAIL_PATTERN,
     ROOM_ID_PATTERN,
@@ -19,9 +20,7 @@ try:
     normalize_terminal_shell,
     normalize_workspace_path,
   )
-  from ..services.workspace_runtime import LANGUAGE_EXTENSION_MAP
 except ImportError:
-  from database import ASSIGNABLE_ROOM_ACCESS_ROLES, DSA_LANGUAGE_IDS, ROOM_TEMPLATE_DEFINITIONS
   from core.security import (
     EMAIL_PATTERN,
     ROOM_ID_PATTERN,
@@ -31,6 +30,7 @@ except ImportError:
     normalize_terminal_shell,
     normalize_workspace_path,
   )
+  from database import ASSIGNABLE_ROOM_ACCESS_ROLES, DSA_LANGUAGE_IDS, ROOM_TEMPLATE_DEFINITIONS
   from services.workspace_runtime import LANGUAGE_EXTENSION_MAP
 
 RUNNABLE_SNIPPET_LANGUAGES = frozenset(LANGUAGE_EXTENSION_MAP)

@@ -57,3 +57,12 @@ coverage/
 htmlcov/
 tmp/
 temp/
+
+# Trunk (local caches only; trunk.yaml and configs/ stay tracked)
+.trunk/*out/
+.trunk/*logs/
+.trunk/actions/
+.trunk/notifications/
+.trunk/tools/
+.trunk/plugins/
+.trunk/tmp/

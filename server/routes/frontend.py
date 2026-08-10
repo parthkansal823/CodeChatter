@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
 
 try:
+  from ..core.security import create_access_token, decode_access_token
+  from ..core.settings import CLIENT_INDEX_FILE, DEFAULT_CALLBACK_URL, logger, repository
   from ..services.frontend import (
     build_frontend_error_redirect,
     build_oauth_callback_url,
@@ -14,10 +16,10 @@ try:
     get_safe_redirect_uri,
     resolve_frontend_asset,
   )
-  from ..core.security import create_access_token, decode_access_token
   from ..services.oauth import REGISTERED_OAUTH_PROVIDERS, oauth
-  from ..core.settings import CLIENT_INDEX_FILE, DEFAULT_CALLBACK_URL, logger, repository
 except ImportError:
+  from core.security import create_access_token, decode_access_token
+  from core.settings import CLIENT_INDEX_FILE, DEFAULT_CALLBACK_URL, logger, repository
   from services.frontend import (
     build_frontend_error_redirect,
     build_oauth_callback_url,
@@ -25,9 +27,7 @@ except ImportError:
     get_safe_redirect_uri,
     resolve_frontend_asset,
   )
-  from core.security import create_access_token, decode_access_token
   from services.oauth import REGISTERED_OAUTH_PROVIDERS, oauth
-  from core.settings import CLIENT_INDEX_FILE, DEFAULT_CALLBACK_URL, logger, repository
 
 router = APIRouter()
 
@@ -86,7 +86,7 @@ async def auth_google_callback(request: Request):
 
   try:
     token = await oauth.google.authorize_access_token(request)
-    
+
     # ── Fetch user profile from Google's userinfo endpoint ──────────────
     # Important: When using server_metadata_url, profile is not auto-included
     userinfo_response = await oauth.google.get(

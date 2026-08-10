@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-from datetime import timedelta, timezone
+from datetime import UTC, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -173,7 +173,7 @@ def verify_otp(payload: VerifyOTPRequest, request: Request) -> dict[str, Any]:
 
   expires_at = challenge["expires_at"]
   if expires_at.tzinfo is None:
-    expires_at = expires_at.replace(tzinfo=timezone.utc)
+    expires_at = expires_at.replace(tzinfo=UTC)
   if utc_now() > expires_at:
     repository.delete_otp_challenge(payload.mfa_token)
     raise HTTPException(
