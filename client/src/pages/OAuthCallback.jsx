@@ -14,18 +14,33 @@ export default function OAuthCallback() {
     hasCalledRef.current = true;
 
     const handleCallback = async () => {
+      // The backend returns the sign-in credentials in the URL fragment so the
+      // token never reaches a server log or Referer header. Query params are
+      // still read as a fallback for the GitHub-connect redirect.
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const readParam = (key) => hashParams.get(key) ?? searchParams.get(key);
+
+      // Drop the credentials from the address bar as soon as they are read.
+      const clearHash = () => {
+        if (window.location.hash) {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      };
+
       try {
-        const error = searchParams.get("error");
+        const error = readParam("error");
         if (error) {
+          clearHash();
           toast.error(`OAuth Error: ${error}`);
           navigate("/auth");
           return;
         }
 
         // ── GitHub connect flow (linking to existing account) ─────────
-        const githubLinked = searchParams.get("github_linked");
+        const githubLinked = readParam("github_linked");
         if (githubLinked === "1") {
-          const githubUsername = searchParams.get("githubUsername") || "";
+          const githubUsername = readParam("githubUsername") || "";
+          clearHash();
           await refreshUser();
           toast.success(`GitHub connected${githubUsername ? ` as @${githubUsername}` : ""}!`);
           navigate("/settings", { replace: true });
@@ -33,12 +48,14 @@ export default function OAuthCallback() {
         }
 
         // ── Normal OAuth sign-in ───────────────────────────────────────
-        const token = searchParams.get("token");
-        const username = searchParams.get("user");
-        const email = searchParams.get("email");
-        const id = searchParams.get("id");
-        const githubConnected = searchParams.get("githubConnected") === "1";
-        const githubUsername = searchParams.get("githubUsername") || null;
+        const token = readParam("token");
+        const username = readParam("user");
+        const email = readParam("email");
+        const id = readParam("id");
+        const githubConnected = readParam("githubConnected") === "1";
+        const githubUsername = readParam("githubUsername") || null;
+
+        clearHash();
 
         if (!token || !username) {
           toast.error("Invalid OAuth response");
@@ -57,6 +74,7 @@ export default function OAuthCallback() {
           navigate("/auth");
         }
       } catch (error) {
+        clearHash();
         console.error("OAuth callback error:", error);
         toast.error("Login failed. Please try again.");
         navigate("/auth");

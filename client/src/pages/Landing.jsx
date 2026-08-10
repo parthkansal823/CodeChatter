@@ -131,7 +131,7 @@ function HeroMockup() {
           {/* User cursor badge — line 1 */}
           <div className="h-6 leading-6 relative">
             <span className="absolute -left-4 top-0 flex items-start">
-              <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#7c3aed" }}>priya</span>
+              <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#7c3aed" }}>Ananya</span>
               <span className="w-0.5 h-6" style={{ background: "#7c3aed" }} />
             </span>
             {CODE[0].map(([type, txt], j) => <span key={j} className={TOKEN_COLOR[type]}>{txt}</span>)}
@@ -142,7 +142,7 @@ function HeroMockup() {
               {/* User cursor badge — line 5 */}
               {i === 3 && (
                 <span className="absolute -left-4 top-0 flex items-start">
-                  <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#2563eb" }}>nikhil</span>
+                  <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#2563eb" }}>Parth</span>
                   <span className="w-0.5 h-6" style={{ background: "#2563eb" }} />
                 </span>
               )}

@@ -5,7 +5,8 @@ from urllib.parse import urlencode, urlparse
 
 try:
   from ..core.settings import (
-    ALLOWED_ORIGINS,
+    ALLOWED_HOST_SET,
+    ALLOWED_ORIGIN_SET,
     CLIENT_DIST_DIR,
     CLIENT_INDEX_FILE,
     DEFAULT_CALLBACK_URL,
@@ -13,7 +14,8 @@ try:
   )
 except ImportError:
   from core.settings import (
-    ALLOWED_ORIGINS,
+    ALLOWED_HOST_SET,
+    ALLOWED_ORIGIN_SET,
     CLIENT_DIST_DIR,
     CLIENT_INDEX_FILE,
     DEFAULT_CALLBACK_URL,
@@ -31,10 +33,31 @@ def get_safe_redirect_uri(redirect_uri: str | None) -> str:
   except ValueError:
     return DEFAULT_CALLBACK_URL
 
-  if parsed.scheme in {"http", "https"} and origin in ALLOWED_ORIGINS:
+  # Compare against the normalized origin set so a trailing slash or a
+  # FRONTEND_URL that was never repeated in ALLOWED_ORIGINS still matches.
+  if parsed.scheme in {"http", "https"} and origin in ALLOWED_ORIGIN_SET:
     return redirect_uri
 
   return DEFAULT_CALLBACK_URL
+
+
+def build_oauth_callback_url(request, provider: str) -> str:
+  """Build this server's own OAuth callback URL for `provider`.
+
+  X-Forwarded-* is attacker-controlled unless a trusted proxy rewrites it, so
+  the forwarded host is only honoured when it is one we already recognise.
+  """
+  scheme = request.url.scheme
+  host = request.url.netloc
+
+  forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+  if forwarded_host and forwarded_host in ALLOWED_HOST_SET:
+    host = forwarded_host
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    if forwarded_proto in {"http", "https"}:
+      scheme = forwarded_proto
+
+  return f"{scheme}://{host}/auth/{provider}/callback"
 
 
 def build_frontend_error_redirect(error_code: str) -> str:

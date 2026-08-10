@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -34,6 +35,52 @@ except ImportError:
   from services.workspace_runtime import sync_workspace_to_disk
 
 router = APIRouter()
+
+MAX_CHAT_TEXT_CHARS = 8_000
+CHAT_MESSAGE_TYPES = {"text", "file"}
+ATTACHMENT_URL_PATTERN = re.compile(r"^/api/uploads/[A-Z0-9]{6,20}/[a-f0-9]{16}(\.[A-Za-z0-9]{1,12})?$")
+
+
+async def run_until_first_finished(*coroutines) -> None:
+  """Run the pump coroutines until one ends, then cancel the rest.
+
+  `asyncio.gather` would keep waiting for the reader task, which is parked in a
+  blocking pty read and only wakes when the shell writes again — leaking the
+  task, the fd, and the child process for every disconnected terminal.
+  """
+  tasks = [asyncio.create_task(coroutine) for coroutine in coroutines]
+
+  try:
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+    for task in pending:
+      task.cancel()
+
+    if pending:
+      await asyncio.gather(*pending, return_exceptions=True)
+
+    for task in done:
+      if task.cancelled():
+        continue
+      error = task.exception()
+      if error is not None and not isinstance(error, WebSocketDisconnect):
+        logger.error("Terminal pump failed: %s", error)
+  finally:
+    for task in tasks:
+      task.cancel()
+
+
+def normalize_attachment_url(value: Any) -> str | None:
+  """Accept only URLs this server actually minted for chat attachments.
+
+  Without this a client could attach any absolute URL, turning chat into an
+  open redirect / tracking-pixel vector for everyone in the room.
+  """
+  if not value:
+    return None
+
+  candidate = str(value).strip()
+  return candidate if ATTACHMENT_URL_PATTERN.fullmatch(candidate) else None
 
 
 @router.websocket("/api/rooms/{room_id}/collaborate")
@@ -236,18 +283,23 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
         continue
 
       if message_type == "chat_message":
-        text = str(message.get("text", "")).strip()
-        msg_type = message.get("msgType", "text")
-        file_url = message.get("fileUrl")
-        file_name = message.get("fileName")
+        text = str(message.get("text", "")).strip()[:MAX_CHAT_TEXT_CHARS]
+        msg_type = str(message.get("msgType", "text")).strip().lower()
+        file_url = normalize_attachment_url(message.get("fileUrl"))
+        file_name = str(message.get("fileName") or "")[:255] or None
         file_size = message.get("fileSize")
+
+        if msg_type not in CHAT_MESSAGE_TYPES:
+          msg_type = "text"
+
+        if not isinstance(file_size, (int, float)) or file_size < 0:
+          file_size = None
 
         if not text and not file_url:
           continue
-          
+
         chat_payload = {
           "type": msg_type,
-          "id": message.get("id"),
           "text": text,
           "sender": current_user["username"],
           "userId": current_user["id"],
@@ -255,15 +307,15 @@ async def collaboration_websocket(websocket: WebSocket, room_id: str, token: str
           "fileName": file_name,
           "fileSize": file_size,
         }
-        
+
         # Persist to database
         saved_msg = repository.insert_room_message(normalized_room_id, chat_payload)
-        saved_msg["type"] = "chat_message" # For the UI websocket event type
+        saved_msg["type"] = "chat_message"  # For the UI websocket event type
         saved_msg["msgType"] = chat_payload["type"]
-        
+
         await collaboration_manager.broadcast(
           normalized_room_id,
-          saved_msg
+          saved_msg,
         )
         continue
 
@@ -351,7 +403,13 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
       pass
     return
 
-  workspace_dir = sync_workspace_to_disk(normalized_room_id, room.get("workspace_tree", []))
+  # Writing the whole workspace to disk is blocking IO; keep it off the event
+  # loop so one terminal launch cannot stall every other room's websocket.
+  workspace_dir = await asyncio.to_thread(
+    sync_workspace_to_disk,
+    normalized_room_id,
+    room.get("workspace_tree", []),
+  )
   terminal_shell = room.get("terminal_shell") or get_default_terminal_shell()
 
   if os.name == "nt":
@@ -404,11 +462,11 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
           stop_event.set()
 
       try:
-        await asyncio.gather(
-          read_from_process(),
-          read_from_websocket(),
-        )
+        await run_until_first_finished(read_from_process(), read_from_websocket())
       finally:
+        stop_event.set()
+        # Terminate first: that is what unblocks the reader thread still parked
+        # inside proc.read().
         try:
           proc.terminate()
         except Exception:
@@ -484,13 +542,13 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
         logger.error("WebSocket input error: %s", error)
 
     try:
-      await asyncio.gather(
-        read_from_process(),
-        read_from_websocket(),
-      )
+      await run_until_first_finished(read_from_process(), read_from_websocket())
     finally:
+      # Terminate before closing the fd — the reader thread is blocked on
+      # os.read(master_fd) and only returns once the child is gone.
       try:
         process.terminate()
+        await process.wait()
       except Exception:
         pass
       try:

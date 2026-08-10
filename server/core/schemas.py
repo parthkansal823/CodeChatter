@@ -19,6 +19,7 @@ try:
     normalize_terminal_shell,
     normalize_workspace_path,
   )
+  from ..services.workspace_runtime import LANGUAGE_EXTENSION_MAP
 except ImportError:
   from database import ASSIGNABLE_ROOM_ACCESS_ROLES, DSA_LANGUAGE_IDS, ROOM_TEMPLATE_DEFINITIONS
   from core.security import (
@@ -30,6 +31,9 @@ except ImportError:
     normalize_terminal_shell,
     normalize_workspace_path,
   )
+  from services.workspace_runtime import LANGUAGE_EXTENSION_MAP
+
+RUNNABLE_SNIPPET_LANGUAGES = frozenset(LANGUAGE_EXTENSION_MAP)
 
 
 class LoginRequest(BaseModel):
@@ -290,3 +294,17 @@ class RunSnippetRequest(BaseModel):
   code: str = Field(max_length=100_000)
   language: str = Field(default="python", max_length=32)
   stdin: str = Field(default="", max_length=10_000)
+
+  @field_validator("language")
+  @classmethod
+  def validate_language(cls, value: str) -> str:
+    # Unknown languages used to fall through to a .py extension, so a JS
+    # snippet mislabelled by the client was silently executed as Python.
+    normalized = (value or "python").strip().lower()
+
+    if normalized not in RUNNABLE_SNIPPET_LANGUAGES:
+      raise ValueError(
+        f"Unsupported language. Choose from: {', '.join(sorted(RUNNABLE_SNIPPET_LANGUAGES))}",
+      )
+
+    return normalized

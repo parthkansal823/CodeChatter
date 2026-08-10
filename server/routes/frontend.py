@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 try:
   from ..services.frontend import (
     build_frontend_error_redirect,
+    build_oauth_callback_url,
     frontend_is_built,
     get_safe_redirect_uri,
     resolve_frontend_asset,
@@ -19,6 +20,7 @@ try:
 except ImportError:
   from services.frontend import (
     build_frontend_error_redirect,
+    build_oauth_callback_url,
     frontend_is_built,
     get_safe_redirect_uri,
     resolve_frontend_asset,
@@ -31,7 +33,10 @@ router = APIRouter()
 
 
 def build_oauth_success_redirect(redirect_uri: str, user: dict[str, Any]) -> str:
-  query_string = urlencode(
+  # The credentials go in the URL fragment, not the query string: fragments are
+  # never sent to a server, so the token stays out of access logs, Referer
+  # headers, and any proxy in between.
+  fragment = urlencode(
     {
       "token": create_access_token(user),
       "user": user["username"],
@@ -41,7 +46,7 @@ def build_oauth_success_redirect(redirect_uri: str, user: dict[str, Any]) -> str
       "githubUsername": user.get("githubUsername") or "",
     },
   )
-  return f"{redirect_uri}?{query_string}"
+  return f"{redirect_uri}#{fragment}"
 
 
 def build_github_connect_redirect(redirect_uri: str, github_username: str) -> str:
@@ -67,14 +72,11 @@ async def login_google(request: Request, redirect_uri: str | None = None):
     return RedirectResponse(build_frontend_error_redirect("google_not_configured"))
 
   request.session["redirect_uri"] = get_safe_redirect_uri(redirect_uri)
-  
-  # ── Build callback URL with proper scheme and host ──────────────────
-  # Use X-Forwarded-Proto and X-Forwarded-Host if behind a proxy
-  scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-  host = request.headers.get("x-forwarded-host", request.url.netloc)
-  redirect_url = f"{scheme}://{host}/auth/google/callback"
-  
-  return await oauth.google.authorize_redirect(request, redirect_url)
+
+  return await oauth.google.authorize_redirect(
+    request,
+    build_oauth_callback_url(request, "google"),
+  )
 
 
 @router.get("/auth/google/callback")
@@ -126,13 +128,10 @@ async def login_github(
   else:
     request.session.pop("github_connect_token", None)
 
-  # ── Build callback URL with proper scheme and host ──────────────────
-  # Use X-Forwarded-Proto and X-Forwarded-Host if behind a proxy
-  scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-  host = request.headers.get("x-forwarded-host", request.url.netloc)
-  redirect_url = f"{scheme}://{host}/auth/github/callback"
-  
-  return await oauth.github.authorize_redirect(request, redirect_url)
+  return await oauth.github.authorize_redirect(
+    request,
+    build_oauth_callback_url(request, "github"),
+  )
 
 
 @router.get("/auth/github/callback")

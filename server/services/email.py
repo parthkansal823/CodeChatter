@@ -1,19 +1,32 @@
 from __future__ import annotations
 
 import logging
-import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-logger = logging.getLogger("codechatter.email")
+try:
+  from ..core.settings import (
+    ENVIRONMENT,
+    SMTP_FROM,
+    SMTP_HOST,
+    SMTP_PASS,
+    SMTP_PORT,
+    SMTP_TIMEOUT_SECONDS,
+    SMTP_USER,
+  )
+except ImportError:
+  from core.settings import (
+    ENVIRONMENT,
+    SMTP_FROM,
+    SMTP_HOST,
+    SMTP_PASS,
+    SMTP_PORT,
+    SMTP_TIMEOUT_SECONDS,
+    SMTP_USER,
+  )
 
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_FROM = os.getenv("SMTP_FROM", "") or SMTP_USER
-SMTP_TIMEOUT_SECONDS = float(os.getenv("SMTP_TIMEOUT_SECONDS", "5"))
+logger = logging.getLogger("codechatter.email")
 
 
 def mask_email(email: str) -> str:
@@ -29,10 +42,19 @@ def mask_email(email: str) -> str:
 
 
 def send_otp_email(to_email: str, otp: str, action: str = "login") -> None:
-  logger.info(f"[MFA] OTP for {to_email} ({action}): {otp}")
-
   if not SMTP_HOST or not SMTP_USER:
-    logger.warning("[MFA] SMTP not configured — OTP printed to console only")
+    # Without SMTP there is no way to deliver the code. Falling back to the
+    # console keeps local development usable, but a one-time code in the log
+    # is a full MFA bypass for anyone who can read logs — so never in production.
+    if ENVIRONMENT == "production":
+      logger.error(
+        "[MFA] SMTP is not configured — cannot deliver the %s code to %s",
+        action,
+        mask_email(to_email),
+      )
+      return
+
+    logger.warning("[MFA] SMTP not configured — dev-only OTP for %s (%s): %s", to_email, action, otp)
     return
 
   if action == "login":

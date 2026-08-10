@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-import os
+import hmac
 import secrets
-from datetime import timedelta
+from datetime import timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -171,10 +171,9 @@ def verify_otp(payload: VerifyOTPRequest, request: Request) -> dict[str, Any]:
       detail="Invalid or expired verification session",
     )
 
-  from datetime import timezone as _tz
   expires_at = challenge["expires_at"]
   if expires_at.tzinfo is None:
-    expires_at = expires_at.replace(tzinfo=_tz.utc)
+    expires_at = expires_at.replace(tzinfo=timezone.utc)
   if utc_now() > expires_at:
     repository.delete_otp_challenge(payload.mfa_token)
     raise HTTPException(
@@ -191,7 +190,7 @@ def verify_otp(payload: VerifyOTPRequest, request: Request) -> dict[str, Any]:
 
   attempts = repository.increment_otp_attempts(payload.mfa_token)
 
-  if _hash_otp(payload.otp) != challenge["otp_hash"]:
+  if not hmac.compare_digest(_hash_otp(payload.otp), str(challenge["otp_hash"])):
     remaining = OTP_MAX_ATTEMPTS - attempts
     if remaining <= 0:
       repository.delete_otp_challenge(payload.mfa_token)

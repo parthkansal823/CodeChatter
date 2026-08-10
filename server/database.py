@@ -565,6 +565,7 @@ class MongoRepository:
     self._database = None
     self._users = None
     self._rooms = None
+    self._room_messages = None
     self._otp_challenges = None
     self._is_mock = mongo_uri.startswith("mongomock://")
 
@@ -695,14 +696,41 @@ class MongoRepository:
     if user is None:
       raise ValueError("User not found")
 
-    self._rooms.delete_many({"owner_id": user_id})
+    timestamp = self._utc_now()
+
+    # Rooms this user solely owns go away entirely; co-owned rooms survive and
+    # just lose this owner. Both legacy `owner_id` and `owner_ids` are checked.
+    solely_owned_ids = [
+      room["id"]
+      for room in self._rooms.find(
+        {"$or": [{"owner_id": user_id}, {"owner_ids": user_id}]},
+        {"id": 1, "owner_ids": 1, "owner_id": 1},
+      )
+      if set(self._get_owner_ids(room)) <= {user_id}
+    ]
+
+    if solely_owned_ids:
+      self._rooms.delete_many({"id": {"$in": solely_owned_ids}})
+      self._room_messages.delete_many({"room_id": {"$in": solely_owned_ids}})
+
+    # Detach the account from every remaining room it touched, including the
+    # co-owner list, the participant list, and its per-room access role.
     self._rooms.update_many(
-      {"participant_ids": user_id},
+      {"$or": [{"participant_ids": user_id}, {"owner_ids": user_id}]},
       {
-        "$pull": {"participant_ids": user_id},
-        "$set": {"updated_at": self._utc_now()},
+        "$pull": {"participant_ids": user_id, "owner_ids": user_id},
+        "$unset": {f"member_access_roles.{user_id}": ""},
+        "$set": {"updated_at": timestamp},
       },
     )
+    self._rooms.update_many(
+      {"join_requests.user_id": user_id},
+      {
+        "$pull": {"join_requests": {"user_id": user_id}},
+        "$set": {"updated_at": timestamp},
+      },
+    )
+    self._otp_challenges.delete_many({"user_id": user_id})
     self._users.delete_one({"id": user_id})
 
   def store_otp_challenge(
@@ -1684,7 +1712,9 @@ class MongoRepository:
     self.initialize()
     timestamp = self._utc_now()
     document = {
-      "id": message.get("id") or secrets.token_hex(16),
+      # Always server-generated: `id` carries a unique index, so honouring a
+      # client-supplied value lets any client wedge the write with a duplicate.
+      "id": secrets.token_hex(16),
       "room_id": room_id,
       "userId": message.get("userId"),
       "sender": message.get("sender"),
@@ -1704,8 +1734,11 @@ class MongoRepository:
 
   def get_room_messages(self, room_id: str, limit: int = 200) -> list[dict[str, Any]]:
     self.initialize()
-    cursor = self._room_messages.find({"room_id": room_id}).sort("created_at", ASCENDING).limit(limit)
-    messages = [self._strip_mongo_id(msg) for msg in cursor]
+    # Take the newest `limit` messages, then flip back to chronological order —
+    # sorting ascending first would pin the transcript to the oldest messages
+    # and never show recent chat once a room passes the limit.
+    cursor = self._room_messages.find({"room_id": room_id}).sort("created_at", DESCENDING).limit(limit)
+    messages = [self._strip_mongo_id(msg) for msg in reversed(list(cursor))]
     for msg in messages:
       if isinstance(msg.get("created_at"), datetime):
         msg["time"] = msg["created_at"].strftime("%I:%M %p")
@@ -1872,20 +1905,28 @@ class MongoRepository:
       },
     )
 
-    self._rooms.update_many(
+    # Each room needs its own token — a single update_many would hand the same
+    # invite secret to every room, letting one link unlock all of them.
+    rooms_missing_tokens = self._rooms.find(
       {
         "$or": [
           {"invite_token": {"$exists": False}},
           {"invite_token": ""},
         ],
       },
-      {
-        "$set": {
-          "invite_token": self.generate_invite_token(),
-          "updated_at": self._utc_now(),
-        }
-      },
+      {"id": 1},
     )
+
+    for room in rooms_missing_tokens:
+      self._rooms.update_one(
+        {"id": room["id"]},
+        {
+          "$set": {
+            "invite_token": self.generate_invite_token(),
+            "updated_at": self._utc_now(),
+          }
+        },
+      )
 
   @staticmethod
   def _normalize_node_name(value: Any) -> str:

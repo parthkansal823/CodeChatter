@@ -1,4 +1,25 @@
-// Utility for browser-native AES-GCM encryption/decryption
+// Utility for browser-native AES-GCM encryption/decryption.
+//
+// SCOPE NOTE: the key is derived from the room ID plus a constant that ships in
+// this bundle, so anyone who can read the room ID can derive the same key. This
+// protects message text at rest in the database against casual inspection; it
+// is NOT end-to-end encryption and gives no confidentiality against the server
+// or anyone holding a room link. Real E2EE needs a per-room key that is
+// exchanged between clients and never sent to the backend.
+
+// Convert bytes to a binary string in chunks. Passing a whole array to
+// String.fromCharCode via apply blows the argument limit (RangeError) once a
+// message grows past a few tens of kilobytes.
+function bytesToBinaryString(bytes) {
+  const CHUNK_SIZE = 0x8000;
+  let binary = "";
+
+  for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + CHUNK_SIZE));
+  }
+
+  return binary;
+}
 
 // Derive a 256-bit AES-GCM key from a roomId and a static salt
 async function getRoomKey(roomId) {
@@ -47,7 +68,7 @@ export async function encryptText(text, roomId) {
     payload.set(encryptedArray, iv.length);
     
     // To Base64 string
-    return "E2EE~" + btoa(String.fromCharCode.apply(null, payload));
+    return "E2EE~" + btoa(bytesToBinaryString(payload));
   } catch (error) {
     console.error("Encryption error", error);
     return text; // Fallback

@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import logging
-import os
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 try:
   from .core.middleware import configure_middleware
-  from .core.settings import repository
+  from .core.settings import UPLOADS_DIR, repository
   from .routes.auth import router as auth_router
   from .routes.frontend import router as frontend_oauth_router
   from .routes.github import router as github_router
@@ -18,7 +16,7 @@ try:
   from .routes.rooms import router as rooms_router
 except ImportError:
   from core.middleware import configure_middleware
-  from core.settings import repository
+  from core.settings import UPLOADS_DIR, repository
   from routes.auth import router as auth_router
   from routes.frontend import router as frontend_oauth_router
   from routes.github import router as github_router
@@ -46,9 +44,7 @@ app.include_router(github_router)
 app.include_router(realtime_router)
 app.include_router(frontend_oauth_router)
 
-# Ensure uploads directory exists
-uploads_dir = Path(__file__).parent / "data" / "uploads"
-uploads_dir.mkdir(parents=True, exist_ok=True)
-
-# Mount it
-app.mount("/api/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+# Chat attachments live under the configured data directory (CODECHATTER_DATA_DIR),
+# so they follow the same volume as workspace snapshots instead of being stranded
+# inside the image.
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")

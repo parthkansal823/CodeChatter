@@ -3,7 +3,13 @@ import { ArrowLeft, Send, Hash, Paperclip, FileText, Download, Loader2, Lock } f
 import UserAvatar from "./UserAvatar";
 import { useAuth } from "../hooks/useAuth";
 import { secureFetch } from "../utils/security";
+import { API_BASE_URL } from "../config/security";
 import toast from "react-hot-toast";
+
+// Attachment URLs come back as API-relative paths. In dev the app runs on a
+// different origin than the API, so they have to be resolved against it.
+const resolveAttachmentUrl = (url) =>
+  url && url.startsWith("/") ? `${API_BASE_URL}${url}` : url;
 
 export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMessage = () => {} }) {
   const { user, token } = useAuth();
@@ -45,7 +51,6 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
       const data = await secureFetch(`/api/rooms/${roomId}/messages/upload`, {
         method: "POST",
         body: formData,
-        headers: { "Content-Type": null },
       }, token);
 
       // Send the file message payload to WebSocket
@@ -58,8 +63,8 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
       });
 
       e.target.value = null; // reset
-    } catch {
-      toast.error("Failed to upload file");
+    } catch (error) {
+      toast.error(error?.message || "Failed to upload file");
     } finally {
       setIsUploading(false);
     }
@@ -124,8 +129,8 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                             {msg.fileSize ? (msg.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown size'}
                           </span>
                         </div>
-                        <a 
-                          href={msg.fileUrl} 
+                        <a
+                          href={resolveAttachmentUrl(msg.fileUrl)}
                           download={msg.fileName}
                           target="_blank"
                           rel="noreferrer"

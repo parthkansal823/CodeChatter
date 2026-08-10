@@ -129,8 +129,10 @@ export function AuthProvider({ children }) {
             setUser(userData);
           }
         } catch (error) {
-          // 401 = token is invalid/expired — clear it and redirect to login
-          if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+          // 401 = token is invalid/expired — clear it and redirect to login.
+          // secureFetch replaces the message with the server's `detail` string,
+          // so the status code is the only reliable signal here.
+          if (error.status === 401) {
             console.warn("Stored token rejected by server (401) — clearing auth state.");
             if (isMounted) {
               clearData();

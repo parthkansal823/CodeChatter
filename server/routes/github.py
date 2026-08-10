@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import re
 import secrets as _sec
 from pathlib import PurePosixPath
 from typing import Any
@@ -14,15 +15,33 @@ from pydantic import BaseModel, Field
 
 try:
   from ..core.security import get_current_user
-  from ..core.settings import repository, logger
+  from ..core.settings import repository
 except ImportError:
   from core.security import get_current_user
-  from core.settings import repository, logger
+  from core.settings import repository
 
 router = APIRouter(prefix="/api/github", tags=["github"])
 
 GITHUB_API = "https://api.github.com"
 _HEADERS = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+
+# Owner/repo/branch land inside API URLs. Values from a request body are not
+# constrained by the router the way path params are, so a `/` or `..` could
+# retarget the request at a different GitHub endpoint.
+_OWNER_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+_BRANCH_PATTERN = re.compile(r"^[A-Za-z0-9._/-]{1,255}$")
+
+
+def _validate_repo_ref(owner: str, repo: str, branch: str = "") -> None:
+  if not _OWNER_PATTERN.fullmatch(owner or ""):
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid repository owner")
+
+  if not _REPO_PATTERN.fullmatch(repo or "") or repo in {".", ".."}:
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid repository name")
+
+  if branch and (not _BRANCH_PATTERN.fullmatch(branch) or ".." in branch):
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid branch name")
 
 
 # ── low-level helpers ───────────────────────────────────────────────────────
@@ -70,7 +89,7 @@ async def _gh_put(path: str, token: str, payload: dict) -> Any:
 # ── git / workspace helpers ─────────────────────────────────────────────────
 
 def _git_blob_sha(content: str) -> str:
-  """Compute the git blob SHA1 that GitHub uses — sha1("blob N\0content")."""
+  r"""Compute the git blob SHA1 that GitHub uses — sha1("blob N\0content")."""
   data = content.encode("utf-8")
   header = f"blob {len(data)}\0".encode("utf-8")
   return hashlib.sha1(header + data).hexdigest()  # noqa: S324 (git standard)
@@ -210,6 +229,7 @@ async def list_branches(
   repo: str,
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> list[dict]:
+  _validate_repo_ref(owner, repo)
   token = _get_token_or_raise(current_user["id"])
   branches = await _gh_get(f"repos/{owner}/{repo}/branches", token)
   return [{"name": b["name"]} for b in branches]
@@ -222,6 +242,7 @@ async def get_repo_tree(
   branch: str = "",
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict:
+  _validate_repo_ref(owner, repo, branch)
   token = _get_token_or_raise(current_user["id"])
   if not branch:
     repo_info = await _gh_get(f"repos/{owner}/{repo}", token)
@@ -289,6 +310,7 @@ async def import_repo_to_room(
   """Import files from a GitHub repo into a room's workspace.
   If payload.link=True, also links the room to this repo for auto-sync.
   """
+  _validate_repo_ref(payload.owner, payload.repo, payload.branch)
   token = _get_token_or_raise(current_user["id"])
 
   room = repository.get_room_by_id(room_id)
@@ -369,7 +391,15 @@ async def import_repo_to_room(
 
     return [convert(k, v) for k, v in tree.items()]
 
-  file_pairs = [(p, c) for r in results if not isinstance(r, Exception) for p, c in [r] if c]
+  # Keep genuinely empty files — only drop the ones whose fetch raised.
+  file_pairs = [result for result in results if not isinstance(result, BaseException)]
+
+  if not file_pairs:
+    raise HTTPException(
+      status_code=status.HTTP_502_BAD_GATEWAY,
+      detail="Could not download any of the selected files from GitHub",
+    )
+
   new_nodes = _build_nodes(file_pairs)
 
   existing_tree = room.get("workspace_tree") or []
@@ -381,7 +411,14 @@ async def import_repo_to_room(
     "children": new_nodes,
   }
   merged_tree = existing_tree + [repo_folder]
-  repository.update_room_workspace(current_user["id"], room_id, merged_tree)
+
+  try:
+    repository.update_room_workspace(current_user["id"], room_id, merged_tree)
+  except ValueError as error:
+    # e.g. the import would push the workspace past its node/size ceiling.
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+  except PermissionError as error:
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
 
   # Optionally link the room to this repo
   if payload.link:
@@ -424,6 +461,7 @@ def link_room_to_repo(
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict:
   """Manually link (or re-link) a room to a GitHub repo for auto-sync."""
+  _validate_repo_ref(payload.owner, payload.repo, payload.branch)
   room = repository.get_room_by_id(room_id)
   if not room:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
@@ -495,6 +533,7 @@ async def sync_room_to_github(
   owner = link["owner"]
   repo = link["repo"]
   branch = link["branch"]
+  _validate_repo_ref(owner, repo, branch)
 
   pushed = 0
   unchanged = 0
@@ -560,6 +599,7 @@ async def push_file_to_repo(
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict:
   """Push (create or update) a single file in a GitHub repo."""
+  _validate_repo_ref(payload.owner, payload.repo, payload.branch)
   token = _get_token_or_raise(current_user["id"])
   encoded = base64.b64encode(payload.content.encode()).decode()
   path = payload.filePath.lstrip("/")

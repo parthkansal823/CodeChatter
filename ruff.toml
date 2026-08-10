@@ -1,0 +1,39 @@
+# Ruff configuration for the CodeChatter backend.
+# The server deliberately uses 2-space indentation throughout.
+
+line-length = 120
+indent-width = 2
+target-version = "py311"
+
+exclude = [
+  "server/venv",
+  "client/node_modules",
+  ".trunk",
+]
+
+[lint]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "W",    # pycodestyle warnings
+  "I",    # import sorting
+  "B",    # bugbear
+  "UP",   # pyupgrade
+  "C4",   # comprehensions
+  "S",    # bandit-style security checks
+]
+ignore = [
+  # `Depends(...)` / `File(...)` in parameter defaults is the documented
+  # FastAPI dependency-injection idiom, not an accidental mutable default.
+  "B008",
+  # Long, readable string literals (SQL-free) are fine at our line length.
+  "E501",
+]
+
+[lint.per-file-ignores]
+# Starter templates embed example code that is not executed by the server.
+"server/database.py" = ["E501"]
+
+[format]
+indent-style = "space"
+quote-style = "double"

@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 import secrets
-import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 try:
   from ..services.ai import build_gemini_prompt, request_gemini_completion
@@ -28,7 +27,13 @@ try:
     normalize_optional_workspace_path,
     validate_room_id_value,
   )
-  from ..core.settings import GEMINI_MODEL, repository
+  from ..core.settings import (
+    ALLOWED_UPLOAD_EXTENSIONS,
+    GEMINI_MODEL,
+    MAX_UPLOAD_BYTES,
+    UPLOADS_DIR,
+    repository,
+  )
   from ..services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 except ImportError:
   from services.ai import build_gemini_prompt, request_gemini_completion
@@ -51,7 +56,13 @@ except ImportError:
     normalize_optional_workspace_path,
     validate_room_id_value,
   )
-  from core.settings import GEMINI_MODEL, repository
+  from core.settings import (
+    ALLOWED_UPLOAD_EXTENSIONS,
+    GEMINI_MODEL,
+    MAX_UPLOAD_BYTES,
+    UPLOADS_DIR,
+    repository,
+  )
   from services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 
 router = APIRouter()
@@ -437,29 +448,60 @@ def get_room_messages(
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
   return repository.get_room_messages(normalized_room_id)
 
+
 @router.post("/api/rooms/{room_id}/messages/upload")
 def upload_room_message_file(
   room_id: str,
+  request: Request,
   file: UploadFile = File(...),
-  current_user: dict[str, Any] = Depends(get_current_user)
+  current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
+  enforce_rate_limit(
+    bucket="room-upload",
+    key=f"{current_user['id']}:{get_client_identifier(request)}",
+    limit=20,
+    window_seconds=60,
+  )
+
   normalized_room_id = validate_room_id_value(room_id)
   room = repository.get_room_by_id(normalized_room_id)
   if not room or not repository.user_can_access_room(current_user["id"], room):
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-  upload_dir = Path(__file__).parent.parent / "data" / "uploads" / normalized_room_id
+  original_name = (file.filename or "").strip()
+  file_ext = PurePosixPath(original_name.replace("\\", "/")).suffix.lower()
+
+  if file_ext not in ALLOWED_UPLOAD_EXTENSIONS:
+    raise HTTPException(
+      status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+      detail=f"`{file_ext or 'files without an extension'}` cannot be shared in room chat.",
+    )
+
+  upload_dir = UPLOADS_DIR / normalized_room_id
   upload_dir.mkdir(parents=True, exist_ok=True)
-  
-  file_ext = Path(file.filename).suffix if file.filename else ""
+
   unique_filename = f"{secrets.token_hex(8)}{file_ext}"
   file_path = upload_dir / unique_filename
-  
-  with open(file_path, "wb") as buffer:
-    shutil.copyfileobj(file.file, buffer)
-     
+
+  # Copy in bounded chunks so an oversized body is rejected while streaming
+  # rather than after it has already filled the disk.
+  written = 0
+  try:
+    with open(file_path, "wb") as buffer:
+      while chunk := file.file.read(64 * 1024):
+        written += len(chunk)
+        if written > MAX_UPLOAD_BYTES:
+          raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Files must be {MAX_UPLOAD_BYTES // (1024 * 1024)} MB or smaller.",
+          )
+        buffer.write(chunk)
+  except BaseException:
+    file_path.unlink(missing_ok=True)
+    raise
+
   return {
     "url": f"/api/uploads/{normalized_room_id}/{unique_filename}",
-    "filename": file.filename,
-    "size": file.size
+    "filename": Path(original_name).name or unique_filename,
+    "size": written,
   }

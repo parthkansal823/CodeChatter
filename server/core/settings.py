@@ -24,8 +24,35 @@ logger = logging.getLogger("codechatter.server")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_DAYS = int(os.getenv("JWT_EXPIRATION_DAYS", "7"))
-SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
-SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY") or secrets.token_urlsafe(32)
+
+
+def _require_secret(name: str) -> str:
+  """Read a signing secret, generating an ephemeral one only outside production.
+
+  A generated key changes on every restart and differs between workers, which
+  silently invalidates every issued token. That is tolerable locally and a
+  serious outage in production, so production must supply the value.
+  """
+  configured = (os.getenv(name) or "").strip()
+
+  if configured:
+    return configured
+
+  if ENVIRONMENT == "production":
+    raise RuntimeError(
+      f"{name} must be set when ENVIRONMENT=production. "
+      'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+    )
+
+  logger.warning(
+    "%s is not set — using a random key for this process. Sessions will not survive a restart.",
+    name,
+  )
+  return secrets.token_urlsafe(32)
+
+
+SECRET_KEY = _require_secret("SECRET_KEY")
+SESSION_SECRET_KEY = _require_secret("SESSION_SECRET_KEY")
 
 ALLOWED_ORIGINS = [
   origin.strip()
@@ -60,8 +87,23 @@ CLIENT_DIST_DIR = APP_DIR.parent / "client" / "dist"
 CLIENT_INDEX_FILE = CLIENT_DIST_DIR / "index.html"
 DATA_DIR = Path(os.getenv("CODECHATTER_DATA_DIR", str(APP_DIR / "data"))).resolve()
 WORKSPACES_DIR = DATA_DIR / "workspaces"
+UPLOADS_DIR = DATA_DIR / "uploads"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Chat attachment limits. Uploads are served back from the API origin, so the
+# extension allow-list deliberately excludes anything a browser will render as
+# markup (.html, .svg, ...) — those would be stored XSS against our own origin.
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+ALLOWED_UPLOAD_EXTENSIONS = {
+  ".txt", ".md", ".log", ".csv", ".json", ".yaml", ".yml", ".toml",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico",
+  ".pdf", ".zip", ".tar", ".gz", ".tgz", ".7z",
+  ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".java", ".c", ".h",
+  ".cpp", ".cc", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".swift", ".kt",
+  ".sh", ".lua", ".pl", ".sql", ".css", ".scss", ".ipynb",
+}
 
 repository = MongoRepository(
   mongo_uri=os.getenv("MONGODB_URI", "mongodb://localhost:27017"),
@@ -69,12 +111,27 @@ repository = MongoRepository(
   legacy_data_file=DATA_DIR / "storage.json",
 )
 
+def normalize_origin(value: str | None) -> str | None:
+  """Reduce a URL to its `scheme://host[:port]` origin, or None if unusable."""
+  if not value or not value.strip():
+    return None
+
+  parsed = urlparse(value.strip())
+
+  if not parsed.scheme or not parsed.netloc:
+    return None
+
+  return f"{parsed.scheme}://{parsed.netloc}"
+
+
 ALLOWED_ORIGIN_SET = {
-  parsed_origin
-  for parsed_origin in {
-    urlparse(origin).scheme and f"{urlparse(origin).scheme}://{urlparse(origin).netloc}"
-    for origin in [*ALLOWED_ORIGINS, DEFAULT_FRONTEND_URL]
-    if origin.strip()
-  }
-  if parsed_origin
+  origin
+  for origin in (
+    normalize_origin(candidate) for candidate in [*ALLOWED_ORIGINS, DEFAULT_FRONTEND_URL]
+  )
+  if origin
 }
+
+# Hostnames (with optional port) we are willing to build absolute callback URLs
+# for. Used to reject spoofed X-Forwarded-Host headers.
+ALLOWED_HOST_SET = {urlparse(origin).netloc for origin in ALLOWED_ORIGIN_SET}

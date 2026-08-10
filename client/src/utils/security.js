@@ -139,11 +139,16 @@ export const isTokenExpired = (token) => {
 /**
  * Inject security headers into fetch requests
  */
-export const getSecureHeaders = (token) => {
+export const getSecureHeaders = (token, { json = true } = {}) => {
   const headers = {
-    'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
   };
+
+  // FormData bodies must not carry an explicit Content-Type — the browser has
+  // to set it itself so it can append the multipart boundary.
+  if (json) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -259,10 +264,21 @@ export const secureFetch = async (url, options = {}, token = null) => {
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    const headers = getSecureHeaders(token);
+    const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+    const mergedHeaders = {
+      ...getSecureHeaders(token, { json: !isFormData }),
+      ...options.headers,
+    };
+
+    // Callers signal "no header" by passing null/undefined; fetch would
+    // otherwise stringify those into a literal "null" header value.
+    const headers = Object.fromEntries(
+      Object.entries(mergedHeaders).filter(([, value]) => value !== null && value !== undefined)
+    );
+
     const response = await fetch(resolvedUrl.toString(), {
       ...options,
-      headers: { ...headers, ...options.headers },
+      headers,
       signal: controller.signal,
       credentials: "include",
     });

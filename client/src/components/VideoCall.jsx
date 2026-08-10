@@ -79,7 +79,7 @@ function VideoTile({
     if (videoRef.current) {
       videoRef.current.srcObject = stream || null;
     }
-  }, [stream]);
+  }, [stream, videoRef]);
 
   const sizeClasses = size === "thumb"
     ? "aspect-[4/3] rounded-2xl"
@@ -147,6 +147,10 @@ export default function VideoCall({
   const [participantsOpen, setParticipantsOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState(new Map());
+  // Mirrors whichever stream the local tile should show (screen share when
+  // presenting, camera otherwise). Kept in state rather than read from a ref
+  // during render so the tile actually re-renders when the source swaps.
+  const [localPreviewStream, setLocalPreviewStream] = useState(null);
 
   const localVideoRef = useRef(null);
   const streamRef = useRef(null);
@@ -380,6 +384,7 @@ export default function VideoCall({
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
+        setLocalPreviewStream(stream);
         setHasPermissions(true);
         startAudioAnalysis(stream);
         logActivity(roomId, "meeting_event", `Joined video call in ${roomName || "workspace"}`);
@@ -467,6 +472,7 @@ export default function VideoCall({
     streamReadyRef.current = false;
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     screenStreamRef.current = null;
+    setLocalPreviewStream(null);
     stopAudioAnalysis();
     clearInterval(timerRef.current);
     closeAllPeers();
@@ -481,6 +487,7 @@ export default function VideoCall({
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
       await restoreCameraFeed();
+      setLocalPreviewStream(streamRef.current);
       setIsScreenSharing(false);
       logActivity(roomId, "meeting_event", "Stopped presenting");
       return;
@@ -493,6 +500,7 @@ export default function VideoCall({
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = screenStream;
       }
+      setLocalPreviewStream(screenStream);
       await replaceOutgoingVideoTrack(screenTrack);
       setIsScreenSharing(true);
       logActivity(roomId, "meeting_event", "Started presenting screen");
@@ -500,6 +508,7 @@ export default function VideoCall({
       screenTrack.onended = async () => {
         screenStreamRef.current = null;
         await restoreCameraFeed();
+        setLocalPreviewStream(streamRef.current);
         setIsScreenSharing(false);
       };
     } catch (error) {
@@ -633,7 +642,7 @@ export default function VideoCall({
             ) : remoteList.length === 0 ? (
               <div className="space-y-4">
                 <VideoTile
-                  stream={screenStreamRef.current || streamRef.current}
+                  stream={localPreviewStream}
                   username={user?.username || "You"}
                   subtitle={isScreenSharing ? "Presenting to the room" : "Your preview"}
                   muted
@@ -667,7 +676,7 @@ export default function VideoCall({
             ) : layout === "grid" ? (
               <div className="grid grid-cols-1 gap-3">
                 <VideoTile
-                  stream={screenStreamRef.current || streamRef.current}
+                  stream={localPreviewStream}
                   username={user?.username || "You"}
                   subtitle="You"
                   muted
@@ -700,7 +709,7 @@ export default function VideoCall({
 
                     <div className="absolute bottom-3 right-3 w-[34%] min-w-[120px] max-w-[170px]">
                       <VideoTile
-                        stream={screenStreamRef.current || streamRef.current}
+                        stream={localPreviewStream}
                         username={user?.username || "You"}
                         subtitle={isScreenSharing ? "Presenting" : "You"}
                         muted
