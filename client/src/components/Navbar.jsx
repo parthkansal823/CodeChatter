@@ -51,12 +51,12 @@ export default function Navbar({
   }, []);
 
   const PRESENCE_OPTIONS = [
-    { id: "available", label: "Available", color: "bg-emerald-500" },
-    { id: "busy",      label: "Busy",      color: "bg-amber-500"   },
+    { id: "available", label: "Available", color: "bg-success-500" },
+    { id: "busy",      label: "Busy",      color: "bg-warning-500"   },
     { id: "away",      label: "Away",      color: "bg-zinc-400"    },
-    { id: "focus",     label: "Focus",     color: "bg-violet-500"  },
+    { id: "focus",     label: "Focus",     color: "bg-brand-500"  },
   ];
-  const presenceColor = PRESENCE_OPTIONS.find(p => p.id === presence)?.color || "bg-emerald-500";
+  const presenceColor = PRESENCE_OPTIONS.find(p => p.id === presence)?.color || "bg-success-500";
 
   const setPresenceOption = (id) => {
     setPresence(id);
@@ -147,7 +147,7 @@ export default function Navbar({
             >
               <Bell size={15} />
               {unreadCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-600 text-[9px] font-bold text-white ring-2 ring-white dark:ring-zinc-950">
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-[9px] font-bold text-white ring-2 ring-white dark:ring-zinc-950">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
@@ -173,7 +173,7 @@ export default function Navbar({
           <div className="relative hidden sm:block" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen((c) => !c)}
-              className="flex h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-1.5 text-left transition-colors hover:border-violet-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-700"
+              className="flex h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-1.5 text-left transition-colors hover:border-brand-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-brand-700"
               title={user?.username}
             >
               <div className="relative">
@@ -267,7 +267,7 @@ export default function Navbar({
                   {/* Logout */}
                   <button
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-3 border-t border-zinc-100 px-4 py-3 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:border-zinc-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                    className="flex w-full items-center gap-3 border-t border-zinc-100 px-4 py-3 text-left text-sm text-danger-600 transition-colors hover:bg-danger-50 dark:border-zinc-800 dark:text-danger-400 dark:hover:bg-danger-900/20"
                   >
                     <LogOut size={15} />
                     Sign out
@@ -332,7 +332,7 @@ export default function Navbar({
 
               <button
                 onClick={handleLogout}
-                className="flex w-full items-center gap-3 rounded-xl border border-red-200 px-3 py-3 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
+                className="flex w-full items-center gap-3 rounded-xl border border-danger-200 px-3 py-3 text-left text-sm font-medium text-danger-600 transition-colors hover:bg-danger-50 dark:border-danger-900/40 dark:text-danger-400 dark:hover:bg-danger-900/20"
               >
                 <LogOut size={18} />
                 Sign out

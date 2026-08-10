@@ -122,14 +122,14 @@ function WhiteboardUI({ onBack }) {
   const topBtn = (active = false) =>
     `flex items-center justify-center rounded-md transition-all ${
       active
-        ? "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/30"
+        ? "bg-brand-500/20 text-brand-300 ring-1 ring-brand-500/30"
         : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
     }`;
 
   const sideBtn = (active = false) =>
     `flex w-9 items-center justify-center rounded-lg transition-all ${
       active
-        ? "bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40"
+        ? "bg-brand-500/20 text-brand-300 ring-1 ring-brand-500/40"
         : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
     }`;
 
@@ -245,7 +245,7 @@ function WhiteboardUI({ onBack }) {
         {/* Clear */}
         <button
           onClick={clearBoard}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-red-500/60 transition-all hover:bg-red-500/10 hover:text-red-400"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-danger-500/60 transition-all hover:bg-danger-500/10 hover:text-danger-400"
           title="Clear board"
         >
           <Trash2 size={13} />

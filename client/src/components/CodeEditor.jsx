@@ -294,7 +294,7 @@ export default function CodeEditor({
       {/* Status bar */}
       <div className="flex items-center gap-2 border-t border-zinc-200 bg-zinc-50 px-2 py-1 text-[10px] text-zinc-500 sm:gap-3 sm:px-3 sm:text-[11px] dark:border-zinc-800/60 dark:bg-[#0d0d10] dark:text-zinc-600">
         <span className="font-semibold uppercase tracking-wider text-zinc-500">
-          {readOnly ? <span className="text-amber-400">View only</span>
+          {readOnly ? <span className="text-warning-400">View only</span>
             : isMarkdown ? "Markdown"
             : selectedLanguage}
         </span>
@@ -323,7 +323,7 @@ export default function CodeEditor({
             title="Version history (Ctrl+S to save)"
             className={`flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors ${
               showVersionHistory
-                ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+                ? "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400"
                 : "hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
             }`}
           >

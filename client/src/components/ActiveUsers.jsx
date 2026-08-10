@@ -8,12 +8,12 @@ export default function ActiveUsers({ users = [] }) {
   }, [users]);
 
   const colors = [
-    "bg-red-500",
-    "bg-blue-500",
-    "bg-green-500",
-    "bg-purple-500",
-    "bg-pink-500",
-    "bg-yellow-500"
+    "bg-danger-500",
+    "bg-info-500",
+    "bg-success-500",
+    "bg-brand-500",
+    "bg-danger-500",
+    "bg-warning-500"
   ];
 
   return (

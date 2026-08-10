@@ -36,7 +36,7 @@ const VideoCall = lazy(() => import("./VideoCall"));
 function PanelFallback({ label }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-400">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-600 border-t-violet-500" />
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-600 border-t-brand-500" />
       <p className="text-xs tracking-wide">Loading {label}...</p>
     </div>
   );
@@ -49,30 +49,30 @@ const TOOLS = [
     name: "Overview",
     section: "Workspace",
     icon: LayoutDashboard,
-    color: "text-indigo-400",
-    bg: "hover:bg-indigo-500/10",
-    activeBg: "bg-indigo-500/10",
-    activeBorder: "border-indigo-500/40",
+    color: "text-brand-400",
+    bg: "hover:bg-brand-500/10",
+    activeBg: "bg-brand-500/10",
+    activeBorder: "border-brand-500/40",
   },
   {
     id: "chat",
     name: "Room Chat",
     section: "Collaboration",
     icon: MessageCircleMore,
-    color: "text-emerald-400",
-    bg: "hover:bg-emerald-500/10",
-    activeBg: "bg-emerald-500/10",
-    activeBorder: "border-emerald-500/40",
+    color: "text-success-400",
+    bg: "hover:bg-success-500/10",
+    activeBg: "bg-success-500/10",
+    activeBorder: "border-success-500/40",
   },
   {
     id: "ai",
     name: "AI Help",
     section: "Collaboration",
     icon: Bot,
-    color: "text-violet-400",
-    bg: "hover:bg-violet-500/10",
-    activeBg: "bg-violet-500/10",
-    activeBorder: "border-violet-500/40",
+    color: "text-brand-400",
+    bg: "hover:bg-brand-500/10",
+    activeBg: "bg-brand-500/10",
+    activeBorder: "border-brand-500/40",
   },
   // ── Code tools ──────────────────────────────────────
   {
@@ -80,10 +80,10 @@ const TOOLS = [
     name: "Flowchart",
     section: "Coding",
     icon: GitBranch,
-    color: "text-cyan-400",
-    bg: "hover:bg-cyan-500/10",
-    activeBg: "bg-cyan-500/10",
-    activeBorder: "border-cyan-500/40",
+    color: "text-info-400",
+    bg: "hover:bg-info-500/10",
+    activeBg: "bg-info-500/10",
+    activeBorder: "border-info-500/40",
   },
   {
     id: "github",
@@ -101,30 +101,30 @@ const TOOLS = [
     name: "Activity",
     section: "Workspace",
     icon: Activity,
-    color: "text-rose-400",
-    bg: "hover:bg-rose-500/10",
-    activeBg: "bg-rose-500/10",
-    activeBorder: "border-rose-500/40",
+    color: "text-danger-400",
+    bg: "hover:bg-danger-500/10",
+    activeBg: "bg-danger-500/10",
+    activeBorder: "border-danger-500/40",
   },
   {
     id: "notes",
     name: "Quick Notes",
     section: "Workspace",
     icon: FileText,
-    color: "text-amber-400",
-    bg: "hover:bg-amber-500/10",
-    activeBg: "bg-amber-500/10",
-    activeBorder: "border-amber-500/40",
+    color: "text-warning-400",
+    bg: "hover:bg-warning-500/10",
+    activeBg: "bg-warning-500/10",
+    activeBorder: "border-warning-500/40",
   },
   {
     id: "whiteboard",
     name: "Whiteboard",
     section: "Planning",
     icon: PencilRuler,
-    color: "text-orange-400",
-    bg: "hover:bg-orange-500/10",
-    activeBg: "bg-orange-500/10",
-    activeBorder: "border-orange-500/40",
+    color: "text-warning-400",
+    bg: "hover:bg-warning-500/10",
+    activeBg: "bg-warning-500/10",
+    activeBorder: "border-warning-500/40",
   },
   // ── Focus / AV ──────────────────────────────────────
   {
@@ -132,20 +132,20 @@ const TOOLS = [
     name: "Pomodoro",
     section: "Focus",
     icon: Timer,
-    color: "text-rose-400",
-    bg: "hover:bg-rose-500/10",
-    activeBg: "bg-rose-500/10",
-    activeBorder: "border-rose-500/40",
+    color: "text-danger-400",
+    bg: "hover:bg-danger-500/10",
+    activeBg: "bg-danger-500/10",
+    activeBorder: "border-danger-500/40",
   },
   {
     id: "video",
     name: "Video Call",
     section: "Collaboration",
     icon: Video,
-    color: "text-sky-400",
-    bg: "hover:bg-sky-500/10",
-    activeBg: "bg-sky-500/10",
-    activeBorder: "border-sky-500/40",
+    color: "text-info-400",
+    bg: "hover:bg-info-500/10",
+    activeBg: "bg-info-500/10",
+    activeBorder: "border-info-500/40",
   },
 ];
 
@@ -236,7 +236,7 @@ function OverviewPanel({
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
               liveConnected
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                ? "bg-success-500/10 text-success-600 dark:text-success-300"
                 : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
             }`}>
               {liveConnected ? "Live" : "Offline"}
@@ -278,14 +278,14 @@ function OverviewPanel({
             <button
               type="button"
               onClick={() => openTool("ai")}
-              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 dark:border-white/[0.06] dark:text-zinc-200 dark:hover:border-violet-500/40 dark:hover:bg-violet-500/10"
+              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/[0.06] dark:text-zinc-200 dark:hover:border-brand-500/40 dark:hover:bg-brand-500/10"
             >
               Open AI Help
             </button>
             <button
               type="button"
               onClick={() => openTool("flowchart")}
-              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 dark:border-white/[0.06] dark:text-zinc-200 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/10"
+              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-info-300 hover:bg-info-50 hover:text-info-700 dark:border-white/[0.06] dark:text-zinc-200 dark:hover:border-info-500/40 dark:hover:bg-info-500/10"
             >
               Open Flowchart
             </button>
@@ -300,10 +300,10 @@ function OverviewPanel({
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
               runResult?.status === "running"
-                ? "bg-amber-500/10 text-amber-600 dark:text-amber-300"
+                ? "bg-warning-500/10 text-warning-600 dark:text-warning-300"
                 : lastRunFailed
-                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-300"
-                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                  ? "bg-danger-500/10 text-danger-600 dark:text-danger-300"
+                  : "bg-success-500/10 text-success-600 dark:text-success-300"
             }`}>
               {runResult?.status === "running" ? "Running" : lastRunFailed ? "Errors" : "Ready"}
             </span>
@@ -331,14 +331,14 @@ function OverviewPanel({
                     <div className="relative">
                       <UserAvatar username={collaborator.username} size="xs" />
                       {isLive ? (
-                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white bg-emerald-500 dark:border-[#0d0d10]" />
+                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white bg-success-500 dark:border-[#0d0d10]" />
                       ) : null}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100">{collaborator.username}</p>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{formatRoleLabel(collaborator.accessRole || "editor")}</p>
                     </div>
-                    {isLive ? <Radio size={12} className="text-emerald-500" /> : null}
+                    {isLive ? <Radio size={12} className="text-success-500" /> : null}
                   </div>
                 );
               })
@@ -662,7 +662,7 @@ export default function RightSidebar({
           <p className="text-xs text-zinc-500 dark:text-zinc-400">{tool.section}</p>
         </div>
         {badge ? (
-          <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
+          <span className="rounded-full bg-danger-500 px-2 py-0.5 text-[10px] font-bold text-white">
             {badge > 99 ? "99+" : badge}
           </span>
         ) : null}
@@ -711,12 +711,12 @@ export default function RightSidebar({
             >
               <Icon size={17} />
               {badge && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-zinc-50 dark:ring-[#0d0d10]">
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger-500 text-[9px] font-bold text-white ring-2 ring-zinc-50 dark:ring-[#0d0d10]">
                   {badge > 9 ? "9+" : badge}
                 </span>
               )}
               {showGithubDot && (
-                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-zinc-50 bg-emerald-500 dark:border-[#0d0d10]" />
+                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-zinc-50 bg-success-500 dark:border-[#0d0d10]" />
               )}
             </button>
           );
@@ -728,14 +728,14 @@ export default function RightSidebar({
         {/* Live presence avatars — mini stack */}
         <div className="flex flex-col items-center gap-1.5 py-3">
           <div className="flex items-center gap-1 text-[10px] text-zinc-400 dark:text-zinc-700">
-            <Radio size={9} className={liveConnected ? "text-emerald-500" : ""} />
+            <Radio size={9} className={liveConnected ? "text-success-500" : ""} />
             {liveCount > 0 ? liveCount : ""}
           </div>
           {allCollaborators.slice(0, 4).map((c) => (
             <div key={c.id} className="relative" title={c.username}>
               <UserAvatar username={c.username} size="xs" />
               {activeCollaborators.some((a) => a.userId === c.id || a.id === c.id) && (
-                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[#0d0d10] bg-emerald-500" />
+                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[#0d0d10] bg-success-500" />
               )}
             </div>
           ))}
@@ -789,7 +789,7 @@ export default function RightSidebar({
                     value={toolQuery}
                     onChange={(event) => setToolQuery(event.target.value)}
                     placeholder="Search tools"
-                    className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-violet-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-100"
+                    className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-100"
                   />
                 </div>
               </div>
@@ -832,7 +832,7 @@ export default function RightSidebar({
         >
           <div
             className={`h-full w-[2px] transition-colors ${
-              isResizing ? "bg-violet-500" : "bg-transparent group-hover:bg-zinc-700"
+              isResizing ? "bg-brand-500" : "bg-transparent group-hover:bg-zinc-700"
             }`}
           />
         </div>
@@ -861,7 +861,7 @@ export default function RightSidebar({
                   </div>
                   <div className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
                     liveConnected
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                      ? "bg-success-500/10 text-success-600 dark:text-success-300"
                       : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
                   }`}>
                     {liveConnected ? "Live" : "Offline"}
@@ -891,7 +891,7 @@ export default function RightSidebar({
                         key={tool.id}
                         type="button"
                         onClick={() => openTool(tool.id)}
-                        className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-200 dark:hover:border-violet-500/40 dark:hover:bg-violet-500/10"
+                        className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-200 dark:hover:border-brand-500/40 dark:hover:bg-brand-500/10"
                       >
                         {tool.name}
                       </button>
@@ -905,7 +905,7 @@ export default function RightSidebar({
             <div className="border-b border-zinc-200 dark:border-white/[0.06]">
               <div className="flex items-center gap-3 px-4 py-3">
                 <div className="flex items-center gap-1.5">
-                  <Radio size={11} className={liveConnected ? "text-emerald-500" : "text-zinc-400 dark:text-zinc-600"} />
+                  <Radio size={11} className={liveConnected ? "text-success-500" : "text-zinc-400 dark:text-zinc-600"} />
                   <span className="text-xs text-zinc-500">{liveConnected ? "Live" : "Offline"}</span>
                 </div>
                 {allCollaborators.length > 0 && (
@@ -917,7 +917,7 @@ export default function RightSidebar({
                           <div key={c.id} className="relative" title={`${c.username} · ${c.accessRole || "member"}`}>
                             <UserAvatar username={c.username} size="xs" className="ring-1 ring-[#0d0d10]" />
                             {activeCollaborators.some((a) => a.userId === c.id || a.id === c.id) && (
-                              <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-[#0d0d10] bg-emerald-500" />
+                              <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-[#0d0d10] bg-success-500" />
                             )}
                           </div>
                         ))}
@@ -934,20 +934,20 @@ export default function RightSidebar({
                 <div className="px-4 pb-3 space-y-1">
                   {allCollaborators.map((c) => {
                     const isLive = activeCollaborators.some((a) => a.userId === c.id || a.id === c.id);
-                    const roleDot = { owner: "bg-yellow-400", editor: "bg-violet-400", runner: "bg-amber-400", viewer: "bg-zinc-500" };
+                    const roleDot = { owner: "bg-warning-400", editor: "bg-brand-400", runner: "bg-warning-400", viewer: "bg-zinc-500" };
                     const roleLabel = { owner: "Owner", editor: "Editor", runner: "Runner", viewer: "Viewer" };
                     const role = c.accessRole || "editor";
                     return (
                       <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-white/[0.04]">
                         <div className="relative shrink-0">
                           <UserAvatar username={c.username} size="xs" />
-                          {isLive && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-white bg-emerald-500 dark:border-[#0d0d10]" />}
+                          {isLive && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-white bg-success-500 dark:border-[#0d0d10]" />}
                         </div>
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">{c.username}</span>
                         <span className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                          role === "owner"  ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-300" :
-                          role === "editor" ? "bg-violet-500/10 text-violet-600 dark:text-violet-300" :
-                          role === "runner" ? "bg-amber-500/10 text-amber-600 dark:text-amber-300" :
+                          role === "owner"  ? "bg-warning-500/10 text-warning-600 dark:text-warning-300" :
+                          role === "editor" ? "bg-brand-500/10 text-brand-600 dark:text-brand-300" :
+                          role === "runner" ? "bg-warning-500/10 text-warning-600 dark:text-warning-300" :
                           "bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
                         }`}>
                           <span className={`h-1 w-1 rounded-full ${roleDot[role] || "bg-zinc-500"}`} />
@@ -968,7 +968,7 @@ export default function RightSidebar({
                   value={toolQuery}
                   onChange={(event) => setToolQuery(event.target.value)}
                   placeholder="Search sidebar tools"
-                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-violet-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-100"
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-100"
                 />
               </div>
             </div>

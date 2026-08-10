@@ -13,6 +13,26 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Consistent, visible keyboard focus. The app previously relied on Tailwind's
+   default ring only where it was written by hand, so most interactive elements
+   had no visible focus state at all — the single biggest accessibility gap. */
+:focus-visible {
+  outline: 2px solid theme("colors.brand.500");
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Tabular numerals wherever figures are compared vertically (timers, stats,
+   file sizes) so digits stop shifting as they change. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================
@@ -56,9 +76,13 @@ body {
   animation: floatSlow 20s ease-in-out infinite;
 }
 
-/* Noise texture overlay */
+/* Noise texture overlay.
+   Inlined as a data URI: this previously fetched an SVG from a third-party
+   domain on every page load, which cost a DNS lookup + round trip, broke
+   offline/air-gapped use, and made a decorative texture depend on someone
+   else's uptime. */
 .bg-noise {
-  background-image: url("https://grainy-gradients.vercel.app/noise.svg");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
 }
 
 /* Gradient shift (Auth page background) */

@@ -71,7 +71,7 @@ export default function AuthFormLayout({ children }) {
             opacity: [0.09, 0.15, 0.08, 0.09],
           }}
           transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-48 -left-48 h-[620px] w-[620px] rounded-full bg-purple-700"
+          className="absolute -top-48 -left-48 h-[620px] w-[620px] rounded-full bg-brand-700"
           style={{ filter: "blur(120px)" }}
         />
         <Motion.div
@@ -82,7 +82,7 @@ export default function AuthFormLayout({ children }) {
             opacity: [0.06, 0.11, 0.07, 0.06],
           }}
           transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 4 }}
-          className="absolute -bottom-48 -right-24 h-[540px] w-[540px] rounded-full bg-indigo-600"
+          className="absolute -bottom-48 -right-24 h-[540px] w-[540px] rounded-full bg-brand-600"
           style={{ filter: "blur(120px)" }}
         />
         <Motion.div
@@ -91,7 +91,7 @@ export default function AuthFormLayout({ children }) {
             opacity: [0.03, 0.08, 0.03],
           }}
           transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500"
+          className="absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-info-500"
           style={{ filter: "blur(100px)" }}
         />
       </div>
@@ -118,7 +118,7 @@ export default function AuthFormLayout({ children }) {
           >
             <h2 className="mb-3 text-[2.15rem] font-bold leading-[1.15] tracking-tight xl:text-[2.45rem]">
               Your workspace,{" "}
-              <span className="bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-brand-400 via-info-400 to-info-400 bg-clip-text text-transparent">
                 multiplied.
               </span>
             </h2>
@@ -142,7 +142,7 @@ export default function AuthFormLayout({ children }) {
                   transition={SPRING_POP}
                   className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.045]"
                 >
-                  <Icon size={14} className="text-purple-400" />
+                  <Icon size={14} className="text-brand-400" />
                 </Motion.div>
                 <div>
                   <p className="text-[13.5px] font-medium text-gray-100">{label}</p>

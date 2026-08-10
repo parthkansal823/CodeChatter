@@ -103,7 +103,7 @@ function OtpInput({ value, onChange }) {
             value={value[i] || ""}
             onChange={(e) => handleChange(i, e)}
             onKeyDown={(e) => handleKeyDown(i, e)}
-            className="h-12 w-10 rounded-xl border border-white/10 bg-white/[0.05] text-center text-lg font-bold text-white caret-transparent transition-all duration-150 focus:scale-105 focus:border-purple-500 focus:bg-white/[0.09] focus:outline-none sm:h-[3.25rem] sm:w-11 sm:text-xl"
+            className="h-12 w-10 rounded-xl border border-white/10 bg-white/[0.05] text-center text-lg font-bold text-white caret-transparent transition-all duration-150 focus:scale-105 focus:border-brand-500 focus:bg-white/[0.09] focus:outline-none sm:h-[3.25rem] sm:w-11 sm:text-xl"
             autoComplete="one-time-code"
           />
         </Motion.div>
@@ -270,9 +270,9 @@ export default function Auth() {
                 initial={{ scale: 0, rotate: -20, opacity: 0 }}
                 animate={{ scale: 1, rotate: 0, opacity: 1 }}
                 transition={{ ...SPRING_POP, delay: 0.12 }}
-                className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4"
+                className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-4"
               >
-                <ShieldCheck size={26} className="text-purple-400" />
+                <ShieldCheck size={26} className="text-brand-400" />
               </Motion.div>
 
               <Motion.h1
@@ -306,7 +306,7 @@ export default function Auth() {
                 whileTap={{ scale: 0.97 }}
                 type="submit"
                 disabled={loading || otp.replace(/\D/g, "").length < 6}
-                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -329,7 +329,7 @@ export default function Auth() {
                 type="button"
                 onClick={handleResend}
                 disabled={resendCooldown > 0}
-                className="flex items-center gap-1 text-gray-300 hover:text-purple-400 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors font-medium"
+                className="flex items-center gap-1 text-gray-300 hover:text-brand-400 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors font-medium"
               >
                 <RotateCcw size={11} />
                 {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
@@ -375,7 +375,7 @@ export default function Auth() {
               <Motion.span
                 layoutId="tab-indicator"
                 transition={{ type: "spring", stiffness: 500, damping: 32 }}
-                className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-purple-500 to-blue-500 rounded-full"
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-500 to-info-500 rounded-full"
               />
             )}
           </button>
@@ -480,10 +480,10 @@ export default function Auth() {
               />
               <div className="flex justify-between items-center mt-2.5">
                 <label className="flex items-center gap-2 text-[12.5px] text-gray-400 cursor-pointer hover:text-gray-200 transition-colors select-none">
-                  <input type="checkbox" className="w-3.5 h-3.5 rounded accent-purple-500 bg-white/10 border-white/20" />
+                  <input type="checkbox" className="w-3.5 h-3.5 rounded accent-brand-500 bg-white/10 border-white/20" />
                   Remember me
                 </label>
-                <button type="button" className="text-[12.5px] text-gray-400 hover:text-purple-400 transition-colors">
+                <button type="button" className="text-[12.5px] text-gray-400 hover:text-brand-400 transition-colors">
                   Forgot password?
                 </button>
               </div>
@@ -495,7 +495,7 @@ export default function Auth() {
               transition={SPRING}
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -532,7 +532,7 @@ export default function Auth() {
               transition={SPRING}
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -555,14 +555,14 @@ export default function Auth() {
         {mode === "login" ? (
           <>
             No account?{" "}
-            <button onClick={() => changeMode("signup")} className="text-gray-200 hover:text-purple-400 font-medium transition-colors">
+            <button onClick={() => changeMode("signup")} className="text-gray-200 hover:text-brand-400 font-medium transition-colors">
               Sign up for free
             </button>
           </>
         ) : (
           <>
             Already have an account?{" "}
-            <button onClick={() => changeMode("login")} className="text-gray-200 hover:text-purple-400 font-medium transition-colors">
+            <button onClick={() => changeMode("login")} className="text-gray-200 hover:text-brand-400 font-medium transition-colors">
               Sign in
             </button>
           </>

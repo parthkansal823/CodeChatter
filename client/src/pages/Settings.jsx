@@ -45,7 +45,7 @@ function Toggle({ checked, onChange }) {
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-[2px] transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/40 ${checked ? "bg-violet-600" : "bg-zinc-300 dark:bg-zinc-700"
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-[2px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 ${checked ? "bg-brand-600" : "bg-zinc-300 dark:bg-zinc-700"
         }`}
     >
       <span
@@ -167,9 +167,9 @@ export default function Settings() {
               action={
                 <button
                   onClick={handleCopyUserId}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-violet-300 hover:text-violet-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-brand-300 hover:text-brand-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 transition-colors"
                 >
-                  {copiedId ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                  {copiedId ? <Check size={12} className="text-success-500" /> : <Copy size={12} />}
                   {copiedId ? "Copied!" : "Copy"}
                 </button>
               }
@@ -193,14 +193,14 @@ export default function Settings() {
                         <ExternalLink size={11} />
                       </a>
                     )}
-                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="flex items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 text-[11px] font-semibold text-success-700 dark:bg-success-500/10 dark:text-success-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-success-500" />
                       Connected
                     </span>
                     <button
                       onClick={handleDisconnectGitHub}
                       disabled={disconnectingGitHub}
-                      className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition hover:border-rose-300 hover:text-rose-600 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-rose-500/40 dark:hover:text-rose-400"
+                      className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition hover:border-danger-300 hover:text-danger-600 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-danger-500/40 dark:hover:text-danger-400"
                     >
                       {disconnectingGitHub ? <Loader2 size={11} className="animate-spin" /> : <Link2Off size={11} />}
                       Disconnect
@@ -230,7 +230,7 @@ export default function Settings() {
                     { icon: "⊞", label: "Browse repos",    desc: "View all your repos" },
                   ].map((f) => (
                     <div key={f.label} className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-800/50">
-                      <span className="text-sm font-bold text-violet-500">{f.icon}</span>
+                      <span className="text-sm font-bold text-brand-500">{f.icon}</span>
                       <div>
                         <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{f.label}</p>
                         <p className="text-[10px] text-zinc-500">{f.desc}</p>
@@ -253,7 +253,7 @@ export default function Settings() {
               action={
                 <input type="range" min="12" max="20" value={preferences.fontSize}
                   onChange={(e) => { updatePreference("fontSize", parseInt(e.target.value)); }}
-                  className="w-28 accent-violet-600"
+                  className="w-28 accent-brand-600"
                 />
               }
             />
@@ -263,7 +263,7 @@ export default function Settings() {
               action={
                 <input type="range" min="1.2" max="2" step="0.1" value={preferences.lineHeight}
                   onChange={(e) => { updatePreference("lineHeight", parseFloat(e.target.value)); }}
-                  className="w-28 accent-violet-600"
+                  className="w-28 accent-brand-600"
                 />
               }
             />
@@ -305,11 +305,11 @@ export default function Settings() {
                   type="button"
                   onClick={() => handleThemeChange(id)}
                   className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all ${preferences.theme === id
-                      ? "border-violet-500 bg-violet-50 dark:border-violet-400 dark:bg-violet-900/10"
+                      ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/10"
                       : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/50"
                     }`}
                 >
-                  <div className={`rounded-lg p-2 ${preferences.theme === id ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"}`}>
+                  <div className={`rounded-lg p-2 ${preferences.theme === id ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"}`}>
                     <Icon size={16} />
                   </div>
                   <div>
@@ -317,7 +317,7 @@ export default function Settings() {
                     <p className="text-xs text-zinc-500">{desc}</p>
                   </div>
                   {preferences.theme === id && (
-                    <span className="mt-1 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white">Active</span>
+                    <span className="mt-1 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">Active</span>
                   )}
                 </button>
               ))}
@@ -407,7 +407,7 @@ export default function Settings() {
               action={
                 <button
                   onClick={() => { openHomeTutorial(); toast.success("Opening home tutorial…"); }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-600/40 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/40"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 dark:border-brand-600/40 dark:bg-brand-900/20 dark:text-brand-300 dark:hover:bg-brand-900/40"
                 >
                   <RotateCcw size={12} /> Restart
                 </button>
@@ -423,7 +423,7 @@ export default function Settings() {
                     window.dispatchEvent(new CustomEvent("cc-open-room-tutorial"));
                     toast.success("Opening room tutorial…");
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-600/40 dark:bg-violet-900/20 dark:text-violet-300 dark:hover:bg-violet-900/40"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 dark:border-brand-600/40 dark:bg-brand-900/20 dark:text-brand-300 dark:hover:bg-brand-900/40"
                 >
                   <RotateCcw size={12} /> Restart
                 </button>
@@ -436,9 +436,9 @@ export default function Settings() {
         return (
           <div>
             <SectionTitle>Account Actions</SectionTitle>
-            <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 dark:border-red-900/50 dark:bg-red-950/20">
-              <p className="mb-1 text-sm font-semibold text-red-700 dark:text-red-300">Danger Zone</p>
-              <p className="mb-4 text-xs text-red-600 dark:text-red-400">These actions are permanent and cannot be undone.</p>
+            <div className="rounded-xl border border-danger-200 bg-danger-50/50 p-5 dark:border-danger-900/50 dark:bg-danger-950/20">
+              <p className="mb-1 text-sm font-semibold text-danger-700 dark:text-danger-300">Danger Zone</p>
+              <p className="mb-4 text-xs text-danger-600 dark:text-danger-400">These actions are permanent and cannot be undone.</p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button onClick={() => setShowLogoutConfirm(true)} variant="danger" className="flex-1">
                   <LogOut size={14} className="mr-2" /> Sign out
@@ -446,7 +446,7 @@ export default function Settings() {
                 <Button
                   onClick={() => setShowDeleteConfirm(true)}
                   variant="outline"
-                  className="flex-1 !text-red-500 !border-red-300 hover:!bg-red-50 dark:!border-red-800 dark:hover:!bg-red-950/30"
+                  className="flex-1 !text-danger-500 !border-danger-300 hover:!bg-danger-50 dark:!border-danger-800 dark:hover:!bg-danger-950/30"
                 >
                   <Trash2 size={14} className="mr-2" /> Delete Account
                 </Button>
@@ -465,7 +465,7 @@ export default function Settings() {
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         {/* Page header */}
         <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-violet-600 dark:text-violet-400">Settings</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-600 dark:text-brand-400">Settings</p>
           <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Preferences</h1>
           <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Manage your account, editor, and workspace settings.</p>
         </div>
@@ -480,7 +480,7 @@ export default function Settings() {
                   type="button"
                   onClick={() => setActiveSection(id)}
                   className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${activeSection === id
-                      ? "bg-violet-600 text-white shadow-sm shadow-violet-500/30"
+                      ? "bg-brand-600 text-white shadow-sm shadow-brand-500/30"
                       : "text-zinc-600 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
                     }`}
                 >

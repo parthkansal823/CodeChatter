@@ -11,19 +11,19 @@ import { useNotifications } from "../context/NotificationsContext";
 const TYPE_META = {
   join_request: {
     icon: UserPlus,
-    colorClass: "text-violet-500 bg-violet-50 dark:bg-violet-900/20",
+    colorClass: "text-brand-500 bg-brand-50 dark:bg-brand-900/20",
   },
   room_invite: {
     icon: FolderGit2,
-    colorClass: "text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20",
+    colorClass: "text-success-500 bg-success-50 dark:bg-success-900/20",
   },
   room_deleted: {
     icon: AlertCircle,
-    colorClass: "text-red-500 bg-red-50 dark:bg-red-900/20",
+    colorClass: "text-danger-500 bg-danger-50 dark:bg-danger-900/20",
   },
   info: {
     icon: Info,
-    colorClass: "text-sky-500 bg-sky-50 dark:bg-sky-900/20",
+    colorClass: "text-info-500 bg-info-50 dark:bg-info-900/20",
   },
 };
 
@@ -75,7 +75,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
               <Bell size={14} className="text-zinc-700 dark:text-zinc-200" />
               <span className="text-sm font-semibold text-zinc-900 dark:text-white">Notifications</span>
               {unreadCount > 0 && (
-                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-violet-600 px-1.5 text-[10px] font-bold text-white">
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand-600 px-1.5 text-[10px] font-bold text-white">
                   {unreadCount}
                 </span>
               )}
@@ -93,7 +93,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
               {notifications.length > 0 && (
                 <button
                   onClick={clearAll}
-                  className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                  className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-900/20 dark:hover:text-danger-400"
                   title="Clear all"
                 >
                   <Trash2 size={14} />
@@ -118,7 +118,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
                   <div
                     key={notif.id}
                     className={`relative flex gap-3 border-b border-zinc-100 px-4 py-3.5 last:border-b-0 dark:border-zinc-800 ${
-                      !notif.read ? "bg-violet-50/40 dark:bg-violet-900/5" : ""
+                      !notif.read ? "bg-brand-50/40 dark:bg-brand-900/5" : ""
                     }`}
                   >
                     <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${meta.colorClass}`}>
@@ -134,7 +134,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
                           {notif.title}
                         </p>
                         {!notif.read && (
-                          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+                          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
                         )}
                       </div>
                       <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{notif.message}</p>

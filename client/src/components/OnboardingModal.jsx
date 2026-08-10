@@ -15,9 +15,9 @@ function RoomCardPreview() {
   return (
     <div className="flex gap-2 px-2">
       {[
-        { name: "my-project",   lang: "Python", color: "bg-blue-500"   },
-        { name: "web-app",      lang: "React",  color: "bg-cyan-500"   },
-        { name: "api-service",  lang: "Go",     color: "bg-emerald-500"},
+        { name: "my-project",   lang: "Python", color: "bg-info-500"   },
+        { name: "web-app",      lang: "React",  color: "bg-info-500"   },
+        { name: "api-service",  lang: "Go",     color: "bg-success-500"},
       ].map((r) => (
         <div key={r.name} className="flex-1 rounded-xl border border-zinc-200 bg-white p-2.5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
           <div className="mb-1.5 flex items-center gap-1.5">
@@ -34,13 +34,13 @@ function RoomCardPreview() {
 function CreateRoomPreview() {
   return (
     <div className="flex flex-col gap-2 px-4">
-      <div className="rounded-lg border border-violet-300 bg-violet-50 p-2 dark:border-violet-500/40 dark:bg-violet-900/20">
-        <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-300">Room Name</p>
+      <div className="rounded-lg border border-brand-300 bg-brand-50 p-2 dark:border-brand-500/40 dark:bg-brand-900/20">
+        <p className="text-[10px] font-semibold text-brand-600 dark:text-brand-300">Room Name</p>
         <p className="text-xs text-zinc-400">my-awesome-project</p>
       </div>
       <div className="grid grid-cols-3 gap-1.5">
         {["Python", "React", "Node.js", "Go", "Java", "Blank"].map((t) => (
-          <div key={t} className={`rounded-lg border px-2 py-1.5 text-center text-[10px] font-medium ${t === "Python" ? "border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" : "border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"}`}>
+          <div key={t} className={`rounded-lg border px-2 py-1.5 text-center text-[10px] font-medium ${t === "Python" ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"}`}>
             {t}
           </div>
         ))}
@@ -63,7 +63,7 @@ function SharePreview() {
         </div>
         <div className="mt-2 flex gap-1.5">
           {["Dark", "Light"].map((t) => (
-            <div key={t} className={`flex-1 rounded-lg border py-1 text-center text-[10px] font-medium ${t === "Dark" ? "border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" : "border-zinc-200 text-zinc-500 dark:border-zinc-700"}`}>{t}</div>
+            <div key={t} className={`flex-1 rounded-lg border py-1 text-center text-[10px] font-medium ${t === "Dark" ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "border-zinc-200 text-zinc-500 dark:border-zinc-700"}`}>{t}</div>
           ))}
         </div>
       </div>
@@ -73,11 +73,11 @@ function SharePreview() {
 
 function ToolsPreview() {
   const tools = [
-    { icon: MessageCircleMore, color: "text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20", label: "Chat"      },
-    { icon: Bot,               color: "text-violet-400 bg-violet-50 dark:bg-violet-900/20",   label: "AI"        },
-    { icon: GitBranch,         color: "text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20",         label: "Flowchart" },
+    { icon: MessageCircleMore, color: "text-success-400 bg-success-50 dark:bg-success-900/20", label: "Chat"      },
+    { icon: Bot,               color: "text-brand-400 bg-brand-50 dark:bg-brand-900/20",   label: "AI"        },
+    { icon: GitBranch,         color: "text-info-400 bg-info-50 dark:bg-info-900/20",         label: "Flowchart" },
     { icon: Github,            color: "text-zinc-500 bg-zinc-100 dark:bg-zinc-800",           label: "GitHub"    },
-    { icon: Timer,             color: "text-rose-400 bg-rose-50 dark:bg-rose-900/20",         label: "Pomodoro"  },
+    { icon: Timer,             color: "text-danger-400 bg-danger-50 dark:bg-danger-900/20",         label: "Pomodoro"  },
   ];
   return (
     <div className="flex items-center justify-center gap-3 px-2">
@@ -97,14 +97,14 @@ function CodeEditorPreview() {
   return (
     <div className="mx-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-900 font-mono text-[10px] leading-5 dark:border-zinc-700">
       <div className="flex items-center gap-1.5 border-b border-zinc-700 bg-zinc-800 px-3 py-1.5">
-        <div className="h-2 w-2 rounded-full bg-red-400" />
-        <div className="h-2 w-2 rounded-full bg-yellow-400" />
-        <div className="h-2 w-2 rounded-full bg-green-400" />
+        <div className="h-2 w-2 rounded-full bg-danger-400" />
+        <div className="h-2 w-2 rounded-full bg-warning-400" />
+        <div className="h-2 w-2 rounded-full bg-success-400" />
         <span className="ml-2 text-zinc-400">main.py</span>
       </div>
       <div className="px-3 py-2">
-        <p><span className="text-violet-400">def</span> <span className="text-yellow-300">greet</span><span className="text-zinc-300">(name):</span></p>
-        <p className="pl-4"><span className="text-green-400">return</span> <span className="text-amber-300">"Hello, " + name</span></p>
+        <p><span className="text-brand-400">def</span> <span className="text-warning-300">greet</span><span className="text-zinc-300">(name):</span></p>
+        <p className="pl-4"><span className="text-success-400">return</span> <span className="text-warning-300">"Hello, " + name</span></p>
         <p className="mt-1"><span className="text-zinc-500"># Live collab — 2 online</span></p>
       </div>
     </div>
@@ -115,7 +115,7 @@ function CodeEditorPreview() {
 
 const HOME_STEPS = [
   {
-    gradient: "from-violet-500 to-purple-700",
+    gradient: "from-brand-500 to-brand-700",
     icon: Sparkles,
     title: "Welcome to CodeChatter!",
     desc: "Your all-in-one collaborative coding platform. This quick tour shows you everything in under 2 minutes.",
@@ -123,7 +123,7 @@ const HOME_STEPS = [
     tip: null,
   },
   {
-    gradient: "from-sky-500 to-blue-700",
+    gradient: "from-info-500 to-info-700",
     icon: LayoutGrid,
     title: "Your Dashboard",
     desc: "All your rooms live here. Filter by recent, bookmarked, or search by name. Switch between grid and list views.",
@@ -131,7 +131,7 @@ const HOME_STEPS = [
     tip: "Click a room card to jump straight into the code editor.",
   },
   {
-    gradient: "from-emerald-500 to-green-700",
+    gradient: "from-success-500 to-success-700",
     icon: Plus,
     title: "Create a Room",
     desc: "Hit the + New Room button to create a workspace. Pick a language template (Python, React, Node.js…) or start blank.",
@@ -139,7 +139,7 @@ const HOME_STEPS = [
     tip: "Rooms keep all your files, history, and collaborator access together.",
   },
   {
-    gradient: "from-amber-500 to-orange-600",
+    gradient: "from-warning-500 to-warning-600",
     icon: Share2,
     title: "Share & Theme",
     desc: "Use the Share button inside any room to copy the invite link. The dropdown also has Dark / Light theme toggle.",
@@ -147,7 +147,7 @@ const HOME_STEPS = [
     tip: "Anyone with the link can request to join — you approve them in Room Settings.",
   },
   {
-    gradient: "from-cyan-500 to-teal-600",
+    gradient: "from-info-500 to-success-600",
     icon: Bot,
     title: "Built-in Tools",
     desc: "Every room includes Chat, AI Help, Flowchart generator, GitHub sync, Whiteboard, Pomodoro timer, and Video call.",
@@ -155,7 +155,7 @@ const HOME_STEPS = [
     tip: "All tools live in the right sidebar — click any icon to open it.",
   },
   {
-    gradient: "from-rose-500 to-pink-600",
+    gradient: "from-danger-500 to-danger-600",
     icon: Settings,
     title: "Settings & Profile",
     desc: "Use Settings to change theme, editor font size, notifications, and privacy. Your profile shows your GitHub connection.",
@@ -265,9 +265,9 @@ export default function OnboardingModal() {
 
                 {/* Tip */}
                 {current.tip && (
-                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-violet-50 px-3 py-2 dark:bg-violet-900/20">
-                    <span className="mt-px text-violet-500">💡</span>
-                    <p className="text-[11px] leading-relaxed text-violet-700 dark:text-violet-300">{current.tip}</p>
+                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-brand-50 px-3 py-2 dark:bg-brand-900/20">
+                    <span className="mt-px text-brand-500">💡</span>
+                    <p className="text-[11px] leading-relaxed text-brand-700 dark:text-brand-300">{current.tip}</p>
                   </div>
                 )}
               </Motion.div>
@@ -297,7 +297,7 @@ export default function OnboardingModal() {
                   </button>
                 )}
                 <Motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={next}
-                  className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-500/30 transition-colors hover:bg-violet-500">
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-500/30 transition-colors hover:bg-brand-500">
                   {isLast ? "Done" : "Next"}
                   {isLast ? <Check size={14} /> : <ArrowRight size={14} />}
                 </Motion.button>

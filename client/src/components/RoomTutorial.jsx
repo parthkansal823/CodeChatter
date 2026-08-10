@@ -24,7 +24,7 @@ function ExplorerPreview() {
           { name: "tests/", indent: 0, folder: true },
         ].map((item) => (
           <div key={item.name}
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${item.active ? "bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" : "text-zinc-600 dark:text-zinc-400"}`}
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${item.active ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "text-zinc-600 dark:text-zinc-400"}`}
             style={{ paddingLeft: `${8 + item.indent * 12}px` }}
           >
             <span>{item.folder ? "📁" : "📄"}</span>
@@ -40,17 +40,17 @@ function EditorPreview() {
   return (
     <div className="mx-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-900 font-mono text-[10px] leading-5 dark:border-zinc-700">
       <div className="flex items-center gap-1 border-b border-zinc-700 bg-zinc-800 px-3 py-1">
-        <div className="h-1.5 w-1.5 rounded-full bg-red-400" />
-        <div className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
-        <div className="h-1.5 w-1.5 rounded-full bg-green-400" />
+        <div className="h-1.5 w-1.5 rounded-full bg-danger-400" />
+        <div className="h-1.5 w-1.5 rounded-full bg-warning-400" />
+        <div className="h-1.5 w-1.5 rounded-full bg-success-400" />
         <span className="ml-2 text-zinc-400">main.py</span>
-        <span className="ml-auto rounded-full bg-violet-600/30 px-1.5 py-0.5 text-[9px] text-violet-300">Saved</span>
+        <span className="ml-auto rounded-full bg-brand-600/30 px-1.5 py-0.5 text-[9px] text-brand-300">Saved</span>
       </div>
       <div className="px-3 py-2">
-        <p><span className="text-violet-400">def</span> <span className="text-yellow-300">factorial</span><span className="text-zinc-300">(n):</span></p>
-        <p className="pl-4"><span className="text-sky-400">if</span> <span className="text-zinc-300">n &lt;= 1:</span></p>
-        <p className="pl-8"><span className="text-green-400">return</span> <span className="text-amber-300">1</span></p>
-        <p className="pl-4"><span className="text-green-400">return</span> <span className="text-zinc-300">n * factorial(n-1)</span></p>
+        <p><span className="text-brand-400">def</span> <span className="text-warning-300">factorial</span><span className="text-zinc-300">(n):</span></p>
+        <p className="pl-4"><span className="text-info-400">if</span> <span className="text-zinc-300">n &lt;= 1:</span></p>
+        <p className="pl-8"><span className="text-success-400">return</span> <span className="text-warning-300">1</span></p>
+        <p className="pl-4"><span className="text-success-400">return</span> <span className="text-zinc-300">n * factorial(n-1)</span></p>
       </div>
     </div>
   );
@@ -59,16 +59,16 @@ function EditorPreview() {
 function TopBarPreview() {
   return (
     <div className="mx-4 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
-      <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 dark:bg-emerald-900/20">
-        <Play size={10} className="text-emerald-500" />
-        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Run</span>
+      <div className="flex items-center gap-1.5 rounded-lg bg-success-50 px-2.5 py-1 dark:bg-success-900/20">
+        <Play size={10} className="text-success-500" />
+        <span className="text-[10px] font-semibold text-success-600 dark:text-success-400">Run</span>
       </div>
       <div className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1 dark:border-zinc-700">
         <Share2 size={10} className="text-zinc-500" />
         <span className="text-[10px] font-medium text-zinc-500">Share</span>
       </div>
       <div className="ml-auto flex -space-x-1.5">
-        {["bg-violet-400", "bg-cyan-400", "bg-amber-400"].map((c, i) => (
+        {["bg-brand-400", "bg-info-400", "bg-warning-400"].map((c, i) => (
           <div key={i} className={`h-5 w-5 rounded-full border-2 border-white dark:border-zinc-800 ${c}`} />
         ))}
       </div>
@@ -78,10 +78,10 @@ function TopBarPreview() {
 
 function SidebarPreview() {
   const tools = [
-    { icon: MessageCircleMore, color: "text-emerald-400", label: "Chat" },
-    { icon: Bot,               color: "text-violet-400",  label: "AI"   },
-    { icon: GitBranch,         color: "text-cyan-400",    label: "Flow" },
-    { icon: Timer,             color: "text-rose-400",    label: "Pomo" },
+    { icon: MessageCircleMore, color: "text-success-400", label: "Chat" },
+    { icon: Bot,               color: "text-brand-400",  label: "AI"   },
+    { icon: GitBranch,         color: "text-info-400",    label: "Flow" },
+    { icon: Timer,             color: "text-danger-400",    label: "Pomo" },
   ];
   return (
     <div className="flex items-center justify-center gap-4 px-4">
@@ -119,7 +119,7 @@ function ShortcutsPreview() {
 
 const ROOM_STEPS = [
   {
-    gradient: "from-violet-500 to-purple-700",
+    gradient: "from-brand-500 to-brand-700",
     icon: Layers,
     title: "Welcome to the Code Room!",
     desc: "This is your collaborative coding space. Let's take a quick tour of all the tools available to you.",
@@ -127,7 +127,7 @@ const ROOM_STEPS = [
     tip: null,
   },
   {
-    gradient: "from-sky-500 to-blue-700",
+    gradient: "from-info-500 to-info-700",
     icon: FolderOpen,
     title: "File Explorer",
     desc: "The left panel holds all your project files. Create, rename, move, or delete files and folders. Click any file to open it in the editor.",
@@ -143,7 +143,7 @@ const ROOM_STEPS = [
     tip: "Files auto-save. The status indicator in the tab bar shows Saved / Saving / Unsaved.",
   },
   {
-    gradient: "from-emerald-500 to-green-700",
+    gradient: "from-success-500 to-success-700",
     icon: Play,
     title: "Run & Share",
     desc: "Hit Run (or Ctrl+Enter) to execute your code. Use Share to copy the invite link or open Room Settings to manage members.",
@@ -151,7 +151,7 @@ const ROOM_STEPS = [
     tip: "Run output appears in the terminal panel at the bottom of the screen.",
   },
   {
-    gradient: "from-cyan-500 to-teal-600",
+    gradient: "from-info-500 to-success-600",
     icon: GitBranch,
     title: "Right Sidebar Tools",
     desc: "Click any icon on the right edge to open tools: Chat, AI Help, Flowchart, GitHub sync, Notes, Whiteboard, Pomodoro, and Video call.",
@@ -159,7 +159,7 @@ const ROOM_STEPS = [
     tip: "The AI tool can explain code, suggest fixes, and answer coding questions in context.",
   },
   {
-    gradient: "from-rose-500 to-pink-600",
+    gradient: "from-danger-500 to-danger-600",
     icon: Bot,
     title: "Flowchart Generator",
     desc: "Open the Flowchart tool and it auto-generates a colorful Mermaid diagram from your active code file. Download it as SVG, PNG, or .mmd.",
@@ -167,7 +167,7 @@ const ROOM_STEPS = [
     tip: "Switch files and the flowchart updates automatically — great for understanding complex logic.",
   },
   {
-    gradient: "from-amber-500 to-orange-600",
+    gradient: "from-warning-500 to-warning-600",
     icon: Keyboard,
     title: "Keyboard Shortcuts",
     desc: "Speed up your workflow with shortcuts. Use Focus Mode for a distraction-free coding experience.",
@@ -270,9 +270,9 @@ export default function RoomTutorial() {
                 )}
 
                 {current.tip && (
-                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-violet-50 px-3 py-2 dark:bg-violet-900/20">
-                    <span className="mt-px text-violet-500">💡</span>
-                    <p className="text-[11px] leading-relaxed text-violet-700 dark:text-violet-300">{current.tip}</p>
+                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-brand-50 px-3 py-2 dark:bg-brand-900/20">
+                    <span className="mt-px text-brand-500">💡</span>
+                    <p className="text-[11px] leading-relaxed text-brand-700 dark:text-brand-300">{current.tip}</p>
                   </div>
                 )}
               </Motion.div>
@@ -301,7 +301,7 @@ export default function RoomTutorial() {
                   </button>
                 )}
                 <Motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={next}
-                  className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-500/30 transition-colors hover:bg-violet-500">
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-500/30 transition-colors hover:bg-brand-500">
                   {isLast ? "Done" : "Next"}
                   {isLast ? <Check size={14} /> : <ArrowRight size={14} />}
                 </Motion.button>

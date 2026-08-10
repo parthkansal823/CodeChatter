@@ -213,7 +213,7 @@ export default function BottomPanel({
 
         <div className="flex items-center gap-2">
           {runResult?.status === "running" ? (
-            <div className="hidden text-xs text-amber-400 sm:block">
+            <div className="hidden text-xs text-warning-400 sm:block">
               Running...
             </div>
           ) : runResult ? (
@@ -224,11 +224,11 @@ export default function BottomPanel({
                 </span>
               )}
               {runResult.exitCode === 0 ? (
-                <span className="inline-flex items-center gap-1 rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-300">
+                <span className="inline-flex items-center gap-1 rounded bg-success-500/10 px-1.5 py-0.5 text-[10px] font-medium text-success-300">
                   Success
                 </span>
               ) : runResult.exitCode !== null ? (
-                <span className="inline-flex items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-300">
+                <span className="inline-flex items-center gap-1 rounded bg-danger-500/10 px-1.5 py-0.5 text-[10px] font-medium text-danger-300">
                   Exit {runResult.exitCode}
                 </span>
               ) : null}
@@ -299,15 +299,15 @@ export default function BottomPanel({
                         onClick={() => setSelectedHistory(isSelected ? null : entry)}
                         className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
                           isSelected
-                            ? "border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-900/20"
+                            ? "border-brand-300 bg-brand-50 dark:border-brand-800 dark:bg-brand-900/20"
                             : "border-zinc-200 bg-zinc-50 hover:border-zinc-300 dark:border-white/[0.06] dark:bg-black/20 dark:hover:border-white/10"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             {ok
-                              ? <CheckCircle size={12} className="shrink-0 text-green-500" />
-                              : <XCircle size={12} className="shrink-0 text-red-400" />
+                              ? <CheckCircle size={12} className="shrink-0 text-success-500" />
+                              : <XCircle size={12} className="shrink-0 text-danger-400" />
                             }
                             <span className="truncate text-[11px] font-mono text-zinc-600 dark:text-zinc-300">
                               {entry.command || "code run"}

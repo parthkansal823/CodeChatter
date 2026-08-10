@@ -18,8 +18,8 @@ function getStatusConfig(status) {
       title: "Access wasn't granted",
       description: "The room owner has declined this join request. You can ask them to send a fresh invite link.",
       accent: "rose",
-      ringColor: "ring-rose-500/20",
-      glowColor: "bg-rose-500/5",
+      ringColor: "ring-danger-500/20",
+      glowColor: "bg-danger-500/5",
     };
   }
   return {
@@ -27,16 +27,16 @@ function getStatusConfig(status) {
     title: "You're in the lobby",
     description: "The room owner will review your request and let you in shortly. This page refreshes automatically.",
     accent: "violet",
-    ringColor: "ring-violet-500/20",
-    glowColor: "bg-violet-500/5",
+    ringColor: "ring-brand-500/20",
+    glowColor: "bg-brand-500/5",
   };
 }
 
 function PulsingDot() {
   return (
     <span className="relative flex h-2.5 w-2.5">
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-60" />
-      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-violet-500" />
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-60" />
+      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-500" />
     </span>
   );
 }
@@ -94,9 +94,9 @@ export default function PendingRoomAccessScreen({
         <div className={`overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0f0f12] shadow-2xl ring-1 ${statusConfig.ringColor}`}>
           {/* Status bar */}
           {isPending && (
-            <div className="flex items-center gap-3 border-b border-white/[0.06] bg-violet-950/30 px-5 py-3">
+            <div className="flex items-center gap-3 border-b border-white/[0.06] bg-brand-950/30 px-5 py-3">
               <PulsingDot />
-              <p className="text-xs font-medium text-violet-300">Waiting for owner approval…</p>
+              <p className="text-xs font-medium text-brand-300">Waiting for owner approval…</p>
             </div>
           )}
 
@@ -125,7 +125,7 @@ export default function PendingRoomAccessScreen({
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Your Role</p>
                 <div className="mt-2 flex items-center gap-1.5">
-                  <RoleIcon size={12} className="text-violet-400" />
+                  <RoleIcon size={12} className="text-brand-400" />
                   <p className="text-sm font-semibold text-zinc-200">{roleInfo.label}</p>
                 </div>
                 <p className="mt-0.5 text-[11px] text-zinc-600">{roleInfo.text}</p>
@@ -154,7 +154,7 @@ export default function PendingRoomAccessScreen({
                   type="button"
                   onClick={onRefresh}
                   isLoading={isRefreshing}
-                  className="flex-1 bg-violet-600 hover:bg-violet-500"
+                  className="flex-1 bg-brand-600 hover:bg-brand-500"
                 >
                   {!isRefreshing && <RefreshCw size={13} className="mr-2 shrink-0" />}
                   Check status
@@ -165,9 +165,9 @@ export default function PendingRoomAccessScreen({
 
           {/* Rejected state footer */}
           {!isPending && (
-            <div className="flex items-center gap-3 border-t border-white/[0.06] bg-rose-950/20 px-5 py-3">
-              <ShieldAlert size={14} className="shrink-0 text-rose-400" />
-              <p className="text-xs text-rose-400">Contact the room owner to request a new invite link.</p>
+            <div className="flex items-center gap-3 border-t border-white/[0.06] bg-danger-950/20 px-5 py-3">
+              <ShieldAlert size={14} className="shrink-0 text-danger-400" />
+              <p className="text-xs text-danger-400">Contact the room owner to request a new invite link.</p>
             </div>
           )}
         </div>

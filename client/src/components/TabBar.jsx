@@ -84,7 +84,7 @@ export default function TabBar({
 
               {isModified && (
                 <div
-                  className="h-2 w-2 flex-shrink-0 rounded-full bg-orange-400"
+                  className="h-2 w-2 flex-shrink-0 rounded-full bg-warning-400"
                   title="Modified"
                 />
               )}

@@ -14,11 +14,11 @@ const STORAGE_PREFIX = "cc-notes-v2-";
 
 const NOTE_COLORS = [
   { id: "zinc",   bg: "bg-zinc-100 dark:bg-zinc-800",   border: "border-l-zinc-400",   dot: "bg-zinc-400"   },
-  { id: "violet", bg: "bg-violet-50 dark:bg-violet-900/20", border: "border-l-violet-400", dot: "bg-violet-400" },
-  { id: "amber",  bg: "bg-amber-50 dark:bg-amber-900/20",  border: "border-l-amber-400",  dot: "bg-amber-400"  },
-  { id: "emerald",bg: "bg-emerald-50 dark:bg-emerald-900/20",border: "border-l-emerald-400",dot: "bg-emerald-400"},
-  { id: "rose",   bg: "bg-rose-50 dark:bg-rose-900/20",    border: "border-l-rose-400",   dot: "bg-rose-400"   },
-  { id: "sky",    bg: "bg-sky-50 dark:bg-sky-900/20",      border: "border-l-sky-400",    dot: "bg-sky-400"    },
+  { id: "violet", bg: "bg-brand-50 dark:bg-brand-900/20", border: "border-l-brand-400", dot: "bg-brand-400" },
+  { id: "amber",  bg: "bg-warning-50 dark:bg-warning-900/20",  border: "border-l-warning-400",  dot: "bg-warning-400"  },
+  { id: "emerald",bg: "bg-success-50 dark:bg-success-900/20",border: "border-l-success-400",dot: "bg-success-400"},
+  { id: "rose",   bg: "bg-danger-50 dark:bg-danger-900/20",    border: "border-l-danger-400",   dot: "bg-danger-400"   },
+  { id: "sky",    bg: "bg-info-50 dark:bg-info-900/20",      border: "border-l-info-400",    dot: "bg-info-400"    },
 ];
 
 function colorOf(id) {
@@ -205,7 +205,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
 
           <Motion.span
             animate={{ opacity: saved ? 1 : 0 }}
-            className="text-[10px] text-emerald-500"
+            className="text-[10px] text-success-500"
           >
             <Check size={11} className="inline" /> saved
           </Motion.span>
@@ -215,7 +215,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
             title={preview ? "Edit" : "Preview"}
             className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
               preview
-                ? "bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400"
+                ? "bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400"
                 : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/[0.08]"
             }`}
           >
@@ -224,7 +224,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
 
           <button
             onClick={() => deleteNote(openNote.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-500/10 dark:hover:text-danger-400"
           >
             <Trash2 size={13} />
           </button>
@@ -295,7 +295,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
               <ArrowLeft size={14} />
             </button>
           ) : null}
-          <StickyNote size={14} className="text-amber-400" />
+          <StickyNote size={14} className="text-warning-400" />
           <span className="text-sm font-semibold text-zinc-900 dark:text-white">Notes</span>
           <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
             {notes.length}
@@ -303,7 +303,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
         </div>
         <button
           onClick={createNote}
-          className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-white hover:bg-amber-500 transition"
+          className="flex h-7 w-7 items-center justify-center rounded-lg bg-warning-400 text-white hover:bg-warning-500 transition"
           title="New note"
         >
           <Plus size={14} />
@@ -318,7 +318,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search notes…"
-            className="w-full rounded-md border border-zinc-200 bg-zinc-50 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-amber-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            className="w-full rounded-md border border-zinc-200 bg-zinc-50 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-warning-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
           />
         </div>
       </div>
@@ -333,7 +333,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
               {!search && (
                 <button
                   onClick={createNote}
-                  className="flex items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500"
+                  className="flex items-center gap-1.5 rounded-lg bg-warning-400 px-3 py-1.5 text-xs font-semibold text-white hover:bg-warning-500"
                 >
                   <Plus size={12} /> New note
                 </button>
@@ -362,13 +362,13 @@ export default function QuickNotes({ roomId, onBack = null }) {
                       <button
                         onClick={(e) => { e.stopPropagation(); togglePin(note.id); }}
                         title={note.pinned ? "Unpin" : "Pin"}
-                        className={`flex h-5 w-5 items-center justify-center rounded ${note.pinned ? "text-amber-500" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"}`}
+                        className={`flex h-5 w-5 items-center justify-center rounded ${note.pinned ? "text-warning-500" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"}`}
                       >
                         {note.pinned ? <Pin size={10} /> : <PinOff size={10} />}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                        className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400"
+                        className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:text-danger-500 dark:hover:text-danger-400"
                       >
                         <Trash2 size={10} />
                       </button>
@@ -378,7 +378,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
                     <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500 dark:text-zinc-400">{preview}</p>
                   )}
                   <div className="mt-1.5 flex items-center gap-2">
-                    {note.pinned && <Pin size={9} className="text-amber-400" />}
+                    {note.pinned && <Pin size={9} className="text-warning-400" />}
                     <span className="text-[10px] text-zinc-400">{relativeTime(note.updatedAt)}</span>
                     <span className="text-[10px] text-zinc-300 dark:text-zinc-700">·</span>
                     <span className="text-[10px] text-zinc-400">{note.content.length} chars</span>

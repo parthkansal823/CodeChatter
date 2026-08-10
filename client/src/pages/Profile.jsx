@@ -32,9 +32,9 @@ function formatDateLabel(value) {
 
 function RolePill({ role }) {
   const palette = {
-    owner: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-300 dark:border-yellow-500/20",
-    editor: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20",
-    runner: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
+    owner: "bg-warning-50 text-warning-700 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20",
+    editor: "bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/10 dark:text-brand-300 dark:border-brand-500/20",
+    runner: "bg-warning-50 text-warning-700 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20",
     viewer: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-700/20 dark:text-zinc-300 dark:border-zinc-700/40",
   };
 
@@ -107,10 +107,10 @@ export default function Profile() {
     : "New member";
 
   const stats = [
-    { label: "Owned workspaces", value: ownedRooms.length, icon: FolderGit2, accent: "bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300" },
-    { label: "Joined workspaces", value: joinedRooms.length, icon: Users, accent: "bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300" },
-    { label: "Can run code", value: runnableRooms, icon: PlayCircle, accent: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" },
-    { label: "Collaborators", value: collaborators.length, icon: Sparkles, accent: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" },
+    { label: "Owned workspaces", value: ownedRooms.length, icon: FolderGit2, accent: "bg-brand-100 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300" },
+    { label: "Joined workspaces", value: joinedRooms.length, icon: Users, accent: "bg-info-100 text-info-700 dark:bg-info-500/10 dark:text-info-300" },
+    { label: "Can run code", value: runnableRooms, icon: PlayCircle, accent: "bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300" },
+    { label: "Collaborators", value: collaborators.length, icon: Sparkles, accent: "bg-warning-100 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300" },
   ];
 
   return (
@@ -148,7 +148,7 @@ export default function Profile() {
                 </button>
                 <button
                   onClick={() => navigate("/settings")}
-                  className="inline-flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-violet-500 dark:hover:bg-violet-500/10 dark:hover:text-violet-300"
+                  className="inline-flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
                 >
                   <Settings size={16} />
                   Account Settings
@@ -215,7 +215,7 @@ export default function Profile() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Recent workspaces</p>
                 <h2 className="mt-1 text-xl font-semibold text-zinc-900 dark:text-white">Jump back into your latest rooms</h2>
               </div>
-              <button onClick={() => navigate("/home")} className="text-sm font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+              <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
                 View all
               </button>
             </div>
@@ -232,7 +232,7 @@ export default function Profile() {
                   <button
                     key={room.id}
                     onClick={() => navigate(`/room/${room.id}`)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-left transition hover:border-violet-300 hover:bg-violet-50 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:border-violet-500 dark:hover:bg-violet-500/10"
+                    className="flex w-full items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -270,7 +270,7 @@ export default function Profile() {
             <Motion.section variants={itemVariants} className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Collaborators</p>
-                <button onClick={() => navigate("/home")} className="text-sm font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+                <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
                   Open rooms
                 </button>
               </div>
@@ -303,7 +303,7 @@ export default function Profile() {
                   <button
                     key={label}
                     onClick={() => navigate(path)}
-                    className="flex items-center gap-3 rounded-2xl border border-zinc-200 px-4 py-3 text-left transition hover:border-violet-300 hover:bg-violet-50 dark:border-zinc-800 dark:hover:border-violet-500 dark:hover:bg-violet-500/10"
+                    className="flex items-center gap-3 rounded-2xl border border-zinc-200 px-4 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
                   >
                     <Icon size={16} className="text-zinc-500 dark:text-zinc-400" />
                     <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{label}</span>

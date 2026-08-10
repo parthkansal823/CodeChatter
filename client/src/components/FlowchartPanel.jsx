@@ -280,7 +280,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
           <ChevronLeft size={15} />
         </button>
 
-        <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-500">
+        <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-info-500/10 text-info-500">
           <GitBranch size={16} />
         </div>
 
@@ -296,7 +296,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
             onClick={() => setShowSource((value) => !value)}
             className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
               showSource
-                ? "bg-cyan-500/15 text-cyan-400"
+                ? "bg-info-500/15 text-info-400"
                 : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/[0.08] dark:hover:text-zinc-100"
             }`}
             title={showSource ? "Show diagram" : "View Mermaid source"}
@@ -308,7 +308,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         <button
           onClick={generate}
           disabled={isGenerating || !activeCode?.trim()}
-          className="inline-flex h-9 items-center gap-2 rounded-xl bg-cyan-500 px-3 text-xs font-semibold text-white transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-9 items-center gap-2 rounded-xl bg-info-500 px-3 text-xs font-semibold text-white transition hover:bg-info-400 disabled:cursor-not-allowed disabled:opacity-50"
           title={needsGeneration ? "Generate flowchart" : "Regenerate flowchart"}
         >
           {isGenerating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
@@ -320,7 +320,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 px-3 py-2 dark:border-white/[0.06]">
           <FileCode2 size={12} className="text-zinc-400" />
           <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{fileName}</span>
-          <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-600 dark:text-cyan-300">
+          <span className="rounded-full bg-info-500/10 px-2 py-0.5 text-[10px] font-semibold text-info-600 dark:text-info-300">
             {detectedLang}
           </span>
           {generatedAt ? (
@@ -335,7 +335,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         {!activeCode?.trim() ? (
           <div className="flex flex-1 items-center justify-center p-5">
             <div className="w-full max-w-sm rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-center dark:border-white/[0.1] dark:bg-white/[0.03]">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-info-500/10 text-info-400">
                 <GitBranch size={20} />
               </div>
               <p className="mt-4 text-sm font-semibold text-zinc-900 dark:text-white">Open a file first</p>
@@ -346,24 +346,24 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
           </div>
         ) : isGenerating ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6">
-            <Loader2 size={24} className="animate-spin text-cyan-500" />
+            <Loader2 size={24} className="animate-spin text-info-500" />
             <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">Building flowchart</p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Reading the {detectedLang} file and mapping its important steps.
             </p>
           </div>
         ) : genError ? (
-          <div className="m-3 rounded-3xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+          <div className="m-3 rounded-3xl border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/20 dark:bg-warning-500/10">
             <div className="flex items-start gap-3">
-              <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-500" />
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-warning-500" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">{genError}</p>
-                <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-200/70">
+                <p className="text-sm font-semibold text-warning-800 dark:text-warning-200">{genError}</p>
+                <p className="mt-1 text-xs text-warning-700/80 dark:text-warning-200/70">
                   Try regenerating after saving the current file or simplifying the code region.
                 </p>
                 <button
                   onClick={generate}
-                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-400"
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-warning-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-warning-400"
                 >
                   <RefreshCw size={12} />
                   Try again
@@ -373,14 +373,14 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
           </div>
         ) : renderError ? (
           <div className="m-3 space-y-3">
-            <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
+            <div className="rounded-3xl border border-danger-200 bg-danger-50 p-4 dark:border-danger-500/20 dark:bg-danger-500/10">
               <div className="flex items-start gap-3">
-                <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-500" />
+                <AlertCircle size={16} className="mt-0.5 shrink-0 text-danger-500" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">{renderError}</p>
+                  <p className="text-sm font-semibold text-danger-800 dark:text-danger-200">{renderError}</p>
                   <button
                     onClick={generate}
-                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-rose-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-400"
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-danger-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-danger-400"
                   >
                     <RefreshCw size={12} />
                     Regenerate
@@ -397,9 +397,9 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         ) : !mermaidCode ? (
           <div className="flex flex-1 overflow-y-auto p-4">
             <div className="w-full space-y-4">
-              <div className="rounded-[28px] border border-zinc-200 bg-zinc-50 p-5 dark:border-white/[0.06] dark:bg-gradient-to-br dark:from-cyan-500/10 dark:via-white/[0.04] dark:to-violet-500/10">
+              <div className="rounded-[28px] border border-zinc-200 bg-zinc-50 p-5 dark:border-white/[0.06] dark:bg-gradient-to-br dark:from-info-500/10 dark:via-white/[0.04] dark:to-brand-500/10">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-400">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-info-500/15 text-info-400">
                     <Sparkles size={20} />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -426,7 +426,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     onClick={generate}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-cyan-400"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-info-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-info-400"
                   >
                     <GitBranch size={15} />
                     Generate flowchart
@@ -491,7 +491,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
               <button
                 key={label}
                 onClick={onClick}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-200 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/10"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-info-300 hover:bg-info-50 hover:text-info-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-200 dark:hover:border-info-500/40 dark:hover:bg-info-500/10"
               >
                 <Download size={12} />
                 {label}

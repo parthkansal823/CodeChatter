@@ -11,12 +11,12 @@ import { useAuth } from "../hooks/useAuth";
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const FEATURES = [
-  { icon: Users,    title: "Real-time Collaboration", desc: "See teammates' cursors, edits, and selections live — zero lag.", color: "purple" },
-  { icon: Code2,    title: "Monaco Editor",            desc: "The same engine that powers VS Code, running in your browser.",  color: "blue"   },
-  { icon: Video,    title: "Built-in Video Calls",     desc: "Talk through your code without leaving the workspace.",          color: "cyan"   },
-  { icon: Shield,   title: "Secure Rooms",             desc: "End-to-end encrypted sessions. Your code stays private.",        color: "green"  },
-  { icon: Terminal, title: "Integrated Terminal",      desc: "Run your code instantly — a real shell for every room.",         color: "orange" },
-  { icon: Bot,      title: "AI Assistant",             desc: "Intelligent suggestions and explanations as you type.",          color: "pink"   },
+  { icon: Users,    title: "Real-time collaboration", desc: "Live cursors, selections, and presence. Everyone sees the same file as it changes." },
+  { icon: Code2,    title: "Monaco editor",           desc: "The editor engine behind VS Code, with syntax support for 20+ languages." },
+  { icon: Video,    title: "Video and screen share",  desc: "Talk through the code without leaving the workspace." },
+  { icon: Shield,   title: "Private rooms",           desc: "Invite links, owner approval queues, and per-member viewer/editor/runner roles." },
+  { icon: Terminal, title: "Integrated terminal",     desc: "A real shell per room, plus one-click run for the file you're editing." },
+  { icon: Bot,      title: "AI assistance",           desc: "Explain a file, read a stack trace, or plan a fix with full room context." },
 ];
 
 const STEPS = [
@@ -25,11 +25,12 @@ const STEPS = [
   { n: "03", title: "Code together",        desc: "Write, run, and debug in real-time with voice and video built right in." },
 ];
 
+// Capability facts, not invented traction numbers.
 const STATS = [
-  { value: "2,000+", label: "Developers" },
-  { value: "10K+",   label: "Rooms Created" },
-  { value: "20+",    label: "Languages" },
-  { value: "99.9%",  label: "Uptime" },
+  { value: "20+", label: "Languages" },
+  { value: "5",   label: "Starter templates" },
+  { value: "4",   label: "Access roles" },
+  { value: "<1s", label: "Edit sync" },
 ];
 
 const PLATFORM_DETAILS = [
@@ -55,14 +56,11 @@ const PLATFORM_DETAILS = [
   },
 ];
 
-const ICON_COLOR = {
-  purple: "bg-purple-500/10 border-purple-500/20 text-purple-500 dark:text-purple-400",
-  blue:   "bg-blue-500/10   border-blue-500/20   text-blue-500   dark:text-blue-400",
-  cyan:   "bg-cyan-500/10   border-cyan-500/20   text-cyan-500   dark:text-cyan-400",
-  green:  "bg-green-500/10  border-green-500/20  text-green-500  dark:text-green-400",
-  orange: "bg-orange-500/10 border-orange-500/20 text-orange-500 dark:text-orange-400",
-  pink:   "bg-pink-500/10   border-pink-500/20   text-pink-500   dark:text-pink-400",
-};
+// One accent for every feature icon. Colour-coding six unrelated features in six
+// different hues carries no information and is the fastest way to make a product
+// look unfinished; status colours are reserved for actual status.
+const ICON_TILE =
+  "bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400";
 
 // ─── Fake code for the hero mockup ───────────────────────────────────────────
 
@@ -77,7 +75,7 @@ const CODE = [
   [["","    "],["kw","return "],["fn","merge"],["","(left, right)"]],
 ];
 
-const TOKEN_COLOR = { kw:"text-purple-400", fn:"text-blue-400", op:"text-yellow-400", num:"text-orange-400", "":"text-gray-300" };
+const TOKEN_COLOR = { kw:"text-brand-400", fn:"text-info-400", op:"text-warning-400", num:"text-warning-400", "":"text-gray-300" };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -101,9 +99,9 @@ function HeroMockup() {
       {/* Window chrome */}
       <div className="flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-[#14141f] border-b border-gray-200 dark:border-white/[0.06]">
         <span className="flex gap-1.5">
-          <span className="w-3 h-3 rounded-full bg-red-400" />
-          <span className="w-3 h-3 rounded-full bg-yellow-400" />
-          <span className="w-3 h-3 rounded-full bg-green-400" />
+          <span className="w-3 h-3 rounded-full bg-danger-400" />
+          <span className="w-3 h-3 rounded-full bg-warning-400" />
+          <span className="w-3 h-3 rounded-full bg-success-400" />
         </span>
         <span className="flex-1 text-center text-xs text-gray-400 font-mono">
           merge_sort.py — CodeChatter
@@ -199,7 +197,7 @@ export default function Landing({ theme, onThemeChange }) {
 
             {isAuthenticated ? (
               <button onClick={() => navigate("/home")}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all">
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all">
                 Dashboard <ArrowRight size={14} />
               </button>
             ) : (
@@ -209,7 +207,7 @@ export default function Landing({ theme, onThemeChange }) {
                   Sign in
                 </Link>
                 <Link to="/auth?mode=signup"
-                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13.5px] font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-sm">
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13.5px] font-semibold text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all shadow-sm">
                   Get started <ChevronRight size={14} />
                 </Link>
               </>
@@ -235,7 +233,7 @@ export default function Landing({ theme, onThemeChange }) {
             <hr className="border-gray-100 dark:border-white/[0.08]" />
             <Link to="/auth" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-gray-600 dark:text-gray-300">Sign in</Link>
             <Link to="/auth?mode=signup" onClick={() => setMobileOpen(false)}
-              className="text-center py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-600">
+              className="text-center py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-info-600">
               Get started free
             </Link>
           </div>
@@ -248,22 +246,22 @@ export default function Landing({ theme, onThemeChange }) {
       <section className="relative pt-32 pb-20 px-5 overflow-hidden">
         {/* Ambient blobs */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 left-1/3 w-[480px] h-[480px] rounded-full bg-purple-500/10 blur-[100px]" />
-          <div className="absolute top-10 right-1/4 w-[400px] h-[400px] rounded-full bg-blue-500/8 blur-[100px]" />
+          <div className="absolute -top-40 left-1/3 w-[480px] h-[480px] rounded-full bg-brand-500/10 blur-[100px]" />
+          <div className="absolute top-10 right-1/4 w-[400px] h-[400px] rounded-full bg-info-500/8 blur-[100px]" />
         </div>
 
         <div className="relative max-w-7xl mx-auto">
           <div className="max-w-[680px] mx-auto text-center mb-14">
             <Motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
               {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 mb-6 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-[12.5px] font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 mb-6 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-[12.5px] font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
                 Now in open beta — free for all developers
               </div>
 
               <h1 className="text-5xl sm:text-6xl lg:text-[4rem] font-extrabold leading-[1.1] tracking-tight mb-5">
                 Code together,{" "}
-                <span className="bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-400 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-brand-500 via-info-500 to-info-400 bg-clip-text text-transparent">
                   ship faster.
                 </span>
               </h1>
@@ -274,7 +272,7 @@ export default function Landing({ theme, onThemeChange }) {
 
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <Link to="/auth?mode=signup"
-                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-bold text-white text-[15px] bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-[0_0_28px_rgba(124,58,237,0.3)] hover:shadow-[0_0_40px_rgba(124,58,237,0.45)]">
+                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-bold text-white text-[15px] bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all shadow-[0_0_28px_rgba(124,58,237,0.3)] hover:shadow-[0_0_40px_rgba(124,58,237,0.45)]">
                   Start for free <ArrowRight size={16} />
                 </Link>
                 <Link to="/auth"
@@ -309,7 +307,7 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
             {STATS.map(({ value, label }) => (
               <div key={label}>
-                <p className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent">
+                <p className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-brand-500 to-info-500 bg-clip-text text-transparent">
                   {value}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">{label}</p>
@@ -325,7 +323,7 @@ export default function Landing({ theme, onThemeChange }) {
       <section id="features" className="py-24 px-5">
         <div className="max-w-7xl mx-auto">
           <FadeUp className="text-center mb-14">
-            <p className="text-[13px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-3">Features</p>
+            <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">Features</p>
             <h2 className="text-4xl font-extrabold tracking-tight">Everything in one workspace</h2>
             <p className="mt-4 text-gray-500 dark:text-gray-400 max-w-md mx-auto text-[15px] leading-relaxed">
               No more context-switching. Your entire dev workflow, right here.
@@ -333,18 +331,18 @@ export default function Landing({ theme, onThemeChange }) {
           </FadeUp>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map(({ icon: Icon, title, desc, color }, i) => (
+            {FEATURES.map(({ icon: Icon, title, desc }, i) => (
               <FadeUp key={title} delay={i * 0.07}>
                 <Motion.div
-                  whileHover={{ y: -4 }}
+                  whileHover={{ y: -3 }}
                   transition={{ duration: 0.2 }}
-                  className="h-full p-6 rounded-2xl bg-gray-50 dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.07] hover:border-gray-300 dark:hover:border-white/[0.14] transition-all"
+                  className="group h-full rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 transition-colors hover:border-brand-300 dark:border-white/[0.07] dark:bg-white/[0.025] dark:hover:border-brand-500/40"
                 >
-                  <div className={`w-9 h-9 rounded-xl border flex items-center justify-center mb-4 ${ICON_COLOR[color]}`}>
+                  <div className={`mb-4 flex h-9 w-9 items-center justify-center rounded-xl ${ICON_TILE}`}>
                     <Icon size={16} />
                   </div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1.5">{title}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+                  <h3 className="mb-1.5 font-semibold text-zinc-900 dark:text-white">{title}</h3>
+                  <p className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{desc}</p>
                 </Motion.div>
               </FadeUp>
             ))}
@@ -358,7 +356,7 @@ export default function Landing({ theme, onThemeChange }) {
       <section id="platform" className="pb-24 px-5">
         <div className="max-w-7xl mx-auto">
           <FadeUp className="text-center mb-14">
-            <p className="text-[13px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-3">Platform overview</p>
+            <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">Platform overview</p>
             <h2 className="text-4xl font-extrabold tracking-tight">More than a login page</h2>
             <p className="mt-4 text-gray-500 dark:text-gray-400 max-w-2xl mx-auto text-[15px] leading-relaxed">
               CodeChatter gives your team a full website experience from the start: a clear product page, guided authentication, and dedicated collaborative rooms for actual work.
@@ -369,7 +367,7 @@ export default function Landing({ theme, onThemeChange }) {
             {PLATFORM_DETAILS.map(({ icon: Icon, title, desc }, i) => (
               <FadeUp key={title} delay={i * 0.08}>
                 <div className="h-full rounded-2xl border border-gray-200 bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-white/[0.07] dark:bg-white/[0.025]">
-                  <div className="w-10 h-10 rounded-xl border border-purple-500/20 bg-purple-500/10 text-purple-500 dark:text-purple-300 flex items-center justify-center mb-4">
+                  <div className="w-10 h-10 rounded-xl border border-brand-500/20 bg-brand-500/10 text-brand-500 dark:text-brand-300 flex items-center justify-center mb-4">
                     <Icon size={18} />
                   </div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
@@ -384,7 +382,7 @@ export default function Landing({ theme, onThemeChange }) {
       <section id="how-it-works" className="py-24 px-5 bg-gray-50 dark:bg-white/[0.015]">
         <div className="max-w-7xl mx-auto">
           <FadeUp className="text-center mb-16">
-            <p className="text-[13px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest mb-3">How it works</p>
+            <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">How it works</p>
             <h2 className="text-4xl font-extrabold tracking-tight">Up and running in minutes</h2>
           </FadeUp>
 
@@ -407,7 +405,7 @@ export default function Landing({ theme, onThemeChange }) {
         <FadeUp className="max-w-2xl mx-auto text-center">
           <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-5">
             Start coding{" "}
-            <span className="bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-brand-500 to-info-500 bg-clip-text text-transparent">
               together today.
             </span>
           </h2>
@@ -415,7 +413,7 @@ export default function Landing({ theme, onThemeChange }) {
             Join thousands of developers using CodeChatter to collaborate faster and ship better software.
           </p>
           <Link to="/auth?mode=signup"
-            className="inline-flex items-center gap-2.5 px-9 py-4 rounded-xl font-bold text-white text-[15px] bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-[0_0_32px_rgba(124,58,237,0.3)] hover:shadow-[0_0_48px_rgba(124,58,237,0.5)]">
+            className="inline-flex items-center gap-2.5 px-9 py-4 rounded-xl font-bold text-white text-[15px] bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all shadow-[0_0_32px_rgba(124,58,237,0.3)] hover:shadow-[0_0_48px_rgba(124,58,237,0.5)]">
             Create free account <ArrowRight size={18} />
           </Link>
           <p className="mt-4 text-[12px] text-gray-400 dark:text-gray-500">

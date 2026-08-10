@@ -40,11 +40,11 @@ export function getRecentRooms() {
 const TAGS_KEY = "cc-room-tags";
 
 export const TAG_COLORS = [
-  { id: "violet", label: "Violet", cls: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300", dot: "bg-violet-500" },
-  { id: "emerald", label: "Green",  cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300", dot: "bg-emerald-500" },
-  { id: "sky",    label: "Blue",   cls: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300", dot: "bg-sky-500" },
-  { id: "amber",  label: "Amber",  cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300", dot: "bg-amber-500" },
-  { id: "rose",   label: "Rose",   cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300", dot: "bg-rose-500" },
+  { id: "violet", label: "Violet", cls: "bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300", dot: "bg-brand-500" },
+  { id: "emerald", label: "Green",  cls: "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300", dot: "bg-success-500" },
+  { id: "sky",    label: "Blue",   cls: "bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300", dot: "bg-info-500" },
+  { id: "amber",  label: "Amber",  cls: "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300", dot: "bg-warning-500" },
+  { id: "rose",   label: "Rose",   cls: "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300", dot: "bg-danger-500" },
   { id: "zinc",   label: "None",   cls: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400", dot: "bg-zinc-400" },
 ];
 

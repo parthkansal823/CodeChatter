@@ -29,8 +29,8 @@ const ACCESS_ROLE_OPTIONS = [
     shortLabel: "Run only",
     description: "Can execute code and use the terminal, but cannot edit files.",
     icon: Play,
-    classes: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/25 dark:bg-amber-950/30 dark:text-amber-200",
-    accent: "bg-amber-500",
+    classes: "border-warning-200 bg-warning-50 text-warning-800 dark:border-warning-500/25 dark:bg-warning-950/30 dark:text-warning-200",
+    accent: "bg-warning-500",
   },
   {
     id: "editor",
@@ -38,8 +38,8 @@ const ACCESS_ROLE_OPTIONS = [
     shortLabel: "Edit and run",
     description: "Can work directly in the workspace and run files.",
     icon: PencilLine,
-    classes: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/25 dark:bg-violet-950/30 dark:text-violet-200",
-    accent: "bg-violet-500",
+    classes: "border-brand-200 bg-brand-50 text-brand-800 dark:border-brand-500/25 dark:bg-brand-950/30 dark:text-brand-200",
+    accent: "bg-brand-500",
   },
   {
     id: "owner",
@@ -47,8 +47,8 @@ const ACCESS_ROLE_OPTIONS = [
     shortLabel: "Full control",
     description: "Can manage members, approvals, and workspace settings.",
     icon: Crown,
-    classes: "border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-500/25 dark:bg-yellow-950/30 dark:text-yellow-200",
-    accent: "bg-yellow-500",
+    classes: "border-warning-200 bg-warning-50 text-warning-800 dark:border-warning-500/25 dark:bg-warning-950/30 dark:text-warning-200",
+    accent: "bg-warning-500",
   },
 ];
 
@@ -70,7 +70,7 @@ const NAV_ITEMS = [
   { id: "queue", label: "Requests", icon: Clock3 },
 ];
 
-const inputClasses = "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:focus:border-violet-500";
+const inputClasses = "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:focus:border-brand-500";
 
 function formatRequestedAt(value) {
   if (!value) return "Just now";
@@ -138,7 +138,7 @@ function RoleOptionGrid({ selectedRole, onChange, allowOwner = false, dense = fa
             onClick={() => onChange(option.id)}
             className={`rounded-2xl border p-3 text-left transition-all ${
               isSelected
-                ? "border-violet-500 bg-violet-50 shadow-sm shadow-violet-500/10 dark:border-violet-500 dark:bg-violet-950/40"
+                ? "border-brand-500 bg-brand-50 shadow-sm shadow-brand-500/10 dark:border-brand-500 dark:bg-brand-950/40"
                 : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:border-zinc-600"
             }`}
           >
@@ -348,7 +348,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                 onClick={() => setShell(option.id)}
                 className={`rounded-2xl border px-4 py-3 text-left transition-all ${
                   shell === option.id
-                    ? "border-violet-500 bg-violet-50 text-violet-700 dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-200"
+                    ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950/40 dark:text-brand-200"
                     : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
                 }`}
               >
@@ -377,12 +377,12 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               onClick={() => setRequireJoinApproval(true)}
               className={`rounded-2xl border p-4 text-left transition-all ${
                 requireJoinApproval
-                  ? "border-amber-400 bg-amber-50 shadow-sm shadow-amber-500/10 dark:border-amber-500 dark:bg-amber-950/40"
+                  ? "border-warning-400 bg-warning-50 shadow-sm shadow-warning-500/10 dark:border-warning-500 dark:bg-warning-950/40"
                   : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-200">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-warning-100 text-warning-700 dark:bg-warning-950 dark:text-warning-200">
                   <Lock size={16} />
                 </span>
                 <div>
@@ -397,12 +397,12 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               onClick={() => setRequireJoinApproval(false)}
               className={`rounded-2xl border p-4 text-left transition-all ${
                 !requireJoinApproval
-                  ? "border-emerald-400 bg-emerald-50 shadow-sm shadow-emerald-500/10 dark:border-emerald-500 dark:bg-emerald-950/40"
+                  ? "border-success-400 bg-success-50 shadow-sm shadow-success-500/10 dark:border-success-500 dark:bg-success-950/40"
                   : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-success-100 text-success-700 dark:bg-success-950 dark:text-success-200">
                   <Unlock size={16} />
                 </span>
                 <div>
@@ -452,7 +452,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                     {["owner", "editor", "runner", "viewer"].map((role) => (
                       <td key={role} className="px-2 py-3 text-center">
                         {row[role] ? (
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-success-100 text-success-700 dark:bg-success-950 dark:text-success-300">
                             <Check size={14} />
                           </span>
                         ) : (
@@ -477,7 +477,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const renderMemberList = (members, title, isOwnerGroup = false) => (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        {isOwnerGroup ? <Crown size={14} className="text-yellow-500" /> : <Users size={14} className="text-zinc-400" />}
+        {isOwnerGroup ? <Crown size={14} className="text-warning-500" /> : <Users size={14} className="text-zinc-400" />}
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">{title}</p>
       </div>
 
@@ -491,7 +491,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               key={member.id}
               className={`rounded-2xl border p-4 ${
                 isOwnerGroup
-                  ? "border-yellow-200 bg-yellow-50/70 dark:border-yellow-500/20 dark:bg-yellow-950/10"
+                  ? "border-warning-200 bg-warning-50/70 dark:border-warning-500/20 dark:bg-warning-950/10"
                   : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
               }`}
             >
@@ -647,7 +647,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
           >
             {!room || isLoading ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                <Loader2 className="h-6 w-6 animate-spin text-brand-500" />
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading workspace settings...</p>
               </div>
             ) : (
@@ -656,7 +656,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                   <div className="border-b border-zinc-200 px-5 py-5 dark:border-zinc-800">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">
                           Workspace controls
                         </p>
                         <h2 className="mt-1 text-xl font-semibold text-zinc-900 dark:text-white">{room.name || "Workspace"}</h2>
@@ -701,7 +701,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                           onClick={() => setActiveSection(id)}
                           className={`mb-1.5 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
                             isActive
-                              ? "bg-violet-600 text-white shadow-sm shadow-violet-500/20"
+                              ? "bg-brand-600 text-white shadow-sm shadow-brand-500/20"
                               : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
                           }`}
                         >

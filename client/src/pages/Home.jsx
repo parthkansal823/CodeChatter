@@ -498,7 +498,7 @@ export default function Home() {
                 <button
                   key={r.id}
                   onClick={() => { recordVisit(r.id, r.name); navigate(`/room/${r.id}`); }}
-                  className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-sm transition-colors hover:border-violet-300 hover:bg-violet-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-700 dark:hover:bg-violet-900/10"
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-sm transition-colors hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-brand-700 dark:hover:bg-brand-900/10"
                 >
                   <FolderGit2 size={13} className="text-zinc-400" />
                   <span className="font-medium text-zinc-800 dark:text-zinc-200">{r.name}</span>
@@ -520,7 +520,7 @@ export default function Home() {
                   value={roomSearch}
                   onChange={e => setRoomSearch(e.target.value)}
                   placeholder="Search rooms…"
-                  className="h-8 w-40 rounded-lg border border-zinc-200 bg-white pl-8 pr-7 text-xs text-zinc-700 outline-none transition focus:border-violet-400 focus:ring-1 focus:ring-violet-400/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 sm:w-52"
+                  className="h-8 w-40 rounded-lg border border-zinc-200 bg-white pl-8 pr-7 text-xs text-zinc-700 outline-none transition focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 sm:w-52"
                 />
                 {roomSearch && (
                   <button onClick={() => setRoomSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
@@ -533,7 +533,7 @@ export default function Home() {
                   onClick={() => setRoomSearch(prev => prev === "__bookmarked__" ? "" : "__bookmarked__")}
                   className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
                     roomSearch === "__bookmarked__"
-                      ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+                      ? "bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
                       : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
                   }`}
                 >
@@ -591,7 +591,7 @@ export default function Home() {
                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
                     whileHover={{ y: -5, scale: 1.01, transition: SPRING }}
                     whileTap={{ scale: 0.99 }}
-                    className={`group/card relative rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-violet-200 dark:hover:border-violet-900/50 hover:shadow-xl hover:shadow-violet-500/8 ${
+                    className={`group/card relative rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-brand-200 dark:hover:border-brand-900/50 hover:shadow-xl hover:shadow-brand-500/8 ${
                       isListView ? "p-4" : "p-5"
                     }`}
                   >
@@ -605,7 +605,7 @@ export default function Home() {
                           {room.templateName || "Blank Workspace"}
                         </p>
                         {room.ownerId === user?.id && (room.pendingJoinRequestCount || 0) > 0 && (
-                          <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                          <span className="mt-2 inline-flex rounded-full bg-warning-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-warning-700 dark:bg-warning-500/10 dark:text-warning-300">
                             {room.pendingJoinRequestCount} request{room.pendingJoinRequestCount === 1 ? "" : "s"} waiting
                           </span>
                         )}
@@ -621,7 +621,7 @@ export default function Home() {
                         title={bookmarks.includes(room.id) ? "Remove bookmark" : "Bookmark room"}
                         className={`shrink-0 rounded-lg p-1.5 transition-colors ${
                           bookmarks.includes(room.id)
-                            ? "text-violet-600 dark:text-violet-400"
+                            ? "text-brand-600 dark:text-brand-400"
                             : "text-zinc-300 hover:text-zinc-500 dark:text-zinc-700 dark:hover:text-zinc-400"
                         }`}
                       >
@@ -641,7 +641,7 @@ export default function Home() {
                               setOpenMenuId(openMenuId === room.id ? null : room.id);
                             }}
                             className={`rounded-lg p-1.5 transition-colors ${openMenuId === room.id
-                              ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+                              ? "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400"
                               : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                               }`}
                             title="Workspace settings"
@@ -698,7 +698,7 @@ export default function Home() {
                               <div className="border-t border-zinc-100 py-1 dark:border-zinc-800">
                                 <button
                                   onClick={() => { handleDeleteRoom(room); setOpenMenuId(null); }}
-                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-danger-600 transition-colors hover:bg-danger-50 dark:text-danger-400 dark:hover:bg-danger-900/20"
                                 >
                                   <Trash2 size={14} />
                                   Delete workspace
@@ -725,7 +725,7 @@ export default function Home() {
                           {room.id}
                         </span>
                       </div>
-                      <div className="mt-5 flex items-center justify-between border-t border-zinc-100 pt-3 text-sm font-medium text-zinc-400 dark:border-zinc-800 dark:text-zinc-500 group-hover/card:text-violet-600 dark:group-hover/card:text-violet-400 transition-colors">
+                      <div className="mt-5 flex items-center justify-between border-t border-zinc-100 pt-3 text-sm font-medium text-zinc-400 dark:border-zinc-800 dark:text-zinc-500 group-hover/card:text-brand-600 dark:group-hover/card:text-brand-400 transition-colors">
                         <span>Open room</span>
                         <ArrowRight size={14} className="transform group-hover/card:translate-x-1 transition-transform" />
                       </div>
@@ -753,7 +753,7 @@ export default function Home() {
               <Motion.div
                 animate={{ y: [0, -5, 0] }}
                 transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400"
+                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400"
               >
                 <FolderGit2 size={24} />
               </Motion.div>
@@ -763,7 +763,7 @@ export default function Home() {
               </p>
               <button
                 onClick={openCreateModal}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-500/20 hover:bg-violet-500 transition-colors"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-500/20 hover:bg-brand-500 transition-colors"
               >
                 <Plus size={15} /> Create a room
               </button>
@@ -852,14 +852,14 @@ export default function Home() {
                         type="button"
                         onClick={() => setSelectedTemplateId(template.id)}
                         className={`rounded-xl border p-4 text-left transition-colors ${selectedTemplateId === template.id
-                          ? "border-violet-600 bg-violet-50 dark:border-violet-400 dark:bg-violet-900/10"
+                          ? "border-brand-600 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/10"
                           : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
                           }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <p className={`font-medium text-sm ${selectedTemplateId === template.id ? "text-violet-700 dark:text-violet-300" : ""}`}>{template.name}</p>
+                          <p className={`font-medium text-sm ${selectedTemplateId === template.id ? "text-brand-700 dark:text-brand-300" : ""}`}>{template.name}</p>
                           <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${selectedTemplateId === template.id
-                            ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                            ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
                             : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
                             }`}>
                             {template.category}
@@ -874,8 +874,8 @@ export default function Home() {
 
                   {/* DSA Language Picker */}
                   {selectedTemplateId === "dsa-practice" && (
-                    <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900/40 dark:bg-violet-900/10">
-                      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                    <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-900/40 dark:bg-brand-900/10">
+                      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-300">
                         Starter Language
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -885,8 +885,8 @@ export default function Home() {
                             type="button"
                             onClick={() => setDsaLanguage(lang.id)}
                             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${dsaLanguage === lang.id
-                              ? "border-violet-600 bg-violet-600 text-white dark:border-violet-400 dark:bg-violet-400 dark:text-zinc-900"
-                              : "border-zinc-200 bg-white text-zinc-600 hover:border-violet-300 hover:text-violet-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+                              ? "border-brand-600 bg-brand-600 text-white dark:border-brand-400 dark:bg-brand-400 dark:text-zinc-900"
+                              : "border-zinc-200 bg-white text-zinc-600 hover:border-brand-300 hover:text-brand-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
                               }`}
                           >
                             {lang.label}

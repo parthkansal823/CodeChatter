@@ -79,7 +79,7 @@ function CreateNodeInput({
           }
         }}
         placeholder={creatingType === "folder" ? "new-folder" : "new-file.ext"}
-        className="h-8 w-full rounded-sm border border-blue-300 bg-white px-2 text-[13px] text-zinc-800 outline-none transition focus:border-blue-500 dark:border-blue-500/60 dark:bg-zinc-900 dark:text-white"
+        className="h-8 w-full rounded-sm border border-info-300 bg-white px-2 text-[13px] text-zinc-800 outline-none transition focus:border-info-500 dark:border-info-500/60 dark:bg-zinc-900 dark:text-white"
       />
     </div>
   );

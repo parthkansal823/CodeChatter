@@ -64,17 +64,17 @@ function getPresenceTone(collaborator, fallbackOnly = false) {
 function toneClasses(tone) {
   if (tone === "typing") {
     return {
-      chip: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
-      dot: "bg-amber-400",
-      avatar: "border-amber-200 bg-white dark:border-amber-500/30 dark:bg-zinc-900",
+      chip: "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300",
+      dot: "bg-warning-400",
+      avatar: "border-warning-200 bg-white dark:border-warning-500/30 dark:bg-zinc-900",
     };
   }
 
   if (tone === "active") {
     return {
-      chip: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
-      dot: "bg-emerald-400",
-      avatar: "border-emerald-200 bg-white dark:border-emerald-500/30 dark:bg-zinc-900",
+      chip: "bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300",
+      dot: "bg-success-400",
+      avatar: "border-success-200 bg-white dark:border-success-500/30 dark:bg-zinc-900",
     };
   }
 
@@ -202,7 +202,7 @@ export default function TopBar({
               onClick={onToggleExplorer}
               className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
                 explorerOpen
-                  ? "bg-violet-500/10 text-violet-400"
+                  ? "bg-brand-500/10 text-brand-400"
                   : "text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
               }`}
               title={explorerOpen ? "Hide files" : "Show files"}
@@ -223,9 +223,9 @@ export default function TopBar({
                 <PresenceChip
                   className={
                     saveStatus === "error"
-                      ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                      ? "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300"
                       : liveConnected
-                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        ? "bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300"
                         : "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
                   }
                 >
@@ -234,9 +234,9 @@ export default function TopBar({
                 </PresenceChip>
                 {room?.accessRole && (() => {
                   const roleStyles = {
-                    owner:  "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-300",
-                    editor: "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300",
-                    runner: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+                    owner:  "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300",
+                    editor: "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300",
+                    runner: "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300",
                     viewer: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
                   };
                   const roleLabels = { owner: "Owner", editor: "Editor", runner: "Runner", viewer: "Viewer" };
@@ -249,12 +249,12 @@ export default function TopBar({
                 {canManageRoom && pendingJoinRequestCount > 0 && (
                   <button
                     onClick={onOpenSettings}
-                    className="outline-none flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 transition-all hover:border-amber-500/60 hover:bg-amber-500/20"
+                    className="outline-none flex items-center gap-1.5 rounded-full border border-warning-500/40 bg-warning-500/10 px-2.5 py-1 text-[11px] font-semibold text-warning-300 transition-all hover:border-warning-500/60 hover:bg-warning-500/20"
                     title="Review join requests"
                   >
                     <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-warning-500" />
                     </span>
                     {pendingJoinRequestCount} waiting to join
                   </button>
@@ -270,13 +270,13 @@ export default function TopBar({
 
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 xl:justify-end">
             {activeCollaborators.length > 0 && (
-              <PresenceChip className="bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <PresenceChip className="bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300">
                 {activeCollaborators.length} live
               </PresenceChip>
             )}
 
             {typingCollaborators.length > 0 && (
-              <PresenceChip className="bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+              <PresenceChip className="bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300">
                 {typingCollaborators.length === 1
                   ? `${typingCollaborators[0].username} typing`
                   : `${typingCollaborators.length} typing`}
@@ -323,7 +323,7 @@ export default function TopBar({
             <button
               onClick={onRun}
               disabled={isRunning || !canRun}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-xs font-medium text-white shadow-sm transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-600 dark:hover:bg-emerald-500 sm:gap-2 sm:px-3.5 sm:text-sm"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-success-600 px-2.5 text-xs font-medium text-white shadow-sm transition-all hover:bg-success-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-success-600 dark:hover:bg-success-500 sm:gap-2 sm:px-3.5 sm:text-sm"
               title={canRun ? "Run active file" : "You need at least runner access to run files"}
             >
               <Play size={13} fill="currentColor" />

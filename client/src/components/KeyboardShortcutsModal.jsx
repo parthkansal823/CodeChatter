@@ -76,8 +76,8 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
           >
             <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-900/30">
-                  <Keyboard size={16} className="text-violet-600 dark:text-violet-400" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-100 dark:bg-brand-900/30">
+                  <Keyboard size={16} className="text-brand-600 dark:text-brand-400" />
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Keyboard Shortcuts</h2>

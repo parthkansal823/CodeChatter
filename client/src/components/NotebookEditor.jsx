@@ -72,14 +72,14 @@ function OutputBlock({ outputs }) {
       {outputs.map((out, i) => {
         if (out.type === "error") {
           return (
-            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/[0.06]">
+            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-danger-500 dark:text-danger-400 bg-danger-50 dark:bg-danger-500/[0.06]">
               {stripAnsi(out.text)}
             </pre>
           );
         }
         if (out.type === "stderr") {
           return (
-            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/[0.06]">
+            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-warning-600 dark:text-warning-400 bg-warning-50 dark:bg-warning-500/[0.06]">
               {stripAnsi(out.text)}
             </pre>
           );
@@ -97,8 +97,8 @@ function OutputBlock({ outputs }) {
 function CellStatusBadge({ count, running }) {
   if (running) {
     return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-500/20">
-        <Loader2 size={10} className="animate-spin text-violet-500" />
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-500/20">
+        <Loader2 size={10} className="animate-spin text-brand-500" />
       </span>
     );
   }
@@ -297,7 +297,7 @@ export default function NotebookEditor({
         onClick={() => setActiveCellId(cell.id)}
         className={`group relative rounded-xl border transition-all ${
           isActive
-            ? "border-violet-400/60 shadow-sm dark:border-violet-500/40"
+            ? "border-brand-400/60 shadow-sm dark:border-brand-500/40"
             : "border-zinc-200 dark:border-white/[0.07] hover:border-zinc-300 dark:hover:border-white/[0.12]"
         } bg-white dark:bg-[#0d0d10]`}
       >
@@ -305,9 +305,9 @@ export default function NotebookEditor({
         <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-white/[0.05]">
           {/* Cell type icon */}
           {cell.type === "code" ? (
-            <Code2 size={12} className="text-violet-400 shrink-0" />
+            <Code2 size={12} className="text-brand-400 shrink-0" />
           ) : (
-            <Type size={12} className="text-amber-400 shrink-0" />
+            <Type size={12} className="text-warning-400 shrink-0" />
           )}
 
           {/* Execution badge */}
@@ -360,7 +360,7 @@ export default function NotebookEditor({
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteCell(cell.id); }}
                   title="Delete cell"
-                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-500/10 dark:hover:text-danger-400"
                 >
                   <Trash2 size={11} />
                 </button>
@@ -371,7 +371,7 @@ export default function NotebookEditor({
                 onClick={(e) => { e.stopPropagation(); runCell(cell.id, false); }}
                 disabled={isRunning || readOnly}
                 title="Run cell (Shift+Enter)"
-                className="flex h-6 w-6 items-center justify-center rounded bg-violet-100 text-violet-600 hover:bg-violet-200 dark:bg-violet-500/20 dark:text-violet-400 dark:hover:bg-violet-500/30 disabled:opacity-50"
+                className="flex h-6 w-6 items-center justify-center rounded bg-brand-100 text-brand-600 hover:bg-brand-200 dark:bg-brand-500/20 dark:text-brand-400 dark:hover:bg-brand-500/30 disabled:opacity-50"
               >
                 {isRunning ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
               </button>
@@ -435,13 +435,13 @@ export default function NotebookEditor({
           <div className="absolute -bottom-4 left-0 right-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
             <button
               onClick={(e) => { e.stopPropagation(); addCell(cell.id, "code"); }}
-              className="flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-zinc-500 shadow-sm hover:border-violet-300 hover:text-violet-600 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-violet-500 dark:hover:text-violet-400"
+              className="flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-zinc-500 shadow-sm hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-brand-500 dark:hover:text-brand-400"
             >
               <Plus size={9} /> Code
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); addCell(cell.id, "markdown"); }}
-              className="flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-zinc-500 shadow-sm hover:border-amber-300 hover:text-amber-600 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-amber-500 dark:hover:text-amber-400"
+              className="flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-zinc-500 shadow-sm hover:border-warning-300 hover:text-warning-600 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-warning-500 dark:hover:text-warning-400"
             >
               <Plus size={9} /> Markdown
             </button>
@@ -464,7 +464,7 @@ export default function NotebookEditor({
           value={notebook.language}
           disabled={readOnly}
           onChange={(e) => updateNotebook((nb) => ({ ...nb, language: e.target.value }))}
-          className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-600 outline-none focus:border-violet-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+          className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-600 outline-none focus:border-brand-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
         >
           {SUPPORTED_LANGUAGES.map((l) => (
             <option key={l} value={l}>{l}</option>
@@ -477,14 +477,14 @@ export default function NotebookEditor({
               <button
                 onClick={() => addCell(null, "code")}
                 title="Add code cell"
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:border-violet-300 hover:text-violet-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-violet-500 dark:hover:text-violet-400"
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-brand-500 dark:hover:text-brand-400"
               >
                 <Plus size={11} /> Code
               </button>
               <button
                 onClick={() => addCell(null, "markdown")}
                 title="Add markdown cell"
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:border-amber-300 hover:text-amber-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-amber-500 dark:hover:text-amber-400"
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:border-warning-300 hover:text-warning-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-warning-500 dark:hover:text-warning-400"
               >
                 <Plus size={11} /> Markdown
               </button>
@@ -502,7 +502,7 @@ export default function NotebookEditor({
             onClick={handleRunAll}
             disabled={runAll || readOnly}
             title="Run all cells"
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
           >
             {runAll ? <Loader2 size={11} className="animate-spin" /> : <PlayCircle size={11} />}
             Run All
@@ -521,13 +521,13 @@ export default function NotebookEditor({
             <div className="flex gap-2">
               <button
                 onClick={() => addCell(null, "code")}
-                className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:border-violet-300 hover:text-violet-600 dark:border-zinc-700 dark:text-zinc-400"
+                className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-400"
               >
                 <Plus size={14} /> Code cell
               </button>
               <button
                 onClick={() => addCell(null, "markdown")}
-                className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:border-amber-300 hover:text-amber-600 dark:border-zinc-700 dark:text-zinc-400"
+                className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:border-warning-300 hover:text-warning-600 dark:border-zinc-700 dark:text-zinc-400"
               >
                 <Plus size={14} /> Markdown cell
               </button>

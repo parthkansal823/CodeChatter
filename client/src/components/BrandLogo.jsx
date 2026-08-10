@@ -67,7 +67,7 @@ export default function BrandLogo({ size = "md", className = "" }) {
       {/* TEXT */}
       <span className="text-xl font-semibold tracking-tight">
         <span className="text-zinc-800 dark:text-white">Code</span>
-        <span className="bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-transparent">
+        <span className="bg-gradient-to-r from-brand-500 to-info-500 bg-clip-text text-transparent">
           Chatter
         </span>
       </span>

@@ -113,7 +113,7 @@ export default function FileItem({
       }}
       className={`group flex items-center gap-1 transition-colors cursor-pointer outline-none border-l-[3px] select-none ${
         isActive
-          ? "bg-blue-100/50 text-blue-900 border-blue-500 dark:bg-blue-600/20 dark:text-blue-200 dark:border-blue-400"
+          ? "bg-info-100/50 text-info-900 border-info-500 dark:bg-info-600/20 dark:text-info-200 dark:border-info-400"
           : isFocused
             ? "bg-zinc-200/50 text-zinc-950 border-transparent dark:bg-zinc-800/60 dark:text-zinc-100"
             : "text-zinc-700 hover:bg-zinc-100/60 border-transparent dark:text-zinc-300 dark:hover:bg-zinc-900/40"
@@ -161,7 +161,7 @@ export default function FileItem({
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
-            className="h-6 w-full min-w-0 rounded-sm border border-blue-500 bg-white px-1 text-[13px] text-zinc-900 outline-none dark:bg-zinc-900 dark:text-white"
+            className="h-6 w-full min-w-0 rounded-sm border border-info-500 bg-white px-1 text-[13px] text-zinc-900 outline-none dark:bg-zinc-900 dark:text-white"
           />
         ) : (
           <span className="truncate text-[13px]">{node.name}</span>
@@ -203,7 +203,7 @@ export default function FileItem({
               event.stopPropagation();
               setIsRenaming(true);
             }}
-            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-zinc-800 dark:hover:text-blue-400"
+            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-info-100 hover:text-info-600 dark:hover:bg-zinc-800 dark:hover:text-info-400"
             title={`Rename ${node.name} (F2)`}
           >
             <Pencil size={13} />
@@ -215,7 +215,7 @@ export default function FileItem({
               event.stopPropagation();
               onDelete?.(node);
             }}
-            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-zinc-800 dark:hover:text-red-400"
+            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-danger-100 hover:text-danger-600 dark:hover:bg-zinc-800 dark:hover:text-danger-400"
             title={`Delete ${node.name} (Del)`}
           >
             <Trash2 size={13} />

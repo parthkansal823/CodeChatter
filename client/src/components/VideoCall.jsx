@@ -107,7 +107,7 @@ function VideoTile({
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
 
       {isScreenSharing ? (
-        <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-500/85 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-md">
+        <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-info-400/30 bg-info-500/85 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-md">
           <MonitorUp size={10} />
           Presenting
         </div>
@@ -120,7 +120,7 @@ function VideoTile({
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/45 px-2.5 py-2 backdrop-blur-md">
-          {isLocal && muted ? <MicOff size={13} className="text-rose-400" /> : <AudioBars level={audioLevel} active={!muted} />}
+          {isLocal && muted ? <MicOff size={13} className="text-danger-400" /> : <AudioBars level={audioLevel} active={!muted} />}
         </div>
       </div>
     </div>
@@ -552,16 +552,16 @@ export default function VideoCall({
   const controlButton = (active, danger = false) =>
     `flex h-12 w-12 items-center justify-center rounded-2xl border transition ${
       danger
-        ? "border-red-400/30 bg-red-500 text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] hover:bg-red-400"
+        ? "border-danger-400/30 bg-danger-500 text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] hover:bg-danger-400"
         : active
-          ? "border-sky-400/30 bg-sky-500 text-white shadow-[0_10px_25px_rgba(14,165,233,0.35)] hover:bg-sky-400"
+          ? "border-info-400/30 bg-info-500 text-white shadow-[0_10px_25px_rgba(14,165,233,0.35)] hover:bg-info-400"
           : "border-white/8 bg-white/[0.05] text-zinc-200 hover:bg-white/[0.09]"
     }`;
 
   const headerButton = (active = false) =>
     `flex h-9 w-9 items-center justify-center rounded-xl border transition ${
       active
-        ? "border-sky-400/30 bg-sky-500/15 text-sky-300"
+        ? "border-info-400/30 bg-info-500/15 text-info-300"
         : "border-white/8 bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] hover:text-zinc-100"
     }`;
 
@@ -579,7 +579,7 @@ export default function VideoCall({
               <ArrowLeft size={15} />
             </button>
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-400">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-info-500/15 text-info-400">
               <Video size={17} />
             </div>
 
@@ -587,7 +587,7 @@ export default function VideoCall({
               <p className="truncate text-sm font-semibold text-white">Video Call</p>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
                 <span className="truncate">{roomName || "Workspace call"}</span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                <span className="inline-flex items-center gap-1 rounded-full bg-success-500/10 px-2 py-0.5 text-success-300">
                   <Radio size={10} />
                   Live
                 </span>
@@ -598,7 +598,7 @@ export default function VideoCall({
           <div className="flex items-center gap-2">
             {hasPermissions === true ? (
               <div className="hidden items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300 sm:flex">
-                <Clock size={11} className="text-emerald-400" />
+                <Clock size={11} className="text-success-400" />
                 {formatDuration(callDuration)}
               </div>
             ) : null}
@@ -629,8 +629,8 @@ export default function VideoCall({
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {hasPermissions === false ? (
               <div className="flex h-full items-center justify-center">
-                <div className="w-full max-w-sm rounded-[28px] border border-rose-500/20 bg-rose-500/10 p-6 text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-300">
+                <div className="w-full max-w-sm rounded-[28px] border border-danger-500/20 bg-danger-500/10 p-6 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-danger-500/20 text-danger-300">
                     <VideoOff size={22} />
                   </div>
                   <p className="mt-4 text-lg font-semibold text-white">Camera or mic blocked</p>
@@ -653,7 +653,7 @@ export default function VideoCall({
                   videoRefOverride={localVideoRef}
                 />
 
-                <div className="rounded-[28px] border border-white/8 bg-gradient-to-br from-white/[0.05] via-white/[0.03] to-sky-500/10 p-5">
+                <div className="rounded-[28px] border border-white/8 bg-gradient-to-br from-white/[0.05] via-white/[0.03] to-info-500/10 p-5">
                   <p className="text-lg font-semibold text-white">Meeting is ready</p>
                   <p className="mt-2 text-sm leading-6 text-zinc-300">
                     This call now behaves more like a real meeting room: you can present, pin yourself in PiP, switch layouts, and watch participants join live.
@@ -757,7 +757,7 @@ export default function VideoCall({
                   <PictureInPicture2 size={18} />
                 </button>
               ) : null}
-              <button onClick={endCall} className="inline-flex h-12 items-center gap-2 rounded-2xl border border-red-400/30 bg-red-500 px-5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] transition hover:bg-red-400" title="End call">
+              <button onClick={endCall} className="inline-flex h-12 items-center gap-2 rounded-2xl border border-danger-400/30 bg-danger-500 px-5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] transition hover:bg-danger-400" title="End call">
                 <PhoneOff size={18} />
                 Leave
               </button>
@@ -773,14 +773,14 @@ export default function VideoCall({
             </div>
 
             <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
-              <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-3 py-3">
+              <div className="rounded-2xl border border-info-500/20 bg-info-500/10 px-3 py-3">
                 <div className="flex items-center gap-3">
                   <UserAvatar username={user?.username} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-white">{user?.username || "You"}</p>
-                    <p className="text-[11px] text-sky-200">{isScreenSharing ? "Presenting" : "Local"}</p>
+                    <p className="text-[11px] text-info-200">{isScreenSharing ? "Presenting" : "Local"}</p>
                   </div>
-                  {isAudioMuted ? <MicOff size={13} className="text-rose-400" /> : <Mic size={13} className="text-emerald-400" />}
+                  {isAudioMuted ? <MicOff size={13} className="text-danger-400" /> : <Mic size={13} className="text-success-400" />}
                 </div>
               </div>
 
@@ -792,7 +792,7 @@ export default function VideoCall({
                       <p className="truncate text-sm font-semibold text-white">{username}</p>
                       <p className="text-[11px] text-zinc-400">Connected</p>
                     </div>
-                    <Radio size={12} className="text-emerald-400" />
+                    <Radio size={12} className="text-success-400" />
                   </div>
                 </div>
               ))}

@@ -9,15 +9,15 @@ export const ACTIVITY_STORAGE_PREFIX = "cc-activity-";
 const MAX_ENTRIES = 60;
 
 const TYPE_META = {
-  file_open:   { icon: File,      color: "text-sky-500",     bg: "bg-sky-50 dark:bg-sky-900/20" },
-  file_create: { icon: File,      color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
-  file_delete: { icon: Trash2,    color: "text-red-500",     bg: "bg-red-50 dark:bg-red-900/20" },
-  code_run:    { icon: Play,      color: "text-green-500",   bg: "bg-green-50 dark:bg-green-900/20" },
-  code_error:  { icon: Code2,     color: "text-red-500",     bg: "bg-red-50 dark:bg-red-900/20" },
-  code_save:   { icon: Save,      color: "text-violet-500",  bg: "bg-violet-50 dark:bg-violet-900/20" },
-  user_join:   { icon: UserPlus,  color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
+  file_open:   { icon: File,      color: "text-info-500",     bg: "bg-info-50 dark:bg-info-900/20" },
+  file_create: { icon: File,      color: "text-success-500", bg: "bg-success-50 dark:bg-success-900/20" },
+  file_delete: { icon: Trash2,    color: "text-danger-500",     bg: "bg-danger-50 dark:bg-danger-900/20" },
+  code_run:    { icon: Play,      color: "text-success-500",   bg: "bg-success-50 dark:bg-success-900/20" },
+  code_error:  { icon: Code2,     color: "text-danger-500",     bg: "bg-danger-50 dark:bg-danger-900/20" },
+  code_save:   { icon: Save,      color: "text-brand-500",  bg: "bg-brand-50 dark:bg-brand-900/20" },
+  user_join:   { icon: UserPlus,  color: "text-success-500", bg: "bg-success-50 dark:bg-success-900/20" },
   user_leave:  { icon: UserMinus, color: "text-zinc-500",    bg: "bg-zinc-100 dark:bg-zinc-800" },
-  ai_query:    { icon: Bot,       color: "text-amber-500",   bg: "bg-amber-50 dark:bg-amber-900/20" },
+  ai_query:    { icon: Bot,       color: "text-warning-500",   bg: "bg-warning-50 dark:bg-warning-900/20" },
 };
 
 function timeAgo(iso) {
@@ -87,7 +87,7 @@ export default function ActivityLog({ roomId, onBack = null }) {
               <ArrowLeft size={13} />
             </button>
           ) : null}
-          <Activity size={14} className="text-violet-400" />
+          <Activity size={14} className="text-brand-400" />
           <span className="text-sm font-semibold text-zinc-900 dark:text-white">Activity Log</span>
           {activities.length > 0 && (
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
@@ -106,7 +106,7 @@ export default function ActivityLog({ roomId, onBack = null }) {
           {activities.length > 0 && (
             <button
               onClick={clear}
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-900/20 dark:hover:text-danger-400"
               title="Clear log"
             >
               <Trash2 size={13} />

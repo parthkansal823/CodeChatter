@@ -82,7 +82,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="flex items-center gap-2 min-w-0">
-          <Clock size={14} className="shrink-0 text-violet-400" />
+          <Clock size={14} className="shrink-0 text-brand-400" />
           <div className="min-w-0">
             <p className="text-xs font-semibold text-zinc-900 dark:text-white">Version History</p>
             {fileName && (
@@ -112,7 +112,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {versions.map((entry, i) => (
               <div key={entry.id} className="group flex items-start gap-2 px-3 py-3">
-                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-50 text-[9px] font-bold text-violet-600 dark:bg-violet-900/20 dark:text-violet-400">
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[9px] font-bold text-brand-600 dark:bg-brand-900/20 dark:text-brand-400">
                   {versions.length - i}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -127,13 +127,13 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
                 <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
                     onClick={() => handleRestore(entry)}
-                    className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-900/20 dark:hover:text-violet-400"
+                    className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
                     title="Restore this version"
                   >
                     <AnimatePresence mode="wait">
                       {restored === entry.id ? (
                         <Motion.div key="check" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                          <CheckCircle size={13} className="text-green-500" />
+                          <CheckCircle size={13} className="text-success-500" />
                         </Motion.div>
                       ) : (
                         <Motion.div key="restore" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
@@ -145,7 +145,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
                   {i > 0 && (
                     <button
                       onClick={() => deleteVersion(entry.id)}
-                      className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                      className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-900/20 dark:hover:text-danger-400"
                       title="Delete this version"
                     >
                       <Trash2 size={13} />

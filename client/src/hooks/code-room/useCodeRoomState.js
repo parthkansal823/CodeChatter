@@ -935,6 +935,18 @@ export function useCodeRoomState({
 
     setSaveStatus("saving");
 
+    // Every save ships the whole workspace tree, so a big room would push
+    // hundreds of KB on each debounce tick during sustained typing (and make
+    // the server rewrite + revalidate the entire document). Back the interval
+    // off as the payload grows: small rooms stay at the snappy 180ms, large
+    // ones trade a little sync latency for far less bandwidth and CPU.
+    const snapshotBytes = nextSnapshot.length;
+    const saveDelayMs =
+      snapshotBytes > 400_000 ? 900
+        : snapshotBytes > 120_000 ? 500
+          : snapshotBytes > 30_000 ? 300
+            : 180;
+
     const timeoutId = window.setTimeout(() => {
       const requestId = generateRequestId();
 
@@ -953,7 +965,7 @@ export function useCodeRoomState({
       }
 
       saveWorkspace(workspaceTreeRef.current).catch(() => {});
-    }, 180);
+    }, saveDelayMs);
 
     return () => window.clearTimeout(timeoutId);
   }, [canEditRoom, isRealtimeConnected, roomId, saveWorkspace, sendCollaborationMessage, token, workspaceTree]);
