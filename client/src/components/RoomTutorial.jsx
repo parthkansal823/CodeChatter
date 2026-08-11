@@ -301,7 +301,7 @@ export default function RoomTutorial() {
                   </button>
                 )}
                 <Motion.button  whileTap={{ scale: 0.97 }} onClick={next}
-                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-sm transition-colors hover:bg-brand-500">
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-500">
                   {isLast ? "Done" : "Next"}
                   {isLast ? <Check size={14} /> : <ArrowRight size={14} />}
                 </Motion.button>

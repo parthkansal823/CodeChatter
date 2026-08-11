@@ -1,0 +1,11 @@
+rules:
+  quoted-strings:
+    required: only-when-needed
+    # Docker Compose exec-form commands (healthcheck test, entrypoint, command)
+    # are conventionally written as quoted string arrays; the quotes are part of
+    # the idiom rather than redundant.
+    allow-quoted-quotes: true
+    extra-allowed: ["{|}", "^CMD", "^--", "^db\\.", "^mongosh$"]
+  key-duplicates: {}
+  octal-values:
+    forbid-implicit-octal: true

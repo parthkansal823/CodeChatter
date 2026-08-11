@@ -8,6 +8,7 @@ import {
   FolderOpen, Play, Timer, Github,
 } from "lucide-react";
 import { HOME_TUTORIAL_KEY } from "./tutorialKeys";
+import { useAuth } from "../hooks/useAuth";
 
 // ── Mini UI preview components ──────────────────────────────────────────────
 
@@ -168,26 +169,38 @@ const HOME_STEPS = [
 
 const SPRING = { type: "spring", stiffness: 380, damping: 26 };
 
+const hasCompletedTour = () => {
+  try {
+    return Boolean(localStorage.getItem(HOME_TUTORIAL_KEY));
+  } catch {
+    // No localStorage (private mode, blocked storage) — never nag.
+    return true;
+  }
+};
+
 export default function OnboardingModal() {
-  const [step, setStep]       = useState(0);
-  const [visible, setVisible] = useState(false);
+  const [step, setStep]         = useState(0);
+  const [completed, setCompleted] = useState(hasCompletedTour);
+  const [manuallyOpened, setManuallyOpened] = useState(false);
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    const show = () => { setStep(0); setVisible(true); };
-
-    // First-time auto-show
-    try {
-      if (!localStorage.getItem(HOME_TUTORIAL_KEY)) show();
-    } catch { /* */ }
-
-    // Re-open from Settings
+    // Re-open from Settings — always allowed, regardless of auth state.
+    const show = () => { setStep(0); setManuallyOpened(true); };
     window.addEventListener("cc-open-tutorial", show);
     return () => window.removeEventListener("cc-open-tutorial", show);
   }, []);
 
+  // Derived, not stored: this component is mounted at the app root, outside
+  // <Routes>, so an unguarded first-run tour opened on top of the landing and
+  // login pages and dimmed the whole screen behind its backdrop before anyone
+  // had even signed in. Only offer it once there is a workspace to tour.
+  const visible = manuallyOpened || (!isLoading && isAuthenticated && !completed);
+
   const dismiss = () => {
     try { localStorage.setItem(HOME_TUTORIAL_KEY, "1"); } catch { /* */ }
-    setVisible(false);
+    setCompleted(true);
+    setManuallyOpened(false);
   };
 
   const next = () => {
@@ -297,7 +310,7 @@ export default function OnboardingModal() {
                   </button>
                 )}
                 <Motion.button  whileTap={{ scale: 0.97 }} onClick={next}
-                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-sm transition-colors hover:bg-brand-500">
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-500">
                   {isLast ? "Done" : "Next"}
                   {isLast ? <Check size={14} /> : <ArrowRight size={14} />}
                 </Motion.button>

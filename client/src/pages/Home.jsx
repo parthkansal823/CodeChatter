@@ -32,12 +32,12 @@ import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/termi
 import { getBookmarks, getRecentRooms, recordVisit, toggleBookmark } from "../utils/roomUtils";
 
 const SkeletonCard = () => (
-  <div className="rounded-lg border border-zinc-200 bg-white p-5 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
+  <div className="rounded-lg border border-edge-subtle bg-panel p-5 animate-pulse">
     <div className="mb-3 flex items-center justify-between gap-3">
-      <div className="h-5 w-1/2 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-      <div className="h-7 w-16 rounded-lg bg-hovered" />
+      <div className="h-5 w-1/2 rounded-md bg-hovered" />
+      <div className="h-7 w-16 rounded-md bg-hovered" />
     </div>
-    <div className="mb-4 h-4 w-1/3 rounded-lg bg-hovered" />
+    <div className="mb-4 h-4 w-1/3 rounded-md bg-hovered" />
     <div className="flex gap-2">
       <div className="h-6 w-16 rounded-full bg-hovered" />
       <div className="h-6 w-20 rounded-full bg-hovered" />
@@ -404,7 +404,7 @@ export default function Home() {
   };
 
   return (
-    <div className="relative min-h-screen bg-canvas text-black dark:from-zinc-950 dark:to-zinc-950/90 dark:text-white">
+    <div className="relative min-h-screen bg-canvas text-fg">
       <Motion.div
         variants={containerVariants}
         initial="hidden"
@@ -437,7 +437,7 @@ export default function Home() {
             
             whileTap={{ scale: 0.99 }}
             onClick={openCreateModal}
-            className="group rounded-lg border border-zinc-200 bg-white/70 p-6 text-left transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
+            className="group rounded-lg border border-edge-subtle bg-panel p-6 text-left transition-colors hover:border-accent"
           >
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -447,7 +447,7 @@ export default function Home() {
                   Name the room, pick a template, and jump straight into the editor.
                 </p>
               </div>
-              <div className="rounded-xl bg-brand-100 p-3 text-brand-700 transition-transform group-hover:scale-110 dark:bg-brand-900/40 dark:text-brand-300">
+              <div className="rounded-md bg-accent-subtle p-3 text-accent transition-transform group-hover:scale-110">
                 <Plus size={22} />
               </div>
             </div>
@@ -460,7 +460,7 @@ export default function Home() {
               const { roomId, inviteToken } = parseRoomInvite(joinRoomValue);
               handleJoinById(roomId, inviteToken);
             }}
-            className="rounded-lg border border-zinc-200 bg-white/70 p-6 transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
+            className="rounded-lg border border-edge-subtle bg-panel p-6 transition-colors hover:border-accent"
           >
             <p className="text-sm text-fg-muted">Join room</p>
             <h2 className="mt-1 text-2xl font-semibold">Paste a room ID or invite link</h2>
@@ -488,8 +488,8 @@ export default function Home() {
         {recentRooms.length > 0 && (
           <Motion.div variants={itemVariants} className="mt-8">
             <div className="mb-3 flex items-center gap-2">
-              <Clock size={13} className="text-zinc-400" />
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
+              <Clock size={13} className="text-fg-subtle" />
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">
                 Recently visited
               </h2>
             </div>
@@ -497,12 +497,12 @@ export default function Home() {
               {recentRooms.map(r => (
                 <button
                   key={r.id}
-                  onClick={() => { recordVisit(r.id, r.name); navigate(`/room/${r.id}`); }}
-                  className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left text-sm transition-colors hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-brand-700 dark:hover:bg-brand-900/10"
+                  onClick={() => { recordVisit(r.id, r.name); setRecentRooms(getRecentRooms()); navigate(`/room/${r.id}`); }}
+                  className="flex shrink-0 items-center gap-2 rounded-md border border-edge-subtle bg-panel px-3 py-2 text-left text-sm transition-colors hover:border-accent hover:bg-hovered"
                 >
-                  <FolderGit2 size={13} className="text-zinc-400" />
+                  <FolderGit2 size={13} className="text-fg-subtle" />
                   <span className="font-medium text-fg">{r.name}</span>
-                  <ArrowRight size={12} className="text-zinc-400" />
+                  <ArrowRight size={12} className="text-fg-subtle" />
                 </button>
               ))}
             </div>
@@ -515,15 +515,16 @@ export default function Home() {
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {/* Search */}
               <div className="relative">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle" />
                 <input
-                  value={roomSearch}
+                  value={roomSearch === "__bookmarked__" ? "" : roomSearch}
                   onChange={e => setRoomSearch(e.target.value)}
                   placeholder="Search rooms…"
-                  className="h-8 w-40 rounded-lg border border-zinc-200 bg-white pl-8 pr-7 text-xs text-zinc-700 outline-none transition focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 sm:w-52"
+                  aria-label="Search rooms"
+                  className="h-8 w-40 rounded-md border border-edge bg-field pl-8 pr-7 text-xs text-fg placeholder:text-fg-subtle outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent sm:w-52"
                 />
                 {roomSearch && (
-                  <button onClick={() => setRoomSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                  <button onClick={() => setRoomSearch("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg">
                     <X size={12} />
                   </button>
                 )}
@@ -531,10 +532,11 @@ export default function Home() {
               {bookmarks.length > 0 && (
                 <button
                   onClick={() => setRoomSearch(prev => prev === "__bookmarked__" ? "" : "__bookmarked__")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  aria-pressed={roomSearch === "__bookmarked__"}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                     roomSearch === "__bookmarked__"
-                      ? "bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
-                      : "text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      ? "bg-accent-subtle text-accent"
+                      : "text-fg-muted hover:bg-hovered hover:text-fg"
                   }`}
                 >
                   <BookmarkCheck size={12} />
@@ -542,14 +544,15 @@ export default function Home() {
                 </button>
               )}
               <span className="text-xs text-fg-muted sm:text-sm">{rooms.length} total</span>
-              <div className="inline-flex items-center rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900">
+              <div className="inline-flex items-center rounded-md bg-chrome p-1">
                 <button
                   type="button"
                   onClick={() => setRoomViewMode("grid")}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  aria-pressed={!isListView}
+                  className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                     !isListView
-                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                      ? "bg-canvas text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   title="Block view"
                 >
@@ -559,10 +562,11 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setRoomViewMode("list")}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  aria-pressed={isListView}
+                  className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                     isListView
-                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                      ? "bg-canvas text-fg"
+                      : "text-fg-muted hover:text-fg"
                   }`}
                   title="List view"
                 >
@@ -591,7 +595,7 @@ export default function Home() {
                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
                     whileHover={{ y: -5, scale: 1.01, transition: SPRING }}
                     whileTap={{ scale: 0.99 }}
-                    className={`group/card relative rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-brand-200 dark:hover:border-brand-900/50 hover:shadow-xl hover:shadow-sm ${
+                    className={`group/card relative rounded-lg border border-edge-subtle bg-panel transition-colors hover:border-accent ${
                       isListView ? "p-4" : "p-5"
                     }`}
                   >
@@ -605,7 +609,7 @@ export default function Home() {
                           {room.templateName || "Blank Workspace"}
                         </p>
                         {room.ownerId === user?.id && (room.pendingJoinRequestCount || 0) > 0 && (
-                          <span className="mt-2 inline-flex rounded-full bg-warning-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-warning-700 dark:bg-warning-500/10 dark:text-warning-300">
+                          <span className="mt-2 inline-flex rounded-full bg-warning-500/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-warning-600">
                             {room.pendingJoinRequestCount} request{room.pendingJoinRequestCount === 1 ? "" : "s"} waiting
                           </span>
                         )}
@@ -619,10 +623,10 @@ export default function Home() {
                           setBookmarks(getBookmarks());
                         }}
                         title={bookmarks.includes(room.id) ? "Remove bookmark" : "Bookmark room"}
-                        className={`shrink-0 rounded-lg p-1.5 transition-colors ${
+                        className={`shrink-0 rounded-md p-1.5 transition-colors ${
                           bookmarks.includes(room.id)
-                            ? "text-brand-600 dark:text-brand-400"
-                            : "text-zinc-300 hover:text-zinc-500 dark:text-zinc-700 dark:hover:text-zinc-400"
+                            ? "text-accent"
+                            : "text-fg-subtle hover:text-fg"
                         }`}
                       >
                         {bookmarks.includes(room.id)
@@ -640,11 +644,13 @@ export default function Home() {
                               e.stopPropagation();
                               setOpenMenuId(openMenuId === room.id ? null : room.id);
                             }}
-                            className={`rounded-lg p-1.5 transition-colors ${openMenuId === room.id
-                              ? "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400"
-                              : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                            className={`rounded-md p-1.5 transition-colors ${openMenuId === room.id
+                              ? "bg-accent-subtle text-accent"
+                              : "text-fg-subtle hover:bg-hovered hover:text-fg"
                               }`}
                             title="Workspace settings"
+                            aria-haspopup="menu"
+                            aria-expanded={openMenuId === room.id}
                           >
                             <MoreVertical size={16} />
                           </button>
@@ -652,24 +658,27 @@ export default function Home() {
                           {openMenuId === room.id && (
                             <div
                               onMouseDown={(e) => e.stopPropagation()}
-                              className="absolute right-0 top-10 z-30 w-56 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-700/80 dark:bg-zinc-900"
+                              role="menu"
+                              className="absolute right-0 top-10 z-30 w-56 overflow-hidden rounded-md border border-edge bg-overlay shadow-xl"
                             >
 
                               {/* Actions */}
                               <div className="py-1">
                                 <button
                                   onClick={() => { navigate(`/room/${room.id}`); setOpenMenuId(null); }}
-                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                                  role="menuitem"
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-fg transition-colors hover:bg-hovered"
                                 >
-                                  <ArrowRight size={14} className="text-zinc-400" />
+                                  <ArrowRight size={14} className="text-fg-subtle" />
                                   Open workspace
                                 </button>
 
                                 <button
                                   onClick={() => handleOpenRoomSettings(room)}
-                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                                  role="menuitem"
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-fg transition-colors hover:bg-hovered"
                                 >
-                                  <Settings2 size={14} className="text-zinc-400" />
+                                  <Settings2 size={14} className="text-fg-subtle" />
                                   Workspace settings
                                 </button>
 
@@ -687,18 +696,20 @@ export default function Home() {
                                     }
                                     setOpenMenuId(null);
                                   }}
-                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                                  role="menuitem"
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-fg transition-colors hover:bg-hovered"
                                 >
-                                  <Link2 size={14} className="text-zinc-400" />
+                                  <Link2 size={14} className="text-fg-subtle" />
                                   Copy invite link
                                 </button>
                               </div>
 
                               {/* Delete */}
-                              <div className="border-t border-zinc-100 py-1 dark:border-zinc-800">
+                              <div className="border-t border-edge-subtle py-1">
                                 <button
                                   onClick={() => { handleDeleteRoom(room); setOpenMenuId(null); }}
-                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-danger-600 transition-colors hover:bg-danger-50 dark:text-danger-400 dark:hover:bg-danger-900/20"
+                                  role="menuitem"
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-danger-500 transition-colors hover:bg-danger-500/10"
                                 >
                                   <Trash2 size={14} />
                                   Delete workspace
@@ -715,17 +726,17 @@ export default function Home() {
                       className="mt-4 block w-full text-left group"
                     >
                       <div className="flex flex-wrap gap-2 text-xs text-fg-muted">
-                        <span className="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">
+                        <span className="rounded-full bg-hovered px-2.5 py-1">
                           {room.fileCount || 0} files
                         </span>
-                        <span className="rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">
+                        <span className="rounded-full bg-hovered px-2.5 py-1">
                           {room.participantCount || 0} collaborators
                         </span>
-                        <span className="truncate max-w-[120px] rounded-full bg-zinc-100 px-2.5 py-1 dark:bg-zinc-800">
+                        <span className="truncate max-w-[120px] rounded-full bg-hovered px-2.5 py-1">
                           {room.id}
                         </span>
                       </div>
-                      <div className="mt-5 flex items-center justify-between border-t border-zinc-100 pt-3 text-sm font-medium text-zinc-400 dark:border-zinc-800 dark:text-zinc-500 group-hover/card:text-brand-600 dark:group-hover/card:text-brand-400 transition-colors">
+                      <div className="mt-5 flex items-center justify-between border-t border-edge-subtle pt-3 text-sm font-medium text-fg-muted transition-colors group-hover/card:text-accent">
                         <span>Open room</span>
                         <ArrowRight size={14} className="transform group-hover/card:translate-x-1 transition-transform" />
                       </div>
@@ -735,25 +746,25 @@ export default function Home() {
               </AnimatePresence>
             </div>
           ) : rooms.length > 0 ? (
-            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
-              <Search size={22} className="text-zinc-400" />
+            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-lg border border-dashed border-edge p-10 text-center">
+              <Search size={22} className="text-fg-subtle" />
               <p className="mt-3 text-base font-semibold text-fg">No matching rooms</p>
               <p className="mt-1 max-w-sm text-sm text-fg-muted">
                 Try a different name or room ID, or clear the filter to view all rooms.
               </p>
               <button
                 onClick={() => setRoomSearch("")}
-                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                className="mt-4 inline-flex items-center gap-2 rounded-md border border-edge bg-panel px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-hovered hover:border-edge-strong"
               >
                 Clear filter
               </button>
             </Motion.div>
           ) : (
-            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
+            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-lg border border-dashed border-edge p-12 text-center">
               <Motion.div
                 animate={{ y: [0, -5, 0] }}
                 transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-                className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-brand-100 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400"
+                className="mb-4 flex h-14 w-14 items-center justify-center rounded-md bg-accent-subtle text-accent"
               >
                 <FolderGit2 size={24} />
               </Motion.div>
@@ -763,7 +774,7 @@ export default function Home() {
               </p>
               <button
                 onClick={openCreateModal}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-sm hover:bg-brand-500 transition-colors"
+                className="mt-5 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-fg-accent transition-colors hover:bg-accent-hover"
               >
                 <Plus size={15} /> Create a room
               </button>
@@ -774,16 +785,22 @@ export default function Home() {
 
       <AnimatePresence>
         {createModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
+          <Motion.div
+            key="create-room-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.16 } }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          >
             <Motion.form
               initial={{ opacity: 0, y: 8, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.97, transition: { duration: 0.16, ease: "easeIn" } }}
               transition={{ type: "spring", stiffness: 360, damping: 28, filter: { duration: 0.22 }, opacity: { duration: 0.2 } }}
               onSubmit={handleCreateRoom}
-              className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+              className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-lg border border-edge bg-overlay text-fg shadow-xl"
             >
-              <div className="border-b border-zinc-200 px-4 py-4 sm:px-6 dark:border-zinc-800">
+              <div className="border-b border-edge-subtle px-4 py-4 sm:px-6">
                 <p className="text-sm font-medium text-fg-muted">Create a room</p>
                 <h2 className="mt-1 text-2xl font-semibold">Choose how the workspace should start</h2>
               </div>
@@ -807,7 +824,7 @@ export default function Home() {
                       onChange={(event) => setRoomDescription(event.target.value)}
                       placeholder="Optional room description"
                       rows={4}
-                      className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 resize-none"
+                      className="w-full resize-none rounded-md border border-edge bg-field px-4 py-3 text-sm text-fg placeholder:text-fg-subtle outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent"
                     />
                   </div>
 
@@ -822,9 +839,10 @@ export default function Home() {
                           key={shell.id}
                           type="button"
                           onClick={() => setSelectedShell(shell.id)}
-                          className={`rounded-lg border px-3 py-2 text-center text-sm font-medium transition-colors ${selectedShell === shell.id
-                            ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-950 shadow-sm"
-                            : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700"
+                          aria-pressed={selectedShell === shell.id}
+                          className={`rounded-md border px-3 py-2 text-center text-sm font-medium transition-colors ${selectedShell === shell.id
+                            ? "border-accent bg-accent text-fg-accent"
+                            : "border-edge bg-field text-fg-muted hover:border-edge-strong hover:text-fg"
                             }`}
                         >
                           {shell.label}
@@ -833,7 +851,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+                  <div className="rounded-md border border-edge-subtle bg-panel p-4">
                     <p className="text-sm font-medium">{selectedTemplate?.name || "Blank Workspace"}</p>
                     <p className="mt-1 text-sm text-fg-muted">
                       {selectedTemplate?.description || "Start from an empty workspace."}
@@ -851,16 +869,17 @@ export default function Home() {
                         key={template.id}
                         type="button"
                         onClick={() => setSelectedTemplateId(template.id)}
-                        className={`rounded-xl border p-4 text-left transition-colors ${selectedTemplateId === template.id
-                          ? "border-brand-600 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/10"
-                          : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                        aria-pressed={selectedTemplateId === template.id}
+                        className={`rounded-md border p-4 text-left transition-colors ${selectedTemplateId === template.id
+                          ? "border-accent bg-accent-subtle"
+                          : "border-edge-subtle bg-field hover:border-edge-strong"
                           }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <p className={`font-medium text-sm ${selectedTemplateId === template.id ? "text-brand-700 dark:text-brand-300" : ""}`}>{template.name}</p>
+                          <p className={`font-medium text-sm ${selectedTemplateId === template.id ? "text-accent" : "text-fg"}`}>{template.name}</p>
                           <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${selectedTemplateId === template.id
-                            ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
-                            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+                            ? "bg-accent text-fg-accent"
+                            : "bg-hovered text-fg-muted"
                             }`}>
                             {template.category}
                           </span>
@@ -874,8 +893,8 @@ export default function Home() {
 
                   {/* DSA Language Picker */}
                   {selectedTemplateId === "dsa-practice" && (
-                    <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-900/40 dark:bg-brand-900/10">
-                      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-300">
+                    <div className="mt-3 rounded-md border border-edge-subtle bg-accent-subtle p-4">
+                      <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-accent">
                         Starter Language
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -884,9 +903,10 @@ export default function Home() {
                             key={lang.id}
                             type="button"
                             onClick={() => setDsaLanguage(lang.id)}
-                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${dsaLanguage === lang.id
-                              ? "border-brand-600 bg-brand-600 text-white dark:border-brand-400 dark:bg-brand-400 dark:text-zinc-900"
-                              : "border-zinc-200 bg-white text-zinc-600 hover:border-brand-300 hover:text-brand-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+                            aria-pressed={dsaLanguage === lang.id}
+                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${dsaLanguage === lang.id
+                              ? "border-accent bg-accent text-fg-accent"
+                              : "border-edge bg-field text-fg-muted hover:border-accent hover:text-fg"
                               }`}
                           >
                             {lang.label}
@@ -901,7 +921,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
+              <div className="flex items-center justify-end gap-3 border-t border-edge-subtle px-6 py-4">
                 <Button
                   type="button"
                   onClick={() => {
@@ -921,7 +941,7 @@ export default function Home() {
                 </Button>
               </div>
             </Motion.form>
-          </div>
+          </Motion.div>
         )}
       </AnimatePresence>
 
@@ -953,9 +973,9 @@ function SummaryCard({ label, value, icon }) {
   return (
     <Motion.div
       whileHover={{ y: -3, scale: 1.02, transition: { type: "spring", stiffness: 400, damping: 24 } }}
-      className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      className="rounded-lg border border-edge-subtle bg-panel p-4">
       <div className="flex items-center gap-3">
-        <div className="rounded-lg bg-zinc-100 p-2 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+        <div className="rounded-md bg-hovered p-2 text-fg">
           <IconComponent size={16} />
         </div>
         <div>

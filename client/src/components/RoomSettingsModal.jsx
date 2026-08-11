@@ -138,7 +138,7 @@ function RoleOptionGrid({ selectedRole, onChange, allowOwner = false, dense = fa
             onClick={() => onChange(option.id)}
             className={`rounded-lg border p-3 text-left transition-all ${
               isSelected
-                ? "border-brand-500 bg-brand-50 shadow-sm shadow-sm dark:border-brand-500 dark:bg-brand-950/40"
+                ? "border-brand-500 bg-brand-50 shadow-sm dark:border-brand-500 dark:bg-brand-950/40"
                 : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:border-zinc-600"
             }`}
           >
@@ -377,7 +377,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               onClick={() => setRequireJoinApproval(true)}
               className={`rounded-lg border p-4 text-left transition-all ${
                 requireJoinApproval
-                  ? "border-warning-400 bg-warning-50 shadow-sm shadow-sm dark:border-warning-500 dark:bg-warning-950/40"
+                  ? "border-warning-400 bg-warning-50 shadow-sm dark:border-warning-500 dark:bg-warning-950/40"
                   : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
               }`}
             >
@@ -397,7 +397,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               onClick={() => setRequireJoinApproval(false)}
               className={`rounded-lg border p-4 text-left transition-all ${
                 !requireJoinApproval
-                  ? "border-success-400 bg-success-50 shadow-sm shadow-sm dark:border-success-500 dark:bg-success-950/40"
+                  ? "border-success-400 bg-success-50 shadow-sm dark:border-success-500 dark:bg-success-950/40"
                   : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
               }`}
             >
@@ -701,7 +701,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                           onClick={() => setActiveSection(id)}
                           className={`mb-1.5 flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-all ${
                             isActive
-                              ? "bg-brand-600 text-white shadow-sm shadow-sm"
+                              ? "bg-brand-600 text-white shadow-sm"
                               : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
                           }`}
                         >

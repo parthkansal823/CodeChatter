@@ -480,7 +480,7 @@ export default function Settings() {
                   type="button"
                   onClick={() => setActiveSection(id)}
                   className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${activeSection === id
-                      ? "bg-brand-600 text-white shadow-sm shadow-sm"
+                      ? "bg-brand-600 text-white shadow-sm"
                       : "text-zinc-600 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
                     }`}
                 >

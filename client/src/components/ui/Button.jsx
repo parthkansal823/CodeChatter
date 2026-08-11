@@ -7,34 +7,26 @@ import { forwardRef } from "react";
  * ones that use the brand accent, `danger` is reserved for destructive actions,
  * and the rest are neutral. Sizes share a fixed height scale so buttons line up
  * with inputs and with each other in a toolbar row.
+ *
+ * Neutral variants are built from the theme tokens in styles/theme.css rather
+ * than a zinc scale plus `dark:` pairs — the tokens already carry both themes,
+ * so one class list stays correct when the theme flips at runtime.
  */
 const VARIANTS = {
-  primary:
-    "bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800 " +
-    "dark:bg-brand-500 dark:hover:bg-brand-400 dark:active:bg-brand-600",
-  secondary:
-    "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 active:bg-zinc-300 " +
-    "dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 dark:active:bg-zinc-600",
-  outline:
-    "border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 " +
-    "dark:border-zinc-800 dark:bg-transparent dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/60",
-  ghost:
-    "bg-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 " +
-    "dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100",
-  danger:
-    "bg-danger-600 text-white shadow-sm hover:bg-danger-700 active:bg-danger-800 " +
-    "dark:bg-danger-600 dark:hover:bg-danger-500",
-  subtle:
-    "bg-brand-50 text-brand-700 hover:bg-brand-100 " +
-    "dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20",
+  primary: "bg-accent text-fg-accent hover:bg-accent-hover active:bg-accent-active",
+  secondary: "bg-chrome text-fg hover:bg-hovered active:bg-selected",
+  outline: "border border-edge bg-canvas text-fg hover:border-edge-strong hover:bg-hovered",
+  ghost: "bg-transparent text-fg-muted hover:bg-hovered hover:text-fg",
+  danger: "bg-danger-600 text-white hover:bg-danger-700 active:bg-danger-800",
+  subtle: "bg-accent-subtle text-accent hover:bg-selected",
 };
 
 const SIZES = {
   xs: "h-7 gap-1.5 rounded-md px-2.5 text-xs",
-  sm: "h-8 gap-1.5 rounded-lg px-3 text-xs",
-  md: "h-9 gap-2 rounded-lg px-3.5 text-sm",
-  lg: "h-11 gap-2 rounded-xl px-5 text-base",
-  icon: "h-9 w-9 rounded-lg",
+  sm: "h-8 gap-1.5 rounded-md px-3 text-xs",
+  md: "h-9 gap-2 rounded-md px-3.5 text-sm",
+  lg: "h-11 gap-2 rounded-md px-5 text-base",
+  icon: "h-9 w-9 rounded-md",
   "icon-sm": "h-8 w-8 rounded-md",
 };
 
@@ -55,6 +47,8 @@ const Button = forwardRef(function Button(
   const base =
     "relative inline-flex select-none items-center justify-center whitespace-nowrap font-medium " +
     "transition-[background-color,border-color,color,transform] duration-150 " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 " +
+    "focus-visible:ring-offset-canvas " +
     "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50";
 
   const iconSize = size === "lg" ? 18 : 15;

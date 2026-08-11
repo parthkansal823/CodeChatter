@@ -4,16 +4,19 @@ const Input = forwardRef(({ className = "", error, icon: Icon, ...props }, ref) 
   return (
     <div className="relative">
       {Icon && (
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-fg-subtle">
           <Icon size={16} />
         </div>
       )}
       <input
         ref={ref}
-        className={`flex h-10 w-full rounded-lg border bg-white px-3 py-2 text-sm text-zinc-900 transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 ${
+        aria-invalid={error ? true : undefined}
+        className={`flex h-10 w-full rounded-md border bg-field px-3 py-2 text-sm text-fg transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-fg-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${
           Icon ? "pl-10" : ""
         } ${
-          error ? "border-danger-500 focus-visible:ring-danger-500" : "border-edge-subtle focus-visible:border-brand-500 dark:focus-visible:border-brand-500"
+          error
+            ? "border-danger-500 focus-visible:ring-danger-500"
+            : "border-edge hover:border-edge-strong focus-visible:border-accent"
         } ${className}`}
         {...props}
       />

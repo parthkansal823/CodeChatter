@@ -6,8 +6,14 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    # Either file works, and a missing one is not an error. `.env.local` is
+    # loaded last so it wins where both define the same key — matching the
+    # precedence the backend itself uses.
     env_file:
-      - ./server/.env.local
+      - path: ./server/.env
+        required: false
+      - path: ./server/.env.local
+        required: false
     environment:
       ENVIRONMENT: production
       FRONTEND_URL: http://localhost:8000
