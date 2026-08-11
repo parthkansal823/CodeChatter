@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, FilePlus2, FolderPlus, Search, X } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, FilePlus2, FolderPlus, Search, X } from "lucide-react";
 
 import FileItem from "./FileItem";
 import { countFiles, flattenWorkspaceTree } from "../utils/workspace";
@@ -125,6 +125,10 @@ export default function FileExplorer({
   const explorerEntries = useMemo(() => flattenWorkspaceTree(tree), [tree]);
   const folderIds = useMemo(() => collectFolderIds(tree), [tree]);
   const folderIdSet = useMemo(() => new Set(folderIds), [folderIds]);
+  const collapseAllFolders = useCallback(
+    () => setCollapsedFolders(new Set(folderIds)),
+    [folderIds],
+  );
   const activeFolderCount = folderIds.length;
   const activeFileCount = useMemo(() => countFiles(tree), [tree]);
   const focusedEntry = explorerEntries.find((entry) => entry.id === focusedNodeId) || null;
@@ -381,31 +385,49 @@ export default function FileExplorer({
 
       {!isCollapsed && (
         <div className="border-b border-edge-subtle px-3 py-2">
-          <div className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-wider text-fg-subtle">
-            <span className="truncate font-semibold text-fg">{workspaceLabel}</span>
-            <span className="whitespace-nowrap text-[11px]">
-              {activeFileCount}F {activeFolderCount}D
+          {/* Workspace row, laid out like an editor's: the name on the left and
+              icon-only actions on the right that appear on hover. Two labelled
+              buttons on their own row cost more vertical space than the file
+              list they sit above. */}
+          <div className="group/toolbar mb-2 flex items-center justify-between gap-2">
+            <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-fg">
+              {workspaceLabel}
             </span>
-          </div>
 
-          {canEdit && (
-            <div className="mb-2 grid grid-cols-2 gap-2">
+            <div className="flex shrink-0 items-center gap-0.5">
+              {canEdit && (
+                <>
+                  <button
+                    onClick={() => startCreate("file")}
+                    title="New file"
+                    aria-label="New file"
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle opacity-0 transition-colors hover:bg-hovered hover:text-fg focus-visible:opacity-100 group-hover/toolbar:opacity-100"
+                  >
+                    <FilePlus2 size={15} />
+                  </button>
+                  <button
+                    onClick={() => startCreate("folder")}
+                    title="New folder"
+                    aria-label="New folder"
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle opacity-0 transition-colors hover:bg-hovered hover:text-fg focus-visible:opacity-100 group-hover/toolbar:opacity-100"
+                  >
+                    <FolderPlus size={15} />
+                  </button>
+                </>
+              )}
               <button
-                onClick={() => startCreate("file")}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-edge-subtle bg-field px-2 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent hover:text-accent"
+                onClick={collapseAllFolders}
+                title="Collapse folders"
+                aria-label="Collapse folders"
+                className="flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle opacity-0 transition-colors hover:bg-hovered hover:text-fg focus-visible:opacity-100 group-hover/toolbar:opacity-100"
               >
-                <FilePlus2 size={13} />
-                File
+                <ChevronsDownUp size={15} />
               </button>
-              <button
-                onClick={() => startCreate("folder")}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-edge-subtle bg-field px-2 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent hover:text-accent"
-              >
-                <FolderPlus size={13} />
-                Folder
-              </button>
+              <span className="ml-1 whitespace-nowrap text-[11px] tabular-nums text-fg-subtle">
+                {activeFileCount}F {activeFolderCount}D
+              </span>
             </div>
-          )}
+          </div>
 
           <div className="relative">
             <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle" />
@@ -426,21 +448,24 @@ export default function FileExplorer({
             )}
           </div>
 
-          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-fg-muted">
-            <span>
-              {normalizedSearchQuery
-                ? `${filteredEntries.length} matching item${filteredEntries.length === 1 ? "" : "s"}`
-                : "Tip: F2 rename, Del delete, drag to move"}
-            </span>
-            {activeFolderCount > 0 && (
-              <button
-                onClick={() => setCollapsedFolders(new Set())}
-                className="font-medium transition-colors hover:text-fg"
-              >
-                Expand all
-              </button>
-            )}
-          </div>
+          {/* Only while searching. The shortcut hint used to sit here
+              permanently, spending two lines above the tree to say something a
+              tooltip on each row already says. */}
+          {normalizedSearchQuery && (
+            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-fg-muted">
+              <span>
+                {filteredEntries.length} matching item{filteredEntries.length === 1 ? "" : "s"}
+              </span>
+              {activeFolderCount > 0 && (
+                <button
+                  onClick={() => setCollapsedFolders(new Set())}
+                  className="font-medium transition-colors hover:text-fg"
+                >
+                  Expand all
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

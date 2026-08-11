@@ -91,3 +91,79 @@ def test_duplicate_email_is_rejected(client, register):
     json={"email": "frank@example.com", "username": "frank2", "password": "Str0ng!Passw0rd"},
   )
   assert response.status_code == 409
+
+
+# ── Development MFA bypass ────────────────────────────────────────────────────
+
+
+def _reload_auth_with(monkeypatch, *, environment: str, flag: str):
+  """Re-import settings and the auth routes with a different environment."""
+  import importlib
+
+  import core.settings as settings_module
+
+  monkeypatch.setenv("ENVIRONMENT", environment)
+  monkeypatch.setenv("DEV_SKIP_MFA", flag)
+  importlib.reload(settings_module)
+
+  import routes.auth as auth_module
+
+  return importlib.reload(auth_module), settings_module
+
+
+def test_dev_skip_mfa_signs_up_and_logs_in_without_a_code(client, monkeypatch):
+  auth_module, _ = _reload_auth_with(monkeypatch, environment="development", flag="1")
+
+  try:
+    signup = client.post(
+      "/api/auth/signup",
+      json={"email": "fast@example.com", "username": "fast", "password": "Str0ng!Passw0rd"},
+    )
+    assert signup.status_code == 200, signup.text
+
+    body = signup.json()
+    assert "mfa_token" not in body
+    assert body["token"]
+    assert body["user"]["email"] == "fast@example.com"
+
+    login = client.post(
+      "/api/auth/login",
+      json={"email": "fast@example.com", "password": "Str0ng!Passw0rd"},
+    )
+    assert login.status_code == 200, login.text
+    assert "mfa_token" not in login.json()
+    assert login.json()["token"]
+  finally:
+    _reload_auth_with(monkeypatch, environment="development", flag="")
+    del auth_module
+
+
+def test_the_bypass_cannot_be_switched_on_in_production(monkeypatch):
+  import importlib
+
+  import core.settings as settings_module
+
+  monkeypatch.setenv("ENVIRONMENT", "production")
+  monkeypatch.setenv("DEV_SKIP_MFA", "1")
+  monkeypatch.setenv("SECRET_KEY", "prod-secret-for-this-test-only")
+  monkeypatch.setenv("SESSION_SECRET_KEY", "prod-session-secret-for-this-test")
+
+  try:
+    importlib.reload(settings_module)
+    assert settings_module.DEV_SKIP_MFA is False
+  finally:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("DEV_SKIP_MFA", "")
+    importlib.reload(settings_module)
+    importlib.reload(importlib.import_module("routes.auth"))
+
+
+def test_mfa_still_applies_when_the_flag_is_off(client, sent_otps):
+  signup = client.post(
+    "/api/auth/signup",
+    json={"email": "slow@example.com", "username": "slow", "password": "Str0ng!Passw0rd"},
+  )
+
+  assert signup.status_code == 200, signup.text
+  assert signup.json()["requires_mfa"] is True
+  assert sent_otps, "an OTP should have been issued"

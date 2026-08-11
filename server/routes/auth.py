@@ -25,7 +25,7 @@ try:
     utc_now,
     verify_password,
   )
-  from ..core.settings import repository
+  from ..core.settings import DEV_SKIP_MFA, repository
   from ..services.email import mask_email, send_otp_email
 except ImportError:
   from core.schemas import (
@@ -44,7 +44,7 @@ except ImportError:
     utc_now,
     verify_password,
   )
-  from core.settings import repository
+  from core.settings import DEV_SKIP_MFA, repository
   from services.email import mask_email, send_otp_email
 
 router = APIRouter()
@@ -61,12 +61,42 @@ def _hash_otp(otp: str) -> str:
   return hashlib.sha256(otp.encode()).hexdigest()
 
 
+def _signed_in_response(user: dict[str, Any]) -> dict[str, Any]:
+  return {
+    "token": create_access_token(user),
+    "user": repository.serialize_user(user),
+  }
+
+
 def _issue_mfa_challenge(
   challenge_type: str,
   email: str,
   user_id: str | None = None,
   pending_signup: dict | None = None,
 ) -> dict[str, Any]:
+  # Development shortcut: hand back a session instead of mailing a code. Gated
+  # in settings on both the flag and a non-production environment, so this
+  # branch is unreachable on a deployed instance.
+  if DEV_SKIP_MFA:
+    if challenge_type == "login":
+      user = repository.get_user_by_id(user_id)
+
+      if not user:
+        raise HTTPException(
+          status_code=status.HTTP_401_UNAUTHORIZED,
+          detail="User no longer exists",
+        )
+
+      return _signed_in_response(user)
+
+    created = repository.create_user(
+      email=pending_signup["email"],
+      username=pending_signup["username"],
+      password_hash=pending_signup["password_hash"],
+      password_salt=pending_signup["password_salt"],
+    )
+    return _signed_in_response(created)
+
   otp = _generate_otp()
   otp_hash = _hash_otp(otp)
   mfa_token = secrets.token_hex(24)  # 48 hex chars
@@ -224,10 +254,7 @@ def verify_otp(payload: VerifyOTPRequest, request: Request) -> dict[str, Any]:
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="User no longer exists",
       )
-    return {
-      "token": create_access_token(user),
-      "user": repository.serialize_user(user),
-    }
+    return _signed_in_response(user)
 
   # signup — create the user now
   pending = challenge["pending_signup"]
@@ -251,10 +278,7 @@ def verify_otp(payload: VerifyOTPRequest, request: Request) -> dict[str, Any]:
     password_salt=pending["password_salt"],
   )
 
-  return {
-    "token": create_access_token(user),
-    "user": repository.serialize_user(user),
-  }
+  return _signed_in_response(user)
 
 
 @router.post("/api/auth/resend-otp")

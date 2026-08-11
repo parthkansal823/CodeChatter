@@ -26,7 +26,11 @@ services:
       - path: ./server/.env.local
         required: false
     environment:
-      ENVIRONMENT: production
+      # This stack serves plain HTTP on localhost, so it is not a production
+      # deployment and should not claim to be one. "production" turns on HSTS
+      # and marks the session cookie Secure — both wrong over http://, and the
+      # cookie carries the OAuth state. Set it to production only behind TLS.
+      ENVIRONMENT: development
       FRONTEND_URL: http://localhost:8000
       ALLOWED_ORIGINS: http://localhost:8000
       MONGODB_DB_NAME: codechatter

@@ -26,6 +26,26 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_DAYS = int(os.getenv("JWT_EXPIRATION_DAYS", "7"))
 
 
+def _flag(name: str) -> bool:
+  return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Sign in without the emailed one-time code. This exists so local development is
+# not gated on reading a mailbox (or a log line) on every single login.
+#
+# Two locks, both of which must be open: the flag has to be set AND the app must
+# not be in production. The environment check is not a formality — it is what
+# makes it impossible to turn multi-factor auth off on a deployed instance by
+# leaking one env var into the wrong place.
+DEV_SKIP_MFA = _flag("DEV_SKIP_MFA") and ENVIRONMENT != "production"
+
+if DEV_SKIP_MFA:
+  logger.warning(
+    "DEV_SKIP_MFA is on - login and signup will NOT ask for an email code. "
+    "Development only.",
+  )
+
+
 def _require_secret(name: str) -> str:
   """Read a signing secret, generating an ephemeral one only outside production.
 
