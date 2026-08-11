@@ -38,6 +38,10 @@ DSA_LANGUAGE_OPTIONS: list[dict[str, str]] = [
   {"id": "kotlin", "label": "Kotlin"},
 ]
 DSA_LANGUAGE_IDS = {option["id"] for option in DSA_LANGUAGE_OPTIONS}
+
+# The sandbox offers the same set: both lists exist so either can change
+# independently without silently widening the other.
+SANDBOX_LANGUAGE_OPTIONS: list[dict[str, str]] = deepcopy(DSA_LANGUAGE_OPTIONS)
 ASSIGNABLE_ROOM_ACCESS_ROLES = {"viewer", "editor", "runner", "owner"}
 
 
@@ -373,6 +377,129 @@ def _dsa_starter(language: str = "python") -> list:
   return common + [starters.get(lang, starters["python"])]
 
 
+# ------------------------------------------------------------------
+# Sandbox starters — one runnable file per language
+# ------------------------------------------------------------------
+# Every entry is a single file that the room's Run button can execute as-is,
+# which is what makes this template useful: no build step, no package install.
+# The set matches services.workspace_runtime.LANGUAGE_EXTENSION_MAP.
+_SANDBOX_FILES: dict[str, tuple[str, str]] = {
+  "python": ("main.py", 'print("Hello from CodeChatter")\n'),
+  "javascript": ("main.js", 'console.log("Hello from CodeChatter");\n'),
+  "typescript": ("main.ts", 'const message: string = "Hello from CodeChatter";\nconsole.log(message);\n'),
+  "go": (
+    "main.go",
+    'package main\n\nimport "fmt"\n\nfunc main() {\n\tfmt.Println("Hello from CodeChatter")\n}\n',
+  ),
+  "rust": ("main.rs", 'fn main() {\n    println!("Hello from CodeChatter");\n}\n'),
+  "java": (
+    "Main.java",
+    "public class Main {\n"
+    "    public static void main(String[] args) {\n"
+    '        System.out.println("Hello from CodeChatter");\n'
+    "    }\n"
+    "}\n",
+  ),
+  "cpp": (
+    "main.cpp",
+    "#include <iostream>\n\nint main() {\n"
+    '    std::cout << "Hello from CodeChatter" << std::endl;\n'
+    "    return 0;\n}\n",
+  ),
+  "c": (
+    "main.c",
+    '#include <stdio.h>\n\nint main(void) {\n    printf("Hello from CodeChatter\\n");\n    return 0;\n}\n',
+  ),
+  "ruby": ("main.rb", 'puts "Hello from CodeChatter"\n'),
+  "php": ("main.php", '<?php\n\necho "Hello from CodeChatter\\n";\n'),
+  "shell": ("main.sh", '#!/usr/bin/env bash\n\necho "Hello from CodeChatter"\n'),
+  "lua": ("main.lua", 'print("Hello from CodeChatter")\n'),
+  "perl": ("main.pl", 'use strict;\nuse warnings;\n\nprint "Hello from CodeChatter\\n";\n'),
+  "swift": ("main.swift", 'print("Hello from CodeChatter")\n'),
+  "kotlin": ("main.kt", 'fun main() {\n    println("Hello from CodeChatter")\n}\n'),
+}
+
+
+def _sandbox_starter(language: str = "python") -> list:
+  lang = (language or "python").lower()
+  filename, content = _SANDBOX_FILES.get(lang, _SANDBOX_FILES["python"])
+
+  return [
+    _file(filename, content),
+    _file(
+      "README.md",
+      "# Code Sandbox\n\n"
+      f"- Write in `{filename}` and hit Run in the room toolbar\n"
+      "- Add more files as the idea grows\n"
+      "- The terminal in the room is a real shell if you need one\n",
+    ),
+  ]
+
+
+def _interview_kit() -> list:
+  return [
+    _file(
+      "README.md",
+      "# Interview Room\n\n"
+      "A shared space for one interviewer and one candidate.\n\n"
+      "- `brief.md` — what the candidate sees\n"
+      "- `scratchpad.md` — thinking out loud, not graded\n"
+      "- `rubric.md` — interviewer notes (agree up front whether this stays open)\n"
+      "- `solution.py` — where the code goes\n",
+    ),
+    _file(
+      "brief.md",
+      "# Design a URL shortener\n\n"
+      "Build the core of a service that turns a long URL into a short code and back.\n\n"
+      "## Start with\n\n"
+      "- `shorten(url) -> code`\n"
+      "- `resolve(code) -> url`\n\n"
+      "## Then talk through\n\n"
+      "- What happens when the same URL is shortened twice?\n"
+      "- How do you avoid collisions as the table grows?\n"
+      "- Where does this break at 10k writes a second?\n\n"
+      "Working code first, scale second.\n",
+    ),
+    _file(
+      "scratchpad.md",
+      "# Scratchpad\n\n"
+      "Assumptions:\n\n"
+      "Approach:\n\n"
+      "Trade-offs considered:\n\n"
+      "Left to do:\n",
+    ),
+    _file(
+      "rubric.md",
+      "# Interviewer notes\n\n"
+      "| Signal | Notes |\n"
+      "| --- | --- |\n"
+      "| Clarified the problem before coding | |\n"
+      "| Chose a reasonable data structure | |\n"
+      "| Handled collisions / edge cases | |\n"
+      "| Explained trade-offs unprompted | |\n"
+      "| Code readable without narration | |\n\n"
+      "Overall:\n",
+    ),
+    _file(
+      "solution.py",
+      "import string\n\n"
+      "ALPHABET = string.digits + string.ascii_letters\n\n\n"
+      "class UrlShortener:\n"
+      "    def __init__(self) -> None:\n"
+      "        self._by_code: dict[str, str] = {}\n"
+      "        self._next_id = 1\n\n"
+      "    def shorten(self, url: str) -> str:\n"
+      "        raise NotImplementedError\n\n"
+      "    def resolve(self, code: str) -> str | None:\n"
+      "        raise NotImplementedError\n\n\n"
+      "if __name__ == '__main__':\n"
+      "    shortener = UrlShortener()\n"
+      "    code = shortener.shorten('https://example.com/a/very/long/path')\n"
+      "    print(code, shortener.resolve(code))\n",
+    ),
+  ]
+
+
 ROOM_TEMPLATE_DEFINITIONS: dict[str, dict] = {
   "blank": {
     "id": "blank",
@@ -384,31 +511,29 @@ ROOM_TEMPLATE_DEFINITIONS: dict[str, dict] = {
     "priority": 10,
     "build": lambda **kw: [],
   },
+  # The id stays `python-starter` so rooms created before this became
+  # multi-language still resolve to a template.
   "python-starter": {
     "id": "python-starter",
-    "name": "Python Sandbox",
-    "description": "A tiny Python setup for scripts, notes, and quick experiments.",
-    "category": "Backend",
+    "name": "Code Sandbox",
+    "description": "One runnable file in the language you pick. Nothing to install.",
+    "category": "Scratch",
     "starterLanguage": "python",
     "featured": True,
     "priority": 30,
-    "build": lambda **kw: [
-      _file(
-        "main.py",
-        "def main() -> None:\n"
-        "    message = \"Hello from CodeChatter\"\n"
-        "    print(message)\n\n\n"
-        "if __name__ == \"__main__\":\n"
-        "    main()\n",
-      ),
-      _file(
-        "README.md",
-        "# Python Sandbox\n\n"
-        "- Keep quick scripts in `main.py`\n"
-        "- Add scratch notes beside your code\n"
-        "- Run the active file from the room toolbar\n",
-      ),
-    ],
+    "supportedLanguages": deepcopy(SANDBOX_LANGUAGE_OPTIONS),
+    "defaultLanguage": "python",
+    "build": lambda language="python", **kw: _sandbox_starter(language),
+  },
+  "interview-kit": {
+    "id": "interview-kit",
+    "name": "Interview Room",
+    "description": "Brief, scratchpad, rubric, and a starter file — set up for one interview.",
+    "category": "Practice",
+    "starterLanguage": "python",
+    "featured": True,
+    "priority": 25,
+    "build": lambda **kw: _interview_kit(),
   },
   "dsa-practice": {
     "id": "dsa-practice",
@@ -534,18 +659,66 @@ ROOM_TEMPLATE_DEFINITIONS: dict[str, dict] = {
   },
   "node-express": {
     "id": "node-express",
-    "name": "Node.js Express",
-    "description": "A lightweight Express API server with a clean project structure.",
+    "name": "Node.js API",
+    "description": "An Express server with routes and JSON parsing. Needs npm install first.",
     "category": "Backend",
     "starterLanguage": "javascript",
-    "featured": False,
-    "priority": 90,
+    "featured": True,
+    "priority": 60,
     "build": lambda **kw: [
       _folder("src", [
-        _file("index.js", "const express = require('express');\nconst app = express();\n\napp.use(express.json());\n\napp.get('/', (req, res) => {\n  res.json({ message: 'Hello from Express!' });\n});\n\napp.listen(3000, () => {\n  console.log('Server running on http://localhost:3000');\n});\n"),
+        _file(
+          "index.js",
+          "const express = require('express');\n\n"
+          "const app = express();\n"
+          "const PORT = process.env.PORT || 3000;\n\n"
+          "app.use(express.json());\n\n"
+          "const notes = [];\n\n"
+          "app.get('/api/notes', (req, res) => {\n"
+          "  res.json(notes);\n"
+          "});\n\n"
+          "app.post('/api/notes', (req, res) => {\n"
+          "  const { text } = req.body || {};\n\n"
+          "  if (!text) {\n"
+          "    return res.status(400).json({ error: 'text is required' });\n"
+          "  }\n\n"
+          "  const note = { id: notes.length + 1, text };\n"
+          "  notes.push(note);\n"
+          "  res.status(201).json(note);\n"
+          "});\n\n"
+          "app.listen(PORT, () => {\n"
+          "  console.log(`Listening on http://localhost:${PORT}`);\n"
+          "});\n",
+        ),
       ]),
-      _file("package.json", "{\n  \"name\": \"express-starter\",\n  \"main\": \"src/index.js\",\n  \"dependencies\": {\n    \"express\": \"^4.18.2\"\n  }\n}\n"),
-      _file("README.md", "# Node.js Express Starter\n\nRun `npm install` then `node src/index.js`\n"),
+      _file(
+        "package.json",
+        "{\n"
+        "  \"name\": \"express-starter\",\n"
+        "  \"private\": true,\n"
+        "  \"main\": \"src/index.js\",\n"
+        "  \"scripts\": {\n"
+        "    \"start\": \"node src/index.js\"\n"
+        "  },\n"
+        "  \"dependencies\": {\n"
+        "    \"express\": \"^4.18.2\"\n"
+        "  }\n"
+        "}\n",
+      ),
+      _file(
+        "README.md",
+        "# Node.js API\n\n"
+        "This one needs its dependency installed before it runs. In the room terminal:\n\n"
+        "```\n"
+        "npm install\n"
+        "npm start\n"
+        "```\n\n"
+        "Then try it:\n\n"
+        "```\n"
+        "curl localhost:3000/api/notes\n"
+        "curl -X POST localhost:3000/api/notes -H 'Content-Type: application/json' -d '{\"text\":\"first\"}'\n"
+        "```\n",
+      ),
     ],
   },
 }
@@ -630,6 +803,22 @@ class MongoRepository:
     }
 
   def list_room_templates(self) -> list[dict[str, Any]]:
+    # Only advertise languages this server can actually execute. The image
+    # carries a fixed set of toolchains, so offering the full list hands people
+    # a starter file that dies with "X is not installed" on the first Run.
+    #
+    # Imported here rather than at module scope because workspace_runtime pulls
+    # in core.settings, which constructs the repository defined in this module —
+    # a module-level import would be circular. This file is `server.database`,
+    # so the sibling package is one dot, not two.
+    try:
+      from .services.workspace_runtime import is_language_runnable
+    except ImportError:
+      from services.workspace_runtime import is_language_runnable
+
+    def runnable_only(options: list[dict[str, str]]) -> list[dict[str, str]]:
+      return [option for option in options if is_language_runnable(option["id"])]
+
     featured_templates = sorted(
       (
         template
@@ -639,18 +828,30 @@ class MongoRepository:
       key=lambda template: (template.get("priority", 100), template["name"].lower()),
     )
 
-    return [
-      {
-        "id": template["id"],
-        "name": template["name"],
-        "description": template["description"],
-        "category": template["category"],
-        "starterLanguage": template["starterLanguage"],
-        "defaultLanguage": template.get("defaultLanguage"),
-        "supportedLanguages": deepcopy(template.get("supportedLanguages", [])),
-      }
-      for template in featured_templates
-    ]
+    payload = []
+
+    for template in featured_templates:
+      languages = runnable_only(template.get("supportedLanguages", []))
+      language_ids = {option["id"] for option in languages}
+      default_language = template.get("defaultLanguage")
+
+      # The declared default can itself be a language this image cannot run.
+      if default_language not in language_ids:
+        default_language = languages[0]["id"] if languages else None
+
+      payload.append(
+        {
+          "id": template["id"],
+          "name": template["name"],
+          "description": template["description"],
+          "category": template["category"],
+          "starterLanguage": template["starterLanguage"],
+          "defaultLanguage": default_language,
+          "supportedLanguages": languages,
+        },
+      )
+
+    return payload
 
   def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
     self.initialize()

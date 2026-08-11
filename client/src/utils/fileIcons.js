@@ -1,148 +1,295 @@
 import {
-  SiJavascript,
-  SiTypescript,
-  SiPython,
-  SiHtml5,
-  SiCss,
-  SiReact,
-  SiGo,
-  SiRust,
-  SiRuby,
-  SiPhp,
-  SiGnubash,
-  SiSwift,
-  SiKotlin,
-  SiDocker,
-  SiCplusplus,
   SiC,
-  SiVite,
+  SiCplusplus,
+  SiCss,
+  SiDocker,
+  SiEslint,
+  SiGnubash,
+  SiGo,
+  SiGraphql,
+  SiHtml5,
+  SiJavascript,
+  SiJson,
+  SiKotlin,
+  SiLua,
+  SiMarkdown,
+  SiMysql,
   SiNextdotjs,
   SiNodedotjs,
+  SiPerl,
+  SiPhp,
+  SiPostcss,
+  SiPrettier,
+  SiPython,
+  SiReact,
+  SiRuby,
+  SiRust,
+  SiSass,
+  SiSwift,
   SiTailwindcss,
+  SiTypescript,
+  SiVite,
+  SiVuedotjs,
+  SiYaml,
 } from "react-icons/si";
-import { VscJson, VscMarkdown } from "react-icons/vsc";
 import { FaJava } from "react-icons/fa";
 import {
-  FileText,
-  Folder,
-  FolderOpen,
-  Lock,
-  GitBranch,
-  Package,
+  Binary,
+  Braces,
   Database,
-  FileImage,
   FileArchive,
   FileAudio,
-  FileVideo,
   FileCode2,
+  FileImage,
+  FileText,
+  FileVideo,
+  Folder,
+  FolderOpen,
+  GitBranch,
+  KeyRound,
+  Package,
+  Settings2,
+  Terminal,
+  Type,
 } from "lucide-react";
 
+/**
+ * File-tree icons, the way an editor sidebar does them.
+ *
+ * Two lookup tables instead of a chain of `if`s: a filename is either a known
+ * exact name (`Dockerfile`, `.gitignore`) or it falls through to its extension.
+ * Adding a type is one line in one map, which is what keeps the coverage wide.
+ *
+ * Colours are the language's own — that is the point of these icons, and it is
+ * how the eye finds a file in a long tree. Everything with no brand of its own
+ * uses theme tokens so it still follows light/dark.
+ */
+
+// Exact filenames win over extensions: `package.json` is not a generic JSON file.
+const BY_FILENAME = {
+  "package.json": [SiNodedotjs, "text-success-500"],
+  "package-lock.json": [Package, "text-success-700"],
+  "yarn.lock": [Package, "text-info-500"],
+  "pnpm-lock.yaml": [Package, "text-warning-600"],
+  "bun.lockb": [Package, "text-warning-500"],
+
+  dockerfile: [SiDocker, "text-info-500"],
+  "docker-compose.yml": [SiDocker, "text-info-500"],
+  "docker-compose.yaml": [SiDocker, "text-info-500"],
+  ".dockerignore": [SiDocker, "text-info-400"],
+
+  ".gitignore": [GitBranch, "text-danger-500"],
+  ".gitattributes": [GitBranch, "text-danger-500"],
+  ".gitmodules": [GitBranch, "text-danger-500"],
+
+  ".env": [KeyRound, "text-warning-500"],
+  ".npmrc": [SiNodedotjs, "text-fg-muted"],
+  ".editorconfig": [Settings2, "text-fg-muted"],
+  ".prettierrc": [SiPrettier, "text-info-400"],
+  ".eslintrc": [SiEslint, "text-brand-500"],
+  "eslint.config.js": [SiEslint, "text-brand-500"],
+
+  "vite.config.js": [SiVite, "text-brand-500"],
+  "vite.config.ts": [SiVite, "text-brand-500"],
+  "tailwind.config.js": [SiTailwindcss, "text-info-500"],
+  "tailwind.config.cjs": [SiTailwindcss, "text-info-500"],
+  "tailwind.config.ts": [SiTailwindcss, "text-info-500"],
+  "postcss.config.js": [SiPostcss, "text-danger-500"],
+  "postcss.config.cjs": [SiPostcss, "text-danger-500"],
+  "next.config.js": [SiNextdotjs, "text-fg"],
+  "next.config.ts": [SiNextdotjs, "text-fg"],
+
+  makefile: [Terminal, "text-fg-muted"],
+  "cmakelists.txt": [Settings2, "text-fg-muted"],
+  "requirements.txt": [SiPython, "text-success-600"],
+  "pyproject.toml": [SiPython, "text-success-600"],
+  "cargo.toml": [SiRust, "text-warning-600"],
+  "go.mod": [SiGo, "text-info-400"],
+  "go.sum": [SiGo, "text-info-400"],
+  "gemfile": [SiRuby, "text-danger-500"],
+  "composer.json": [SiPhp, "text-brand-500"],
+  "readme.md": [SiMarkdown, "text-info-400"],
+  "license": [FileText, "text-warning-500"],
+};
+
+const BY_EXTENSION = {
+  // Web
+  html: [SiHtml5, "text-warning-500"],
+  htm: [SiHtml5, "text-warning-500"],
+  css: [SiCss, "text-info-500"],
+  scss: [SiSass, "text-danger-400"],
+  sass: [SiSass, "text-danger-400"],
+  less: [SiCss, "text-info-600"],
+  vue: [SiVuedotjs, "text-success-500"],
+  svelte: [FileCode2, "text-danger-500"],
+
+  // JavaScript / TypeScript
+  js: [SiJavascript, "text-warning-400"],
+  mjs: [SiJavascript, "text-warning-400"],
+  cjs: [SiJavascript, "text-warning-400"],
+  jsx: [SiReact, "text-info-400"],
+  ts: [SiTypescript, "text-info-500"],
+  mts: [SiTypescript, "text-info-500"],
+  cts: [SiTypescript, "text-info-500"],
+  tsx: [SiReact, "text-info-400"],
+
+  // Languages
+  py: [SiPython, "text-success-500"],
+  pyw: [SiPython, "text-success-500"],
+  pyi: [SiPython, "text-success-600"],
+  ipynb: [SiPython, "text-warning-500"],
+  java: [FaJava, "text-warning-600"],
+  jar: [FaJava, "text-warning-700"],
+  class: [Binary, "text-fg-subtle"],
+  kt: [SiKotlin, "text-brand-600"],
+  kts: [SiKotlin, "text-brand-600"],
+  go: [SiGo, "text-info-400"],
+  rs: [SiRust, "text-warning-600"],
+  rb: [SiRuby, "text-danger-500"],
+  php: [SiPhp, "text-brand-500"],
+  swift: [SiSwift, "text-warning-500"],
+  lua: [SiLua, "text-brand-600"],
+  pl: [SiPerl, "text-info-500"],
+  pm: [SiPerl, "text-info-500"],
+  c: [SiC, "text-brand-500"],
+  h: [SiC, "text-brand-400"],
+  cpp: [SiCplusplus, "text-info-600"],
+  cc: [SiCplusplus, "text-info-600"],
+  cxx: [SiCplusplus, "text-info-600"],
+  hpp: [SiCplusplus, "text-info-500"],
+  cs: [FileCode2, "text-brand-600"],
+  dart: [FileCode2, "text-info-500"],
+  scala: [FileCode2, "text-danger-500"],
+  r: [FileCode2, "text-info-500"],
+  ex: [FileCode2, "text-brand-600"],
+  exs: [FileCode2, "text-brand-600"],
+  hs: [FileCode2, "text-brand-500"],
+  clj: [FileCode2, "text-success-500"],
+  zig: [FileCode2, "text-warning-500"],
+
+  // Shell
+  sh: [SiGnubash, "text-success-600"],
+  bash: [SiGnubash, "text-success-600"],
+  zsh: [SiGnubash, "text-success-600"],
+  fish: [SiGnubash, "text-success-600"],
+  ps1: [Terminal, "text-info-500"],
+  bat: [Terminal, "text-fg-muted"],
+  cmd: [Terminal, "text-fg-muted"],
+
+  // Data / config
+  json: [SiJson, "text-warning-500"],
+  jsonc: [SiJson, "text-warning-500"],
+  json5: [SiJson, "text-warning-500"],
+  yaml: [SiYaml, "text-danger-500"],
+  yml: [SiYaml, "text-danger-500"],
+  toml: [Settings2, "text-warning-600"],
+  ini: [Settings2, "text-fg-muted"],
+  cfg: [Settings2, "text-fg-muted"],
+  conf: [Settings2, "text-fg-muted"],
+  xml: [Braces, "text-warning-600"],
+  csv: [Database, "text-success-600"],
+  tsv: [Database, "text-success-600"],
+  sql: [SiMysql, "text-info-600"],
+  db: [Database, "text-info-600"],
+  sqlite: [Database, "text-info-600"],
+  graphql: [SiGraphql, "text-danger-400"],
+  gql: [SiGraphql, "text-danger-400"],
+  env: [KeyRound, "text-warning-500"],
+  lock: [Package, "text-fg-subtle"],
+
+  // Documents
+  md: [SiMarkdown, "text-info-400"],
+  markdown: [SiMarkdown, "text-info-400"],
+  mdx: [SiMarkdown, "text-info-500"],
+  txt: [FileText, "text-fg-muted"],
+  log: [FileText, "text-fg-subtle"],
+  pdf: [FileText, "text-danger-500"],
+  rtf: [FileText, "text-fg-muted"],
+
+  // Media
+  png: [FileImage, "text-danger-400"],
+  jpg: [FileImage, "text-danger-400"],
+  jpeg: [FileImage, "text-danger-400"],
+  gif: [FileImage, "text-danger-400"],
+  webp: [FileImage, "text-danger-400"],
+  bmp: [FileImage, "text-danger-400"],
+  svg: [FileImage, "text-warning-500"],
+  ico: [FileImage, "text-info-500"],
+  ttf: [Type, "text-fg-muted"],
+  otf: [Type, "text-fg-muted"],
+  woff: [Type, "text-fg-muted"],
+  woff2: [Type, "text-fg-muted"],
+  mp3: [FileAudio, "text-brand-500"],
+  wav: [FileAudio, "text-brand-500"],
+  flac: [FileAudio, "text-brand-500"],
+  aac: [FileAudio, "text-brand-500"],
+  ogg: [FileAudio, "text-brand-500"],
+  mp4: [FileVideo, "text-info-500"],
+  webm: [FileVideo, "text-info-500"],
+  mkv: [FileVideo, "text-info-500"],
+  avi: [FileVideo, "text-info-500"],
+  mov: [FileVideo, "text-info-500"],
+
+  // Archives / binaries
+  zip: [FileArchive, "text-warning-600"],
+  tar: [FileArchive, "text-warning-600"],
+  gz: [FileArchive, "text-warning-600"],
+  tgz: [FileArchive, "text-warning-600"],
+  rar: [FileArchive, "text-warning-600"],
+  "7z": [FileArchive, "text-warning-600"],
+  exe: [Binary, "text-fg-subtle"],
+  dll: [Binary, "text-fg-subtle"],
+  so: [Binary, "text-fg-subtle"],
+  bin: [Binary, "text-fg-subtle"],
+  wasm: [Binary, "text-brand-500"],
+
+  // App-specific
+  nb: [FileCode2, "text-brand-500"],
+};
+
+const DEFAULT_FILE = [FileCode2, "text-fg-subtle"];
+
 export function getFileVisual(name = "") {
-  const extension = name.includes(".")
-    ? name.split(".").pop().toLowerCase()
-    : "";
+  const lower = name.toLowerCase();
 
-  // Exact file name matches
-  if (name === "package.json") return { Icon: SiNodedotjs, className: "text-success-500" };
-  if (name === "vite.config.js" || name === "vite.config.ts") return { Icon: SiVite, className: "text-brand-500" };
-  if (name === "tailwind.config.js" || name === "tailwind.config.ts") return { Icon: SiTailwindcss, className: "text-info-500" };
-  if (name === "next.config.js" || name === "next.config.ts") return { Icon: SiNextdotjs, className: "text-fg" };
-  
-  // Notebook files
-  if (extension === "nb") return { Icon: FileCode2, className: "text-brand-500" };
+  const exact = BY_FILENAME[lower];
+  if (exact) return { Icon: exact[0], className: exact[1] };
 
-  // JSON files
-  if (extension === "json") return { Icon: VscJson, className: "text-warning-500" };
+  // `.env.local`, `.env.production` and friends all read as env files.
+  if (lower.startsWith(".env")) return { Icon: KeyRound, className: "text-warning-500" };
 
-  // Document files
-  if (extension === "md" || extension === "markdown") return { Icon: VscMarkdown, className: "text-info-500" };
-  if (extension === "txt" || extension === "log") return { Icon: FileText, className: "text-zinc-400" };
+  // Config files often carry a compound extension: `foo.config.js` should still
+  // resolve on `js`, which the plain extension lookup below already handles.
+  const extension = lower.includes(".") ? lower.split(".").pop() : "";
+  const match = BY_EXTENSION[extension] || DEFAULT_FILE;
 
-  // Markup/Web files
-  if (extension === "html" || extension === "htm") return { Icon: SiHtml5, className: "text-warning-500" };
-  if (extension === "css" || extension === "scss" || extension === "sass" || extension === "less") return { Icon: SiCss, className: "text-info-500" };
-
-  // JavaScript/TypeScript + React
-  if (extension === "jsx" || extension === "tsx") return { Icon: SiReact, className: "text-info-400" };
-  if (extension === "js" || extension === "mjs" || extension === "cjs") return { Icon: SiJavascript, className: "text-warning-400" };
-  if (extension === "ts") return { Icon: SiTypescript, className: "text-info-500" };
-
-  // Python
-  if (extension === "py" || extension === "pyw") return { Icon: SiPython, className: "text-success-500" };
-
-  // Java
-  if (extension === "java" || extension === "jar") return { Icon: FaJava, className: "text-warning-600" };
-
-  // Go
-  if (extension === "go") return { Icon: SiGo, className: "text-info-400" };
-
-  // Rust
-  if (extension === "rs") return { Icon: SiRust, className: "text-warning-600" };
-
-  // PHP
-  if (extension === "php") return { Icon: SiPhp, className: "text-brand-500" };
-
-  // Ruby
-  if (extension === "rb") return { Icon: SiRuby, className: "text-danger-500" };
-
-  // C/C++
-  if (extension === "cpp" || extension === "cc" || extension === "cxx") return { Icon: SiCplusplus, className: "text-info-600" };
-  if (extension === "c" || extension === "h" || extension === "hpp") return { Icon: SiC, className: "text-brand-500" };
-
-  // Shell/Bash
-  if (extension === "sh" || extension === "bash" || extension === "zsh") return { Icon: SiGnubash, className: "text-fg" };
-
-  // Swift
-  if (extension === "swift") return { Icon: SiSwift, className: "text-warning-500" };
-
-  // Kotlin
-  if (extension === "kt" || extension === "kts") return { Icon: SiKotlin, className: "text-brand-600" };
-
-  // Docker
-  if (name === "dockerfile" || extension === "dockerfile" || name === ".dockerignore") return { Icon: SiDocker, className: "text-info-500" };
-
-  // Configuration & System files
-  if (name === ".env" || name.startsWith(".env.") || extension === "env") return { Icon: Lock, className: "text-zinc-500" };
-  if (name === ".gitignore" || extension === "git") return { Icon: GitBranch, className: "text-danger-500" };
-  if (name === "package-lock.json" || name === "yarn.lock" || name === "pnpm-lock.yaml") return { Icon: Package, className: "text-warning-700" };
-  
-  if (["sql", "db", "sqlite", "dbml"].includes(extension)) return { Icon: Database, className: "text-info-600" };
-  if (["yaml", "yml", "toml"].includes(extension)) return { Icon: FileText, className: "text-danger-500" };
-  
-  // Media files
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(extension)) return { Icon: FileImage, className: "text-danger-500" };
-  if (["zip", "tar", "gz", "rar", "7z"].includes(extension)) return { Icon: FileArchive, className: "text-warning-600" };
-  if (["mp3", "wav", "flac", "aac"].includes(extension)) return { Icon: FileAudio, className: "text-brand-500" };
-  if (["mp4", "webm", "mkv", "avi"].includes(extension)) return { Icon: FileVideo, className: "text-info-500" };
-
-  // Default
-  return {
-    Icon: FileCode2,
-    className: "text-zinc-500",
-  };
+  return { Icon: match[0], className: match[1] };
 }
 
+// Folders that are machine-generated read as inert; the rest share one colour so
+// the tree does not turn into a colour chart.
+const MUTED_FOLDERS = new Set([
+  "node_modules",
+  "venv",
+  ".venv",
+  ".git",
+  "__pycache__",
+  "dist",
+  "build",
+  ".next",
+  ".cache",
+  "coverage",
+  "target",
+  ".ruff_cache",
+  ".trunk",
+]);
+
 export function getFolderVisual(name = "") {
-  // Special folder colors
-  if (name === "node_modules" || name === "venv" || name === ".git" || name === "__pycache__") {
-    return {
-      Icon: Folder,
-      OpenIcon: FolderOpen,
-      className: "text-zinc-500",
-    };
-  }
-  
-  if (name === "src" || name === "public" || name === "components" || name === "pages" || name === "api") {
-    return {
-      Icon: Folder,
-      OpenIcon: FolderOpen,
-      className: "text-info-500",
-    };
-  }
+  const isMuted = MUTED_FOLDERS.has(name.toLowerCase());
 
   return {
     Icon: Folder,
     OpenIcon: FolderOpen,
-    className: "text-warning-500",
+    className: isMuted ? "text-fg-subtle" : "text-info-400",
   };
 }

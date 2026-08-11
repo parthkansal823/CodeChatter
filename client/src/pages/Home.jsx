@@ -70,7 +70,7 @@ export default function Home() {
   const [roomDescription, setRoomDescription] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
   const [selectedShell, setSelectedShell] = useState(defaultTerminalShell);
-  const [dsaLanguage, setDsaLanguage] = useState("python");
+  const [starterLanguage, setStarterLanguage] = useState("python");
   const [roomSearch, setRoomSearch] = useState("");
   const [bookmarks, setBookmarks] = useState(getBookmarks);
   const [recentRooms, setRecentRooms] = useState(getRecentRooms);
@@ -106,17 +106,17 @@ export default function Home() {
   );
 
   useEffect(() => {
-    if (selectedTemplateId !== "dsa-practice") {
+    if (selectedTemplateLanguages.length === 0) {
       return;
     }
 
     const supportedLanguageIds = new Set(selectedTemplateLanguages.map((language) => language.id));
     const preferredLanguage = selectedTemplate?.defaultLanguage || selectedTemplateLanguages[0]?.id || "python";
 
-    if (!supportedLanguageIds.has(dsaLanguage)) {
-      setDsaLanguage(preferredLanguage);
+    if (!supportedLanguageIds.has(starterLanguage)) {
+      setStarterLanguage(preferredLanguage);
     }
-  }, [dsaLanguage, selectedTemplate, selectedTemplateId, selectedTemplateLanguages]);
+  }, [starterLanguage, selectedTemplate, selectedTemplateLanguages]);
 
   useEffect(() => {
     if (!token) {
@@ -281,7 +281,7 @@ export default function Home() {
             description: sanitizeInput(roomDescription) || null,
             templateId: selectedTemplateId,
             terminalShell: selectedShell,
-            dsaLanguage: selectedTemplateId === "dsa-practice" ? dsaLanguage : undefined,
+            dsaLanguage: selectedTemplateLanguages.length > 0 ? starterLanguage : undefined,
           }),
         },
         token
@@ -292,7 +292,7 @@ export default function Home() {
       setRoomDescription("");
       setSelectedTemplateId("blank");
       setSelectedShell(defaultTerminalShell);
-      setDsaLanguage("python");
+      setStarterLanguage("python");
       toast.success("Room created");
       recordVisit(room.id, room.name);
       navigate(`/room/${room.id}`);
@@ -308,7 +308,7 @@ export default function Home() {
     setRoomDescription("");
     setSelectedTemplateId("blank");
     setSelectedShell(defaultTerminalShell);
-    setDsaLanguage("python");
+    setStarterLanguage("python");
     setCreateModalOpen(true);
   };
 
@@ -755,38 +755,51 @@ export default function Home() {
 
                 <div>
                   <p className="mb-3 text-sm font-medium">Starter templates</p>
-                  <div className="grid max-h-[38vh] gap-2.5 overflow-auto pr-1 md:grid-cols-2">
-                    {roomTemplates.map((template) => (
-                      <Motion.button
-                        
-                        whileTap={{ scale: 0.98 }}
-                        key={template.id}
-                        type="button"
-                        onClick={() => setSelectedTemplateId(template.id)}
-                        aria-pressed={selectedTemplateId === template.id}
-                        className={`rounded-md border p-4 text-left transition-colors ${selectedTemplateId === template.id
-                          ? "border-accent bg-accent-subtle"
-                          : "border-edge-subtle bg-field hover:border-edge-strong"
+                  {/* A single-column list rather than a grid of cards: the
+                      description lives in the summary panel on the left, so a
+                      row only needs a name, which fits without scrolling. */}
+                  <div
+                    role="radiogroup"
+                    aria-label="Starter template"
+                    className="space-y-1"
+                  >
+                    {roomTemplates.map((template) => {
+                      const isSelected = selectedTemplateId === template.id;
+
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => setSelectedTemplateId(template.id)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
+                            isSelected
+                              ? "border-accent bg-accent-subtle"
+                              : "border-edge-subtle bg-field hover:border-edge-strong hover:bg-hovered"
                           }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className={`font-medium text-sm ${selectedTemplateId === template.id ? "text-accent" : "text-fg"}`}>{template.name}</p>
-                          <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase ${selectedTemplateId === template.id
-                            ? "bg-accent text-fg-accent"
-                            : "bg-hovered text-fg-muted"
-                            }`}>
+                        >
+                          <span
+                            className={`truncate text-sm font-medium ${
+                              isSelected ? "text-accent" : "text-fg"
+                            }`}
+                          >
+                            {template.name}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                              isSelected ? "bg-accent text-fg-accent" : "bg-hovered text-fg-muted"
+                            }`}
+                          >
                             {template.category}
                           </span>
-                        </div>
-                        <p className="mt-1.5 text-xs leading-relaxed text-fg-muted">
-                          {template.description}
-                        </p>
-                      </Motion.button>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
 
-                  {/* DSA Language Picker */}
-                  {selectedTemplateId === "dsa-practice" && (
+                  {/* Shown for any template that ships a per-language starter. */}
+                  {selectedTemplateLanguages.length > 0 && (
                     <div className="mt-3 rounded-md border border-edge-subtle bg-accent-subtle p-4">
                       <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-accent">
                         Starter Language
@@ -796,9 +809,9 @@ export default function Home() {
                           <button
                             key={lang.id}
                             type="button"
-                            onClick={() => setDsaLanguage(lang.id)}
-                            aria-pressed={dsaLanguage === lang.id}
-                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${dsaLanguage === lang.id
+                            onClick={() => setStarterLanguage(lang.id)}
+                            aria-pressed={starterLanguage === lang.id}
+                            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${starterLanguage === lang.id
                               ? "border-accent bg-accent text-fg-accent"
                               : "border-edge bg-field text-fg-muted hover:border-accent hover:text-fg"
                               }`}
@@ -808,7 +821,7 @@ export default function Home() {
                         ))}
                       </div>
                       <p className="mt-2 text-[11px] text-fg-muted">
-                        A <strong>{selectedTemplateLanguages.find((language) => language.id === dsaLanguage)?.label || "Python"}</strong> starter solution will be added to your workspace.
+                        A <strong>{selectedTemplateLanguages.find((language) => language.id === starterLanguage)?.label || "Python"}</strong> starter file will be added to your workspace.
                       </p>
                     </div>
                   )}

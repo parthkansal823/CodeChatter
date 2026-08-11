@@ -60,6 +60,43 @@ def find_installed_command(*candidates: str) -> str | None:
   return None
 
 
+# What each language needs on PATH before `build_run_plan` will run it. Kept
+# beside the plan builder so the two cannot drift: if a language is added there,
+# it has to be added here to be offered in the UI.
+LANGUAGE_TOOLCHAINS: dict[str, tuple[str, ...]] = {
+  "python": ("python", "py", "python3"),
+  "javascript": ("node",),
+  "typescript": ("ts-node", "tsc"),
+  "go": ("go",),
+  "rust": ("rustc",),
+  "java": ("java",),
+  "cpp": ("g++", "clang++"),
+  "c": ("gcc", "clang"),
+  "ruby": ("ruby",),
+  "php": ("php",),
+  "shell": ("bash", "sh"),
+  "lua": ("lua",),
+  "perl": ("perl",),
+  "swift": ("swift", "swiftc"),
+  "kotlin": ("kotlinc",),
+}
+
+
+def is_language_runnable(language: str) -> bool:
+  """Whether this server can actually execute `language` right now.
+
+  Offering a language the image does not carry produces a starter file that
+  fails the moment Run is pressed, so the room templates ask this before
+  advertising a language rather than assuming the full list is available.
+  """
+  candidates = LANGUAGE_TOOLCHAINS.get(language.lower())
+
+  if not candidates:
+    return False
+
+  return find_installed_command(*candidates) is not None
+
+
 def run_process(
   command: list[str],
   cwd: str,

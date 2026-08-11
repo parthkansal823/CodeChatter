@@ -111,14 +111,14 @@ export default function FileItem({
           setIsRenaming(true);
         }
       }}
-      className={`group flex items-center gap-1 transition-colors cursor-pointer outline-none border-l-[3px] select-none ${
+      className={`group flex cursor-pointer select-none items-center gap-1 border-l-2 outline-none transition-colors ${
         isActive
-          ? "bg-info-100/50 text-info-900 border-info-500 dark:bg-info-600/20 dark:text-info-200 dark:border-info-400"
+          ? "border-accent bg-selected text-fg"
           : isFocused
-            ? "bg-zinc-200/50 text-zinc-950 border-transparent dark:bg-zinc-800/60 dark:text-zinc-100"
-            : "text-zinc-700 hover:bg-zinc-100/60 border-transparent dark:text-zinc-300 dark:hover:bg-zinc-900/40"
+            ? "border-transparent bg-hovered text-fg"
+            : "border-transparent text-fg-muted hover:bg-hovered hover:text-fg"
       }`}
-      style={{ paddingLeft: `${depth * 16 + 3}px` }}
+      style={{ paddingLeft: `${depth * 12 + 4}px` }}
       onClick={() => {
         if (!isRenaming) {
           if (isFolder) onToggleFolder?.(node.id);
@@ -132,23 +132,26 @@ export default function FileItem({
         e.currentTarget.focus();
       }}
     >
-      <div className="flex h-7 min-w-0 flex-1 items-center gap-[6px] px-1 font-medium">
+      {/* 22px rows, the height an editor tree uses — it fits roughly twice the
+          files on screen compared with the 28px rows this had. */}
+      <div className="flex h-[22px] min-w-0 flex-1 items-center gap-1.5 px-1">
         {isFolder ? (
           <>
             <ChevronRight
-              size={16}
-              className={`flex-shrink-0 text-zinc-500 transition-transform dark:text-zinc-400 ${isExpanded ? "rotate-90" : ""}`}
+              size={14}
+              className={`flex-shrink-0 text-fg-subtle transition-transform ${isExpanded ? "rotate-90" : ""}`}
             />
             {isExpanded ? (
-              <OpenFolderIcon size={16} className={`flex-shrink-0 ${folderIconClassName}`} />
+              <OpenFolderIcon size={15} className={`flex-shrink-0 ${folderIconClassName}`} />
             ) : (
-              <FolderIcon size={16} className={`flex-shrink-0 ${folderIconClassName}`} />
+              <FolderIcon size={15} className={`flex-shrink-0 ${folderIconClassName}`} />
             )}
           </>
         ) : (
           <>
-            <span className="w-4 flex-shrink-0" />
-            <FileIcon size={16} className={`flex-shrink-0 ${fileIconClassName}`} />
+            {/* Matches the chevron's width so files line up under their folder. */}
+            <span className="w-[14px] flex-shrink-0" />
+            <FileIcon size={15} className={`flex-shrink-0 ${fileIconClassName}`} />
           </>
         )}
 
@@ -161,7 +164,7 @@ export default function FileItem({
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
-            className="h-6 w-full min-w-0 rounded-sm border border-info-500 bg-white px-1 text-[13px] text-zinc-900 outline-none dark:bg-zinc-900 dark:text-white"
+            className="h-[18px] w-full min-w-0 rounded-sm border border-accent bg-field px-1 text-[13px] text-fg outline-none"
           />
         ) : (
           <span className="truncate text-[13px]">{node.name}</span>
@@ -178,7 +181,7 @@ export default function FileItem({
                   event.stopPropagation();
                   onCreateFile?.(node.id);
                 }}
-                className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-selected hover:text-fg"
                 title={`New file in ${node.name}`}
               >
                 <FilePlus2 size={13} />
@@ -189,7 +192,7 @@ export default function FileItem({
                   event.stopPropagation();
                   onCreateFolder?.(node.id);
                 }}
-                className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-selected hover:text-fg"
                 title={`New folder in ${node.name}`}
               >
                 <FolderPlus size={13} />
@@ -203,7 +206,7 @@ export default function FileItem({
               event.stopPropagation();
               setIsRenaming(true);
             }}
-            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-info-100 hover:text-info-600 dark:hover:bg-zinc-800 dark:hover:text-info-400"
+            className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-selected hover:text-accent"
             title={`Rename ${node.name} (F2)`}
           >
             <Pencil size={13} />
@@ -215,7 +218,7 @@ export default function FileItem({
               event.stopPropagation();
               onDelete?.(node);
             }}
-            className="rounded-sm p-1 text-zinc-400 transition-colors hover:bg-danger-100 hover:text-danger-600 dark:hover:bg-zinc-800 dark:hover:text-danger-400"
+            className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-danger-500/15 hover:text-danger-500"
             title={`Delete ${node.name} (Del)`}
           >
             <Trash2 size={13} />

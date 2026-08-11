@@ -17,14 +17,20 @@ SERVER_DIR = Path(__file__).resolve().parent.parent
 # Point the app at throwaway infrastructure before anything imports settings.
 # CODECHATTER_DATA_DIR must be set first: settings resolves the workspace and
 # upload directories at import time and the app mounts them immediately.
+#
+# These are hard assignments, NOT setdefault. The `client` fixture truncates
+# every collection before each test, so if a real MONGODB_URI is already in the
+# environment — which it is inside the app container, and in any shell that has
+# sourced server/.env — setdefault would leave it in place and the suite would
+# wipe the live database. Overwriting is the only safe behaviour here.
 _TEST_DATA_DIR = Path(tempfile.mkdtemp(prefix="codechatter-tests-"))
-os.environ.setdefault("CODECHATTER_DATA_DIR", str(_TEST_DATA_DIR))
-os.environ.setdefault("MONGODB_URI", "mongomock://localhost")
-os.environ.setdefault("MONGODB_DB_NAME", "codechatter_test")
-os.environ.setdefault("ENVIRONMENT", "development")
-os.environ.setdefault("SECRET_KEY", "test-secret-key-not-used-in-production")
-os.environ.setdefault("SESSION_SECRET_KEY", "test-session-secret-not-used-in-prod")
-os.environ.setdefault("SMTP_HOST", "")
+os.environ["CODECHATTER_DATA_DIR"] = str(_TEST_DATA_DIR)
+os.environ["MONGODB_URI"] = "mongomock://localhost"
+os.environ["MONGODB_DB_NAME"] = "codechatter_test"
+os.environ["ENVIRONMENT"] = "development"
+os.environ["SECRET_KEY"] = "test-secret-key-not-used-in-production"
+os.environ["SESSION_SECRET_KEY"] = "test-session-secret-not-used-in-prod"
+os.environ["SMTP_HOST"] = ""
 
 if str(SERVER_DIR) not in sys.path:
   sys.path.insert(0, str(SERVER_DIR))
@@ -59,6 +65,17 @@ def client(sent_otps):
 
     # mongomock keeps state for the process lifetime; start each test clean.
     repository.initialize()
+
+    # Last line of defence before the truncation below. If the repository ever
+    # ends up pointed at a real server — a stray MONGODB_URI, an import order
+    # change, a future edit to the block at the top of this file — these deletes
+    # would empty the live database. Refuse to run instead.
+    if not repository._is_mock:
+      raise RuntimeError(
+        "Refusing to run: the test repository is connected to a real MongoDB, "
+        "not mongomock. The fixtures below truncate every collection.",
+      )
+
     for collection in (
       repository._users,
       repository._rooms,
