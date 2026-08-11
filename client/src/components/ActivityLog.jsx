@@ -76,12 +76,12 @@ export default function ActivityLog({ roomId, onBack = null }) {
   return (
     <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div className="flex items-center gap-2">
           {onBack ? (
             <button
               onClick={onBack}
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200"
               title="Back to tools"
             >
               <ArrowLeft size={13} />
@@ -98,7 +98,7 @@ export default function ActivityLog({ roomId, onBack = null }) {
         <div className="flex items-center gap-1">
           <button
             onClick={load}
-            className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-200"
+            className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200"
             title="Refresh"
           >
             <RefreshCw size={13} />

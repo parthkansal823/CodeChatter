@@ -22,7 +22,7 @@ export default function PasswordInput({ id, label, required = false, value, onCh
           value={value}
           onChange={onChange}
           placeholder="••••••••"
-          className={`w-full ${Icon ? "pl-10" : "pl-3.5"} pr-10 py-2.5 rounded-lg bg-white/[0.04] border border-white/10 text-white text-sm placeholder-gray-600 outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/25 hover:border-white/20 transition-all duration-200`}
+          className={`w-full ${Icon ? "pl-10" : "pl-3.5"} pr-10 py-2.5 rounded-lg bg-zinc-800/60 border border-zinc-800 text-white text-sm placeholder-gray-600 outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/25 hover:border-zinc-700 transition-all duration-200`}
         />
         <button
           type="button"

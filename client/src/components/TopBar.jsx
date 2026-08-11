@@ -193,7 +193,7 @@ export default function TopBar({
   ];
 
   return (
-    <div className="border-b border-zinc-100 bg-white/85 backdrop-blur-xl dark:border-white/[0.04] dark:bg-[#09090b]/90">
+    <div className="border-b border-zinc-100 bg-white/85 backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090b]/90">
       <div className="flex flex-col gap-2 px-2 py-2 sm:px-3">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-start gap-2 sm:items-center">
@@ -203,7 +203,7 @@ export default function TopBar({
               className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
                 explorerOpen
                   ? "bg-brand-500/10 text-brand-400"
-                  : "text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
+                  : "text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-300"
               }`}
               title={explorerOpen ? "Hide files" : "Show files"}
             >
@@ -334,7 +334,7 @@ export default function TopBar({
               <button
                 ref={shareBtnRef}
                 onClick={openShare}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
                 title="Share & Settings"
               >
                 <Share2 size={14} />
@@ -378,7 +378,7 @@ export default function TopBar({
 
             <button
               onClick={() => navigate("/home")}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
               title="Back to dashboard"
             >
               <Home size={14} />

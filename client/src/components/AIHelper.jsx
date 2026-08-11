@@ -65,7 +65,7 @@ function CodeBlock({ code, lang }) {
   return (
     <div className="group/code relative my-2">
       {lang && (
-        <div className="rounded-t-lg border border-b-0 border-zinc-200 bg-zinc-100 px-3 py-1 text-[10px] font-mono text-zinc-500 dark:border-white/8 dark:bg-zinc-900/80 dark:text-zinc-500">
+        <div className="rounded-t-lg border border-b-0 border-zinc-200 bg-zinc-100 px-3 py-1 text-[10px] font-mono text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-500">
           {lang}
         </div>
       )}
@@ -74,7 +74,7 @@ function CodeBlock({ code, lang }) {
       </pre>
       <button
         onClick={copy}
-        className="absolute right-2 top-2 rounded border border-zinc-200 bg-white p-1 text-zinc-400 opacity-0 shadow transition-opacity group-hover/code:opacity-100 hover:text-zinc-700 dark:border-white/10 dark:bg-zinc-800/80 dark:hover:text-white"
+        className="absolute right-2 top-2 rounded border border-zinc-200 bg-white p-1 text-zinc-400 opacity-0 shadow transition-opacity group-hover/code:opacity-100 hover:text-zinc-700 dark:border-zinc-800 dark:bg-zinc-800/80 dark:hover:text-white"
         title="Copy code"
       >
         {copied ? <Check size={10} className="text-success-500" /> : <Copy size={10} />}
@@ -151,7 +151,7 @@ function MessageText({ text }) {
       }
     }
     if (/^---+$/.test(line.trim())) {
-      elements.push(<div key={i} className="my-2 h-px w-full bg-zinc-200 dark:bg-white/8" />);
+      elements.push(<div key={i} className="my-2 h-px w-full bg-zinc-200 dark:bg-zinc-800/60" />);
       return;
     }
     if (line.trim() === "") {
@@ -299,7 +299,7 @@ export default function AIHelper({
     <div className="flex h-full flex-col overflow-hidden bg-white dark:bg-zinc-950">
 
       {/* ── Header ── */}
-      <div className="relative shrink-0 overflow-hidden border-b border-zinc-200 dark:border-white/5">
+      <div className="relative shrink-0 overflow-hidden border-b border-zinc-200 dark:border-zinc-800">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/10 via-brand-500/5 to-transparent dark:from-brand-600/20 dark:via-brand-600/10" />
         <div className="relative px-3 pb-3 pt-3">
 
@@ -308,12 +308,12 @@ export default function AIHelper({
             <button
               type="button"
               onClick={onBack}
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
+              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white"
               title="Back"
             >
               <ArrowLeft size={15} />
             </button>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 shadow-lg shadow-brand-500/30">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 shadow-lg shadow-sm">
               <Bot size={14} className="text-white" />
             </div>
             <div className="min-w-0 flex-1">
@@ -329,7 +329,7 @@ export default function AIHelper({
               type="button"
               onClick={handleCopyConversation}
               disabled={messages.length <= 1}
-              className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-30 dark:hover:bg-white/10 dark:hover:text-zinc-200"
+              className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-30 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200"
               title="Copy conversation"
             >
               {copied === "conversation"
@@ -343,7 +343,7 @@ export default function AIHelper({
               type="button"
               onClick={handleClear}
               disabled={messages.length <= 1}
-              className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-danger-500 disabled:opacity-30 dark:hover:bg-white/10 dark:hover:text-danger-400"
+              className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-danger-500 disabled:opacity-30 dark:hover:bg-zinc-800/60 dark:hover:text-danger-400"
               title="Clear chat"
             >
               <Trash2 size={13} />
@@ -352,7 +352,7 @@ export default function AIHelper({
 
           {/* Context pill */}
           {context.filePath ? (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-white/8 dark:bg-white/5">
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
               <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${langClass}`}>
                 {context.languageLabel}
               </span>
@@ -395,7 +395,7 @@ export default function AIHelper({
                           type="button"
                           onClick={() => void submitPrompt(action.prompt)}
                           disabled={isTyping}
-                          className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-[11px] font-medium text-zinc-600 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-40 dark:border-white/8 dark:bg-white/5 dark:text-zinc-300 dark:hover:border-brand-400/30 dark:hover:bg-brand-500/10 dark:hover:text-brand-200"
+                          className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-[11px] font-medium text-zinc-600 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-brand-400/30 dark:hover:bg-brand-500/10 dark:hover:text-brand-200"
                         >
                           <Icon size={11} className="shrink-0" />
                           {action.label}
@@ -437,10 +437,10 @@ export default function AIHelper({
                 )}
 
                 <div
-                  className={`relative max-w-[92%] rounded-2xl px-3.5 py-2.5 ${
+                  className={`relative max-w-[92%] rounded-lg px-3.5 py-2.5 ${
                     isUser
-                      ? "rounded-tr-sm bg-brand-600 text-white shadow-lg shadow-brand-500/20"
-                      : "rounded-tl-sm border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm dark:border-white/8 dark:bg-zinc-900 dark:text-zinc-200"
+                      ? "rounded-tr-sm bg-brand-600 text-white shadow-lg shadow-sm"
+                      : "rounded-tl-sm border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
                   }`}
                 >
                   {isUser ? (
@@ -452,7 +452,7 @@ export default function AIHelper({
                   {!isUser && (
                     <button
                       onClick={() => handleCopy(msg.text, msg.id)}
-                      className="absolute -right-1 -top-1 hidden rounded-md border border-zinc-200 bg-white p-1 text-zinc-400 opacity-0 shadow transition-opacity group-hover:flex group-hover:opacity-100 hover:text-zinc-700 dark:border-white/10 dark:bg-zinc-800 dark:hover:text-white"
+                      className="absolute -right-1 -top-1 hidden rounded-md border border-zinc-200 bg-white p-1 text-zinc-400 opacity-0 shadow transition-opacity group-hover:flex group-hover:opacity-100 hover:text-zinc-700 dark:border-zinc-800 dark:bg-zinc-800 dark:hover:text-white"
                       title="Copy message"
                     >
                       {copied === msg.id ? (
@@ -487,7 +487,7 @@ export default function AIHelper({
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600">
               <Bot size={10} className="text-white" />
             </div>
-            <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm border border-zinc-200 bg-zinc-50 px-4 py-3 shadow-sm dark:border-white/8 dark:bg-zinc-900">
+            <div className="flex items-center gap-1 rounded-lg rounded-tl-sm border border-zinc-200 bg-zinc-50 px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               {[0, 150, 300].map((d, i) => (
                 <span
                   key={i}
@@ -501,10 +501,10 @@ export default function AIHelper({
       </div>
 
       {/* ── Input ── */}
-      <div className="shrink-0 border-t border-zinc-200 bg-zinc-50 p-3 dark:border-white/5 dark:bg-zinc-950">
+      <div className="shrink-0 border-t border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950">
         <form
           onSubmit={handleSend}
-          className="relative flex items-end gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm transition-all focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400/30 dark:border-white/10 dark:bg-zinc-900 dark:focus-within:border-brand-500/40 dark:focus-within:ring-brand-500/30"
+          className="relative flex items-end gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm transition-all focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400/30 dark:border-zinc-800 dark:bg-zinc-900 dark:focus-within:border-brand-500/40 dark:focus-within:ring-brand-500/30"
         >
           <textarea
             ref={textareaRef}
@@ -521,7 +521,7 @@ export default function AIHelper({
           <button
             type="submit"
             disabled={!input.trim() || isTyping}
-            className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md shadow-brand-500/30 transition-all hover:bg-brand-500 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+            className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md shadow-sm transition-all hover:bg-brand-500 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
           >
             {isTyping ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} className="ml-0.5" />}
           </button>

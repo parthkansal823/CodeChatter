@@ -32,7 +32,7 @@ import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/termi
 import { getBookmarks, getRecentRooms, recordVisit, toggleBookmark } from "../utils/roomUtils";
 
 const SkeletonCard = () => (
-  <div className="rounded-2xl border border-zinc-200 bg-white p-5 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
+  <div className="rounded-lg border border-zinc-200 bg-white p-5 animate-pulse dark:border-zinc-800 dark:bg-zinc-900">
     <div className="mb-3 flex items-center justify-between gap-3">
       <div className="h-5 w-1/2 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
       <div className="h-7 w-16 rounded-lg bg-zinc-100 dark:bg-zinc-800" />
@@ -56,7 +56,7 @@ const containerVariants = {
 const SPRING = { type: "spring", stiffness: 340, damping: 28 };
 
 const itemVariants = {
-  hidden:  { opacity: 0, y: 18, scale: 0.97 },
+  hidden:  { opacity: 0, y: 8, scale: 0.97 },
   visible: { opacity: 1, y: 0,  scale: 1,    transition: { ...SPRING, opacity: { duration: 0.22 } } },
 };
 
@@ -437,7 +437,7 @@ export default function Home() {
             whileHover={{ scale: 1.01, y: -2 }}
             whileTap={{ scale: 0.99 }}
             onClick={openCreateModal}
-            className="group rounded-2xl border border-zinc-200 bg-white/70 p-6 text-left transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
+            className="group rounded-lg border border-zinc-200 bg-white/70 p-6 text-left transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
           >
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -460,7 +460,7 @@ export default function Home() {
               const { roomId, inviteToken } = parseRoomInvite(joinRoomValue);
               handleJoinById(roomId, inviteToken);
             }}
-            className="rounded-2xl border border-zinc-200 bg-white/70 p-6 transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
+            className="rounded-lg border border-zinc-200 bg-white/70 p-6 transition-all hover:border-brand-500 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-brand-500 backdrop-blur-md"
           >
             <p className="text-sm text-zinc-500 dark:text-zinc-400">Join room</p>
             <h2 className="mt-1 text-2xl font-semibold">Paste a room ID or invite link</h2>
@@ -591,7 +591,7 @@ export default function Home() {
                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
                     whileHover={{ y: -5, scale: 1.01, transition: SPRING }}
                     whileTap={{ scale: 0.99 }}
-                    className={`group/card relative rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-brand-200 dark:hover:border-brand-900/50 hover:shadow-xl hover:shadow-brand-500/8 ${
+                    className={`group/card relative rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 transition-all hover:border-brand-200 dark:hover:border-brand-900/50 hover:shadow-xl hover:shadow-sm ${
                       isListView ? "p-4" : "p-5"
                     }`}
                   >
@@ -652,7 +652,7 @@ export default function Home() {
                           {openMenuId === room.id && (
                             <div
                               onMouseDown={(e) => e.stopPropagation()}
-                              className="absolute right-0 top-10 z-30 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-700/80 dark:bg-zinc-900"
+                              className="absolute right-0 top-10 z-30 w-56 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-700/80 dark:bg-zinc-900"
                             >
 
                               {/* Actions */}
@@ -735,7 +735,7 @@ export default function Home() {
               </AnimatePresence>
             </div>
           ) : rooms.length > 0 ? (
-            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
+            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
               <Search size={22} className="text-zinc-400" />
               <p className="mt-3 text-base font-semibold text-zinc-700 dark:text-zinc-300">No matching rooms</p>
               <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
@@ -749,11 +749,11 @@ export default function Home() {
               </button>
             </Motion.div>
           ) : (
-            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
+            <Motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
               <Motion.div
                 animate={{ y: [0, -5, 0] }}
                 transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400"
+                className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-brand-100 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400"
               >
                 <FolderGit2 size={24} />
               </Motion.div>
@@ -763,7 +763,7 @@ export default function Home() {
               </p>
               <button
                 onClick={openCreateModal}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-500/20 hover:bg-brand-500 transition-colors"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-sm hover:bg-brand-500 transition-colors"
               >
                 <Plus size={15} /> Create a room
               </button>
@@ -776,12 +776,12 @@ export default function Home() {
         {createModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-sm">
             <Motion.form
-              initial={{ opacity: 0, y: 20, scale: 0.96, filter: "blur(6px)" }}
+              initial={{ opacity: 0, y: 8, scale: 0.96, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: 14, scale: 0.97, filter: "blur(4px)", transition: { duration: 0.16, ease: "easeIn" } }}
+              exit={{ opacity: 0, y: 8, scale: 0.97, filter: "blur(4px)", transition: { duration: 0.16, ease: "easeIn" } }}
               transition={{ type: "spring", stiffness: 360, damping: 28, filter: { duration: 0.22 }, opacity: { duration: 0.2 } }}
               onSubmit={handleCreateRoom}
-              className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+              className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
             >
               <div className="border-b border-zinc-200 px-4 py-4 sm:px-6 dark:border-zinc-800">
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Create a room</p>

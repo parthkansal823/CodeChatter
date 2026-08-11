@@ -33,7 +33,7 @@ const slideVariant = {
       stiffness: 340,
       damping: 26,
       opacity: { duration: 0.22 },
-      filter: { duration: 0.28 },
+      filter: { duration: 0.2 },
     },
   },
   exit: (dir) => ({
@@ -91,7 +91,7 @@ function OtpInput({ value, onChange }) {
       {Array.from({ length: 6 }).map((_, i) => (
         <Motion.div
           key={i}
-          initial={{ opacity: 0, scale: 0.55, y: 12 }}
+          initial={{ opacity: 0, scale: 0.55, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ ...SPRING_POP, delay: 0.08 + i * 0.07 }}
         >
@@ -103,7 +103,7 @@ function OtpInput({ value, onChange }) {
             value={value[i] || ""}
             onChange={(e) => handleChange(i, e)}
             onKeyDown={(e) => handleKeyDown(i, e)}
-            className="h-12 w-10 rounded-xl border border-white/10 bg-white/[0.05] text-center text-lg font-bold text-white caret-transparent transition-all duration-150 focus:scale-105 focus:border-brand-500 focus:bg-white/[0.09] focus:outline-none sm:h-[3.25rem] sm:w-11 sm:text-xl"
+            className="h-12 w-10 rounded-xl border border-zinc-800 bg-zinc-800/60 text-center text-lg font-bold text-white caret-transparent transition-all duration-150 focus:scale-105 focus:border-brand-500 focus:bg-zinc-800 focus:outline-none sm:h-[3.25rem] sm:w-11 sm:text-xl"
             autoComplete="one-time-code"
           />
         </Motion.div>
@@ -244,10 +244,10 @@ export default function Auth() {
         <AnimatePresence mode="wait">
           <Motion.div
             key="otp-step"
-            initial={{ opacity: 0, y: 20, filter: "blur(6px)" }}
+            initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
-            transition={{ duration: 0.4, ease: EASE_EXPO }}
+            exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+            transition={{ duration: 0.2, ease: EASE_EXPO }}
             className="w-full"
           >
             {/* Back */}
@@ -255,7 +255,7 @@ export default function Auth() {
               onClick={handleBackToCredentials}
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1, duration: 0.3, ease: EASE_EXPO }}
+              transition={{ delay: 0.1, duration: 0.2, ease: EASE_EXPO }}
               whileHover={{ x: -3 }}
               whileTap={{ scale: 0.95 }}
               className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors mb-8"
@@ -270,15 +270,15 @@ export default function Auth() {
                 initial={{ scale: 0, rotate: -20, opacity: 0 }}
                 animate={{ scale: 1, rotate: 0, opacity: 1 }}
                 transition={{ ...SPRING_POP, delay: 0.12 }}
-                className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-4"
+                className="w-14 h-14 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-4"
               >
                 <ShieldCheck size={26} className="text-brand-400" />
               </Motion.div>
 
               <Motion.h1
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.35, ease: EASE_EXPO }}
+                transition={{ delay: 0.2, duration: 0.2, ease: EASE_EXPO }}
                 className="text-2xl font-bold tracking-tight text-white"
               >
                 Check your email
@@ -286,7 +286,7 @@ export default function Auth() {
               <Motion.p
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.27, duration: 0.35, ease: EASE_EXPO }}
+                transition={{ delay: 0.27, duration: 0.2, ease: EASE_EXPO }}
                 className="text-[13px] text-gray-400 mt-1.5 max-w-xs leading-relaxed"
               >
                 We sent a 6-digit code to{" "}
@@ -301,7 +301,7 @@ export default function Auth() {
               <Motion.button
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.52, duration: 0.35, ease: EASE_EXPO }}
+                transition={{ delay: 0.52, duration: 0.2, ease: EASE_EXPO }}
                 whileHover={{ scale: 1.03, y: -2, boxShadow: "0 0 28px rgba(124,58,237,0.45)" }}
                 whileTap={{ scale: 0.97 }}
                 type="submit"
@@ -321,7 +321,7 @@ export default function Auth() {
             <Motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.6, duration: 0.3 }}
+              transition={{ delay: 0.6, duration: 0.2 }}
               className="flex items-center justify-center gap-1.5 mt-6 text-[12.5px] text-gray-500"
             >
               <span>Didn't receive it?</span>
@@ -339,7 +339,7 @@ export default function Auth() {
             <Motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.65, duration: 0.3 }}
+              transition={{ delay: 0.65, duration: 0.2 }}
               className="text-center text-[11px] text-gray-600 mt-5"
             >
               Code expires in 5 minutes
@@ -358,7 +358,7 @@ export default function Auth() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-6 mb-8 border-b border-white/[0.08]">
+      <div className="flex gap-6 mb-8 border-b border-zinc-800">
         {[
           { key: "login",  label: "Sign in" },
           { key: "signup", label: "Create account" },
@@ -412,14 +412,14 @@ export default function Auth() {
         ].map(({ icon: Icon, label, action }, i) => (
           <Motion.button
             key={label}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08 + i * 0.06, duration: 0.35, ease: EASE_EXPO }}
+            transition={{ delay: 0.08 + i * 0.06, duration: 0.2, ease: EASE_EXPO }}
             whileHover={{ scale: 1.03, y: -2 }}
             whileTap={{ scale: 0.97 }}
             type="button"
             onClick={action}
-            className="flex items-center justify-center gap-2.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-white/20 transition-colors duration-200 group"
+            className="flex items-center justify-center gap-2.5 py-2.5 rounded-xl bg-zinc-800/60 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 transition-colors duration-200 group"
           >
             <Icon size={16} className={`${label === "GitHub" ? "text-gray-300 group-hover:text-white" : ""} transition-colors`} />
             <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
@@ -433,11 +433,11 @@ export default function Auth() {
       <Motion.div
         initial={{ opacity: 0, scaleX: 0.6 }}
         animate={{ opacity: 1, scaleX: 1 }}
-        transition={{ delay: 0.18, duration: 0.4, ease: EASE_EXPO }}
+        transition={{ delay: 0.18, duration: 0.2, ease: EASE_EXPO }}
         className="relative mb-6"
       >
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-white/[0.08]" />
+          <div className="w-full border-t border-zinc-800" />
         </div>
         <div className="relative flex justify-center">
           <span className="px-3 bg-[#08080f] text-[11px] text-gray-500 uppercase tracking-wider">
@@ -480,7 +480,7 @@ export default function Auth() {
               />
               <div className="flex justify-between items-center mt-2.5">
                 <label className="flex items-center gap-2 text-[12.5px] text-gray-400 cursor-pointer hover:text-gray-200 transition-colors select-none">
-                  <input type="checkbox" className="w-3.5 h-3.5 rounded accent-brand-500 bg-white/10 border-white/20" />
+                  <input type="checkbox" className="w-3.5 h-3.5 rounded accent-brand-500 bg-zinc-800/60 border-zinc-700" />
                   Remember me
                 </label>
                 <button type="button" className="text-[12.5px] text-gray-400 hover:text-brand-400 transition-colors">
@@ -549,7 +549,7 @@ export default function Auth() {
       <Motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4, duration: 0.4 }}
+        transition={{ delay: 0.4, duration: 0.2 }}
         className="text-center text-[12.5px] text-gray-500 mt-7"
       >
         {mode === "login" ? (
@@ -572,7 +572,7 @@ export default function Auth() {
       <Motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.45, duration: 0.4 }}
+        transition={{ delay: 0.45, duration: 0.2 }}
         className="text-center text-[11px] text-gray-600 mt-4"
       >
         By continuing, you agree to our{" "}

@@ -15,7 +15,7 @@ export default function Layout({ children, theme, onThemeChange }) {
         <AnimatePresence mode="wait">
           <Motion.div
             key={location.pathname}
-            initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
+            initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: -8, filter: "blur(3px)" }}
             transition={{ duration: 0.24, ease: EASE_EXPO }}

@@ -82,10 +82,10 @@ const TOKEN_COLOR = { kw:"text-brand-400", fn:"text-info-400", op:"text-warning-
 function FadeUp({ children, delay = 0, className = "" }) {
   return (
     <Motion.div
-      initial={{ opacity: 0, y: 22 }}
+      initial={{ opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.48, ease: "easeOut", delay }}
+      transition={{ duration: 0.2, ease: "easeOut", delay }}
       className={className}
     >
       {children}
@@ -95,9 +95,9 @@ function FadeUp({ children, delay = 0, className = "" }) {
 
 function HeroMockup() {
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-white/10 shadow-[0_24px_64px_rgba(0,0,0,0.12)] dark:shadow-[0_24px_64px_rgba(0,0,0,0.55)]">
+    <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-800 shadow-[0_24px_64px_rgba(0,0,0,0.12)] dark:shadow-[0_24px_64px_rgba(0,0,0,0.55)]">
       {/* Window chrome */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-[#14141f] border-b border-gray-200 dark:border-white/[0.06]">
+      <div className="flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-[#14141f] border-b border-gray-200 dark:border-zinc-800">
         <span className="flex gap-1.5">
           <span className="w-3 h-3 rounded-full bg-danger-400" />
           <span className="w-3 h-3 rounded-full bg-warning-400" />
@@ -118,7 +118,7 @@ function HeroMockup() {
       {/* Editor body — always dark like a real IDE */}
       <div className="bg-[#0d1117] flex text-sm font-mono">
         {/* Line numbers */}
-        <div className="w-10 py-4 pr-3 select-none text-right bg-[#0d1117] border-r border-white/[0.04]">
+        <div className="w-10 py-4 pr-3 select-none text-right bg-[#0d1117] border-r border-zinc-800">
           {CODE.map((_, i) => (
             <div key={i} className="h-6 leading-6 text-[11px] text-gray-600">{i + 1}</div>
           ))}
@@ -164,7 +164,7 @@ export default function Landing({ theme, onThemeChange }) {
   const toggleTheme = () => onThemeChange(isDark ? "vs" : "vs-dark");
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#08080f] text-gray-900 dark:text-white transition-colors duration-300">
+    <div className="min-h-screen bg-white dark:bg-[#08080f] text-gray-900 dark:text-white transition-colors duration-200">
 
       {/* ── Dot-grid overlay ───────────────────────────────────────────────── */}
       <div className="pointer-events-none fixed inset-0 dark:hidden"
@@ -175,7 +175,7 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ╔══════════════════════════════════════════════════════════════════╗ */}
       {/* ║  NAVBAR                                                          ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-14 border-b border-gray-200/70 dark:border-white/[0.06] bg-white/80 dark:bg-[#08080f]/80 backdrop-blur-xl flex items-center">
+      <header className="fixed top-0 left-0 right-0 z-50 h-14 border-b border-gray-200/70 dark:border-zinc-800 bg-white/80 dark:bg-[#08080f]/80 backdrop-blur-xl flex items-center">
         <div className="max-w-7xl mx-auto w-full px-5 flex items-center gap-4">
           <Link to="/"><BrandLogo size="sm" /></Link>
 
@@ -191,7 +191,7 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="flex items-center gap-2 ml-auto">
             {/* Theme toggle */}
             <button onClick={toggleTheme}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-all">
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
@@ -203,7 +203,7 @@ export default function Landing({ theme, onThemeChange }) {
             ) : (
               <>
                 <Link to="/auth"
-                  className="hidden sm:block px-3.5 py-1.5 rounded-lg text-[13.5px] font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-all">
+                  className="hidden sm:block px-3.5 py-1.5 rounded-lg text-[13.5px] font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
                   Sign in
                 </Link>
                 <Link to="/auth?mode=signup"
@@ -215,7 +215,7 @@ export default function Landing({ theme, onThemeChange }) {
 
             {/* Mobile menu toggle */}
             <button onClick={() => setMobileOpen(v => !v)}
-              className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-all">
+              className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
               {mobileOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
@@ -223,14 +223,14 @@ export default function Landing({ theme, onThemeChange }) {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="absolute top-14 left-0 right-0 bg-white dark:bg-[#0d0d18] border-b border-gray-200 dark:border-white/[0.06] px-5 py-4 flex flex-col gap-3 md:hidden">
+          <div className="absolute top-14 left-0 right-0 bg-white dark:bg-[#0d0d18] border-b border-gray-200 dark:border-zinc-800 px-5 py-4 flex flex-col gap-3 md:hidden">
             {[["Features","#features"],["Platform","#platform"],["How it works","#how-it-works"]].map(([label,href]) => (
               <a key={label} href={href} onClick={() => setMobileOpen(false)}
                 className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 {label}
               </a>
             ))}
-            <hr className="border-gray-100 dark:border-white/[0.08]" />
+            <hr className="border-gray-100 dark:border-zinc-800" />
             <Link to="/auth" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-gray-600 dark:text-gray-300">Sign in</Link>
             <Link to="/auth?mode=signup" onClick={() => setMobileOpen(false)}
               className="text-center py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-info-600">
@@ -252,7 +252,7 @@ export default function Landing({ theme, onThemeChange }) {
 
         <div className="relative max-w-7xl mx-auto">
           <div className="max-w-[680px] mx-auto text-center mb-14">
-            <Motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+            <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
               {/* Badge */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1 mb-6 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-[12.5px] font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
@@ -276,7 +276,7 @@ export default function Landing({ theme, onThemeChange }) {
                   Start for free <ArrowRight size={16} />
                 </Link>
                 <Link to="/auth"
-                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-[15px] text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-white/[0.06] hover:bg-gray-200 dark:hover:bg-white/[0.10] border border-gray-200 dark:border-white/10 transition-all">
+                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-[15px] text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-zinc-800/60 hover:bg-gray-200 dark:hover:bg-zinc-800 border border-gray-200 dark:border-zinc-800 transition-all">
                   Sign in
                 </Link>
               </div>
@@ -289,9 +289,9 @@ export default function Landing({ theme, onThemeChange }) {
 
           {/* Hero visual */}
           <Motion.div
-            initial={{ opacity: 0, y: 32 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.18 }}
+            transition={{ duration: 0.2, delay: 0.18 }}
             className="max-w-4xl mx-auto"
           >
             <HeroMockup />
@@ -303,7 +303,7 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ║  STATS                                                           ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
       <FadeUp>
-        <div className="border-y border-gray-100 dark:border-white/[0.06] py-12 px-5">
+        <div className="border-y border-gray-100 dark:border-zinc-800 py-12 px-5">
           <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
             {STATS.map(({ value, label }) => (
               <div key={label}>
@@ -336,7 +336,7 @@ export default function Landing({ theme, onThemeChange }) {
                 <Motion.div
                   whileHover={{ y: -3 }}
                   transition={{ duration: 0.2 }}
-                  className="group h-full rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 transition-colors hover:border-brand-300 dark:border-white/[0.07] dark:bg-white/[0.025] dark:hover:border-brand-500/40"
+                  className="group h-full rounded-lg border border-zinc-200 bg-zinc-50/80 p-6 transition-colors hover:border-brand-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-brand-500/40"
                 >
                   <div className={`mb-4 flex h-9 w-9 items-center justify-center rounded-xl ${ICON_TILE}`}>
                     <Icon size={16} />
@@ -366,7 +366,7 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="grid gap-5 lg:grid-cols-2">
             {PLATFORM_DETAILS.map(({ icon: Icon, title, desc }, i) => (
               <FadeUp key={title} delay={i * 0.08}>
-                <div className="h-full rounded-2xl border border-gray-200 bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-white/[0.07] dark:bg-white/[0.025]">
+                <div className="h-full rounded-lg border border-gray-200 bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
                   <div className="w-10 h-10 rounded-xl border border-brand-500/20 bg-brand-500/10 text-brand-500 dark:text-brand-300 flex items-center justify-center mb-4">
                     <Icon size={18} />
                   </div>
@@ -379,7 +379,7 @@ export default function Landing({ theme, onThemeChange }) {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-24 px-5 bg-gray-50 dark:bg-white/[0.015]">
+      <section id="how-it-works" className="py-24 px-5 bg-gray-50 dark:bg-zinc-900">
         <div className="max-w-7xl mx-auto">
           <FadeUp className="text-center mb-16">
             <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">How it works</p>
@@ -425,7 +425,7 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ╔══════════════════════════════════════════════════════════════════╗ */}
       {/* ║  FOOTER                                                          ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
-      <footer className="border-t border-gray-100 dark:border-white/[0.06] py-10 px-5">
+      <footer className="border-t border-gray-100 dark:border-zinc-800 py-10 px-5">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5">
           <BrandLogo size="sm" />
           <p className="text-[13px] text-gray-400 text-center">

@@ -117,10 +117,10 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                     {msg.msgType === "file" && msg.fileUrl ? (
                       <div className={`p-3 text-sm leading-relaxed shadow-sm break-words flex items-center gap-3 ${
                         isSenderYou
-                          ? "bg-brand-600 border border-brand-500 text-white rounded-2xl rounded-br-sm shadow-brand-600/10"
-                          : "bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-white/5 text-zinc-800 dark:text-zinc-200 rounded-2xl rounded-bl-sm"
+                          ? "bg-brand-600 border border-brand-500 text-white rounded-lg rounded-br-sm shadow-sm"
+                          : "bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-lg rounded-bl-sm"
                       }`}>
-                        <div className={`p-2 rounded-lg ${isSenderYou ? "bg-white/20 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-brand-500"}`}>
+                        <div className={`p-2 rounded-lg ${isSenderYou ? "bg-zinc-800 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-brand-500"}`}>
                           <FileText size={18} />
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">
@@ -144,8 +144,8 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                       <div
                         className={`px-3.5 py-2.5 text-sm leading-relaxed shadow-sm break-words whitespace-pre-wrap ${
                           isSenderYou
-                            ? "bg-brand-600 text-white rounded-2xl rounded-br-sm shadow-brand-600/10"
-                            : "bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-white/5 text-zinc-800 dark:text-zinc-200 rounded-2xl rounded-bl-sm"
+                            ? "bg-brand-600 text-white rounded-lg rounded-br-sm shadow-sm"
+                            : "bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-lg rounded-bl-sm"
                         }`}
                       >
                         {msg.text}
@@ -182,7 +182,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
               disabled={isUploading}
-              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-full pl-4 pr-10 py-2.5 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all shadow-sm disabled:opacity-50"
+              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full pl-4 pr-10 py-2.5 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all shadow-sm disabled:opacity-50"
             />
             <button
               type="submit"

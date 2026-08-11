@@ -241,9 +241,9 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
       <AnimatePresence>
         {focusMode && (
           <Motion.button
-            initial={{ opacity: 0, y: -12 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
             onClick={() => setFocusMode(false)}
             className="absolute left-1/2 top-3 z-50 inline-flex -translate-x-1/2 items-center gap-2 rounded-full bg-zinc-900/80 px-3 py-1.5 text-[11px] font-medium text-zinc-300 shadow-xl backdrop-blur-sm hover:bg-zinc-800 dark:bg-zinc-100/10 dark:text-zinc-200 sm:px-4 sm:text-xs"

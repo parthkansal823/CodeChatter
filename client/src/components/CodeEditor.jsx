@@ -311,7 +311,7 @@ export default function CodeEditor({
               URL.revokeObjectURL(url);
             }}
             title="Download file"
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-300"
           >
             <Download size={11} />
             <span className="hidden sm:inline">Download</span>
@@ -324,7 +324,7 @@ export default function CodeEditor({
             className={`flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors ${
               showVersionHistory
                 ? "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400"
-                : "hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-white/[0.06] dark:hover:text-zinc-300"
+                : "hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-300"
             }`}
           >
             <Clock size={11} />

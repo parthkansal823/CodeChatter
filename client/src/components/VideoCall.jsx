@@ -82,8 +82,8 @@ function VideoTile({
   }, [stream, videoRef]);
 
   const sizeClasses = size === "thumb"
-    ? "aspect-[4/3] rounded-2xl"
-    : "aspect-[4/3] rounded-[28px]";
+    ? "aspect-[4/3] rounded-lg"
+    : "aspect-[4/3] rounded-xl";
 
   return (
     <div className={`group relative overflow-hidden border border-white/10 bg-zinc-950 shadow-[0_20px_50px_rgba(0,0,0,0.35)] ${sizeClasses}`}>
@@ -92,10 +92,10 @@ function VideoTile({
         autoPlay
         playsInline
         muted={muted}
-        className={`h-full w-full object-cover transition-opacity duration-300 ${isVideoMuted ? "opacity-0" : "opacity-100"}`}
+        className={`h-full w-full object-cover transition-opacity duration-200 ${isVideoMuted ? "opacity-0" : "opacity-100"}`}
       />
 
-      <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 transition-opacity duration-300 ${isVideoMuted ? "opacity-100" : "pointer-events-none opacity-0"}`}>
+      <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 transition-opacity duration-200 ${isVideoMuted ? "opacity-100" : "pointer-events-none opacity-0"}`}>
         <div className="flex flex-col items-center gap-3">
           <UserAvatar username={username} size="xl" className="h-20 w-20 text-2xl shadow-xl shadow-black/30 ring-4 ring-black/40" />
           <span className="rounded-full border border-white/10 bg-black/45 px-3 py-1 text-sm font-medium text-white">
@@ -114,12 +114,12 @@ function VideoTile({
       ) : null}
 
       <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-        <div className="rounded-2xl border border-white/10 bg-black/45 px-3 py-2 backdrop-blur-md">
+        <div className="rounded-lg border border-white/10 bg-black/45 px-3 py-2 backdrop-blur-md">
           <p className="truncate text-xs font-semibold text-white">{username}</p>
           {subtitle ? <p className="mt-0.5 text-[10px] text-zinc-300">{subtitle}</p> : null}
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/45 px-2.5 py-2 backdrop-blur-md">
+        <div className="rounded-lg border border-white/10 bg-black/45 px-2.5 py-2 backdrop-blur-md">
           {isLocal && muted ? <MicOff size={13} className="text-danger-400" /> : <AudioBars level={audioLevel} active={!muted} />}
         </div>
       </div>
@@ -550,36 +550,36 @@ export default function VideoCall({
   };
 
   const controlButton = (active, danger = false) =>
-    `flex h-12 w-12 items-center justify-center rounded-2xl border transition ${
+    `flex h-12 w-12 items-center justify-center rounded-lg border transition ${
       danger
         ? "border-danger-400/30 bg-danger-500 text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] hover:bg-danger-400"
         : active
           ? "border-info-400/30 bg-info-500 text-white shadow-[0_10px_25px_rgba(14,165,233,0.35)] hover:bg-info-400"
-          : "border-white/8 bg-white/[0.05] text-zinc-200 hover:bg-white/[0.09]"
+          : "border-white/8 bg-zinc-800/60 text-zinc-200 hover:bg-zinc-800"
     }`;
 
   const headerButton = (active = false) =>
     `flex h-9 w-9 items-center justify-center rounded-xl border transition ${
       active
         ? "border-info-400/30 bg-info-500/15 text-info-300"
-        : "border-white/8 bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] hover:text-zinc-100"
+        : "border-white/8 bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
     }`;
 
   return (
     <div ref={containerRef} className="flex h-full flex-col bg-[#08090d] text-white">
-      <div className="border-b border-white/[0.06] bg-[#0c0d12] px-4 py-3">
+      <div className="border-b border-zinc-800 bg-[#0c0d12] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={endCall}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-white/[0.04] text-zinc-300 transition hover:bg-white/[0.08] hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-zinc-800/60 text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
               title="Leave call"
             >
               <ArrowLeft size={15} />
             </button>
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-info-500/15 text-info-400">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-info-500/15 text-info-400">
               <Video size={17} />
             </div>
 
@@ -597,13 +597,13 @@ export default function VideoCall({
 
           <div className="flex items-center gap-2">
             {hasPermissions === true ? (
-              <div className="hidden items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300 sm:flex">
+              <div className="hidden items-center gap-1 rounded-full border border-white/8 bg-zinc-800/60 px-2.5 py-1 text-[11px] text-zinc-300 sm:flex">
                 <Clock size={11} className="text-success-400" />
                 {formatDuration(callDuration)}
               </div>
             ) : null}
 
-            <div className="hidden items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300 sm:flex">
+            <div className="hidden items-center gap-1 rounded-full border border-white/8 bg-zinc-800/60 px-2.5 py-1 text-[11px] text-zinc-300 sm:flex">
               <Users size={11} />
               {participantCount}
             </div>
@@ -629,8 +629,8 @@ export default function VideoCall({
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {hasPermissions === false ? (
               <div className="flex h-full items-center justify-center">
-                <div className="w-full max-w-sm rounded-[28px] border border-danger-500/20 bg-danger-500/10 p-6 text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-danger-500/20 text-danger-300">
+                <div className="w-full max-w-sm rounded-xl border border-danger-500/20 bg-danger-500/10 p-6 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-danger-500/20 text-danger-300">
                     <VideoOff size={22} />
                   </div>
                   <p className="mt-4 text-lg font-semibold text-white">Camera or mic blocked</p>
@@ -653,7 +653,7 @@ export default function VideoCall({
                   videoRefOverride={localVideoRef}
                 />
 
-                <div className="rounded-[28px] border border-white/8 bg-gradient-to-br from-white/[0.05] via-white/[0.03] to-info-500/10 p-5">
+                <div className="rounded-xl border border-white/8 bg-gradient-to-br from-white/[0.05] via-white/[0.03] to-info-500/10 p-5">
                   <p className="text-lg font-semibold text-white">Meeting is ready</p>
                   <p className="mt-2 text-sm leading-6 text-zinc-300">
                     This call now behaves more like a real meeting room: you can present, pin yourself in PiP, switch layouts, and watch participants join live.
@@ -665,7 +665,7 @@ export default function VideoCall({
                       { label: "Layout", value: layout === "stage" ? "Meet stage" : "Grid" },
                       { label: "Presenting", value: isScreenSharing ? "Yes" : "No" },
                     ].map((item) => (
-                      <div key={item.label} className="rounded-2xl border border-white/8 bg-black/20 px-3 py-3">
+                      <div key={item.label} className="rounded-lg border border-white/8 bg-black/20 px-3 py-3">
                         <p className="text-[11px] text-zinc-400">{item.label}</p>
                         <p className="mt-1 text-sm font-semibold text-white">{item.value}</p>
                       </div>
@@ -741,7 +741,7 @@ export default function VideoCall({
             )}
           </div>
 
-          <div className="border-t border-white/[0.06] bg-[#0c0d12] px-4 py-4">
+          <div className="border-t border-zinc-800 bg-[#0c0d12] px-4 py-4">
             <div className="flex items-center justify-center gap-3">
               <button onClick={toggleAudio} className={controlButton(isAudioMuted, isAudioMuted)} title={isAudioMuted ? "Unmute" : "Mute"}>
                 {isAudioMuted ? <MicOff size={18} /> : <Mic size={18} />}
@@ -757,7 +757,7 @@ export default function VideoCall({
                   <PictureInPicture2 size={18} />
                 </button>
               ) : null}
-              <button onClick={endCall} className="inline-flex h-12 items-center gap-2 rounded-2xl border border-danger-400/30 bg-danger-500 px-5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] transition hover:bg-danger-400" title="End call">
+              <button onClick={endCall} className="inline-flex h-12 items-center gap-2 rounded-lg border border-danger-400/30 bg-danger-500 px-5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] transition hover:bg-danger-400" title="End call">
                 <PhoneOff size={18} />
                 Leave
               </button>
@@ -766,14 +766,14 @@ export default function VideoCall({
         </div>
 
         {participantsOpen ? (
-          <aside className="hidden w-[220px] shrink-0 border-l border-white/[0.06] bg-[#0c0d12] xl:flex xl:flex-col">
-            <div className="border-b border-white/[0.06] px-4 py-3">
+          <aside className="hidden w-[220px] shrink-0 border-l border-zinc-800 bg-[#0c0d12] xl:flex xl:flex-col">
+            <div className="border-b border-zinc-800 px-4 py-3">
               <p className="text-sm font-semibold text-white">Participants</p>
               <p className="mt-1 text-xs text-zinc-400">{participantCount} in this workspace call</p>
             </div>
 
             <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
-              <div className="rounded-2xl border border-info-500/20 bg-info-500/10 px-3 py-3">
+              <div className="rounded-lg border border-info-500/20 bg-info-500/10 px-3 py-3">
                 <div className="flex items-center gap-3">
                   <UserAvatar username={user?.username} size="sm" />
                   <div className="min-w-0 flex-1">
@@ -785,7 +785,7 @@ export default function VideoCall({
               </div>
 
               {remoteList.map(([sessionId, { username }]) => (
-                <div key={sessionId} className="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3">
+                <div key={sessionId} className="rounded-lg border border-white/8 bg-zinc-900 px-3 py-3">
                   <div className="flex items-center gap-3">
                     <UserAvatar username={username} size="sm" />
                     <div className="min-w-0 flex-1">

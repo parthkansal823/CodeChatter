@@ -176,7 +176,7 @@ export default function BottomPanel({
       style={heightStyle}
       className={`relative flex flex-col border-t border-zinc-200 bg-zinc-50 transition-[height] ${
         isResizing ? "duration-0" : "duration-200"
-      } dark:border-white/[0.04] dark:bg-[#0d0d10]`}
+      } dark:border-zinc-800 dark:bg-[#0d0d10]`}
     >
       {!isMinimized && (
         <div
@@ -189,7 +189,7 @@ export default function BottomPanel({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2 py-1.5 sm:gap-3 sm:px-3 dark:border-white/[0.05]">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2 py-1.5 sm:gap-3 sm:px-3 dark:border-zinc-800">
         <div className="flex items-center gap-1 overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -200,8 +200,8 @@ export default function BottomPanel({
                 onClick={() => setActiveTab(tab.id)}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors sm:gap-2 sm:px-2.5 sm:text-sm ${
                   activeTab === tab.id
-                    ? "bg-zinc-200 text-zinc-900 dark:bg-white/[0.08] dark:text-white"
-                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-white/[0.05] dark:hover:text-zinc-100"
+                    ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
                 }`}
               >
                 <Icon size={14} />
@@ -237,7 +237,7 @@ export default function BottomPanel({
 
           <button
             onClick={handleCopy}
-            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.05] dark:hover:text-zinc-100"
+            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
             title="Copy panel content"
           >
             <Copy size={15} />
@@ -245,7 +245,7 @@ export default function BottomPanel({
 
           <button
             onClick={() => setIsMinimized((current) => !current)}
-            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.05] dark:hover:text-zinc-100"
+            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
             title={isMinimized ? "Expand panel" : "Minimize panel"}
           >
             {isMinimized ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -266,14 +266,14 @@ export default function BottomPanel({
                   onChange={(event) => onStdinChange?.(event.target.value)}
                   placeholder="Optional stdin for the active file..."
                   disabled={!runEnabled}
-                  className="w-full flex-1 resize-none rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs outline-none transition focus:border-zinc-400 dark:border-white/[0.08] dark:bg-black/20 dark:focus:border-zinc-500"
+                  className="w-full flex-1 resize-none rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs outline-none transition focus:border-zinc-400 dark:border-zinc-800 dark:bg-black/20 dark:focus:border-zinc-500"
                 />
               </div>
               <div className="flex flex-1 flex-col">
                 <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                   Execution Output
                 </label>
-                <div className="flex-1 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs dark:border-white/[0.08] dark:bg-black/20">
+                <div className="flex-1 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs dark:border-zinc-800 dark:bg-black/20">
                   <pre className="whitespace-pre-wrap break-words">
                     {getPanelContent("output", runResult)}
                   </pre>
@@ -300,7 +300,7 @@ export default function BottomPanel({
                         className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
                           isSelected
                             ? "border-brand-300 bg-brand-50 dark:border-brand-800 dark:bg-brand-900/20"
-                            : "border-zinc-200 bg-zinc-50 hover:border-zinc-300 dark:border-white/[0.06] dark:bg-black/20 dark:hover:border-white/10"
+                            : "border-zinc-200 bg-zinc-50 hover:border-zinc-300 dark:border-zinc-800 dark:bg-black/20 dark:hover:border-zinc-800"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -319,7 +319,7 @@ export default function BottomPanel({
                           </div>
                         </div>
                         {isSelected && (entry.stdout || entry.stderr) && (
-                          <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded border border-zinc-200 bg-white p-2 text-[10px] text-zinc-700 dark:border-white/[0.06] dark:bg-black/30 dark:text-zinc-300">
+                          <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded border border-zinc-200 bg-white p-2 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/30 dark:text-zinc-300">
                             {entry.stdout || entry.stderr}
                           </pre>
                         )}
@@ -334,7 +334,7 @@ export default function BottomPanel({
               {terminalEnabled ? (
                 <XTerminal roomId={roomId} />
               ) : (
-                <div className="flex h-full min-h-[96px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-zinc-200 bg-zinc-50 px-6 py-4 text-center dark:border-white/[0.08] dark:bg-black/20">
+                <div className="flex h-full min-h-[96px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-zinc-200 bg-zinc-50 px-6 py-4 text-center dark:border-zinc-800 dark:bg-black/20">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800">
                     <ShieldOff size={20} />
                   </div>

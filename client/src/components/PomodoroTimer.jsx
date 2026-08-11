@@ -101,7 +101,7 @@ function SettingsPanel({ custom, onChange, onClose }) {
       transition={{ duration: 0.15 }}
       className="absolute inset-0 z-20 flex flex-col bg-white dark:bg-[#0d0d10]"
     >
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <span className="text-sm font-semibold text-zinc-900 dark:text-white">Custom Timer</span>
         <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
           <X size={15} />
@@ -280,12 +280,12 @@ export default function PomodoroTimer({ onBack = null }) {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-zinc-800">
         <div className="flex items-center gap-2">
           {onBack ? (
             <button
               onClick={onBack}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
               title="Back to tools"
             >
               <ArrowLeft size={13} />
@@ -303,13 +303,13 @@ export default function PomodoroTimer({ onBack = null }) {
           <button
             onClick={() => setSoundOn((v) => !v)}
             title={soundOn ? "Mute sounds" : "Enable sounds"}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/[0.08]"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             {soundOn ? <Bell size={13} /> : <BellOff size={13} className="opacity-40" />}
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/[0.08]"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <Settings size={13} />
           </button>
@@ -345,7 +345,7 @@ export default function PomodoroTimer({ onBack = null }) {
               strokeLinecap="round"
               strokeDasharray={circ}
               animate={{ strokeDashoffset: circ * (1 - progress) }}
-              transition={{ duration: 0.5, ease: "linear" }}
+              transition={{ duration: 0.2, ease: "linear" }}
             />
           </svg>
           <div className="absolute flex flex-col items-center gap-0.5">
@@ -391,7 +391,7 @@ export default function PomodoroTimer({ onBack = null }) {
             className={`flex h-13 w-13 h-[52px] w-[52px] items-center justify-center rounded-full text-white shadow-lg transition-colors ${
               running
                 ? "bg-zinc-700 shadow-zinc-700/30 hover:bg-zinc-600"
-                : "bg-brand-600 shadow-brand-500/30 hover:bg-brand-500"
+                : "bg-brand-600 shadow-sm hover:bg-brand-500"
             }`}
           >
             {running ? <Pause size={20} /> : <Play size={20} />}

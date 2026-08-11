@@ -21,11 +21,11 @@ export default function ConfirmModal({
           className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/30 p-4 backdrop-blur-sm"
         >
           <Motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, y: 8, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ type: "spring", bounce: 0.4, duration: 0.5 }}
-            className="w-full max-w-md overflow-hidden rounded-3xl border border-zinc-200 bg-white/90 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#09090b]/90"
+            exit={{ opacity: 0, y: 8, scale: 0.95 }}
+            transition={{ type: "spring", bounce: 0.4, duration: 0.2 }}
+            className="w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white/90 p-6 shadow-2xl backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090b]/90"
           >
             <h2 className="text-xl font-semibold">{title}</h2>
             {description && (

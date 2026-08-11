@@ -136,7 +136,7 @@ function WhiteboardUI({ onBack }) {
   return (
     <>
       {/* ═══ Top Bar ═══════════════════════════════════════════════════════ */}
-      <div className="pointer-events-auto absolute left-0 right-0 top-0 z-[300] flex h-10 items-center gap-0.5 border-b border-white/[0.07] bg-zinc-950/96 px-1.5 backdrop-blur-sm">
+      <div className="pointer-events-auto absolute left-0 right-0 top-0 z-[300] flex h-10 items-center gap-0.5 border-b border-zinc-800 bg-zinc-950/96 px-1.5 backdrop-blur-sm">
 
         {/* Back + title */}
         <button onClick={onBack} className={`${topBtn()} h-8 w-8`} title="Back to room">
@@ -144,7 +144,7 @@ function WhiteboardUI({ onBack }) {
         </button>
         <span className="mr-1.5 select-none text-[11px] font-semibold text-zinc-300">Board</span>
 
-        <div className="mx-1 h-4 w-px bg-white/[0.08]" />
+        <div className="mx-1 h-4 w-px bg-zinc-800" />
 
         {/* Undo / Redo */}
         <button
@@ -164,7 +164,7 @@ function WhiteboardUI({ onBack }) {
           <Redo2 size={13} />
         </button>
 
-        <div className="mx-1 h-4 w-px bg-white/[0.08]" />
+        <div className="mx-1 h-4 w-px bg-zinc-800" />
 
         {/* Grid toggle */}
         <button
@@ -180,7 +180,7 @@ function WhiteboardUI({ onBack }) {
           <Maximize2 size={13} />
         </button>
 
-        <div className="mx-1 h-4 w-px bg-white/[0.08]" />
+        <div className="mx-1 h-4 w-px bg-zinc-800" />
 
         {/* Zoom controls */}
         <button onClick={() => editor.zoomOut()} className={`${topBtn()} h-7 w-7`} title="Zoom out">
@@ -219,7 +219,7 @@ function WhiteboardUI({ onBack }) {
           </button>
           {showExport && (
             <div
-              className="absolute right-0 top-full z-10 mt-1 min-w-[120px] overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900 shadow-2xl shadow-black/50"
+              className="absolute right-0 top-full z-10 mt-1 min-w-[120px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/50"
               onMouseLeave={() => setShowExport(false)}
             >
               <button
@@ -240,7 +240,7 @@ function WhiteboardUI({ onBack }) {
           )}
         </div>
 
-        <div className="mx-1 h-4 w-px bg-white/[0.08]" />
+        <div className="mx-1 h-4 w-px bg-zinc-800" />
 
         {/* Clear */}
         <button
@@ -253,12 +253,12 @@ function WhiteboardUI({ onBack }) {
       </div>
 
       {/* ═══ Left Toolbar ══════════════════════════════════════════════════ */}
-      <div className="pointer-events-auto absolute bottom-0 left-0 top-10 z-[300] flex w-[52px] flex-col items-center gap-0.5 overflow-y-auto border-r border-white/[0.07] bg-zinc-950/96 py-2 scrollbar-none backdrop-blur-sm">
+      <div className="pointer-events-auto absolute bottom-0 left-0 top-10 z-[300] flex w-[52px] flex-col items-center gap-0.5 overflow-y-auto border-r border-zinc-800 bg-zinc-950/96 py-2 scrollbar-none backdrop-blur-sm">
 
         {/* Tool groups */}
         {TOOL_GROUPS.map((group, gi) => (
           <div key={gi} className="flex w-full flex-col items-center gap-0.5">
-            {gi > 0 && <div className="my-1 h-px w-8 bg-white/[0.06]" />}
+            {gi > 0 && <div className="my-1 h-px w-8 bg-zinc-800/60" />}
             {group.map((t) => (
               <button
                 key={t.id}
@@ -272,7 +272,7 @@ function WhiteboardUI({ onBack }) {
           </div>
         ))}
 
-        <div className="my-1 h-px w-8 bg-white/[0.06]" />
+        <div className="my-1 h-px w-8 bg-zinc-800/60" />
 
         {/* Size — visual dots */}
         <p className="mb-0.5 text-[8px] tracking-widest text-zinc-600">SIZE</p>
@@ -290,7 +290,7 @@ function WhiteboardUI({ onBack }) {
           </button>
         ))}
 
-        <div className="my-1 h-px w-8 bg-white/[0.06]" />
+        <div className="my-1 h-px w-8 bg-zinc-800/60" />
 
         {/* Fill toggle */}
         <p className="mb-0.5 text-[8px] tracking-widest text-zinc-600">FILL</p>
@@ -302,7 +302,7 @@ function WhiteboardUI({ onBack }) {
           <span className="leading-none">{activeFill === "solid" ? "■" : "□"}</span>
         </button>
 
-        <div className="my-1 h-px w-8 bg-white/[0.06]" />
+        <div className="my-1 h-px w-8 bg-zinc-800/60" />
 
         {/* Color swatches */}
         <p className="mb-1 text-[8px] tracking-widest text-zinc-600">COLOR</p>

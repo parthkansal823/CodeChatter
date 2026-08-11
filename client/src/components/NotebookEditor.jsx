@@ -68,7 +68,7 @@ function stripAnsi(text) {
 function OutputBlock({ outputs }) {
   if (!outputs?.length) return null;
   return (
-    <div className="border-t border-zinc-100 dark:border-white/[0.05]">
+    <div className="border-t border-zinc-100 dark:border-zinc-800">
       {outputs.map((out, i) => {
         if (out.type === "error") {
           return (
@@ -103,7 +103,7 @@ function CellStatusBadge({ count, running }) {
     );
   }
   return (
-    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-zinc-100 px-1 text-[10px] font-mono font-bold text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">
+    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-zinc-100 px-1 text-[10px] font-mono font-bold text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
       {count != null ? count : "·"}
     </span>
   );
@@ -298,11 +298,11 @@ export default function NotebookEditor({
         className={`group relative rounded-xl border transition-all ${
           isActive
             ? "border-brand-400/60 shadow-sm dark:border-brand-500/40"
-            : "border-zinc-200 dark:border-white/[0.07] hover:border-zinc-300 dark:hover:border-white/[0.12]"
+            : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
         } bg-white dark:bg-[#0d0d10]`}
       >
         {/* Cell header */}
-        <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-white/[0.05]">
+        <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-zinc-800">
           {/* Cell type icon */}
           {cell.type === "code" ? (
             <Code2 size={12} className="text-brand-400 shrink-0" />
@@ -327,7 +327,7 @@ export default function NotebookEditor({
                   <button
                     onClick={(e) => { e.stopPropagation(); setMarkdownEditing((prev) => { const n = new Set(prev); n.has(cell.id) ? n.delete(cell.id) : n.add(cell.id); return n; }); }}
                     title={isMarkdownPreview ? "Edit" : "Preview"}
-                    className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200"
+                    className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   >
                     {isMarkdownPreview ? <Code2 size={11} /> : <Type size={11} />}
                   </button>
@@ -336,7 +336,7 @@ export default function NotebookEditor({
                   onClick={(e) => { e.stopPropagation(); moveCell(cell.id, "up"); }}
                   disabled={idx === 0}
                   title="Move up"
-                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200 disabled:opacity-30"
+                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-30"
                 >
                   <ChevronUp size={11} />
                 </button>
@@ -344,7 +344,7 @@ export default function NotebookEditor({
                   onClick={(e) => { e.stopPropagation(); moveCell(cell.id, "down"); }}
                   disabled={idx === notebook.cells.length - 1}
                   title="Move down"
-                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200 disabled:opacity-30"
+                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-30"
                 >
                   <ChevronDown size={11} />
                 </button>
@@ -352,7 +352,7 @@ export default function NotebookEditor({
                   <button
                     onClick={(e) => { e.stopPropagation(); updateCell(cell.id, { outputs: [], executionCount: null }); }}
                     title="Clear output"
-                    className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200"
+                    className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   >
                     <RotateCcw size={11} />
                   </button>
@@ -456,7 +456,7 @@ export default function NotebookEditor({
   return (
     <div className="flex h-full flex-col bg-zinc-50 dark:bg-[#0b0b0c]">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b border-zinc-200 bg-white px-4 py-2 dark:border-white/[0.06] dark:bg-[#0d0d10]">
+      <div className="flex items-center gap-2 border-b border-zinc-200 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-[#0d0d10]">
         <span className="mr-1 text-[11px] font-bold uppercase tracking-widest text-zinc-400">Notebook</span>
 
         {/* Language selector */}

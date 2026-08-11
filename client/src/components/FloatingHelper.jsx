@@ -9,7 +9,7 @@ export default function FloatingHelper() {
       className="fixed bottom-6 left-6 z-[50] group flex flex-col items-start justify-end"
     >
       {/* Tooltip */}
-      <div className="absolute bottom-[5.5rem] left-0 pointer-events-none opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+      <div className="absolute bottom-[5.5rem] left-0 pointer-events-none opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <div className="relative min-w-[190px] rounded-xl border border-warning-400/30 bg-[#1c1007]/90 backdrop-blur-sm p-3 text-sm font-medium text-warning-100 shadow-[0_0_14px_rgba(251,191,36,0.25)]">
           Need help? I&apos;m your AI buddy!
           <div className="absolute -bottom-2 left-6 h-0 w-0 border-x-8 border-x-transparent border-t-8 border-t-[#1c1007]/90" />

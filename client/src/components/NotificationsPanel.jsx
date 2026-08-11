@@ -67,7 +67,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -6, scale: 0.97 }}
           transition={{ duration: 0.14 }}
-          className="absolute right-0 top-10 z-50 w-80 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-800 dark:bg-zinc-900"
+          className="absolute right-0 top-10 z-50 w-80 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-800 dark:bg-zinc-900"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">

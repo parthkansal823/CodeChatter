@@ -136,9 +136,9 @@ function RoleOptionGrid({ selectedRole, onChange, allowOwner = false, dense = fa
             key={option.id}
             type="button"
             onClick={() => onChange(option.id)}
-            className={`rounded-2xl border p-3 text-left transition-all ${
+            className={`rounded-lg border p-3 text-left transition-all ${
               isSelected
-                ? "border-brand-500 bg-brand-50 shadow-sm shadow-brand-500/10 dark:border-brand-500 dark:bg-brand-950/40"
+                ? "border-brand-500 bg-brand-50 shadow-sm shadow-sm dark:border-brand-500 dark:bg-brand-950/40"
                 : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:border-zinc-600"
             }`}
           >
@@ -314,7 +314,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
 
   const renderGeneralSection = () => (
     <form onSubmit={handleSave} className="flex h-full flex-col gap-5">
-      <div className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
         <Field label="Workspace name" hint="Keep it short and easy for your team to recognize.">
           <input
             required
@@ -338,7 +338,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
         </div>
       </div>
 
-      <div className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
         <Field label="Default terminal shell" hint="This applies to new terminal sessions in the room.">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {terminalShellOptions.map((option) => (
@@ -346,7 +346,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                 key={option.id}
                 type="button"
                 onClick={() => setShell(option.id)}
-                className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                className={`rounded-lg border px-4 py-3 text-left transition-all ${
                   shell === option.id
                     ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950/40 dark:text-brand-200"
                     : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
@@ -369,15 +369,15 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
 
   const renderAccessSection = () => (
     <div className="flex h-full flex-col gap-5">
-      <div className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
         <Field label="Join mode" hint="Choose whether people enter directly or wait for approval.">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setRequireJoinApproval(true)}
-              className={`rounded-2xl border p-4 text-left transition-all ${
+              className={`rounded-lg border p-4 text-left transition-all ${
                 requireJoinApproval
-                  ? "border-warning-400 bg-warning-50 shadow-sm shadow-warning-500/10 dark:border-warning-500 dark:bg-warning-950/40"
+                  ? "border-warning-400 bg-warning-50 shadow-sm shadow-sm dark:border-warning-500 dark:bg-warning-950/40"
                   : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
               }`}
             >
@@ -395,9 +395,9 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
             <button
               type="button"
               onClick={() => setRequireJoinApproval(false)}
-              className={`rounded-2xl border p-4 text-left transition-all ${
+              className={`rounded-lg border p-4 text-left transition-all ${
                 !requireJoinApproval
-                  ? "border-success-400 bg-success-50 shadow-sm shadow-success-500/10 dark:border-success-500 dark:bg-success-950/40"
+                  ? "border-success-400 bg-success-50 shadow-sm shadow-sm dark:border-success-500 dark:bg-success-950/40"
                   : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
               }`}
             >
@@ -416,9 +416,9 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
       </div>
 
       {inviteLink ? (
-        <div className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
           <Field label="Invite link" hint="Share this when you want people to join this workspace quickly.">
-            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-950/60">
+            <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-950/60">
               <p className="break-all font-mono text-xs text-zinc-600 dark:text-zinc-300">{inviteLink}</p>
               <div className="flex justify-end">
                 <Button type="button" variant="outline" size="sm" onClick={handleCopyInviteLink}>
@@ -431,9 +431,9 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
         </div>
       ) : null}
 
-      <div className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
         <Field label="Permission matrix" hint="A quick view of what each role can do inside the workspace.">
-          <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700">
+          <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
             <table className="w-full text-sm">
               <thead className="bg-zinc-50 dark:bg-zinc-900/70">
                 <tr>
@@ -489,7 +489,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
           return (
             <div
               key={member.id}
-              className={`rounded-2xl border p-4 ${
+              className={`rounded-lg border p-4 ${
                 isOwnerGroup
                   ? "border-warning-200 bg-warning-50/70 dark:border-warning-500/20 dark:bg-warning-950/10"
                   : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
@@ -534,7 +534,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const renderMembersSection = () => (
     <div className="flex h-full flex-col gap-5">
       {collaborators.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
           <Users size={24} className="text-zinc-400" />
           <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No members yet</p>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Invite teammates to start collaborating here.</p>
@@ -551,7 +551,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const renderQueueSection = () => (
     <div className="flex h-full flex-col gap-4">
       {pendingJoinRequests.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
           <Clock3 size={24} className="text-zinc-400" />
           <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No pending requests</p>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Anyone waiting to join will appear here.</p>
@@ -562,7 +562,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
           const selectedRole = requestRoles[request.id] || "editor";
 
           return (
-            <div key={request.id} className="rounded-3xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <div key={request.id} className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <UserAvatar username={request.username} size="sm" />
@@ -638,12 +638,12 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
         >
           <Motion.div
-            initial={{ opacity: 0, scale: 0.97, y: 10 }}
+            initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 10 }}
+            exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ duration: 0.16, ease: "easeOut" }}
             onClick={(event) => event.stopPropagation()}
-            className="flex h-[min(760px,92vh)] w-full max-w-6xl overflow-hidden rounded-[28px] border border-zinc-200 bg-zinc-50 shadow-2xl shadow-black/25 dark:border-zinc-800 dark:bg-zinc-950"
+            className="flex h-[min(760px,92vh)] w-full max-w-6xl overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 shadow-2xl shadow-black/25 dark:border-zinc-800 dark:bg-zinc-950"
           >
             {!room || isLoading ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-3">
@@ -674,11 +674,11 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                     </div>
 
                     <div className="mt-5 grid grid-cols-2 gap-2">
-                      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
+                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                         <p className="text-xs uppercase tracking-[0.16em] text-zinc-400">Members</p>
                         <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-white">{collaborators.length}</p>
                       </div>
-                      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
+                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                         <p className="text-xs uppercase tracking-[0.16em] text-zinc-400">Pending</p>
                         <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-white">{pendingJoinRequests.length}</p>
                       </div>
@@ -699,9 +699,9 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                           key={id}
                           type="button"
                           onClick={() => setActiveSection(id)}
-                          className={`mb-1.5 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
+                          className={`mb-1.5 flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-all ${
                             isActive
-                              ? "bg-brand-600 text-white shadow-sm shadow-brand-500/20"
+                              ? "bg-brand-600 text-white shadow-sm shadow-sm"
                               : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
                           }`}
                         >
@@ -710,7 +710,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                           {badgeValue > 0 ? (
                             <span className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
                               isActive
-                                ? "bg-white/20 text-white"
+                                ? "bg-zinc-800 text-white"
                                 : "bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200"
                             }`}>
                               {badgeValue}

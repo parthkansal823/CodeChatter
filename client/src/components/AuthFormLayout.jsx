@@ -99,22 +99,22 @@ export default function AuthFormLayout({ children }) {
       <Motion.aside
         initial={{ opacity: 0, x: -32, filter: "blur(8px)" }}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-        transition={{ duration: 0.7, ease: EASE_EXPO }}
-        className="relative z-10 hidden w-[420px] shrink-0 flex-col justify-between border-r border-white/[0.06] px-8 py-8 lg:flex xl:w-[460px] xl:px-10 xl:py-10"
+        transition={{ duration: 0.2, ease: EASE_EXPO }}
+        className="relative z-10 hidden w-[420px] shrink-0 flex-col justify-between border-r border-zinc-800 px-8 py-8 lg:flex xl:w-[460px] xl:px-10 xl:py-10"
       >
         <Motion.div
-          initial={{ opacity: 0, y: -10 }}
+          initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: EASE_EXPO, delay: 0.12 }}
+          transition={{ duration: 0.2, ease: EASE_EXPO, delay: 0.12 }}
         >
           <BrandLogo size="lg" />
         </Motion.div>
 
         <div>
           <Motion.div
-            initial={{ opacity: 0, y: 22 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: EASE_EXPO, delay: 0.2 }}
+            transition={{ duration: 0.2, ease: EASE_EXPO, delay: 0.2 }}
           >
             <h2 className="mb-3 text-[2.15rem] font-bold leading-[1.15] tracking-tight xl:text-[2.45rem]">
               Your workspace,{" "}
@@ -140,7 +140,7 @@ export default function AuthFormLayout({ children }) {
                 <Motion.div
                   whileHover={{ scale: 1.08, rotate: 4 }}
                   transition={SPRING_POP}
-                  className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.045]"
+                  className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-800/60"
                 >
                   <Icon size={14} className="text-brand-400" />
                 </Motion.div>
@@ -154,10 +154,10 @@ export default function AuthFormLayout({ children }) {
         </div>
 
         <Motion.div
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: EASE_EXPO, delay: 0.68 }}
-          className="flex items-center gap-3 border-t border-white/[0.06] pt-4"
+          transition={{ duration: 0.2, ease: EASE_EXPO, delay: 0.68 }}
+          className="flex items-center gap-3 border-t border-zinc-800 pt-4"
         >
           <div className="flex -space-x-2">
             {AVATARS.map((background, index) => (
@@ -185,9 +185,9 @@ export default function AuthFormLayout({ children }) {
 
       <div className="relative z-10 flex flex-1 items-center justify-center px-4 py-4 sm:px-6 sm:py-6">
         <Motion.div
-          initial={{ opacity: 0, y: 24, filter: "blur(10px)" }}
+          initial={{ opacity: 0, y: 8, filter: "blur(10px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 0.6, ease: EASE_EXPO, delay: 0.05 }}
+          transition={{ duration: 0.2, ease: EASE_EXPO, delay: 0.05 }}
           className="w-full max-w-[390px] lg:max-w-[400px]"
         >
           {children}

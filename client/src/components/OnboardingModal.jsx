@@ -209,16 +209,16 @@ export default function OnboardingModal() {
           className="fixed inset-0 z-[200] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
         >
           <Motion.div
-            initial={{ opacity: 0, scale: 0.88, y: 24 }}
+            initial={{ opacity: 0, scale: 0.88, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 16 }}
+            exit={{ opacity: 0, scale: 0.92, y: 8 }}
             transition={SPRING}
-            className="relative w-full max-w-md overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+            className="relative w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
           >
             {/* Close */}
             <button
               onClick={dismiss}
-              className="absolute right-4 top-4 z-10 rounded-xl p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              className="absolute right-4 top-4 z-10 rounded-xl p-1.5 text-white/70 transition-colors hover:bg-zinc-800/60 hover:text-white"
             >
               <X size={16} />
             </button>
@@ -246,7 +246,7 @@ export default function OnboardingModal() {
             {/* Content */}
             <AnimatePresence mode="wait">
               <Motion.div key={step}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.18 }}
@@ -297,7 +297,7 @@ export default function OnboardingModal() {
                   </button>
                 )}
                 <Motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={next}
-                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-500/30 transition-colors hover:bg-brand-500">
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-sm transition-colors hover:bg-brand-500">
                   {isLast ? "Done" : "Next"}
                   {isLast ? <Check size={14} /> : <ArrowRight size={14} />}
                 </Motion.button>

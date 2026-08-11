@@ -15,8 +15,8 @@ export default function EmptyWorkspaceState({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.12),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.1),transparent_35%)]" />
 
       <div className="relative w-full max-w-3xl px-6">
-        <div className="rounded-[28px] border border-zinc-200 bg-white/90 p-8 text-center shadow-xl shadow-zinc-200/40 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90 dark:shadow-black/20">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+        <div className="rounded-xl border border-zinc-200 bg-white/90 p-8 text-center shadow-xl shadow-zinc-200/40 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90 dark:shadow-black/20">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
             <Sparkles size={24} />
           </div>
 
@@ -42,7 +42,7 @@ export default function EmptyWorkspaceState({
             </Button>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 p-4 text-left dark:border-zinc-800 dark:bg-zinc-900/50">
+          <div className="mt-6 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 p-4 text-left dark:border-zinc-800 dark:bg-zinc-900/50">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
               Quick starters
             </p>
@@ -60,7 +60,7 @@ export default function EmptyWorkspaceState({
           </div>
 
           <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
                 <FilePlus2 size={18} />
               </div>
@@ -70,7 +70,7 @@ export default function EmptyWorkspaceState({
               </p>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
                 <FolderPlus size={18} />
               </div>
@@ -80,7 +80,7 @@ export default function EmptyWorkspaceState({
               </p>
             </div>
 
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
                 <Users size={18} />
               </div>

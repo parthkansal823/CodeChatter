@@ -406,8 +406,8 @@ export default function CommandPalette({ theme, onThemeChange }) {
           <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]">
             <div className="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
 
-            <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-zinc-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#09090b]/80">
-              <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-white/10">
+            <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090b]/80">
+              <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
                 <Search className="text-zinc-400 dark:text-zinc-500" size={20} />
                 <input
                   ref={inputRef}
@@ -464,14 +464,14 @@ export default function CommandPalette({ theme, onThemeChange }) {
                                 transition={{ duration: 0.1 }}
                                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
                                   isSelected
-                                    ? "bg-brand-600 text-white shadow-md shadow-brand-600/20"
-                                    : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5"
+                                    ? "bg-brand-600 text-white shadow-md shadow-sm"
+                                    : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
                                 }`}
                               >
                                 <div
                                   className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                                     isSelected
-                                      ? "bg-white/20 text-white"
+                                      ? "bg-zinc-800 text-white"
                                       : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
                                   }`}
                                 >
@@ -488,7 +488,7 @@ export default function CommandPalette({ theme, onThemeChange }) {
                                   )}
                                 </div>
                                 {isSelected && (
-                                  <kbd className="rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white/80">
+                                  <kbd className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-white/80">
                                     Enter
                                   </kbd>
                                 )}
@@ -501,7 +501,7 @@ export default function CommandPalette({ theme, onThemeChange }) {
                 )}
               </div>
 
-              <div className="border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-white/10 dark:bg-[#050505] dark:text-zinc-400">
+              <div className="border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-[#050505] dark:text-zinc-400">
                 <span className="font-semibold text-zinc-900 dark:text-zinc-300">Tip:</span> Use arrows to navigate and enter to select.
               </div>
             </div>

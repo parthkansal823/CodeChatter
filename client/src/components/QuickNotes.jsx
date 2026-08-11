@@ -98,7 +98,7 @@ function FormatToolbar({ taRef, onChange }) {
   };
 
   return (
-    <div className="flex items-center gap-0.5 border-b border-zinc-100 px-2 py-1.5 dark:border-white/[0.05]">
+    <div className="flex items-center gap-0.5 border-b border-zinc-100 px-2 py-1.5 dark:border-zinc-800">
       {[
         { icon: Bold,  title: "Bold",        action: (ta) => wrapSelection(ta, "**") },
         { icon: Italic,title: "Italic",      action: (ta) => wrapSelection(ta, "_") },
@@ -112,7 +112,7 @@ function FormatToolbar({ taRef, onChange }) {
           key={title}
           title={title}
           onMouseDown={(e) => { e.preventDefault(); fmt(action); }}
-          className="flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-white/[0.08] dark:hover:text-zinc-200"
+          className="flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
         >
           <Icon size={12} />
         </button>
@@ -188,10 +188,10 @@ export default function QuickNotes({ roomId, onBack = null }) {
     return (
       <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">
         {/* Header */}
-        <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2.5 dark:border-white/[0.06]">
+        <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
           <button
             onClick={() => setOpenId(null)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-white/[0.08]"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800"
           >
             <ArrowLeft size={14} />
           </button>
@@ -216,7 +216,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
             className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
               preview
                 ? "bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400"
-                : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/[0.08]"
+                : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             }`}
           >
             {preview ? <Type size={13} /> : <Eye size={13} />}
@@ -231,7 +231,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
         </div>
 
         {/* Color picker */}
-        <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-white/[0.05]">
+        <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-zinc-800">
           {NOTE_COLORS.map((c) => (
             <button
               key={c.id}
@@ -271,7 +271,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-zinc-100 px-3 py-1.5 dark:border-white/[0.04]">
+        <div className="flex items-center justify-between border-t border-zinc-100 px-3 py-1.5 dark:border-zinc-800">
           <span className="text-[10px] text-zinc-400">Updated {relativeTime(openNote.updatedAt)}</span>
           <span className="text-[10px] text-zinc-400">{openNote.content.length.toLocaleString()} chars</span>
         </div>
@@ -284,12 +284,12 @@ export default function QuickNotes({ roomId, onBack = null }) {
   return (
     <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
         <div className="flex items-center gap-2">
           {onBack ? (
             <button
               onClick={onBack}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-white/[0.08]"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800"
               title="Back to tools"
             >
               <ArrowLeft size={14} />
@@ -311,7 +311,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
       </div>
 
       {/* Search */}
-      <div className="border-b border-zinc-100 px-3 py-2 dark:border-white/[0.05]">
+      <div className="border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
         <div className="relative">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input

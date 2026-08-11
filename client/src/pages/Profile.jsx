@@ -19,7 +19,7 @@ const containerVariants = {
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 8 },
   visible: { opacity: 1, y: 0, transition: SPRING },
 };
 
@@ -121,7 +121,7 @@ export default function Profile() {
         animate="visible"
         className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8"
       >
-        <Motion.section variants={itemVariants} className="overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <Motion.section variants={itemVariants} className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="h-28 bg-[linear-gradient(135deg,#18181b_0%,#4f46e5_45%,#14b8a6_100%)]" />
           <div className="px-6 pb-6">
             <div className="-mt-12 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -142,13 +142,13 @@ export default function Profile() {
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() => navigate("/home")}
-                  className="inline-flex h-11 items-center gap-2 rounded-2xl bg-zinc-900 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  className="inline-flex h-11 items-center gap-2 rounded-lg bg-zinc-900 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
                 >
                   Open Dashboard
                 </button>
                 <button
                   onClick={() => navigate("/settings")}
-                  className="inline-flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
+                  className="inline-flex h-11 items-center gap-2 rounded-lg border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
                 >
                   <Settings size={16} />
                   Account Settings
@@ -157,7 +157,7 @@ export default function Profile() {
             </div>
 
             <div className="mt-6 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-              <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Workspace snapshot</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div>
@@ -175,11 +175,11 @@ export default function Profile() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Connected account</p>
                 {githubProfile ? (
                   <div className="mt-4 flex items-center gap-3">
-                    <img src={githubProfile.avatarUrl} alt={githubProfile.login} className="h-12 w-12 rounded-2xl object-cover" />
+                    <img src={githubProfile.avatarUrl} alt={githubProfile.login} className="h-12 w-12 rounded-lg object-cover" />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{githubProfile.name || githubProfile.login}</p>
                       <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">@{githubProfile.login}</p>
@@ -198,8 +198,8 @@ export default function Profile() {
 
         <Motion.section variants={itemVariants} className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
           {stats.map(({ label, value, icon: Icon, accent }) => (
-            <div key={label} className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${accent}`}>
+            <div key={label} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+              <span className={`inline-flex h-11 w-11 items-center justify-center rounded-lg ${accent}`}>
                 <Icon size={18} />
               </span>
               <p className="mt-4 text-3xl font-semibold text-zinc-900 dark:text-white">{isLoading ? "-" : value}</p>
@@ -209,7 +209,7 @@ export default function Profile() {
         </Motion.section>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-          <Motion.section variants={itemVariants} className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+          <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Recent workspaces</p>
@@ -222,7 +222,7 @@ export default function Profile() {
 
             <div className="mt-5 space-y-3">
               {recentRooms.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-950/50">
+                <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-950/50">
                   <FolderGit2 size={24} className="mx-auto text-zinc-400" />
                   <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No workspaces yet</p>
                   <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Create a room to start collaborating.</p>
@@ -232,7 +232,7 @@ export default function Profile() {
                   <button
                     key={room.id}
                     onClick={() => navigate(`/room/${room.id}`)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
+                    className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-4 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -253,11 +253,11 @@ export default function Profile() {
           </Motion.section>
 
           <div className="space-y-6">
-            <Motion.section variants={itemVariants} className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Role distribution</p>
               <div className="mt-4 space-y-3">
                 {["owner", "editor", "runner", "viewer"].map((role) => (
-                  <div key={role} className="flex items-center justify-between rounded-2xl bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
+                  <div key={role} className="flex items-center justify-between rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
                     <div className="flex items-center gap-2">
                       <RolePill role={role} />
                     </div>
@@ -267,7 +267,7 @@ export default function Profile() {
               </div>
             </Motion.section>
 
-            <Motion.section variants={itemVariants} className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Collaborators</p>
                 <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
@@ -279,7 +279,7 @@ export default function Profile() {
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">No collaborators yet.</p>
                 ) : (
                   collaborators.slice(0, 6).map((collaborator, index) => (
-                    <div key={collaborator.id || index} className="flex items-center gap-3 rounded-2xl bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
+                    <div key={collaborator.id || index} className="flex items-center gap-3 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
                       <UserAvatar username={collaborator.username} size="sm" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{collaborator.username}</p>
@@ -291,7 +291,7 @@ export default function Profile() {
               </div>
             </Motion.section>
 
-            <Motion.section variants={itemVariants} className="rounded-3xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Quick actions</p>
               <div className="mt-4 grid gap-3">
                 {[
@@ -303,7 +303,7 @@ export default function Profile() {
                   <button
                     key={label}
                     onClick={() => navigate(path)}
-                    className="flex items-center gap-3 rounded-2xl border border-zinc-200 px-4 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
+                    className="flex items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
                   >
                     <Icon size={16} className="text-zinc-500 dark:text-zinc-400" />
                     <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{label}</span>

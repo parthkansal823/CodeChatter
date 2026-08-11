@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Base
+   ============================================================ */
+
 html,
 body,
 #root {
@@ -13,12 +17,17 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Inter's disambiguated glyphs — a plainer, more utilitarian read. */
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Consistent, visible keyboard focus. The app previously relied on Tailwind's
-   default ring only where it was written by hand, so most interactive elements
-   had no visible focus state at all — the single biggest accessibility gap. */
+/* ============================================================
+   Focus
+   Consistent keyboard focus everywhere. Previously only the handful
+   of elements that hand-wrote a ring had any visible focus state,
+   which left most of the app unusable by keyboard.
+   ============================================================ */
+
 :focus-visible {
   outline: 2px solid theme("colors.brand.500");
   outline-offset: 2px;
@@ -29,178 +38,22 @@ body {
   outline: none;
 }
 
-/* Tabular numerals wherever figures are compared vertically (timers, stats,
-   file sizes) so digits stop shifting as they change. */
+/* ============================================================
+   Utilities
+   ============================================================ */
+
+/* Digits that don't reflow as they change — timers, sizes, counters. */
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================
-   Animations — used across pages
+   Scrollbars — thin and neutral, matching the surface palette
    ============================================================ */
 
-/* Gradient background shift (Home page hero) */
-@keyframes meshMove {
-
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-.animate-mesh {
-  background-size: 200% 200%;
-  animation: meshMove 15s ease infinite;
-}
-
-/* Slow-float for decorative blobs */
-@keyframes floatSlow {
-  0% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(40px);
-  }
-
-  100% {
-    transform: translateY(0);
-  }
-}
-
-.animate-floatSlow {
-  animation: floatSlow 20s ease-in-out infinite;
-}
-
-/* Noise texture overlay.
-   Inlined as a data URI: this previously fetched an SVG from a third-party
-   domain on every page load, which cost a DNS lookup + round trip, broke
-   offline/air-gapped use, and made a decorative texture depend on someone
-   else's uptime. */
-.bg-noise {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
-}
-
-/* Gradient shift (Auth page background) */
-@keyframes bgShift {
-  0% {
-    background-position: 0% 50%;
-  }
-
-  50% {
-    background-position: 100% 50%;
-  }
-
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.animate-bgShift {
-  background-size: 200% 200%;
-  animation: bgShift 20s ease infinite;
-}
-
-/* Slow rotation for glow rings */
-@keyframes rotateSlow {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.animate-rotateSlow {
-  animation: rotateSlow 120s linear infinite;
-}
-
-/* Floating blob movement */
-@keyframes floatBlob {
-  0% {
-    transform: translate(0, 0);
-  }
-
-  50% {
-    transform: translate(40px, -60px);
-  }
-
-  100% {
-    transform: translate(0, 0);
-  }
-}
-
-.animate-floatBlob {
-  animation: floatBlob 35s ease-in-out infinite;
-}
-
-/* Scrolling grid background */
-@keyframes gridMove {
-  0% {
-    background-position: 0 0;
-  }
-
-  100% {
-    background-position: 50px 50px;
-  }
-}
-
-.animate-gridMove {
-  animation: gridMove 40s linear infinite;
-}
-
-/* Floating dots */
-@keyframes dotFloat {
-  0% {
-    transform: translateY(0);
-    opacity: 0.4;
-  }
-
-  50% {
-    transform: translateY(-20px);
-    opacity: 0.8;
-  }
-
-  100% {
-    transform: translateY(0);
-    opacity: 0.4;
-  }
-}
-
-.animate-dotFloat {
-  animation: dotFloat 8s ease-in-out infinite;
-}
-
-/* Blinking cursor */
-@keyframes cursorBlink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0;
-  }
-}
-
-.animate-cursor {
-  animation: cursorBlink 1s infinite;
-}
-
-/* ============================================================
-   Custom Scrollbar — consistent across the whole app
-   ============================================================ */
-
-/* WebKit (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -209,20 +62,31 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #d4d4d8;
+  border: 3px solid transparent;
+  background-clip: content-box;
   border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a1a1aa;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
-/* Dark mode scrollbar */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .dark ::-webkit-scrollbar-thumb {
   background: #3f3f46;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 /* Firefox */
@@ -235,7 +99,12 @@ body {
   scrollbar-color: #3f3f46 transparent;
 }
 
+/* ============================================================
+   Motion
+   ============================================================ */
+
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

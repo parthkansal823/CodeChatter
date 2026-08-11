@@ -328,7 +328,7 @@ export default function FileExplorer({
     <div
       ref={panelRef}
       style={widthStyle}
-      className={`relative flex h-full flex-col border-r border-zinc-200 bg-zinc-50 text-zinc-700 transition-[width] dark:border-white/[0.04] dark:bg-[#0b0b0c] dark:text-zinc-200 ${
+      className={`relative flex h-full flex-col border-r border-zinc-200 bg-zinc-50 text-zinc-700 transition-[width] dark:border-zinc-800 dark:bg-[#0b0b0c] dark:text-zinc-200 ${
         isResizing ? "duration-0" : "duration-150"
       } ${mobile ? "w-[88vw] max-w-[360px] shadow-2xl shadow-zinc-950/20" : ""}`}
     >
@@ -343,12 +343,12 @@ export default function FileExplorer({
         </div>
       )}
 
-      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
         <div className="flex min-w-0 items-center gap-2.5">
           {!mobile && (
             <button
               onClick={onToggle}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
               title={isCollapsed ? "Expand files" : "Collapse files"}
             >
               <ChevronRight size={16} className={`transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
@@ -369,7 +369,7 @@ export default function FileExplorer({
             {mobile && (
               <button
                 onClick={onClose}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-white"
                 title="Close"
               >
                 <X size={15} />
@@ -380,7 +380,7 @@ export default function FileExplorer({
       </div>
 
       {!isCollapsed && (
-        <div className="border-b border-zinc-200 px-3 py-2 dark:border-white/[0.06]">
+        <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
           <div className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500">
             <span className="truncate font-semibold text-zinc-700 dark:text-zinc-200">{workspaceLabel}</span>
             <span className="whitespace-nowrap text-[11px]">
@@ -392,14 +392,14 @@ export default function FileExplorer({
             <div className="mb-2 grid grid-cols-2 gap-2">
               <button
                 onClick={() => startCreate("file")}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 <FilePlus2 size={13} />
                 File
               </button>
               <button
                 onClick={() => startCreate("folder")}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:text-brand-300"
               >
                 <FolderPlus size={13} />
                 Folder
@@ -413,12 +413,12 @@ export default function FileExplorer({
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search files..."
-              className="w-full rounded-md border border-zinc-200 bg-white py-1.5 pl-8 pr-2 text-xs text-zinc-700 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand-500/50 focus:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-900"
+              className="w-full rounded-md border border-zinc-200 bg-white py-1.5 pl-8 pr-2 text-xs text-zinc-700 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand-500/50 focus:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-900"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/5 dark:hover:text-zinc-200"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
                 title="Clear search"
               >
                 <X size={12} />
@@ -464,19 +464,19 @@ export default function FileExplorer({
               <>
                 <button
                   onClick={() => startCreate("file")}
-                  className="flex h-8 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
+                  className="flex h-8 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
                   title="New file"
                 >
                   <FilePlus2 size={16} />
                 </button>
                 <button
                   onClick={() => startCreate("folder")}
-                  className="flex h-9 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex h-9 w-full items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-white"
                   title="Create folder"
                 >
                   <FolderPlus size={16} />
                 </button>
-                <div className="mx-auto h-px w-6 bg-zinc-200 dark:bg-white/[0.08]" />
+                <div className="mx-auto h-px w-6 bg-zinc-200 dark:bg-zinc-800" />
               </>
             )}
             {explorerEntries.filter((entry) => entry.type === "file").slice(0, 6).map((entry) => (
@@ -486,7 +486,7 @@ export default function FileExplorer({
                   onSelectNode?.(entry.node);
                   onToggle?.();
                 }}
-                className="flex h-9 w-full items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
+                className="flex h-9 w-full items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
                 title={entry.name}
               >
                 {entry.name.charAt(0).toUpperCase()}
@@ -514,13 +514,13 @@ export default function FileExplorer({
                 ))
               : renderNodes(tree)}
             {normalizedSearchQuery && filteredEntries.length === 0 && (
-              <div className="mx-2 mt-2 rounded-md border border-dashed border-zinc-200 px-3 py-3 text-xs text-zinc-500 dark:border-white/[0.08] dark:text-zinc-500">
+              <div className="mx-2 mt-2 rounded-md border border-dashed border-zinc-200 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
                 No files match "{searchQuery}".
               </div>
             )}
           </div>
         ) : (
-          <div className="mx-2 rounded-md border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-400 dark:border-white/[0.08] dark:text-zinc-500">
+          <div className="mx-2 rounded-md border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
             This room is empty. Create a file or folder to start.
           </div>
         )}

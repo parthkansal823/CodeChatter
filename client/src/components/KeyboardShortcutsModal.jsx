@@ -67,12 +67,12 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
           onClick={onClose}
         >
           <Motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 16 }}
+            initial={{ opacity: 0, scale: 0.94, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: 12 }}
+            exit={{ opacity: 0, scale: 0.94, y: 8 }}
             transition={{ type: "spring", stiffness: 380, damping: 28 }}
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-2xl overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+            className="w-full max-w-2xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
           >
             <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">
               <div className="flex items-center gap-2.5">
