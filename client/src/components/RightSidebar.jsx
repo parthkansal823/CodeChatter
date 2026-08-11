@@ -329,7 +329,7 @@ function OverviewPanel({
                 return (
                   <div key={collaborator.id} className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
                     <div className="relative">
-                      <UserAvatar username={collaborator.username} size="xs" />
+                      <UserAvatar username={collaborator.username} hue={collaborator.avatarHue} size="xs" />
                       {isLive ? (
                         <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white bg-success-500 dark:border-[#0d0d10]" />
                       ) : null}
@@ -733,7 +733,7 @@ export default function RightSidebar({
           </div>
           {allCollaborators.slice(0, 4).map((c) => (
             <div key={c.id} className="relative" title={c.username}>
-              <UserAvatar username={c.username} size="xs" />
+              <UserAvatar username={c.username} hue={c.avatarHue} size="xs" />
               {activeCollaborators.some((a) => a.userId === c.id || a.id === c.id) && (
                 <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[#0d0d10] bg-success-500" />
               )}
@@ -915,7 +915,7 @@ export default function RightSidebar({
                       <div className="flex -space-x-1.5">
                         {allCollaborators.slice(0, 5).map((c) => (
                           <div key={c.id} className="relative" title={`${c.username} · ${c.accessRole || "member"}`}>
-                            <UserAvatar username={c.username} size="xs" className="ring-1 ring-[#0d0d10]" />
+                            <UserAvatar username={c.username} hue={c.avatarHue} size="xs" className="ring-1 ring-[#0d0d10]" />
                             {activeCollaborators.some((a) => a.userId === c.id || a.id === c.id) && (
                               <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-[#0d0d10] bg-success-500" />
                             )}
@@ -940,7 +940,7 @@ export default function RightSidebar({
                     return (
                       <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
                         <div className="relative shrink-0">
-                          <UserAvatar username={c.username} size="xs" />
+                          <UserAvatar username={c.username} hue={c.avatarHue} size="xs" />
                           {isLive && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-white bg-success-500 dark:border-[#0d0d10]" />}
                         </div>
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg">{c.username}</span>

@@ -41,6 +41,164 @@ def mask_email(email: str) -> str:
   return f"{masked}@{domain}"
 
 
+ROLE_BLURBS = {
+  "owner": "full control — they can manage members, approvals, and settings",
+  "editor": "they can edit files and run code",
+  "runner": "they can run code and use the terminal, but not edit files",
+  "viewer": "they can read files and follow along",
+}
+
+
+def _send_html_email(to_email: str, subject: str, html_body: str, log_prefix: str) -> bool:
+  """Deliver one HTML message. Returns whether it actually went out."""
+  if not SMTP_HOST or not SMTP_USER:
+    logger.warning("%s SMTP not configured — no email sent to %s", log_prefix, mask_email(to_email))
+    return False
+
+  msg = MIMEMultipart("alternative")
+  msg["Subject"] = subject
+  msg["From"] = SMTP_FROM
+  msg["To"] = to_email
+  msg.attach(MIMEText(html_body, "html"))
+
+  try:
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as smtp:
+      smtp.ehlo()
+      smtp.starttls()
+      smtp.login(SMTP_USER, SMTP_PASS)
+      smtp.sendmail(SMTP_FROM, to_email, msg.as_string())
+  except Exception as exc:
+    logger.error("%s Failed to send to %s: %s", log_prefix, mask_email(to_email), exc)
+    return False
+
+  logger.info("%s Sent to %s", log_prefix, mask_email(to_email))
+  return True
+
+
+def send_room_share_email(
+  to_email: str,
+  inviter_name: str,
+  room_name: str,
+  room_url: str,
+  access_role: str,
+) -> bool:
+  """Tell someone a workspace was shared with them, and with what role."""
+  role_label = access_role.capitalize()
+  role_blurb = ROLE_BLURBS.get(access_role, "")
+
+  html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>A workspace was shared with you</title>
+</head>
+<body style="margin:0;padding:0;background-color:#07070f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#07070f;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+
+          <tr>
+            <td align="center" style="padding-bottom:28px;">
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#0078d4;border-radius:14px;padding:10px 14px;vertical-align:middle;">
+                    <span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">&#60;/&#62;</span>
+                  </td>
+                  <td style="padding-left:10px;vertical-align:middle;">
+                    <span style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">CodeChatter</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background:#0f0f1a;border-radius:20px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr><td style="height:4px;background:#0078d4;"></td></tr>
+              </table>
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="padding:36px 36px 28px;">
+                <tr>
+                  <td style="padding-bottom:8px;">
+                    <p style="margin:0;font-size:24px;font-weight:700;color:#ffffff;letter-spacing:-0.4px;line-height:1.35;">
+                      {inviter_name} shared a workspace with you
+                    </p>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding-bottom:28px;">
+                    <p style="margin:0;font-size:15px;color:#9ca3af;line-height:1.65;">
+                      You now have access to <strong style="color:#e5e7eb;">{room_name}</strong> on CodeChatter.
+                    </p>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding-bottom:28px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(0,120,212,0.10);border:1px solid rgba(0,120,212,0.28);border-radius:14px;">
+                      <tr>
+                        <td style="padding:18px 20px;">
+                          <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#6cb0e6;letter-spacing:1.5px;text-transform:uppercase;">Your role</p>
+                          <p style="margin:0;font-size:18px;font-weight:700;color:#ffffff;">{role_label}</p>
+                          <p style="margin:6px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">{role_blurb}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding-bottom:28px;">
+                    <table cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="background:#0078d4;border-radius:8px;">
+                          <a href="{room_url}" style="display:inline-block;padding:12px 22px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">
+                            Open workspace
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="border-top:1px solid rgba(255,255,255,0.05);padding-top:22px;">
+                    <p style="margin:0;font-size:12px;color:#4b5563;line-height:1.6;">
+                      If the button does not work, paste this link into your browser:<br/>
+                      <span style="color:#6b7280;word-break:break-all;">{room_url}</span>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-top:28px;">
+              <p style="margin:0 0 6px;font-size:12px;color:#374151;">Made with &#9829; for developers who build together.</p>
+              <p style="margin:0;font-size:11px;color:#1f2937;">© 2026 CodeChatter &nbsp;·&nbsp; All rights reserved</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+  return _send_html_email(
+    to_email,
+    f"{inviter_name} shared “{room_name}” with you",
+    html_body,
+    "[Share]",
+  )
+
+
 def send_otp_email(to_email: str, otp: str, action: str = "login") -> None:
   if not SMTP_HOST or not SMTP_USER:
     # Without SMTP there is no way to deliver the code. Falling back to the

@@ -38,6 +38,7 @@ export const API_ENDPOINTS = {
   LOGOUT: `${API_BASE_URL}/api/auth/logout`,
   ME: `${API_BASE_URL}/api/auth/me`,
   DELETE_ACCOUNT: `${API_BASE_URL}/api/auth/account`,
+  UPDATE_PROFILE: `${API_BASE_URL}/api/auth/profile`,
 
   // Rooms
   CREATE_ROOM: `${API_BASE_URL}/api/rooms/create`,
@@ -51,6 +52,7 @@ export const API_ENDPOINTS = {
   UPDATE_ROOM_SETTINGS: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/settings`,
   APPROVE_JOIN_REQUEST: (roomId, requestId) => `${API_BASE_URL}/api/rooms/${roomId}/join-requests/${requestId}/approve`,
   REJECT_JOIN_REQUEST: (roomId, requestId) => `${API_BASE_URL}/api/rooms/${roomId}/join-requests/${requestId}/reject`,
+  ADD_ROOM_MEMBER: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/members`,
   UPDATE_MEMBER_ACCESS: (roomId, memberId) => `${API_BASE_URL}/api/rooms/${roomId}/members/${memberId}/access`,
   RUN_ROOM_FILE: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}/run`,
   DELETE_ROOM: (roomId) => `${API_BASE_URL}/api/rooms/${roomId}`,

@@ -656,6 +656,23 @@ class MongoRepository:
     self.initialize()
     return self._strip_mongo_id(self._users.find_one({"id": user_id}))
 
+  def update_user_profile(self, user_id: str, avatar_hue: int | None = None) -> dict[str, Any]:
+    self.initialize()
+    user = self.get_user_by_id(user_id)
+
+    if user is None:
+      raise ValueError("User not found")
+
+    updates: dict[str, Any] = {}
+    if avatar_hue is not None:
+      updates["avatar_hue"] = avatar_hue
+
+    if updates:
+      self._users.update_one({"id": user_id}, {"$set": updates})
+      user = self.get_user_by_id(user_id)
+
+    return self.serialize_user(user)
+
   def get_user_by_email(self, email: str) -> dict[str, Any] | None:
     self.initialize()
     return self._strip_mongo_id(self._users.find_one({"email": email.lower()}))
@@ -1284,7 +1301,73 @@ class MongoRepository:
     updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
     return self.serialize_room(updated_room, include_workspace=False, viewer_user_id=owner_id)
 
+  def add_room_member_by_email(
+    self,
+    owner_id: str,
+    room_id: str,
+    email: str,
+    access_role: str = "editor",
+  ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Grant `email` access to `room_id`, skipping the request/approval round trip.
 
+    Returns `(serialized_room, invited_user)`. The caller needs the user record
+    to address the notification email, which the serialized room does not carry.
+    """
+    self.initialize()
+    room = self.get_room_by_id(room_id)
+
+    if room is None:
+      raise ValueError("Room not found")
+
+    if owner_id not in self._get_owner_ids(room):
+      raise PermissionError("Only a room owner can add members")
+
+    normalized_email = email.strip().lower()
+    invited_user = self.get_user_by_email(normalized_email)
+
+    # Membership is by user id, so the address has to belong to an account. A
+    # generic "invite an unregistered address" flow would need a signup token,
+    # which does not exist here.
+    if invited_user is None:
+      raise ValueError("No CodeChatter account uses that email address")
+
+    invited_user_id = invited_user["id"]
+
+    if invited_user_id in self._get_owner_ids(room):
+      raise ValueError("That person already owns this workspace")
+
+    if invited_user_id in room.get("participant_ids", []):
+      raise ValueError("That person already has access to this workspace")
+
+    timestamp = self._utc_now()
+
+    if access_role == "owner":
+      self._rooms.update_one(
+        {"id": room_id},
+        {
+          "$addToSet": {"participant_ids": invited_user_id, "owner_ids": invited_user_id},
+          "$unset": {f"member_access_roles.{invited_user_id}": ""},
+          "$set": {"updated_at": timestamp},
+        },
+      )
+    else:
+      self._rooms.update_one(
+        {"id": room_id},
+        {
+          "$addToSet": {"participant_ids": invited_user_id},
+          "$set": {
+            f"member_access_roles.{invited_user_id}": access_role,
+            "updated_at": timestamp,
+          },
+        },
+      )
+
+    updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+
+    return (
+      self.serialize_room(updated_room, include_workspace=False, viewer_user_id=owner_id),
+      invited_user,
+    )
 
   def delete_room(self, user_id: str, room_id: str) -> None:
     self.initialize()
@@ -1519,6 +1602,7 @@ class MongoRepository:
       "id": user["id"],
       "email": user["email"],
       "username": user["username"],
+      "avatarHue": user.get("avatar_hue"),
       "githubConnected": bool(oauth_accounts.get("github")),
       "githubUsername": oauth_usernames.get("github") or None,
       "githubAvatarUrl": oauth_avatars.get("github") or None,

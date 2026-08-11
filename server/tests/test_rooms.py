@@ -270,3 +270,104 @@ def test_deleting_an_account_keeps_co_owned_rooms_and_detaches_the_user(client, 
   assert surviving is not None
   assert owner["user"]["id"] not in surviving.get("owner_ids", [])
   assert owner["user"]["id"] not in surviving.get("participant_ids", [])
+
+
+# ── Sharing a workspace by email ──────────────────────────────────────────────
+
+
+def test_sharing_by_email_grants_access_and_notifies(client, register, monkeypatch):
+  import routes.rooms as room_routes
+
+  sent: list[dict] = []
+  monkeypatch.setattr(
+    room_routes,
+    "send_room_share_email",
+    lambda **kwargs: sent.append(kwargs) or True,
+  )
+
+  owner = register("owner")
+  invitee = register("invitee")
+  room = create_room(client, owner)
+
+  response = client.post(
+    f"/api/rooms/{room['id']}/members",
+    json={"email": "invitee@example.com", "accessRole": "runner"},
+    headers=owner["headers"],
+  )
+
+  assert response.status_code == 201, response.text
+  assert response.json()["emailSent"] is True
+
+  assert len(sent) == 1
+  assert sent[0]["to_email"] == "invitee@example.com"
+  assert sent[0]["inviter_name"] == "owner"
+  assert sent[0]["access_role"] == "runner"
+  assert room["id"] in sent[0]["room_url"]
+
+  # The invitee can now open the room without requesting approval.
+  opened = client.get(f"/api/rooms/{room['id']}", headers=invitee["headers"])
+  assert opened.status_code == 200
+  assert opened.json()["accessRole"] == "runner"
+
+
+def test_sharing_with_an_unregistered_email_is_rejected(client, register):
+  owner = register("owner")
+  room = create_room(client, owner)
+
+  response = client.post(
+    f"/api/rooms/{room['id']}/members",
+    json={"email": "nobody@example.com", "accessRole": "editor"},
+    headers=owner["headers"],
+  )
+
+  assert response.status_code == 404
+  assert "account" in response.json()["detail"].lower()
+
+
+def test_sharing_the_same_person_twice_is_rejected(client, register, monkeypatch):
+  import routes.rooms as room_routes
+
+  monkeypatch.setattr(room_routes, "send_room_share_email", lambda **kwargs: True)
+
+  owner = register("owner")
+  register("invitee")
+  room = create_room(client, owner)
+
+  body = {"email": "invitee@example.com", "accessRole": "editor"}
+  assert client.post(
+    f"/api/rooms/{room['id']}/members", json=body, headers=owner["headers"]
+  ).status_code == 201
+
+  repeat = client.post(
+    f"/api/rooms/{room['id']}/members", json=body, headers=owner["headers"]
+  )
+  assert repeat.status_code == 404
+  assert "already has access" in repeat.json()["detail"]
+
+
+def test_only_an_owner_can_share_a_workspace(client, register):
+  owner = register("owner")
+  guest = register("guest")
+  register("invitee")
+  room = create_room(client, owner, is_public=True)
+
+  client.post("/api/rooms/join", json={"roomId": room["id"]}, headers=guest["headers"])
+
+  response = client.post(
+    f"/api/rooms/{room['id']}/members",
+    json={"email": "invitee@example.com", "accessRole": "editor"},
+    headers=guest["headers"],
+  )
+  assert response.status_code == 403
+
+
+def test_a_malformed_share_email_is_rejected(client, register):
+  owner = register("owner")
+  room = create_room(client, owner)
+
+  response = client.post(
+    f"/api/rooms/{room['id']}/members",
+    json={"email": "not-an-email", "accessRole": "editor"},
+    headers=owner["headers"],
+  )
+  assert response.status_code == 422

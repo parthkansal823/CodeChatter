@@ -13,6 +13,7 @@ try:
     RoomJoinRequest,
     RoomJoinRequestApprovalRequest,
     RoomMemberAccessUpdateRequest,
+    RoomMemberInviteRequest,
     RoomRunRequest,
     RoomSettingsUpdateRequest,
     RoomWorkspaceUpdateRequest,
@@ -28,12 +29,14 @@ try:
   )
   from ..core.settings import (
     ALLOWED_UPLOAD_EXTENSIONS,
+    DEFAULT_FRONTEND_URL,
     GEMINI_MODEL,
     MAX_UPLOAD_BYTES,
     UPLOADS_DIR,
     repository,
   )
   from ..services.ai import build_gemini_prompt, request_gemini_completion
+  from ..services.email import send_room_share_email
   from ..services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 except ImportError:
   from core.schemas import (
@@ -42,6 +45,7 @@ except ImportError:
     RoomJoinRequest,
     RoomJoinRequestApprovalRequest,
     RoomMemberAccessUpdateRequest,
+    RoomMemberInviteRequest,
     RoomRunRequest,
     RoomSettingsUpdateRequest,
     RoomWorkspaceUpdateRequest,
@@ -57,12 +61,14 @@ except ImportError:
   )
   from core.settings import (
     ALLOWED_UPLOAD_EXTENSIONS,
+    DEFAULT_FRONTEND_URL,
     GEMINI_MODEL,
     MAX_UPLOAD_BYTES,
     UPLOADS_DIR,
     repository,
   )
   from services.ai import build_gemini_prompt, request_gemini_completion
+  from services.email import send_room_share_email
   from services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 
 router = APIRouter()
@@ -414,6 +420,39 @@ def reject_join_request(
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
   except PermissionError as error:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+
+
+@router.post("/api/rooms/{room_id}/members", status_code=status.HTTP_201_CREATED)
+def add_room_member(
+  room_id: str,
+  payload: RoomMemberInviteRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  normalized_room_id = validate_room_id_value(room_id)
+
+  try:
+    room, invited_user = repository.add_room_member_by_email(
+      owner_id=current_user["id"],
+      room_id=normalized_room_id,
+      email=payload.email,
+      access_role=payload.accessRole,
+    )
+  except ValueError as error:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+  except PermissionError as error:
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+
+  # Access is already granted at this point. A dead SMTP server should not undo
+  # that, so delivery failure is reported alongside the success, not raised.
+  email_sent = send_room_share_email(
+    to_email=invited_user["email"],
+    inviter_name=current_user.get("username") or "Someone",
+    room_name=room.get("name") or "a workspace",
+    room_url=f"{DEFAULT_FRONTEND_URL.rstrip('/')}/room/{normalized_room_id}",
+    access_role=payload.accessRole,
+  )
+
+  return {"room": room, "emailSent": email_sent}
 
 
 @router.put("/api/rooms/{room_id}/members/{member_id}/access")

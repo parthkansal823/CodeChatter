@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import { Check, Globe, Link2, Loader2, Lock, X } from "lucide-react";
+import { Check, Globe, Link2, Loader2, Lock, Mail, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 import UserAvatar from "./UserAvatar";
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
@@ -34,11 +35,41 @@ const ACCESS_OPTIONS = [
   },
 ];
 
+const ASSIGNABLE_ROLES = [
+  { id: "editor", label: "Editor" },
+  { id: "runner", label: "Runner" },
+  { id: "viewer", label: "Viewer" },
+  { id: "owner", label: "Owner" },
+];
+
+// Deliberately loose. The address still has to belong to a CodeChatter account,
+// which the server checks — this only catches obvious typos before the request.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function roleLabel(member, ownerIds) {
   if (ownerIds.includes(member.id)) return "Owner";
 
   const role = member.accessRole || "editor";
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+/** Borderless until hovered, so a row of these reads as text, not as a form. */
+function RoleSelect({ value, onChange, disabled = false, ariaLabel }) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label={ariaLabel}
+      className="shrink-0 cursor-pointer rounded-md border border-transparent bg-transparent py-1 pl-1.5 pr-0.5 text-sm text-fg outline-none transition-colors hover:bg-hovered focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {ASSIGNABLE_ROLES.map((role) => (
+        <option key={role.id} value={role.id}>
+          {role.label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
@@ -47,6 +78,11 @@ export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("editor");
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [savingMemberId, setSavingMemberId] = useState(null);
 
   const roomId = room?.id;
 
@@ -54,6 +90,9 @@ export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
     if (!isOpen || !roomId) {
       setFullRoom(null);
       setCopied(false);
+      setInviteEmail("");
+      setInviteRole("editor");
+      setInviteError("");
       return undefined;
     }
 
@@ -97,6 +136,65 @@ export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
       toast.error("Could not copy the link");
     }
   }, [inviteLink]);
+
+  const handleInvite = async (event) => {
+    event.preventDefault();
+
+    const email = inviteEmail.trim().toLowerCase();
+
+    if (!EMAIL_PATTERN.test(email)) {
+      setInviteError("Enter a valid email address");
+      return;
+    }
+
+    setInviteError("");
+    setIsInviting(true);
+
+    try {
+      const result = await secureFetch(
+        API_ENDPOINTS.ADD_ROOM_MEMBER(activeRoom.id),
+        {
+          method: "POST",
+          body: JSON.stringify({ email, accessRole: inviteRole }),
+        },
+        token,
+      );
+
+      setFullRoom(result.room);
+      onUpdate?.(result.room);
+      setInviteEmail("");
+
+      // Access is granted either way; only the notification can fail.
+      toast.success(
+        result.emailSent
+          ? `${email} now has access — we emailed them`
+          : `${email} now has access (email could not be sent)`,
+      );
+    } catch (error) {
+      setInviteError(error.message || "Could not add that person");
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleMemberRoleChange = async (memberId, accessRole) => {
+    setSavingMemberId(memberId);
+
+    try {
+      const updated = await secureFetch(
+        API_ENDPOINTS.UPDATE_MEMBER_ACCESS(activeRoom.id, memberId),
+        { method: "PUT", body: JSON.stringify({ accessRole }) },
+        token,
+      );
+
+      setFullRoom(updated);
+      onUpdate?.(updated);
+    } catch (error) {
+      toast.error(error.message || "Could not change that role");
+    } finally {
+      setSavingMemberId(null);
+    }
+  };
 
   const handleAccessChange = async (nextRequireApproval) => {
     if (nextRequireApproval === requireJoinApproval || !isOwner) return;
@@ -160,6 +258,44 @@ export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
               </button>
             </div>
 
+            {/* Add people by email */}
+            {isOwner ? (
+              <form onSubmit={handleInvite} className="px-5 pt-4">
+                <Input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(event) => {
+                    setInviteEmail(event.target.value);
+                    if (inviteError) setInviteError("");
+                  }}
+                  placeholder="Add people by email"
+                  aria-label="Email address"
+                  icon={Mail}
+                  error={inviteError || undefined}
+                  disabled={isInviting}
+                />
+
+                {/* Role and confirm only appear once there is something to add,
+                    so the resting state stays a single clean field. */}
+                {inviteEmail.trim() ? (
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+                      They need a CodeChatter account — we&apos;ll email them the link.
+                    </p>
+                    <RoleSelect
+                      value={inviteRole}
+                      onChange={setInviteRole}
+                      disabled={isInviting}
+                      ariaLabel="Role for the person you are adding"
+                    />
+                    <Button type="submit" isLoading={isInviting} className="shrink-0">
+                      Add
+                    </Button>
+                  </div>
+                ) : null}
+              </form>
+            ) : null}
+
             {/* People with access */}
             <div className="px-5 pt-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
@@ -179,7 +315,7 @@ export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
                 <ul className="mt-2 max-h-52 space-y-1 overflow-y-auto">
                   {collaborators.map((member) => (
                     <li key={member.id} className="flex items-center gap-3 rounded-md px-1 py-1.5">
-                      <UserAvatar username={member.username} size="base" />
+                      <UserAvatar username={member.username} hue={member.avatarHue} size="base" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-fg">
                           {member.username}
@@ -191,9 +327,21 @@ export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
                           {member.email || "No email available"}
                         </span>
                       </span>
-                      <span className="shrink-0 text-xs text-fg-muted">
-                        {roleLabel(member, ownerIds)}
-                      </span>
+                      {/* Owners are shown as static text: the backend refuses to
+                          demote the last one, and a dropdown that mostly errors
+                          is worse than no dropdown. */}
+                      {!isOwner || ownerIds.includes(member.id) ? (
+                        <span className="shrink-0 text-sm text-fg-muted">
+                          {roleLabel(member, ownerIds)}
+                        </span>
+                      ) : (
+                        <RoleSelect
+                          value={member.accessRole || "editor"}
+                          onChange={(role) => handleMemberRoleChange(member.id, role)}
+                          disabled={savingMemberId === member.id}
+                          ariaLabel={`Role for ${member.username}`}
+                        />
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -206,44 +354,54 @@ export default function ShareModal({ room, isOpen, onClose, onUpdate }) {
                 General access
               </p>
 
-              <div className="mt-2 space-y-1.5">
-                {ACCESS_OPTIONS.map((option) => {
-                  const Icon = option.icon;
-                  const isSelected = option.requireJoinApproval === requireJoinApproval;
+              {(() => {
+                const active =
+                  ACCESS_OPTIONS.find(
+                    (option) => option.requireJoinApproval === requireJoinApproval,
+                  ) || ACCESS_OPTIONS[0];
+                const Icon = active.icon;
 
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      disabled={!isOwner || isSavingAccess}
-                      onClick={() => handleAccessChange(option.requireJoinApproval)}
-                      aria-pressed={isSelected}
-                      className={`flex w-full items-start gap-3 rounded-md border p-3 text-left transition-colors disabled:cursor-not-allowed ${
-                        isSelected
-                          ? "border-accent bg-accent-subtle"
-                          : "border-edge-subtle bg-field enabled:hover:border-edge-strong"
-                      } ${!isOwner && !isSelected ? "opacity-50" : ""}`}
+                return (
+                  <div className="mt-2 flex items-center gap-3">
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                        requireJoinApproval
+                          ? "bg-hovered text-fg-muted"
+                          : "bg-accent text-fg-accent"
+                      }`}
                     >
-                      <span
-                        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                          isSelected ? "bg-accent text-fg-accent" : "bg-hovered text-fg-muted"
-                        }`}
-                      >
-                        <Icon size={14} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium text-fg">{option.label}</span>
-                        <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted">
-                          {option.description}
-                        </span>
-                      </span>
-                      {isSelected ? (
-                        <Check size={16} className="mt-1 shrink-0 text-accent" />
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
+                      <Icon size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      {isOwner ? (
+                        <select
+                          value={active.id}
+                          disabled={isSavingAccess}
+                          onChange={(event) => {
+                            const next = ACCESS_OPTIONS.find(
+                              (option) => option.id === event.target.value,
+                            );
+                            if (next) handleAccessChange(next.requireJoinApproval);
+                          }}
+                          aria-label="General access"
+                          className="-ml-1 max-w-full cursor-pointer rounded-md border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-fg outline-none transition-colors hover:bg-hovered focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent disabled:cursor-not-allowed"
+                        >
+                          {ACCESS_OPTIONS.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-sm font-medium text-fg">{active.label}</p>
+                      )}
+                      <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
+                        {active.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {!isOwner ? (
                 <p className="mt-2 text-xs text-fg-muted">

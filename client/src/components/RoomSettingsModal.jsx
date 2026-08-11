@@ -500,7 +500,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <UserAvatar username={member.username} size="sm" />
+                  <UserAvatar username={member.username} hue={member.avatarHue} size="sm" />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-fg">{member.username}</p>
                     <p className="truncate text-xs text-fg-muted">{member.email || "No email available"}</p>
@@ -568,7 +568,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
             <div key={request.id} className="rounded-lg border border-edge-subtle bg-panel p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <UserAvatar username={request.username} size="sm" />
+                  <UserAvatar username={request.username} hue={request.avatarHue} size="sm" />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-fg">{request.username}</p>
                     <p className="truncate text-xs text-fg-muted">{request.email || "No email available"}</p>

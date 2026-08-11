@@ -1,37 +1,46 @@
+import { avatarBackground, hueForName } from "../utils/avatar";
+
 /**
  * UserAvatar — consistent avatar used everywhere in the app.
  *
- * Displays a DiceBear "thumbs" avatar based on the username.
- * All sizes and variants derive from one place, ensuring
- * the avatar looks identical in the Navbar, Settings,
- * room cards, and anywhere else it appears.
+ * Renders the first letter of the username on a colour derived from the name,
+ * the way Drive, GitHub and Slack do. It used to fetch a DiceBear SVG per user,
+ * which meant every avatar was a blocking request to a third-party host — slow
+ * on a collaborator list, and blank whenever that host was unreachable.
+ *
+ * The colour defaults to a hash of the username, so a person keeps the same one
+ * across sessions and devices with nothing stored. Picking a colour in Settings
+ * saves a hue on the account, which then overrides the hash everywhere.
  *
  * Props:
- *   username  — string (used for initials + aria-label)
- *   size      — "xs" | "sm" | "md" | "lg"  (default "sm")
+ *   username  — string (used for the initial + aria-label)
+ *   hue       — 0-359 from the account, or null/undefined to derive from the name
+ *   size      — "xs" | "sm" | "base" | "md" | "lg"  (default "sm")
  *   className — extra wrapper classes
  */
-export default function UserAvatar({ username = "", size = "sm", className = "" }) {
-  const avatarUrl = `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(username || "default")}`;
+const SIZE_CLASSES = {
+  xs: "h-6 w-6 text-[10px]",
+  sm: "h-7 w-7 text-[11px]",
+  base: "h-8 w-8 text-xs",
+  md: "h-9 w-9 text-sm",
+  lg: "h-14 w-14 text-xl",
+};
 
-  const sizeClasses = {
-    xs: "h-6 w-6",
-    sm: "h-7 w-7",
-    base: "h-8 w-8",
-    md: "h-9 w-9",
-    lg: "h-14 w-14",
-  };
+export default function UserAvatar({ username = "", hue = null, size = "sm", className = "" }) {
+  const label = username || "User";
+  const initial = label.trim().charAt(0).toUpperCase() || "?";
+  const background = avatarBackground(Number.isInteger(hue) ? hue : hueForName(label));
 
   return (
     <div
-      aria-label={username || "User"}
-      className={`inline-flex shrink-0 select-none overflow-hidden items-center justify-center rounded-full bg-slate-800/50 ring-1 ring-white/10 shadow-sm ${sizeClasses[size] ?? sizeClasses.sm} ${className}`}
+      aria-label={label}
+      title={label}
+      style={{ backgroundColor: background }}
+      className={`inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold uppercase leading-none text-white ${
+        SIZE_CLASSES[size] ?? SIZE_CLASSES.sm
+      } ${className}`}
     >
-      <img
-        src={avatarUrl}
-        alt={username || "User Avatar"}
-        className="h-full w-full object-cover"
-      />
+      {initial}
     </div>
   );
 }

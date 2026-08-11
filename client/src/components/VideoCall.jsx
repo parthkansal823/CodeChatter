@@ -775,7 +775,7 @@ export default function VideoCall({
             <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
               <div className="rounded-lg border border-info-500/20 bg-info-500/10 px-3 py-3">
                 <div className="flex items-center gap-3">
-                  <UserAvatar username={user?.username} size="sm" />
+                  <UserAvatar username={user?.username} hue={user?.avatarHue} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-white">{user?.username || "You"}</p>
                     <p className="text-[11px] text-info-200">{isScreenSharing ? "Presenting" : "Local"}</p>

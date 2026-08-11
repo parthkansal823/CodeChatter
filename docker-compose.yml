@@ -6,12 +6,20 @@ services:
       # and an untargeted build would pick the last stage in the file.
       target: runtime
     restart: unless-stopped
-    depends_on:
-      mongo:
-        condition: service_healthy
+    # Now that the database is an Atlas host rather than a service on this
+    # network, the container has to do real DNS — including the SRV lookup that
+    # mongodb+srv:// requires. Docker Desktop's embedded resolver intermittently
+    # fails to answer those, so ask public resolvers directly.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     # Either file works, and a missing one is not an error. `.env.local` is
     # loaded last so it wins where both define the same key — matching the
     # precedence the backend itself uses.
+    #
+    # MONGODB_URI is deliberately NOT set below: the database lives in Atlas and
+    # its connection string comes from these files. Anything in `environment:`
+    # would silently outrank them.
     env_file:
       - path: ./server/.env
         required: false
@@ -21,7 +29,6 @@ services:
       ENVIRONMENT: production
       FRONTEND_URL: http://localhost:8000
       ALLOWED_ORIGINS: http://localhost:8000
-      MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB_NAME: codechatter
       CODECHATTER_DATA_DIR: /data
     ports:
@@ -31,22 +38,5 @@ services:
       # and stay writable by the non-root runtime user.
       - app-data:/data
 
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      # Gate the app on Mongo actually accepting connections, not just on the
-      # container having been created.
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-
 volumes:
-  mongo-data:
   app-data:

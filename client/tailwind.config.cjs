@@ -236,9 +236,14 @@ module.exports = {
         "fade-in": "fadeIn 0.2s ease-out",
         "slide-up": "slideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1)",
         shimmer: "shimmer 1.6s linear infinite",
+        "loading-sweep": "loadingSweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
       },
 
       keyframes: {
+        loadingSweep: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
         fadeIn: {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },

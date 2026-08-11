@@ -127,7 +127,7 @@ export default function Profile() {
             <div className="-mt-12 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
                 <div className="rounded-full ring-4 ring-white dark:ring-zinc-900">
-                  <UserAvatar username={user?.username} size="lg" />
+                  <UserAvatar username={user?.username} hue={user?.avatarHue} size="lg" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-semibold text-fg">{user?.username}</h1>
@@ -280,7 +280,7 @@ export default function Profile() {
                 ) : (
                   collaborators.slice(0, 6).map((collaborator, index) => (
                     <div key={collaborator.id || index} className="flex items-center gap-3 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
-                      <UserAvatar username={collaborator.username} size="sm" />
+                      <UserAvatar username={collaborator.username} hue={collaborator.avatarHue} size="sm" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-fg">{collaborator.username}</p>
                         <p className="truncate text-xs text-fg-muted">{collaborator.email || "Workspace collaborator"}</p>

@@ -9,10 +9,9 @@
 # matching service — the frontend patches the running page without losing state,
 # the backend restarts the process.
 #
-# This is a separate compose project from docker-compose.yml, so the two never
-# share containers. They do share the Mongo volume (see the bottom of the file),
-# so the same rooms and accounts are there either way. Only one stack can hold
-# port 8000 at a time — run `docker compose down` before starting this one.
+# The database is MongoDB Atlas, shared with the production stack, so both see
+# the same data. Only one stack can hold port 8000 at a time — run
+# `docker compose down` before starting this one.
 name: codechatternk-dev
 
 services:
@@ -21,9 +20,15 @@ services:
       context: .
       target: server-dev
     restart: unless-stopped
-    depends_on:
-      mongo:
-        condition: service_healthy
+    # Now that the database is an Atlas host rather than a service on this
+    # network, the container has to do real DNS — including the SRV lookup that
+    # mongodb+srv:// requires. Docker Desktop's embedded resolver intermittently
+    # fails to answer those, so ask public resolvers directly.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    # MONGODB_URI is deliberately NOT in `environment:` below — it comes from
+    # these files, and an `environment:` entry would silently outrank them.
     env_file:
       - path: ./server/.env
         required: false
@@ -36,7 +41,6 @@ services:
       # back, ALLOWED_ORIGINS is what CORS and the redirect allow-list accept.
       FRONTEND_URL: http://localhost:5173
       ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
-      MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB_NAME: codechatter
       CODECHATTER_DATA_DIR: /data
     ports:
@@ -44,6 +48,13 @@ services:
     volumes:
       - ./server:/app/server
       - api-data:/data
+    # The image still carries the production `client/dist` from its build stage,
+    # and FastAPI would happily serve that stale bundle on :8000 — which looks
+    # like the app but is frozen at build time and has no HMR. Blanking the
+    # directory makes :8000 answer with the API status JSON instead, so there is
+    # exactly one place to open the UI in dev: the Vite server on :5173.
+    tmpfs:
+      - /app/client/dist
 
   web:
     build:
@@ -67,22 +78,5 @@ services:
       # the bind mount above.
       - /app/client/node_modules
 
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-
 volumes:
-  # Reuse the volume the production stack already created, so switching between
-  # the two stacks does not look like the database was wiped.
-  mongo-data:
-    external: true
-    name: codechatternk_mongo-data
   api-data:

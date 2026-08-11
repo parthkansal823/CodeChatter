@@ -9,7 +9,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 try:
-  from ..core.schemas import LoginRequest, ResendOTPRequest, SignupRequest, VerifyOTPRequest
+  from ..core.schemas import (
+    LoginRequest,
+    ProfileUpdateRequest,
+    ResendOTPRequest,
+    SignupRequest,
+    VerifyOTPRequest,
+  )
   from ..core.security import (
     create_access_token,
     enforce_rate_limit,
@@ -22,7 +28,13 @@ try:
   from ..core.settings import repository
   from ..services.email import mask_email, send_otp_email
 except ImportError:
-  from core.schemas import LoginRequest, ResendOTPRequest, SignupRequest, VerifyOTPRequest
+  from core.schemas import (
+    LoginRequest,
+    ProfileUpdateRequest,
+    ResendOTPRequest,
+    SignupRequest,
+    VerifyOTPRequest,
+  )
   from core.security import (
     create_access_token,
     enforce_rate_limit,
@@ -293,6 +305,20 @@ def delete_account(current_user: dict[str, Any] = Depends(get_current_user)) -> 
 @router.get("/api/auth/me")
 def get_me(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
   return repository.serialize_user(current_user)
+
+
+@router.put("/api/auth/profile")
+def update_profile(
+  payload: ProfileUpdateRequest,
+  current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+  try:
+    return repository.update_user_profile(
+      user_id=current_user["id"],
+      avatar_hue=payload.avatarHue,
+    )
+  except ValueError as error:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
 
 @router.get("/api/collaborators")

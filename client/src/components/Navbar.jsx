@@ -177,7 +177,7 @@ export default function Navbar({
               title={user?.username}
             >
               <div className="relative">
-                <UserAvatar username={user?.username} size="xs" />
+                <UserAvatar username={user?.username} hue={user?.avatarHue} size="xs" />
                 <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-zinc-900 ${presenceColor}`} />
               </div>
               {!minimal && (
@@ -198,7 +198,7 @@ export default function Navbar({
                 >
                   {/* Profile header */}
                   <div className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">
-                    <UserAvatar username={user?.username} size="md" />
+                    <UserAvatar username={user?.username} hue={user?.avatarHue} size="md" />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-fg">
                         {user?.username}
@@ -308,7 +308,7 @@ export default function Navbar({
             className="border-t border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950 md:hidden"
           >
             <div className="mb-3 flex items-center gap-3 rounded-xl border border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
-              <UserAvatar username={user?.username} size="sm" />
+              <UserAvatar username={user?.username} hue={user?.avatarHue} size="sm" />
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-fg">{user?.username}</p>
                 <p className="truncate text-xs text-zinc-500">{user?.email}</p>

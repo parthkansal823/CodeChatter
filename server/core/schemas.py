@@ -222,6 +222,38 @@ class RoomMemberAccessUpdateRequest(BaseModel):
     return normalized
 
 
+class ProfileUpdateRequest(BaseModel):
+  # A hue rather than a free-form colour: the client renders it at a fixed
+  # saturation and lightness, so every choice stays readable with white text
+  # and no value can produce an unreadable or off-palette avatar.
+  avatarHue: int | None = Field(default=None, ge=0, le=359)
+
+
+class RoomMemberInviteRequest(BaseModel):
+  email: str = Field(min_length=5, max_length=254)
+  accessRole: str = Field(default="editor", min_length=4, max_length=20)
+
+  @field_validator("email")
+  @classmethod
+  def validate_email(cls, value: str) -> str:
+    normalized = value.strip().lower()
+
+    if not EMAIL_PATTERN.fullmatch(normalized):
+      raise ValueError("Enter a valid email address")
+
+    return normalized
+
+  @field_validator("accessRole")
+  @classmethod
+  def validate_access_role(cls, value: str) -> str:
+    normalized = value.strip().lower()
+
+    if normalized not in ASSIGNABLE_ROOM_ACCESS_ROLES:
+      raise ValueError("Access role must be viewer, editor, runner, or owner")
+
+    return normalized
+
+
 class RoomWorkspaceUpdateRequest(BaseModel):
   tree: list[dict[str, Any]] = Field(default_factory=list)
 

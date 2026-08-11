@@ -7,6 +7,7 @@ import { PreferencesProvider } from "./context/PreferencesContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CommandPalette from "./components/CommandPalette";
+import LoadingScreen from "./components/LoadingScreen";
 import OnboardingModal from "./components/OnboardingModal";
 import { usePreferences } from "./hooks/usePreferences";
 
@@ -19,13 +20,6 @@ const Home     = lazy(() => import("./pages/Home"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Profile  = lazy(() => import("./pages/Profile"));
 
-function RouteFallback() {
-  return (
-    <div className="flex h-screen items-center justify-center bg-black text-white">
-      <p className="text-sm tracking-wide text-zinc-400">Loading page...</p>
-    </div>
-  );
-}
 
 function AppContent() {
   const { preferences, updatePreference } = usePreferences();
@@ -37,11 +31,17 @@ function AppContent() {
       <Toaster
         position="top-center"
         toastOptions={{
-          style: { background: "#18181b", color: "#fff", border: "1px solid #27272a" }
+          // Theme tokens, so toasts follow the light/dark switch like the rest
+          // of the app instead of staying permanently dark.
+          style: {
+            background: "var(--bg-overlay)",
+            color: "var(--fg-default)",
+            border: "1px solid var(--border-default)",
+          },
         }}
       />
       <OnboardingModal />
-      <Suspense fallback={<RouteFallback />}>
+      <Suspense fallback={<LoadingScreen />}>
         <CommandPalette theme={theme} onThemeChange={onThemeChange} />
         <Routes>
           <Route path="/" element={<Landing theme={theme} onThemeChange={onThemeChange} />} />

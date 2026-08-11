@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { Button } from "../components/ui/Button";
 import UserAvatar from "../components/UserAvatar";
+import { avatarBackground } from "../utils/avatar";
 import { secureFetch } from "../utils/security";
 import { API_ENDPOINTS } from "../config/security";
 
@@ -28,6 +29,10 @@ const NAV = [
   { id: "help",   label: "Help & Tutorial", icon: HelpCircle },
   { id: "danger", label: "Account Actions", icon: LockKeyhole },
 ];
+
+// Twelve evenly spaced hues. The avatar renders them at a fixed saturation and
+// lightness, so every swatch keeps white initials readable.
+const AVATAR_HUES = Array.from({ length: 12 }, (_, index) => index * 30);
 
 const SHORTCUTS = [
   ["Save file", "Ctrl+S"],
@@ -84,6 +89,27 @@ export default function Settings() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [disconnectingGitHub, setDisconnectingGitHub] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+
+  const handleAvatarHueChange = async (hue) => {
+    if (user?.avatarHue === hue) return;
+
+    setIsSavingAvatar(true);
+
+    try {
+      await secureFetch(
+        API_ENDPOINTS.UPDATE_PROFILE,
+        { method: "PUT", body: JSON.stringify({ avatarHue: hue }) },
+        token,
+      );
+      await refreshUser();
+      toast.success("Avatar colour updated");
+    } catch (error) {
+      toast.error(error.message || "Could not update avatar colour");
+    } finally {
+      setIsSavingAvatar(false);
+    }
+  };
 
   // Handle GitHub connect redirect
   useEffect(() => {
@@ -152,11 +178,46 @@ export default function Settings() {
           <div>
             <SectionTitle>Profile</SectionTitle>
             {/* Avatar hero */}
-            <div className="mb-6 flex items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
-              <UserAvatar username={user?.username} size="lg" />
-              <div>
-                <p className="font-semibold text-fg">{user?.username}</p>
-                <p className="text-sm text-zinc-500">{user?.email}</p>
+            <div className="mb-6 rounded-lg border border-edge-subtle bg-panel p-4">
+              <div className="flex items-center gap-4">
+                <UserAvatar username={user?.username} hue={user?.avatarHue} size="lg" />
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-fg">{user?.username}</p>
+                  <p className="truncate text-sm text-fg-muted">{user?.email}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-edge-subtle pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
+                  Avatar colour
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {AVATAR_HUES.map((hue) => {
+                    const isSelected = user?.avatarHue === hue;
+
+                    return (
+                      <button
+                        key={hue}
+                        type="button"
+                        onClick={() => handleAvatarHueChange(hue)}
+                        disabled={isSavingAvatar}
+                        aria-label={`Use avatar colour ${hue}`}
+                        aria-pressed={isSelected}
+                        style={{ backgroundColor: avatarBackground(hue) }}
+                        className={`h-7 w-7 rounded-full transition-transform disabled:cursor-not-allowed ${
+                          isSelected
+                            ? "ring-2 ring-accent ring-offset-2 ring-offset-panel"
+                            : "hover:scale-110"
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-fg-muted">
+                  {user?.avatarHue === null || user?.avatarHue === undefined
+                    ? "Currently derived from your username."
+                    : "Everyone sees this colour on your avatar."}
+                </p>
               </div>
             </div>
             <Row label="Username" hint={user?.username || "—"} />
