@@ -7,15 +7,11 @@ import {
   BookmarkCheck,
   Clock,
   FolderGit2,
-  LayoutGrid,
   Link2,
-  List,
   MoreVertical,
   Plus,
   Search,
-  Settings2,
   Trash2,
-  Users,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -23,7 +19,6 @@ import toast from "react-hot-toast";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import ConfirmModal from "../components/ConfirmModal";
-import RoomSettingsModal from "../components/RoomSettingsModal";
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch, validateRoomId } from "../utils/security";
@@ -32,16 +27,13 @@ import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/termi
 import { getBookmarks, getRecentRooms, recordVisit, toggleBookmark } from "../utils/roomUtils";
 
 const SkeletonCard = () => (
-  <div className="rounded-lg border border-edge-subtle bg-panel p-5 animate-pulse">
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <div className="h-5 w-1/2 rounded-md bg-hovered" />
-      <div className="h-7 w-16 rounded-md bg-hovered" />
+  <div className="flex animate-pulse items-center gap-3 rounded-lg border border-edge-subtle bg-panel p-3">
+    <div className="h-9 w-9 shrink-0 rounded-md bg-hovered" />
+    <div className="min-w-0 flex-1">
+      <div className="h-4 w-1/3 rounded bg-hovered" />
+      <div className="mt-1.5 h-3 w-2/3 rounded bg-hovered" />
     </div>
-    <div className="mb-4 h-4 w-1/3 rounded-md bg-hovered" />
-    <div className="flex gap-2">
-      <div className="h-6 w-16 rounded-full bg-hovered" />
-      <div className="h-6 w-20 rounded-full bg-hovered" />
-    </div>
+    <div className="h-6 w-6 shrink-0 rounded-md bg-hovered" />
   </div>
 );
 
@@ -69,7 +61,6 @@ export default function Home() {
   const [joiningRoom, setJoiningRoom] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [rooms, setRooms] = useState([]);
-  const [collaborators, setCollaborators] = useState([]);
   const [roomTemplates, setRoomTemplates] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -83,20 +74,8 @@ export default function Home() {
   const [recentRooms, setRecentRooms] = useState(getRecentRooms);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
-  const [settingsRoomId, setSettingsRoomId] = useState(null);
-  const [settingsRoom, setSettingsRoom] = useState(null);
-  const [isRoomSettingsLoading, setIsRoomSettingsLoading] = useState(false);
   const pendingRequestCountsRef = useRef({});
-  const [roomViewMode, setRoomViewMode] = useState(() => {
-    if (typeof window === "undefined") {
-      return "grid";
-    }
 
-    return window.localStorage.getItem("codechatter-home-room-view") === "list" ? "list" : "grid";
-  });
-
-  const isRoomSettingsOpen = Boolean(settingsRoomId);
-  const isListView = roomViewMode === "list";
   const normalizedRoomSearch = roomSearch.trim().toLowerCase();
   const filteredRooms = useMemo(
     () => rooms.filter((room) => {
@@ -148,9 +127,8 @@ export default function Home() {
       setIsLoading(true);
 
       try {
-        const [roomsResult, collaboratorsResult, templateResult] = await Promise.allSettled([
+        const [roomsResult, templateResult] = await Promise.allSettled([
           secureFetch(API_ENDPOINTS.GET_ROOMS, {}, token),
-          secureFetch(API_ENDPOINTS.GET_COLLABORATORS, {}, token),
           secureFetch(API_ENDPOINTS.GET_ROOM_TEMPLATES, {}, token),
         ]);
 
@@ -164,9 +142,6 @@ export default function Home() {
             nextRooms.map((room) => [room.id, room.pendingJoinRequestCount || 0]),
           );
           setRooms(nextRooms);
-          setCollaborators(
-            collaboratorsResult.status === "fulfilled" ? collaboratorsResult.value || [] : []
-          );
           setRoomTemplates(templateResult.status === "fulfilled" ? templateResult.value || [] : []);
         });
       } catch (error) {
@@ -225,13 +200,6 @@ export default function Home() {
 
         pendingRequestCountsRef.current = nextCounts;
         setRooms(nextRooms || []);
-
-        if (settingsRoomId) {
-          const matchingRoom = (nextRooms || []).find((room) => room.id === settingsRoomId);
-          if (matchingRoom) {
-            setSettingsRoom((currentRoom) => ({ ...(currentRoom || {}), ...matchingRoom }));
-          }
-        }
       } catch {
         // Ignore background refresh errors on the dashboard.
       }
@@ -247,7 +215,7 @@ export default function Home() {
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [settingsRoomId, token]);
+  }, [token]);
 
   // Close room action menus when clicking outside
   useEffect(() => {
@@ -255,14 +223,6 @@ export default function Home() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem("codechatter-home-room-view", roomViewMode);
-  }, [roomViewMode]);
 
   const handleJoinById = async (roomId, inviteToken = null) => {
     if (!roomId) {
@@ -353,37 +313,6 @@ export default function Home() {
     setRoomToDelete(room);
   };
 
-  const closeRoomSettings = () => {
-    setSettingsRoomId(null);
-    setSettingsRoom(null);
-    setIsRoomSettingsLoading(false);
-  };
-
-  const handleOpenRoomSettings = async (room) => {
-    setOpenMenuId(null);
-    setSettingsRoomId(room.id);
-    setSettingsRoom(room);
-    setIsRoomSettingsLoading(true);
-
-    try {
-      const fullRoom = await secureFetch(API_ENDPOINTS.GET_ROOM(room.id), {}, token);
-      setSettingsRoom(fullRoom);
-    } catch (error) {
-      toast.error(error.message || "Could not load workspace settings");
-    } finally {
-      setIsRoomSettingsLoading(false);
-    }
-  };
-
-  const handleRoomSettingsUpdate = (updatedRoom) => {
-    setSettingsRoom(updatedRoom);
-    setRooms((currentRooms) =>
-      currentRooms.map((currentRoom) =>
-        currentRoom.id === updatedRoom.id ? { ...currentRoom, ...updatedRoom } : currentRoom
-      )
-    );
-  };
-
   const confirmDeleteRoom = async () => {
     if (!roomToDelete) return;
 
@@ -409,109 +338,110 @@ export default function Home() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8"
+        className="mx-auto max-w-[90rem] px-4 py-10 sm:px-6 lg:px-8"
       >
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <Motion.div variants={itemVariants}>
-            <p className="text-sm text-fg-muted">
-              Welcome back, {user?.username || "developer"}.
-            </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Build room-based workspaces
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm text-fg-muted sm:text-base">
-              Start with a blank room or choose a starter template, invite collaborators by link,
-              and keep each room&apos;s files and members separate.
-            </p>
-          </Motion.div>
+        <Motion.div variants={itemVariants}>
+          <p className="text-sm text-fg-muted">
+            Welcome back, {user?.username || "developer"}.
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
+            Build room-based workspaces
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm text-fg-muted sm:text-base">
+            Start with a blank room or choose a starter template, invite collaborators by link,
+            and keep each room&apos;s files and members separate.
+          </p>
+        </Motion.div>
 
-          <Motion.div variants={itemVariants} className="grid grid-cols-2 gap-3">
-            <SummaryCard label="Your Rooms" value={rooms.length} icon={FolderGit2} />
-            <SummaryCard label="Collaborators" value={collaborators.length} icon={Users} />
-          </Motion.div>
-        </div>
-
-        <div className="mt-10 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <Motion.button
+        {/* Actions stay in a narrow rail on the left; the room list gets the
+            remaining width, which is the part that actually grows over time. */}
+        <div className="mt-8 grid items-start gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <Motion.div
             variants={itemVariants}
-            
-            whileTap={{ scale: 0.99 }}
-            onClick={openCreateModal}
-            className="group rounded-lg border border-edge-subtle bg-panel p-6 text-left transition-colors hover:border-accent"
+            className="flex flex-col gap-4 xl:sticky xl:top-6"
           >
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-fg-muted">Create room</p>
-                <h2 className="mt-1 text-2xl font-semibold">Blank workspace or starter template</h2>
-                <p className="mt-2 text-sm text-fg-muted">
-                  Name the room, pick a template, and jump straight into the editor.
-                </p>
-              </div>
-              <div className="rounded-md bg-accent-subtle p-3 text-accent transition-transform group-hover:scale-110">
-                <Plus size={22} />
-              </div>
-            </div>
-          </Motion.button>
+            <Motion.button
+              whileTap={{ scale: 0.99 }}
+              onClick={openCreateModal}
+              className="group flex w-full items-center gap-3 rounded-lg border border-edge-subtle bg-panel p-4 text-left transition-colors hover:border-accent hover:bg-hovered"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-fg-accent transition-transform group-hover:scale-105">
+                <Plus size={20} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-fg">Create room</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted">
+                  Blank workspace or a starter template
+                </span>
+              </span>
+            </Motion.button>
 
-          <Motion.form
-            variants={itemVariants}
-            onSubmit={(event) => {
-              event.preventDefault();
-              const { roomId, inviteToken } = parseRoomInvite(joinRoomValue);
-              handleJoinById(roomId, inviteToken);
-            }}
-            className="rounded-lg border border-edge-subtle bg-panel p-6 transition-colors hover:border-accent"
-          >
-            <p className="text-sm text-fg-muted">Join room</p>
-            <h2 className="mt-1 text-2xl font-semibold">Paste a room ID or invite link</h2>
-            <div className="mt-4 flex flex-col gap-3">
-              <Input
-                placeholder="ABC123 or https://.../room/ABC123"
-                value={joinRoomValue}
-                onChange={(event) => setJoinRoomValue(event.target.value)}
-                icon={Link2}
-                className="h-12"
-              />
-              <Button
-                type="submit"
-                isLoading={joiningRoom}
-                size="lg"
-              >
-                {!joiningRoom && <Link2 size={18} className="mr-2" />}
-                Join room
-              </Button>
-            </div>
-          </Motion.form>
-        </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const { roomId, inviteToken } = parseRoomInvite(joinRoomValue);
+                handleJoinById(roomId, inviteToken);
+              }}
+              className="rounded-lg border border-edge-subtle bg-panel p-4"
+            >
+              <p className="text-sm font-semibold text-fg">Join a room</p>
+              <p className="mt-0.5 text-xs text-fg-muted">
+                Paste a room ID or an invite link.
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                <Input
+                  placeholder="ABC123 or invite link"
+                  value={joinRoomValue}
+                  onChange={(event) => setJoinRoomValue(event.target.value)}
+                  icon={Link2}
+                  aria-label="Room ID or invite link"
+                />
+                <Button type="submit" isLoading={joiningRoom} fullWidth leadingIcon={Link2}>
+                  Join room
+                </Button>
+              </div>
+            </form>
 
-        {/* Recently Visited */}
-        {recentRooms.length > 0 && (
-          <Motion.div variants={itemVariants} className="mt-8">
-            <div className="mb-3 flex items-center gap-2">
-              <Clock size={13} className="text-fg-subtle" />
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">
-                Recently visited
-              </h2>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {recentRooms.map(r => (
-                <button
-                  key={r.id}
-                  onClick={() => { recordVisit(r.id, r.name); setRecentRooms(getRecentRooms()); navigate(`/room/${r.id}`); }}
-                  className="flex shrink-0 items-center gap-2 rounded-md border border-edge-subtle bg-panel px-3 py-2 text-left text-sm transition-colors hover:border-accent hover:bg-hovered"
-                >
-                  <FolderGit2 size={13} className="text-fg-subtle" />
-                  <span className="font-medium text-fg">{r.name}</span>
-                  <ArrowRight size={12} className="text-fg-subtle" />
-                </button>
-              ))}
-            </div>
+            {recentRooms.length > 0 && (
+              <div className="rounded-lg border border-edge-subtle bg-panel p-4">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <Clock size={12} className="text-fg-subtle" />
+                  <h2 className="text-[11px] font-semibold uppercase tracking-widest text-fg-subtle">
+                    Recently visited
+                  </h2>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {recentRooms.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => { recordVisit(r.id, r.name); setRecentRooms(getRecentRooms()); navigate(`/room/${r.id}`); }}
+                      className="group/recent flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-hovered"
+                    >
+                      <FolderGit2 size={13} className="shrink-0 text-fg-subtle" />
+                      <span className="min-w-0 flex-1 truncate font-medium text-fg">{r.name}</span>
+                      <ArrowRight
+                        size={12}
+                        className="shrink-0 text-fg-subtle transition-transform group-hover/recent:translate-x-0.5"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </Motion.div>
-        )}
 
-        <section className="mt-10">
-          <Motion.div variants={itemVariants} className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <h2 className="text-xl font-bold tracking-tight text-fg">Your rooms</h2>
+        <section className="min-w-0">
+          <Motion.div variants={itemVariants} className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-xl font-bold tracking-tight text-fg">Your rooms</h2>
+              {!isLoading && rooms.length > 0 && (
+                <span className="text-sm text-fg-muted">
+                  {filteredRooms.length === rooms.length
+                    ? rooms.length
+                    : `${filteredRooms.length} of ${rooms.length}`}
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {/* Search */}
               <div className="relative">
@@ -543,78 +473,69 @@ export default function Home() {
                   Bookmarked ({bookmarks.length})
                 </button>
               )}
-              <span className="text-xs text-fg-muted sm:text-sm">{rooms.length} total</span>
-              <div className="inline-flex items-center rounded-md bg-chrome p-1">
-                <button
-                  type="button"
-                  onClick={() => setRoomViewMode("grid")}
-                  aria-pressed={!isListView}
-                  className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    !isListView
-                      ? "bg-canvas text-fg"
-                      : "text-fg-muted hover:text-fg"
-                  }`}
-                  title="Block view"
-                >
-                  <LayoutGrid size={14} />
-                  Blocks
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRoomViewMode("list")}
-                  aria-pressed={isListView}
-                  className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    isListView
-                      ? "bg-canvas text-fg"
-                      : "text-fg-muted hover:text-fg"
-                  }`}
-                  title="List view"
-                >
-                  <List size={14} />
-                  List
-                </button>
-              </div>
             </div>
           </Motion.div>
 
           {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-2">
               {[1, 2, 3].map((item) => (
                 <SkeletonCard key={item} />
               ))}
             </div>
           ) : filteredRooms.length > 0 ? (
-            <div className={isListView ? "space-y-3" : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"}>
+            <div className="space-y-2">
               <AnimatePresence mode="popLayout">
-                {filteredRooms.map((room) => (
+                {filteredRooms.map((room) => {
+                  const isOwner = room.ownerId === user?.id;
+                  const pendingCount = room.pendingJoinRequestCount || 0;
+                  const isBookmarked = bookmarks.includes(room.id);
+                  const openRoom = () => {
+                    recordVisit(room.id, room.name);
+                    setRecentRooms(getRecentRooms());
+                    navigate(`/room/${room.id}`);
+                  };
+
+                  const pendingBadge = isOwner && pendingCount > 0 && (
+                    <span className="shrink-0 rounded-full bg-warning-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warning-600">
+                      {pendingCount} request{pendingCount === 1 ? "" : "s"}
+                    </span>
+                  );
+
+                  return (
                   <Motion.div
                     key={room.id}
-                    layout // helps smoothly reflow grid after deletion
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-                    whileHover={{ y: -5, scale: 1.01, transition: SPRING }}
-                    whileTap={{ scale: 0.99 }}
-                    className={`group/card relative rounded-lg border border-edge-subtle bg-panel transition-colors hover:border-accent ${
-                      isListView ? "p-4" : "p-5"
-                    }`}
+                    layout // keeps the list reflowing smoothly after a deletion
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4, transition: { duration: 0.16 } }}
+                    className="group/card relative flex items-center gap-3 rounded-lg border border-edge-subtle bg-panel p-3 transition-colors hover:border-accent hover:bg-hovered"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <button
-                        onClick={() => { recordVisit(room.id, room.name); setRecentRooms(getRecentRooms()); navigate(`/room/${room.id}`); }}
-                        className="min-w-0 flex-1 text-left"
-                      >
-                        <h3 className="truncate text-base font-semibold text-fg transition-colors">{room.name}</h3>
-                        <p className="mt-1 text-sm text-fg-muted">
+                    <button
+                      onClick={openRoom}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-hovered text-fg-muted transition-colors group-hover/card:bg-accent-subtle group-hover/card:text-accent">
+                        <FolderGit2 size={16} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-fg">{room.name}</span>
+                          {pendingBadge}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-fg-muted">
                           {room.templateName || "Blank Workspace"}
-                        </p>
-                        {room.ownerId === user?.id && (room.pendingJoinRequestCount || 0) > 0 && (
-                          <span className="mt-2 inline-flex rounded-full bg-warning-500/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-warning-600">
-                            {room.pendingJoinRequestCount} request{room.pendingJoinRequestCount === 1 ? "" : "s"} waiting
-                          </span>
-                        )}
-                      </button>
+                          {" · "}{room.fileCount || 0} files
+                          {" · "}{room.participantCount || 0} collaborators
+                          {" · "}{room.id}
+                        </span>
+                      </span>
+                      <ArrowRight
+                        size={15}
+                        className="shrink-0 text-fg-subtle opacity-0 transition-all group-hover/card:translate-x-0.5 group-hover/card:text-accent group-hover/card:opacity-100"
+                      />
+                    </button>
 
+                    <div className="flex shrink-0 items-center gap-1">
                       {/* Bookmark toggle */}
                       <button
                         onClick={(e) => {
@@ -622,20 +543,15 @@ export default function Home() {
                           toggleBookmark(room.id);
                           setBookmarks(getBookmarks());
                         }}
-                        title={bookmarks.includes(room.id) ? "Remove bookmark" : "Bookmark room"}
+                        title={isBookmarked ? "Remove bookmark" : "Bookmark room"}
                         className={`shrink-0 rounded-md p-1.5 transition-colors ${
-                          bookmarks.includes(room.id)
-                            ? "text-accent"
-                            : "text-fg-subtle hover:text-fg"
+                          isBookmarked ? "text-accent" : "text-fg-subtle hover:text-fg"
                         }`}
                       >
-                        {bookmarks.includes(room.id)
-                          ? <BookmarkCheck size={15} />
-                          : <Bookmark size={15} />
-                        }
+                        {isBookmarked ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
                       </button>
 
-                      {room.ownerId === user?.id && (
+                      {isOwner && (
                         <div className="relative">
                           {/* Trigger - stopPropagation on both mousedown and click */}
                           <button
@@ -664,24 +580,6 @@ export default function Home() {
 
                               {/* Actions */}
                               <div className="py-1">
-                                <button
-                                  onClick={() => { navigate(`/room/${room.id}`); setOpenMenuId(null); }}
-                                  role="menuitem"
-                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-fg transition-colors hover:bg-hovered"
-                                >
-                                  <ArrowRight size={14} className="text-fg-subtle" />
-                                  Open workspace
-                                </button>
-
-                                <button
-                                  onClick={() => handleOpenRoomSettings(room)}
-                                  role="menuitem"
-                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-fg transition-colors hover:bg-hovered"
-                                >
-                                  <Settings2 size={14} className="text-fg-subtle" />
-                                  Workspace settings
-                                </button>
-
                                 <button
                                   onClick={async () => {
                                     const url = buildRoomInviteLink({
@@ -720,29 +618,9 @@ export default function Home() {
                         </div>
                       )}
                     </div>
-
-                    <button
-                      onClick={() => navigate(`/room/${room.id}`)}
-                      className="mt-4 block w-full text-left group"
-                    >
-                      <div className="flex flex-wrap gap-2 text-xs text-fg-muted">
-                        <span className="rounded-full bg-hovered px-2.5 py-1">
-                          {room.fileCount || 0} files
-                        </span>
-                        <span className="rounded-full bg-hovered px-2.5 py-1">
-                          {room.participantCount || 0} collaborators
-                        </span>
-                        <span className="truncate max-w-[120px] rounded-full bg-hovered px-2.5 py-1">
-                          {room.id}
-                        </span>
-                      </div>
-                      <div className="mt-5 flex items-center justify-between border-t border-edge-subtle pt-3 text-sm font-medium text-fg-muted transition-colors group-hover/card:text-accent">
-                        <span>Open room</span>
-                        <ArrowRight size={14} className="transform group-hover/card:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
                   </Motion.div>
-                ))}
+                  );
+                })}
               </AnimatePresence>
             </div>
           ) : rooms.length > 0 ? (
@@ -781,6 +659,7 @@ export default function Home() {
             </Motion.div>
           )}
         </section>
+        </div>
       </Motion.div>
 
       <AnimatePresence>
@@ -955,34 +834,7 @@ export default function Home() {
         onConfirm={confirmDeleteRoom}
         onCancel={() => setRoomToDelete(null)}
       />
-
-      <RoomSettingsModal
-        room={settingsRoom}
-        isOpen={isRoomSettingsOpen}
-        isLoading={isRoomSettingsLoading}
-        onClose={closeRoomSettings}
-        onUpdate={handleRoomSettingsUpdate}
-      />
     </div>
   );
 }
 
-function SummaryCard({ label, value, icon }) {
-  const IconComponent = icon;
-
-  return (
-    <Motion.div
-      whileHover={{ y: -3, scale: 1.02, transition: { type: "spring", stiffness: 400, damping: 24 } }}
-      className="rounded-lg border border-edge-subtle bg-panel p-4">
-      <div className="flex items-center gap-3">
-        <div className="rounded-md bg-hovered p-2 text-fg">
-          <IconComponent size={16} />
-        </div>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-fg-muted">{label}</p>
-          <p className="text-xl font-semibold">{value}</p>
-        </div>
-      </div>
-    </Motion.div>
-  );
-}

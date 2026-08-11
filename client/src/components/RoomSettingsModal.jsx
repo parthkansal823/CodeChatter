@@ -20,8 +20,8 @@ const ACCESS_ROLE_OPTIONS = [
     shortLabel: "Read only",
     description: "Can browse files and follow along without changing code.",
     icon: Eye,
-    classes: "border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200",
-    accent: "bg-zinc-500",
+    classes: "border-edge bg-field text-fg",
+    accent: "bg-fg-subtle",
   },
   {
     id: "runner",
@@ -29,7 +29,7 @@ const ACCESS_ROLE_OPTIONS = [
     shortLabel: "Run only",
     description: "Can execute code and use the terminal, but cannot edit files.",
     icon: Play,
-    classes: "border-warning-200 bg-warning-50 text-warning-800 dark:border-warning-500/25 dark:bg-warning-950/30 dark:text-warning-200",
+    classes: "border-warning-500/30 bg-warning-500/10 text-warning-600",
     accent: "bg-warning-500",
   },
   {
@@ -38,8 +38,8 @@ const ACCESS_ROLE_OPTIONS = [
     shortLabel: "Edit and run",
     description: "Can work directly in the workspace and run files.",
     icon: PencilLine,
-    classes: "border-brand-200 bg-brand-50 text-brand-800 dark:border-brand-500/25 dark:bg-brand-950/30 dark:text-brand-200",
-    accent: "bg-brand-500",
+    classes: "border-accent/30 bg-accent-subtle text-accent",
+    accent: "bg-accent",
   },
   {
     id: "owner",
@@ -47,7 +47,7 @@ const ACCESS_ROLE_OPTIONS = [
     shortLabel: "Full control",
     description: "Can manage members, approvals, and workspace settings.",
     icon: Crown,
-    classes: "border-warning-200 bg-warning-50 text-warning-800 dark:border-warning-500/25 dark:bg-warning-950/30 dark:text-warning-200",
+    classes: "border-warning-500/40 bg-warning-500/15 text-warning-600",
     accent: "bg-warning-500",
   },
 ];
@@ -70,7 +70,9 @@ const NAV_ITEMS = [
   { id: "queue", label: "Requests", icon: Clock3 },
 ];
 
-const inputClasses = "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:focus:border-brand-500";
+const inputClasses = "w-full rounded-md border border-edge bg-field px-3 py-2 text-sm text-fg placeholder:text-fg-subtle outline-none transition-colors hover:border-edge-strong focus:border-accent focus:ring-1 focus:ring-accent";
+
+const cardClasses = "rounded-lg border border-edge-subtle bg-panel p-5";
 
 function formatRequestedAt(value) {
   if (!value) return "Just now";
@@ -136,14 +138,15 @@ function RoleOptionGrid({ selectedRole, onChange, allowOwner = false, dense = fa
             key={option.id}
             type="button"
             onClick={() => onChange(option.id)}
-            className={`rounded-lg border p-3 text-left transition-all ${
+            aria-pressed={isSelected}
+            className={`rounded-md border p-3 text-left transition-colors ${
               isSelected
-                ? "border-brand-500 bg-brand-50 shadow-sm dark:border-brand-500 dark:bg-brand-950/40"
-                : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:border-zinc-600"
+                ? "border-accent bg-accent-subtle"
+                : "border-edge-subtle bg-field hover:border-edge-strong"
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${option.classes}`}>
+              <span className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${option.classes}`}>
                 <Icon size={14} />
               </span>
               <div>
@@ -314,7 +317,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
 
   const renderGeneralSection = () => (
     <form onSubmit={handleSave} className="flex h-full flex-col gap-5">
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className={cardClasses}>
         <Field label="Workspace name" hint="Keep it short and easy for your team to recognize.">
           <input
             required
@@ -338,7 +341,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className={cardClasses}>
         <Field label="Default terminal shell" hint="This applies to new terminal sessions in the room.">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {terminalShellOptions.map((option) => (
@@ -348,8 +351,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                 onClick={() => setShell(option.id)}
                 className={`rounded-lg border px-4 py-3 text-left transition-all ${
                   shell === option.id
-                    ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950/40 dark:text-brand-200"
-                    : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                    ? "border-accent bg-accent-subtle text-accent"
+                    : "border-edge-subtle bg-field text-fg-muted hover:border-edge-strong"
                 }`}
               >
                 <p className="text-sm font-semibold">{option.label}</p>
@@ -369,7 +372,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
 
   const renderAccessSection = () => (
     <div className="flex h-full flex-col gap-5">
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className={cardClasses}>
         <Field label="Join mode" hint="Choose whether people enter directly or wait for approval.">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
@@ -377,12 +380,12 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               onClick={() => setRequireJoinApproval(true)}
               className={`rounded-lg border p-4 text-left transition-all ${
                 requireJoinApproval
-                  ? "border-warning-400 bg-warning-50 shadow-sm dark:border-warning-500 dark:bg-warning-950/40"
-                  : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
+                  ? "border-warning-500 bg-warning-500/10"
+                  : "border-edge-subtle bg-field hover:border-edge-strong"
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-warning-100 text-warning-700 dark:bg-warning-950 dark:text-warning-200">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-warning-500/15 text-warning-600">
                   <Lock size={16} />
                 </span>
                 <div>
@@ -397,12 +400,12 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               onClick={() => setRequireJoinApproval(false)}
               className={`rounded-lg border p-4 text-left transition-all ${
                 !requireJoinApproval
-                  ? "border-success-400 bg-success-50 shadow-sm dark:border-success-500 dark:bg-success-950/40"
-                  : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
+                  ? "border-success-500 bg-success-500/10"
+                  : "border-edge-subtle bg-field hover:border-edge-strong"
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-success-100 text-success-700 dark:bg-success-950 dark:text-success-200">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-success-500/15 text-success-600">
                   <Unlock size={16} />
                 </span>
                 <div>
@@ -416,10 +419,10 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
       </div>
 
       {inviteLink ? (
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className={cardClasses}>
           <Field label="Invite link" hint="Share this when you want people to join this workspace quickly.">
-            <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-950/60">
-              <p className="break-all font-mono text-xs text-zinc-600 dark:text-zinc-300">{inviteLink}</p>
+            <div className="flex flex-col gap-3 rounded-md border border-edge-subtle bg-field p-3">
+              <p className="break-all font-mono text-xs text-fg-muted">{inviteLink}</p>
               <div className="flex justify-end">
                 <Button type="button" variant="outline" size="sm" onClick={handleCopyInviteLink}>
                   <Copy size={14} className="mr-2" />
@@ -431,32 +434,32 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className={cardClasses}>
         <Field label="Permission matrix" hint="A quick view of what each role can do inside the workspace.">
-          <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+          <div className="overflow-hidden rounded-lg border border-edge-subtle">
             <table className="w-full text-sm">
-              <thead className="bg-panel/70">
+              <thead className="bg-chrome">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Action</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-fg-muted">Action</th>
                   {["owner", "editor", "runner", "viewer"].map((role) => (
-                    <th key={role} className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                    <th key={role} className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.16em] text-fg-muted">
                       {ROLE_LABELS[role]}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              <tbody className="divide-y divide-edge-subtle">
                 {PERMISSION_ROWS.map((row) => (
                   <tr key={row.action}>
-                    <td className="px-3 py-3 text-sm text-zinc-700 dark:text-zinc-200">{row.action}</td>
+                    <td className="px-3 py-3 text-sm text-fg">{row.action}</td>
                     {["owner", "editor", "runner", "viewer"].map((role) => (
                       <td key={role} className="px-2 py-3 text-center">
                         {row[role] ? (
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-success-100 text-success-700 dark:bg-success-950 dark:text-success-300">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-success-500/15 text-success-600">
                             <Check size={14} />
                           </span>
                         ) : (
-                          <span className="text-zinc-300 dark:text-zinc-600">-</span>
+                          <span className="text-fg-subtle">-</span>
                         )}
                       </td>
                     ))}
@@ -477,8 +480,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const renderMemberList = (members, title, isOwnerGroup = false) => (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        {isOwnerGroup ? <Crown size={14} className="text-warning-500" /> : <Users size={14} className="text-zinc-400" />}
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">{title}</p>
+        {isOwnerGroup ? <Crown size={14} className="text-warning-500" /> : <Users size={14} className="text-fg-subtle" />}
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">{title}</p>
       </div>
 
       <div className="space-y-3">
@@ -491,8 +494,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               key={member.id}
               className={`rounded-lg border p-4 ${
                 isOwnerGroup
-                  ? "border-warning-200 bg-warning-50/70 dark:border-warning-500/20 dark:bg-warning-950/10"
-                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                  ? "border-warning-500/30 bg-warning-500/5"
+                  : "border-edge-subtle bg-panel"
               }`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -506,7 +509,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
 
                 <div className="flex items-center gap-2">
                   <RoleBadge role={isOwnerGroup ? "owner" : member.accessRole || "editor"} />
-                  {isBusy ? <Loader2 size={14} className="animate-spin text-zinc-400" /> : null}
+                  {isBusy ? <Loader2 size={14} className="animate-spin text-fg-subtle" /> : null}
                 </div>
               </div>
 
@@ -534,9 +537,9 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const renderMembersSection = () => (
     <div className="flex h-full flex-col gap-5">
       {collaborators.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
-          <Users size={24} className="text-zinc-400" />
-          <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No members yet</p>
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-edge bg-panel px-6 py-12 text-center">
+          <Users size={24} className="text-fg-subtle" />
+          <p className="mt-3 text-sm font-medium text-fg">No members yet</p>
           <p className="mt-1 text-xs text-fg-muted">Invite teammates to start collaborating here.</p>
         </div>
       ) : (
@@ -551,9 +554,9 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   const renderQueueSection = () => (
     <div className="flex h-full flex-col gap-4">
       {pendingJoinRequests.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
-          <Clock3 size={24} className="text-zinc-400" />
-          <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No pending requests</p>
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-edge bg-panel px-6 py-12 text-center">
+          <Clock3 size={24} className="text-fg-subtle" />
+          <p className="mt-3 text-sm font-medium text-fg">No pending requests</p>
           <p className="mt-1 text-xs text-fg-muted">Anyone waiting to join will appear here.</p>
         </div>
       ) : (
@@ -562,7 +565,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
           const selectedRole = requestRoles[request.id] || "editor";
 
           return (
-            <div key={request.id} className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <div key={request.id} className="rounded-lg border border-edge-subtle bg-panel p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <UserAvatar username={request.username} size="sm" />
@@ -571,7 +574,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                     <p className="truncate text-xs text-fg-muted">{request.email || "No email available"}</p>
                   </div>
                 </div>
-                <span className="text-xs text-zinc-400">{formatRequestedAt(request.requestedAt)}</span>
+                <span className="text-xs text-fg-subtle">{formatRequestedAt(request.requestedAt)}</span>
               </div>
 
               <div className="mt-4">
@@ -643,20 +646,20 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ duration: 0.16, ease: "easeOut" }}
             onClick={(event) => event.stopPropagation()}
-            className="flex h-[min(760px,92vh)] w-full max-w-6xl overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 shadow-2xl shadow-black/25 dark:border-zinc-800 dark:bg-zinc-950"
+            className="flex h-[min(760px,92vh)] w-full max-w-6xl overflow-hidden rounded-xl border border-edge bg-canvas shadow-xl"
           >
             {!room || isLoading ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                <Loader2 className="h-6 w-6 animate-spin text-brand-500" />
+                <Loader2 className="h-6 w-6 animate-spin text-accent" />
                 <p className="text-sm text-fg-muted">Loading workspace settings...</p>
               </div>
             ) : (
               <>
-                <aside className="flex w-full max-w-[290px] shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-                  <div className="border-b border-zinc-200 px-5 py-5 dark:border-zinc-800">
+                <aside className="flex w-full max-w-[290px] shrink-0 flex-col border-r border-edge-subtle bg-panel">
+                  <div className="border-b border-edge-subtle px-5 py-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
                           Workspace controls
                         </p>
                         <h2 className="mt-1 text-xl font-semibold text-fg">{room.name || "Workspace"}</h2>
@@ -667,19 +670,19 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                       <button
                         type="button"
                         onClick={onClose}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-hovered hover:text-fg"
                       >
                         <X size={16} />
                       </button>
                     </div>
 
                     <div className="mt-5 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
-                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-400">Members</p>
+                      <div className="rounded-md border border-edge-subtle bg-field px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-fg-subtle">Members</p>
                         <p className="mt-1 text-lg font-semibold text-fg">{collaborators.length}</p>
                       </div>
-                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
-                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-400">Pending</p>
+                      <div className="rounded-md border border-edge-subtle bg-field px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-fg-subtle">Pending</p>
                         <p className="mt-1 text-lg font-semibold text-fg">{pendingJoinRequests.length}</p>
                       </div>
                     </div>
@@ -701,8 +704,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                           onClick={() => setActiveSection(id)}
                           className={`mb-1.5 flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-all ${
                             isActive
-                              ? "bg-brand-600 text-white shadow-sm"
-                              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+                              ? "bg-accent text-fg-accent"
+                              : "text-fg-muted hover:bg-hovered hover:text-fg"
                           }`}
                         >
                           <Icon size={16} />
@@ -710,8 +713,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                           {badgeValue > 0 ? (
                             <span className={`inline-flex min-w-[22px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
                               isActive
-                                ? "bg-zinc-800 text-white"
-                                : "bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200"
+                                ? "bg-accent-active text-fg-accent"
+                                : "bg-hovered text-fg"
                             }`}>
                               {badgeValue}
                             </span>

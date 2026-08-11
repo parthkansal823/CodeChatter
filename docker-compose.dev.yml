@@ -1,0 +1,88 @@
+# CodeChatter — development stack with live reload.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Frontend: http://localhost:5173  (Vite dev server, hot module replacement)
+# Backend:  http://localhost:8000  (uvicorn --reload)
+#
+# Both source trees are bind-mounted, so editing a file on the host reloads the
+# matching service — the frontend patches the running page without losing state,
+# the backend restarts the process.
+#
+# This is a separate compose project from docker-compose.yml, so the two never
+# share containers. They do share the Mongo volume (see the bottom of the file),
+# so the same rooms and accounts are there either way. Only one stack can hold
+# port 8000 at a time — run `docker compose down` before starting this one.
+name: codechatternk-dev
+
+services:
+  api:
+    build:
+      context: .
+      target: server-dev
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    env_file:
+      - path: ./server/.env
+        required: false
+      - path: ./server/.env.local
+        required: false
+    environment:
+      ENVIRONMENT: development
+      # The browser now talks to Vite, not to FastAPI, so the frontend origin
+      # is 5173. Both values matter: FRONTEND_URL is where OAuth hands the user
+      # back, ALLOWED_ORIGINS is what CORS and the redirect allow-list accept.
+      FRONTEND_URL: http://localhost:5173
+      ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: codechatter
+      CODECHATTER_DATA_DIR: /data
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app/server
+      - api-data:/data
+
+  web:
+    build:
+      context: .
+      target: client-dev
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Without this the client would default to 127.0.0.1:8000. Same host, but
+      # spelling it "localhost" keeps the origin identical to FRONTEND_URL, so
+      # the OAuth round trip and CORS agree on one name.
+      VITE_API_URL: http://localhost:8000
+      # Switches Vite's watcher to polling — see client/vite.config.js.
+      VITE_DOCKER: "1"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app/client
+      # Anonymous volume: keeps the image's node_modules from being shadowed by
+      # the bind mount above.
+      - /app/client/node_modules
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  # Reuse the volume the production stack already created, so switching between
+  # the two stacks does not look like the database was wiped.
+  mongo-data:
+    external: true
+    name: codechatternk_mongo-data
+  api-data:

@@ -41,6 +41,18 @@ const LEAF_VENDOR_CHUNKS = [
 export default defineConfig({
   plugins: [react()],
 
+  server: {
+    host: true,
+    port: 5173,
+    // Inotify events do not cross a Docker Desktop bind mount, so inside a
+    // container the default watcher never sees host edits and HMR silently
+    // stops working. Polling is slower but is the only thing that fires there.
+    // Set by docker-compose.dev.yml; unset on a normal host run.
+    watch: process.env.VITE_DOCKER
+      ? { usePolling: true, interval: 300 }
+      : undefined,
+  },
+
   build: {
     chunkSizeWarningLimit: 1000,
 
