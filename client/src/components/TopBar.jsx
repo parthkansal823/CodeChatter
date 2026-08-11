@@ -212,7 +212,7 @@ export default function TopBar({
 
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                <p className="truncate text-sm font-semibold text-fg">
                   {room?.name || "Workspace"}
                 </p>
                 {room?.templateName && (
@@ -261,7 +261,7 @@ export default function TopBar({
                 )}
               </div>
 
-              <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+              <div className="mt-1 flex items-center gap-2 text-xs text-fg-muted">
                 <FileCode2 size={12} className="shrink-0" />
                 <span className="truncate">{activeFileLabel}</span>
               </div>
@@ -361,7 +361,7 @@ export default function TopBar({
 
                   {/* Room settings */}
                   {canManageRoom && (
-                    <div className="border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="border-t border-edge-subtle">
                       <button
                         onClick={() => { onOpenSettings(); setShareOpen(false); }}
                         className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-zinc-600 transition-colors hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
@@ -394,12 +394,12 @@ export default function TopBar({
               key={stat.label}
               className="bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
             >
-              <span className="font-semibold text-zinc-800 dark:text-zinc-100">{stat.value}</span>
+              <span className="font-semibold text-fg">{stat.value}</span>
               <span>{stat.label}</span>
             </PresenceChip>
           ))}
           {room?.description && (
-            <span className="max-w-full truncate text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="max-w-full truncate text-xs text-fg-muted">
               {room.description}
             </span>
           )}

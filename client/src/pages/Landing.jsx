@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import {
   Users, Terminal, Shield, Zap, Video, Bot,
-  Code2, Moon, Sun, ArrowRight, ChevronRight, Menu, X,
+  Code2, Moon, Sun, ArrowRight, ChevronRight, Check, Menu, X,
 } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { useAuth } from "../hooks/useAuth";
@@ -20,9 +20,24 @@ const FEATURES = [
 ];
 
 const STEPS = [
-  { n: "01", title: "Create a room",        desc: "Set up a workspace in seconds. Pick a template or start from scratch." },
-  { n: "02", title: "Invite collaborators", desc: "Share a link — teammates join instantly, no extra setup." },
-  { n: "03", title: "Code together",        desc: "Write, run, and debug in real-time with voice and video built right in." },
+  {
+    n: "01",
+    title: "Create a room",
+    desc: "Pick a starter template or an empty workspace. You get a room ID and a private invite link immediately.",
+    detail: ["Python, Node, web, or DSA templates", "Choose the room's shell"],
+  },
+  {
+    n: "02",
+    title: "Invite your team",
+    desc: "Share the link. Approve who joins, and give each member viewer, runner, or editor access.",
+    detail: ["Owner approval queue", "Per-member access roles"],
+  },
+  {
+    n: "03",
+    title: "Build together",
+    desc: "Edit the same files with live cursors, run code in the room, and talk it through without switching tools.",
+    detail: ["Shared terminal and run output", "Chat, video, and screen share"],
+  },
 ];
 
 // Capability facts, not invented traction numbers.
@@ -75,7 +90,7 @@ const CODE = [
   [["","    "],["kw","return "],["fn","merge"],["","(left, right)"]],
 ];
 
-const TOKEN_COLOR = { kw:"text-brand-400", fn:"text-info-400", op:"text-warning-400", num:"text-warning-400", "":"text-gray-300" };
+const TOKEN_COLOR = { kw:"text-brand-400", fn:"text-info-400", op:"text-warning-400", num:"text-warning-400", "":"text-zinc-300" };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -95,23 +110,23 @@ function FadeUp({ children, delay = 0, className = "" }) {
 
 function HeroMockup() {
   return (
-    <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-800 shadow-[0_24px_64px_rgba(0,0,0,0.12)] dark:shadow-[0_24px_64px_rgba(0,0,0,0.55)]">
+    <div className="rounded-lg overflow-hidden border border-edge-subtle shadow-lg dark:shadow-lg">
       {/* Window chrome */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-[#14141f] border-b border-gray-200 dark:border-zinc-800">
+      <div className="flex items-center gap-3 px-4 py-3 bg-zinc-100 dark:bg-[#14141f] border-b border-edge-subtle">
         <span className="flex gap-1.5">
           <span className="w-3 h-3 rounded-full bg-danger-400" />
           <span className="w-3 h-3 rounded-full bg-warning-400" />
           <span className="w-3 h-3 rounded-full bg-success-400" />
         </span>
-        <span className="flex-1 text-center text-xs text-gray-400 font-mono">
+        <span className="flex-1 text-center text-xs text-zinc-400 font-mono">
           merge_sort.py — CodeChatter
         </span>
         {/* Live avatars */}
         <span className="flex items-center gap-1.5">
-          {[["P","#7c3aed"],["N","#2563eb"],["K","#059669"]].map(([l,c]) => (
-            <span key={l} className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center border-2 border-gray-100 dark:border-[#14141f]" style={{ background: c }}>{l}</span>
+          {[["P","#0078d4"],["N","#0067b8"],["K","#059669"]].map(([l,c]) => (
+            <span key={l} className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center border-2 border-zinc-100 dark:border-[#14141f]" style={{ background: c }}>{l}</span>
           ))}
-          <span className="ml-1 text-[11px] text-gray-400">3 online</span>
+          <span className="ml-1 text-[11px] text-zinc-400">3 online</span>
         </span>
       </div>
 
@@ -120,7 +135,7 @@ function HeroMockup() {
         {/* Line numbers */}
         <div className="w-10 py-4 pr-3 select-none text-right bg-[#0d1117] border-r border-zinc-800">
           {CODE.map((_, i) => (
-            <div key={i} className="h-6 leading-6 text-[11px] text-gray-600">{i + 1}</div>
+            <div key={i} className="h-6 leading-6 text-[11px] text-zinc-600">{i + 1}</div>
           ))}
         </div>
 
@@ -129,8 +144,8 @@ function HeroMockup() {
           {/* User cursor badge — line 1 */}
           <div className="h-6 leading-6 relative">
             <span className="absolute -left-4 top-0 flex items-start">
-              <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#7c3aed" }}>Ananya</span>
-              <span className="w-0.5 h-6" style={{ background: "#7c3aed" }} />
+              <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#0078d4" }}>Ananya</span>
+              <span className="w-0.5 h-6" style={{ background: "#0078d4" }} />
             </span>
             {CODE[0].map(([type, txt], j) => <span key={j} className={TOKEN_COLOR[type]}>{txt}</span>)}
           </div>
@@ -140,8 +155,8 @@ function HeroMockup() {
               {/* User cursor badge — line 5 */}
               {i === 3 && (
                 <span className="absolute -left-4 top-0 flex items-start">
-                  <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#2563eb" }}>Parth</span>
-                  <span className="w-0.5 h-6" style={{ background: "#2563eb" }} />
+                  <span className="text-[9px] font-semibold px-1 py-0.5 rounded text-white translate-y-[-100%] absolute whitespace-nowrap" style={{ background: "#0067b8" }}>Parth</span>
+                  <span className="w-0.5 h-6" style={{ background: "#0067b8" }} />
                 </span>
               )}
               {line.map(([type, txt], j) => <span key={j} className={TOKEN_COLOR[type]}>{txt}</span>)}
@@ -164,7 +179,7 @@ export default function Landing({ theme, onThemeChange }) {
   const toggleTheme = () => onThemeChange(isDark ? "vs" : "vs-dark");
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#08080f] text-gray-900 dark:text-white transition-colors duration-200">
+    <div className="min-h-screen bg-white dark:bg-[#08080f] text-fg transition-colors duration-200">
 
       {/* ── Dot-grid overlay ───────────────────────────────────────────────── */}
       <div className="pointer-events-none fixed inset-0 dark:hidden"
@@ -175,14 +190,14 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ╔══════════════════════════════════════════════════════════════════╗ */}
       {/* ║  NAVBAR                                                          ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-14 border-b border-gray-200/70 dark:border-zinc-800 bg-white/80 dark:bg-[#08080f]/80 backdrop-blur-xl flex items-center">
+      <header className="fixed top-0 left-0 right-0 z-50 h-14 border-b border-zinc-200/70 dark:border-zinc-800 bg-white/80 dark:bg-[#08080f]/80 backdrop-blur-xl flex items-center">
         <div className="max-w-7xl mx-auto w-full px-5 flex items-center gap-4">
           <Link to="/"><BrandLogo size="sm" /></Link>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6 ml-8 text-[13.5px] font-medium">
             {[["Features","#features"],["Platform","#platform"],["How it works","#how-it-works"]].map(([label, href]) => (
-              <a key={label} href={href} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+              <a key={label} href={href} className="text-fg-muted hover:text-zinc-900 dark:hover:text-white transition-colors">
                 {label}
               </a>
             ))}
@@ -191,23 +206,23 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="flex items-center gap-2 ml-auto">
             {/* Theme toggle */}
             <button onClick={toggleTheme}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
+              className="p-2 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
             {isAuthenticated ? (
               <button onClick={() => navigate("/home")}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all">
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold text-white bg-accent hover:bg-accent-hover transition-all">
                 Dashboard <ArrowRight size={14} />
               </button>
             ) : (
               <>
                 <Link to="/auth"
-                  className="hidden sm:block px-3.5 py-1.5 rounded-lg text-[13.5px] font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
+                  className="hidden sm:block px-3.5 py-1.5 rounded-lg text-[13.5px] font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
                   Sign in
                 </Link>
                 <Link to="/auth?mode=signup"
-                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13.5px] font-semibold text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all shadow-sm">
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13.5px] font-semibold text-white bg-accent hover:bg-accent-hover transition-all shadow-sm">
                   Get started <ChevronRight size={14} />
                 </Link>
               </>
@@ -215,7 +230,7 @@ export default function Landing({ theme, onThemeChange }) {
 
             {/* Mobile menu toggle */}
             <button onClick={() => setMobileOpen(v => !v)}
-              className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all">
+              className="md:hidden p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
               {mobileOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
@@ -223,17 +238,17 @@ export default function Landing({ theme, onThemeChange }) {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="absolute top-14 left-0 right-0 bg-white dark:bg-[#0d0d18] border-b border-gray-200 dark:border-zinc-800 px-5 py-4 flex flex-col gap-3 md:hidden">
+          <div className="absolute top-14 left-0 right-0 bg-white dark:bg-[#0d0d18] border-b border-edge-subtle px-5 py-4 flex flex-col gap-3 md:hidden">
             {[["Features","#features"],["Platform","#platform"],["How it works","#how-it-works"]].map(([label,href]) => (
               <a key={label} href={href} onClick={() => setMobileOpen(false)}
-                className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                className="text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white">
                 {label}
               </a>
             ))}
-            <hr className="border-gray-100 dark:border-zinc-800" />
-            <Link to="/auth" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-gray-600 dark:text-gray-300">Sign in</Link>
+            <hr className="border-edge-subtle" />
+            <Link to="/auth" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-zinc-600 dark:text-zinc-300">Sign in</Link>
             <Link to="/auth?mode=signup" onClick={() => setMobileOpen(false)}
-              className="text-center py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-info-600">
+              className="text-center py-2 rounded-lg text-sm font-semibold text-white bg-accent hover:bg-accent-hover">
               Get started free
             </Link>
           </div>
@@ -261,27 +276,27 @@ export default function Landing({ theme, onThemeChange }) {
 
               <h1 className="text-5xl sm:text-6xl lg:text-[4rem] font-extrabold leading-[1.1] tracking-tight mb-5">
                 Code together,{" "}
-                <span className="bg-gradient-to-r from-brand-500 via-info-500 to-info-400 bg-clip-text text-transparent">
+                <span className="text-accent">
                   ship faster.
                 </span>
               </h1>
 
-              <p className="text-[17px] text-gray-500 dark:text-gray-400 leading-relaxed mb-9 max-w-[520px] mx-auto">
+              <p className="text-[17px] text-fg-muted leading-relaxed mb-9 max-w-[520px] mx-auto">
                 CodeChatter is a real-time collaborative IDE for developer teams — write, run, and debug together with built-in video, chat, and AI assistance.
               </p>
 
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <Link to="/auth?mode=signup"
-                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-bold text-white text-[15px] bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all shadow-[0_0_28px_rgba(124,58,237,0.3)] hover:shadow-[0_0_40px_rgba(124,58,237,0.45)]">
+                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-bold text-white text-[15px] bg-accent hover:bg-accent-hover transition-all ">
                   Start for free <ArrowRight size={16} />
                 </Link>
                 <Link to="/auth"
-                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-[15px] text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-zinc-800/60 hover:bg-gray-200 dark:hover:bg-zinc-800 border border-gray-200 dark:border-zinc-800 transition-all">
+                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-[15px] text-zinc-700 dark:text-zinc-200 bg-hovered/60 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-edge-subtle transition-all">
                   Sign in
                 </Link>
               </div>
 
-              <p className="mt-3.5 text-xs text-gray-400 dark:text-gray-500">
+              <p className="mt-3.5 text-xs text-fg-subtle">
                 No credit card required · Free forever for small teams
               </p>
             </Motion.div>
@@ -303,14 +318,14 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ║  STATS                                                           ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
       <FadeUp>
-        <div className="border-y border-gray-100 dark:border-zinc-800 py-12 px-5">
+        <div className="border-y border-edge-subtle py-12 px-5">
           <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
             {STATS.map(({ value, label }) => (
               <div key={label}>
-                <p className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-brand-500 to-info-500 bg-clip-text text-transparent">
+                <p className="text-3xl font-extrabold tracking-tight text-accent">
                   {value}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">{label}</p>
+                <p className="text-sm text-fg-muted mt-1 font-medium">{label}</p>
               </div>
             ))}
           </div>
@@ -325,7 +340,7 @@ export default function Landing({ theme, onThemeChange }) {
           <FadeUp className="text-center mb-14">
             <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">Features</p>
             <h2 className="text-4xl font-extrabold tracking-tight">Everything in one workspace</h2>
-            <p className="mt-4 text-gray-500 dark:text-gray-400 max-w-md mx-auto text-[15px] leading-relaxed">
+            <p className="mt-4 text-fg-muted max-w-md mx-auto text-[15px] leading-relaxed">
               No more context-switching. Your entire dev workflow, right here.
             </p>
           </FadeUp>
@@ -341,8 +356,8 @@ export default function Landing({ theme, onThemeChange }) {
                   <div className={`mb-4 flex h-9 w-9 items-center justify-center rounded-xl ${ICON_TILE}`}>
                     <Icon size={16} />
                   </div>
-                  <h3 className="mb-1.5 font-semibold text-zinc-900 dark:text-white">{title}</h3>
-                  <p className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{desc}</p>
+                  <h3 className="mb-1.5 font-semibold text-fg">{title}</h3>
+                  <p className="text-sm leading-relaxed text-fg-muted">{desc}</p>
                 </Motion.div>
               </FadeUp>
             ))}
@@ -358,7 +373,7 @@ export default function Landing({ theme, onThemeChange }) {
           <FadeUp className="text-center mb-14">
             <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">Platform overview</p>
             <h2 className="text-4xl font-extrabold tracking-tight">More than a login page</h2>
-            <p className="mt-4 text-gray-500 dark:text-gray-400 max-w-2xl mx-auto text-[15px] leading-relaxed">
+            <p className="mt-4 text-fg-muted max-w-2xl mx-auto text-[15px] leading-relaxed">
               CodeChatter gives your team a full website experience from the start: a clear product page, guided authentication, and dedicated collaborative rooms for actual work.
             </p>
           </FadeUp>
@@ -366,12 +381,12 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="grid gap-5 lg:grid-cols-2">
             {PLATFORM_DETAILS.map(({ icon: Icon, title, desc }, i) => (
               <FadeUp key={title} delay={i * 0.08}>
-                <div className="h-full rounded-lg border border-gray-200 bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="h-full rounded-lg border border-zinc-200 bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
                   <div className="w-10 h-10 rounded-xl border border-brand-500/20 bg-brand-500/10 text-brand-500 dark:text-brand-300 flex items-center justify-center mb-4">
                     <Icon size={18} />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+                  <h3 className="text-lg font-semibold text-fg">{title}</h3>
+                  <p className="mt-2 text-sm text-fg-muted leading-relaxed">{desc}</p>
                 </div>
               </FadeUp>
             ))}
@@ -379,22 +394,59 @@ export default function Landing({ theme, onThemeChange }) {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-24 px-5 bg-gray-50 dark:bg-zinc-900">
-        <div className="max-w-7xl mx-auto">
-          <FadeUp className="text-center mb-16">
-            <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">How it works</p>
-            <h2 className="text-4xl font-extrabold tracking-tight">Up and running in minutes</h2>
+      <section
+        id="how-it-works"
+        className="border-y border-edge-subtle bg-panel px-5 py-20"
+      >
+        <div className="mx-auto max-w-5xl">
+          <FadeUp className="mb-12 max-w-xl">
+            <p className="mb-2 font-mono text-xs uppercase tracking-widest text-accent">
+              How it works
+            </p>
+            <h2 className="text-3xl font-semibold tracking-tight text-fg">
+              From empty room to shared workspace
+            </h2>
+            <p className="mt-3 text-base leading-relaxed text-fg-muted">
+              Three steps, no local setup. Everything runs in the browser.
+            </p>
           </FadeUp>
 
-          <div className="grid sm:grid-cols-3 gap-10 max-w-4xl mx-auto">
-            {STEPS.map(({ n, title, desc }, i) => (
-              <FadeUp key={n} delay={i * 0.1}>
-                <p className="text-8xl font-black text-gray-100 dark:text-white/[0.04] leading-none select-none mb-4">{n}</p>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{title}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
-              </FadeUp>
+          <ol className="relative grid gap-px overflow-hidden rounded-md border border-edge-subtle bg-edge-subtle sm:grid-cols-3">
+            {STEPS.map(({ n, title, desc, detail }, i) => (
+              <li key={n} className="bg-canvas">
+                <FadeUp delay={i * 0.06} className="flex h-full flex-col p-6">
+                  <div className="mb-4 flex items-center gap-2.5">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-accent font-mono text-xs font-semibold text-white">
+                      {Number(n)}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="h-px flex-1 bg-edge-subtle"
+                    />
+                  </div>
+
+                  <h3 className="mb-1.5 text-lg font-semibold text-fg">{title}</h3>
+                  <p className="text-sm leading-relaxed text-fg-muted">{desc}</p>
+
+                  <ul className="mt-4 space-y-1.5 border-t border-edge-subtle pt-4">
+                    {detail.map((item) => (
+                      <li
+                        key={item}
+                        className="flex items-start gap-2 text-xs text-fg-subtle"
+                      >
+                        <Check
+                          size={12}
+                          aria-hidden="true"
+                          className="mt-0.5 shrink-0 text-accent"
+                        />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </FadeUp>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </section>
 
@@ -405,18 +457,18 @@ export default function Landing({ theme, onThemeChange }) {
         <FadeUp className="max-w-2xl mx-auto text-center">
           <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-5">
             Start coding{" "}
-            <span className="bg-gradient-to-r from-brand-500 to-info-500 bg-clip-text text-transparent">
+            <span className="text-accent">
               together today.
             </span>
           </h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-8 text-[15px] leading-relaxed max-w-md mx-auto">
+          <p className="text-fg-muted mb-8 text-[15px] leading-relaxed max-w-md mx-auto">
             Join thousands of developers using CodeChatter to collaborate faster and ship better software.
           </p>
           <Link to="/auth?mode=signup"
-            className="inline-flex items-center gap-2.5 px-9 py-4 rounded-xl font-bold text-white text-[15px] bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-all shadow-[0_0_32px_rgba(124,58,237,0.3)] hover:shadow-[0_0_48px_rgba(124,58,237,0.5)]">
+            className="inline-flex items-center gap-2.5 px-9 py-4 rounded-xl font-bold text-white text-[15px] bg-accent hover:bg-accent-hover transition-all ">
             Create free account <ArrowRight size={18} />
           </Link>
-          <p className="mt-4 text-[12px] text-gray-400 dark:text-gray-500">
+          <p className="mt-4 text-[12px] text-fg-subtle">
             Free forever for small teams · No credit card required
           </p>
         </FadeUp>
@@ -425,16 +477,16 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ╔══════════════════════════════════════════════════════════════════╗ */}
       {/* ║  FOOTER                                                          ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
-      <footer className="border-t border-gray-100 dark:border-zinc-800 py-10 px-5">
+      <footer className="border-t border-edge-subtle py-10 px-5">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5">
           <BrandLogo size="sm" />
-          <p className="text-[13px] text-gray-400 text-center">
+          <p className="text-[13px] text-zinc-400 text-center">
             © {new Date().getFullYear()} CodeChatter — built for developers, by developers.
           </p>
-          <div className="flex gap-6 text-[13px] text-gray-400">
-            <a href="#features" className="hover:text-gray-700 dark:hover:text-white transition-colors">Features</a>
-            <a href="#platform" className="hover:text-gray-700 dark:hover:text-white transition-colors">Platform</a>
-            <Link to="/auth" className="hover:text-gray-700 dark:hover:text-white transition-colors">Auth</Link>
+          <div className="flex gap-6 text-[13px] text-zinc-400">
+            <a href="#features" className="hover:text-zinc-700 dark:hover:text-white transition-colors">Features</a>
+            <a href="#platform" className="hover:text-zinc-700 dark:hover:text-white transition-colors">Platform</a>
+            <Link to="/auth" className="hover:text-zinc-700 dark:hover:text-white transition-colors">Auth</Link>
           </div>
         </div>
       </footer>

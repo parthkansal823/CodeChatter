@@ -68,7 +68,7 @@ function stripAnsi(text) {
 function OutputBlock({ outputs }) {
   if (!outputs?.length) return null;
   return (
-    <div className="border-t border-zinc-100 dark:border-zinc-800">
+    <div className="border-t border-edge-subtle">
       {outputs.map((out, i) => {
         if (out.type === "error") {
           return (
@@ -85,7 +85,7 @@ function OutputBlock({ outputs }) {
           );
         }
         return (
-          <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-zinc-700 dark:text-zinc-300">
+          <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-fg">
             {stripAnsi(out.text)}
           </pre>
         );
@@ -298,7 +298,7 @@ export default function NotebookEditor({
         className={`group relative rounded-xl border transition-all ${
           isActive
             ? "border-brand-400/60 shadow-sm dark:border-brand-500/40"
-            : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+            : "border-edge-subtle hover:border-zinc-300 dark:hover:border-zinc-700"
         } bg-white dark:bg-[#0d0d10]`}
       >
         {/* Cell header */}

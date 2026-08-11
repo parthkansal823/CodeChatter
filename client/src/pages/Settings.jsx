@@ -58,7 +58,7 @@ function Toggle({ checked, onChange }) {
 
 function SectionTitle({ children }) {
   return (
-    <h2 className="mb-5 text-lg font-semibold text-zinc-900 dark:text-white">{children}</h2>
+    <h2 className="mb-5 text-lg font-semibold text-fg">{children}</h2>
   );
 }
 
@@ -66,7 +66,7 @@ function Row({ label, hint, action }) {
   return (
     <div className="flex flex-col items-start gap-3 border-b border-zinc-100 py-3.5 dark:border-zinc-800/60 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{label}</p>
+        <p className="text-sm font-medium text-fg">{label}</p>
         {hint && <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-500">{hint}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -155,7 +155,7 @@ export default function Settings() {
             <div className="mb-6 flex items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
               <UserAvatar username={user?.username} size="lg" />
               <div>
-                <p className="font-semibold text-zinc-900 dark:text-white">{user?.username}</p>
+                <p className="font-semibold text-fg">{user?.username}</p>
                 <p className="text-sm text-zinc-500">{user?.email}</p>
               </div>
             </div>
@@ -221,7 +221,7 @@ export default function Settings() {
             {/* GitHub features quick links (only if connected) */}
             {user?.githubConnected && (
               <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-                <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300">GitHub features available in the Code Editor</p>
+                <p className="mb-3 text-xs font-semibold text-fg">GitHub features available in the Code Editor</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { icon: "↓", label: "Import repos",    desc: "Pull files into workspace" },
@@ -232,7 +232,7 @@ export default function Settings() {
                     <div key={f.label} className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-800/50">
                       <span className="text-sm font-bold text-brand-500">{f.icon}</span>
                       <div>
-                        <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{f.label}</p>
+                        <p className="text-xs font-semibold text-fg">{f.label}</p>
                         <p className="text-[10px] text-zinc-500">{f.desc}</p>
                       </div>
                     </div>
@@ -294,7 +294,7 @@ export default function Settings() {
         return (
           <div>
             <SectionTitle>Appearance</SectionTitle>
-            <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">Choose the app and editor color scheme.</p>
+            <p className="mb-4 text-sm text-fg-muted">Choose the app and editor color scheme.</p>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { id: "vs-dark", label: "Dark", desc: "Easy on the eyes", icon: Moon },
@@ -313,7 +313,7 @@ export default function Settings() {
                     <Icon size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-zinc-900 dark:text-white">{label}</p>
+                    <p className="text-sm font-semibold text-fg">{label}</p>
                     <p className="text-xs text-zinc-500">{desc}</p>
                   </div>
                   {preferences.theme === id && (
@@ -387,7 +387,7 @@ export default function Settings() {
             <div className="space-y-1">
               {SHORTCUTS.map(([action, keys]) => (
                 <div key={action} className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors">
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">{action}</span>
+                  <span className="text-sm text-fg">{action}</span>
                   <kbd className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1 font-mono text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                     {keys}
                   </kbd>
@@ -461,13 +461,13 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
+    <div className="min-h-full bg-canvas">
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         {/* Page header */}
         <div className="mb-8">
           <p className="text-xs font-semibold uppercase tracking-widest text-brand-600 dark:text-brand-400">Settings</p>
-          <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Preferences</h1>
-          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Manage your account, editor, and workspace settings.</p>
+          <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-fg">Preferences</h1>
+          <p className="mt-2 text-sm text-fg-muted">Manage your account, editor, and workspace settings.</p>
         </div>
 
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -40,6 +41,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "playwright-core": "^1.62.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.4",
     "vite": "^7.3.1"

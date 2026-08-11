@@ -44,18 +44,21 @@ module.exports = {
 
       colors: {
         // ── Primary accent ───────────────────────────────────────────────
+        // VS Code's focus/selection blue rather than a saturated indigo.
+        // Editors want an accent that recedes: it marks focus and selection
+        // without competing with syntax highlighting.
         brand: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
-          950: "#1e1b4b",
+          50: "#eff6fc",
+          100: "#cfe4f7",
+          200: "#9ecbef",
+          300: "#6cb0e6",
+          400: "#3794d8",
+          500: "#0078d4",
+          600: "#0067b8",
+          700: "#005a9e",
+          800: "#004578",
+          900: "#003356",
+          950: "#002138",
         },
 
         // ── Semantic: positive ───────────────────────────────────────────
@@ -118,21 +121,80 @@ module.exports = {
           950: "#172554",
         },
 
+        // ── Editor chrome surfaces (VS Code Dark+ / Light+) ──────────────
+        // A flat, four-step ramp. Depth comes from these steps plus 1px
+        // borders — not from shadows or translucency.
+        editor: {
+          // dark
+          bg: "#1e1e1e", // editor canvas
+          side: "#252526", // sidebar / panels
+          bar: "#333333", // activity bar / title bar
+          input: "#3c3c3c", // inputs, dropdowns
+          line: "#2b2b2b", // hairline separators
+          edge: "#454545", // stronger dividers, focus outlines
+          hover: "#2a2d2e", // row hover
+          active: "#37373d", // selected row
+          sel: "#264f78", // text selection
+          // light
+          "l-bg": "#ffffff",
+          "l-side": "#f3f3f3",
+          "l-bar": "#f8f8f8",
+          "l-input": "#ffffff",
+          "l-line": "#e5e5e5",
+          "l-edge": "#d4d4d4",
+          "l-hover": "#e8e8e8",
+          "l-active": "#e4e6f1",
+        },
+
         surface: {
           light: "#ffffff",
-          subtle: "#fafafa",
-          dark: "#09090b",
-          darker: "#000000",
+          subtle: "#f3f3f3",
+          dark: "#1e1e1e",
+          darker: "#181818",
+        },
+
+        // ── Bridge to src/styles/theme.css ───────────────────────────────
+        // These aliases resolve to the CSS custom properties defined there, so
+        // `bg-canvas` / `text-fg` / `border-subtle` follow the active theme
+        // automatically — no `dark:` variant needed. Prefer these in new code;
+        // the zinc/brand scales above remain for the not-yet-migrated screens.
+        canvas: "var(--bg-canvas)",
+        panel: "var(--bg-panel)",
+        chrome: "var(--bg-chrome)",
+        field: "var(--bg-input)",
+        hovered: "var(--bg-hover)",
+        selected: "var(--bg-active)",
+        overlay: "var(--bg-overlay)",
+
+        fg: {
+          DEFAULT: "var(--fg-default)",
+          muted: "var(--fg-muted)",
+          subtle: "var(--fg-subtle)",
+          accent: "var(--accent-fg)",
+        },
+
+        edge: {
+          subtle: "var(--border-subtle)",
+          DEFAULT: "var(--border-default)",
+          strong: "var(--border-strong)",
+        },
+
+        accent: {
+          DEFAULT: "var(--accent)",
+          hover: "var(--accent-hover)",
+          active: "var(--accent-active)",
+          subtle: "var(--accent-subtle)",
         },
       },
 
-      // Tighter, more deliberate type scale than the Tailwind default.
+      // VS Code's UI type scale: 13px base, 12px for tree/list rows, 11px for
+      // badges and status text. Small and dense — an editor shows a lot at once.
       fontSize: {
         "2xs": ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.01em" }],
         xs: ["0.75rem", { lineHeight: "1.125rem" }],
         sm: ["0.8125rem", { lineHeight: "1.25rem" }],
-        base: ["0.875rem", { lineHeight: "1.5rem" }],
-        lg: ["1rem", { lineHeight: "1.625rem" }],
+        base: ["0.8125rem", { lineHeight: "1.375rem" }],
+        lg: ["0.9375rem", { lineHeight: "1.5rem" }],
         xl: ["1.125rem", { lineHeight: "1.75rem", letterSpacing: "-0.01em" }],
         "2xl": ["1.375rem", { lineHeight: "1.875rem", letterSpacing: "-0.015em" }],
         "3xl": ["1.75rem", { lineHeight: "2.125rem", letterSpacing: "-0.02em" }],
@@ -142,24 +204,32 @@ module.exports = {
         "7xl": ["4.5rem", { lineHeight: "1", letterSpacing: "-0.04em" }],
       },
 
+      // Editor-grade radii. VS Code is nearly square: 2px on controls, 4-6px
+      // on floating surfaces. Everything below `xl` is deliberately tiny —
+      // large radii are what made this read as a marketing site, not a tool.
       borderRadius: {
-        DEFAULT: "0.5rem",
-        md: "0.5rem",
-        lg: "0.625rem",
-        xl: "0.75rem",
-        "2xl": "1rem",
-        "3xl": "1.25rem",
+        none: "0",
+        DEFAULT: "3px",
+        sm: "2px",
+        md: "3px",
+        lg: "4px",
+        xl: "6px",
+        "2xl": "6px",
+        "3xl": "8px",
+        full: "9999px",
       },
 
-      // Softer, lower-contrast elevation than Tailwind's defaults.
+      // Elevation is reserved for surfaces that genuinely float above the
+      // page (menus, dialogs, autocomplete). Inline cards use a 1px border.
       boxShadow: {
-        xs: "0 1px 2px 0 rgb(0 0 0 / 0.04)",
-        sm: "0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)",
-        DEFAULT: "0 2px 6px -1px rgb(0 0 0 / 0.07), 0 1px 3px -1px rgb(0 0 0 / 0.05)",
-        md: "0 4px 12px -2px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05)",
-        lg: "0 12px 24px -6px rgb(0 0 0 / 0.10), 0 4px 8px -4px rgb(0 0 0 / 0.06)",
-        xl: "0 24px 48px -12px rgb(0 0 0 / 0.16)",
-        panel: "0 1px 0 0 rgb(0 0 0 / 0.03), 0 8px 24px -12px rgb(0 0 0 / 0.12)",
+        none: "none",
+        xs: "none",
+        sm: "none",
+        DEFAULT: "none",
+        md: "0 2px 8px rgb(0 0 0 / 0.16)",
+        lg: "0 4px 16px rgb(0 0 0 / 0.24)",
+        xl: "0 8px 32px rgb(0 0 0 / 0.32)",
+        panel: "0 2px 8px rgb(0 0 0 / 0.16)",
       },
 
       animation: {

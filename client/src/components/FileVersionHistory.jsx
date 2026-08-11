@@ -84,9 +84,9 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
         <div className="flex items-center gap-2 min-w-0">
           <Clock size={14} className="shrink-0 text-brand-400" />
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-zinc-900 dark:text-white">Version History</p>
+            <p className="text-xs font-semibold text-fg">Version History</p>
             {fileName && (
-              <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400">{fileName}</p>
+              <p className="truncate text-[10px] text-fg-muted">{fileName}</p>
             )}
           </div>
         </div>
@@ -103,8 +103,8 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
         {versions.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center px-4">
             <Clock size={20} className="text-zinc-300 dark:text-zinc-600" />
-            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">No saved versions</p>
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            <p className="text-xs font-medium text-fg-muted">No saved versions</p>
+            <p className="text-[11px] text-fg-subtle">
               Press Ctrl+S to save a version snapshot
             </p>
           </div>
@@ -119,7 +119,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
                   <p className="text-[11px] font-medium text-zinc-700 dark:text-zinc-200">
                     {i === 0 ? "Latest save" : timeLabel(entry.timestamp)}
                   </p>
-                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  <p className="text-[10px] text-fg-subtle">
                     {i !== 0 && timeLabel(entry.timestamp) !== timeLabel(entry.timestamp) ? timeLabel(entry.timestamp) : new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     {" · "}{entry.size.toLocaleString()} chars
                   </p>
@@ -159,7 +159,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
       </div>
 
       <div className="border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
-        <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+        <p className="text-[10px] text-fg-subtle">
           Up to {MAX_VERSIONS} versions per file · Ctrl+S to snapshot
         </p>
       </div>

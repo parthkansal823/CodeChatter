@@ -357,7 +357,7 @@ export default function FileExplorer({
 
           {!isCollapsed && (
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-fg-muted">
                 Explorer
               </p>
             </div>
@@ -426,7 +426,7 @@ export default function FileExplorer({
             )}
           </div>
 
-          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-fg-muted">
             <span>
               {normalizedSearchQuery
                 ? `${filteredEntries.length} matching item${filteredEntries.length === 1 ? "" : "s"}`

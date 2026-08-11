@@ -10,7 +10,7 @@ export default function FloatingHelper() {
     >
       {/* Tooltip */}
       <div className="absolute bottom-[5.5rem] left-0 pointer-events-none opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        <div className="relative min-w-[190px] rounded-xl border border-warning-400/30 bg-[#1c1007]/90 backdrop-blur-sm p-3 text-sm font-medium text-warning-100 shadow-[0_0_14px_rgba(251,191,36,0.25)]">
+        <div className="relative min-w-[190px] rounded-xl border border-warning-400/30 bg-[#1c1007]/90 backdrop-blur-sm p-3 text-sm font-medium text-warning-100 ">
           Need help? I&apos;m your AI buddy!
           <div className="absolute -bottom-2 left-6 h-0 w-0 border-x-8 border-x-transparent border-t-8 border-t-[#1c1007]/90" />
           <div className="absolute -bottom-[9px] left-6 -z-10 h-0 w-0 border-x-[9px] border-x-transparent border-t-[9px] border-t-warning-400/30" />
@@ -18,7 +18,7 @@ export default function FloatingHelper() {
       </div>
 
       {/* Icon avatar — smaller: h-14 w-14 */}
-      <div className="h-14 w-14 cursor-pointer select-none transition-transform duration-200 hover:scale-110 drop-shadow-[0_4px_12px_rgba(251,191,36,0.5)]">
+      <div className="h-14 w-14 cursor-pointer select-none transition-transform duration-200 hover:scale-110 drop-">
         <svg viewBox="0 0 140 140" className="h-full w-full overflow-visible">
           {/* ── Yellow/orange background circle ── */}
           <circle cx="68" cy="72" r="62" fill="#f59e0b" />
@@ -94,7 +94,7 @@ export default function FloatingHelper() {
             transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut", delay: 0.7 }}
             style={{ transformOrigin: "112px 110px" }}
           >
-            <rect x="90" y="82" width="44" height="52" rx="5" fill="#2563eb" />
+            <rect x="90" y="82" width="44" height="52" rx="5" fill="#0067b8" />
             <rect x="97" y="93"  width="30" height="4" rx="2" fill="white" opacity="0.9" />
             <rect x="97" y="101" width="25" height="4" rx="2" fill="white" opacity="0.8" />
             <rect x="97" y="109" width="30" height="4" rx="2" fill="white" opacity="0.9" />

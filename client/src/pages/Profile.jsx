@@ -114,7 +114,7 @@ export default function Profile() {
   ];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.12),_transparent_32%),linear-gradient(to_bottom,_#fafafa,_#ffffff)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.18),_transparent_28%),linear-gradient(to_bottom,_#09090b,_#111827)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(0, 120, 212,0.12),_transparent_32%),linear-gradient(to_bottom,_#fafafa,_#ffffff)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(0, 120, 212,0.18),_transparent_28%),linear-gradient(to_bottom,_#09090b,_#111827)]">
       <Motion.div
         variants={containerVariants}
         initial="hidden"
@@ -130,8 +130,8 @@ export default function Profile() {
                   <UserAvatar username={user?.username} size="lg" />
                 </div>
                 <div>
-                  <h1 className="text-3xl font-semibold text-zinc-900 dark:text-white">{user?.username}</h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-zinc-500 dark:text-zinc-400">
+                  <h1 className="text-3xl font-semibold text-fg">{user?.username}</h1>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-fg-muted">
                     <span className="inline-flex items-center gap-1.5"><Mail size={14} />{user?.email}</span>
                     <span className="inline-flex items-center gap-1.5"><Calendar size={14} />Member since {memberSince}</span>
                     <span className="inline-flex items-center gap-1.5"><Shield size={14} />Verified account</span>
@@ -161,16 +161,16 @@ export default function Profile() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Workspace snapshot</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div>
-                    <p className="text-2xl font-semibold text-zinc-900 dark:text-white">{isLoading ? "-" : rooms.length}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">Total workspaces</p>
+                    <p className="text-2xl font-semibold text-fg">{isLoading ? "-" : rooms.length}</p>
+                    <p className="text-sm text-fg-muted">Total workspaces</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-semibold text-zinc-900 dark:text-white">{isLoading ? "-" : editableRooms}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">Editable workspaces</p>
+                    <p className="text-2xl font-semibold text-fg">{isLoading ? "-" : editableRooms}</p>
+                    <p className="text-sm text-fg-muted">Editable workspaces</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-semibold text-zinc-900 dark:text-white">{isLoading ? "-" : runnableRooms}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">Runnable workspaces</p>
+                    <p className="text-2xl font-semibold text-fg">{isLoading ? "-" : runnableRooms}</p>
+                    <p className="text-sm text-fg-muted">Runnable workspaces</p>
                   </div>
                 </div>
               </div>
@@ -181,14 +181,14 @@ export default function Profile() {
                   <div className="mt-4 flex items-center gap-3">
                     <img src={githubProfile.avatarUrl} alt={githubProfile.login} className="h-12 w-12 rounded-lg object-cover" />
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{githubProfile.name || githubProfile.login}</p>
-                      <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">@{githubProfile.login}</p>
+                      <p className="truncate text-sm font-semibold text-fg">{githubProfile.name || githubProfile.login}</p>
+                      <p className="truncate text-sm text-fg-muted">@{githubProfile.login}</p>
                     </div>
                   </div>
                 ) : (
                   <div className="mt-4">
                     <p className="text-sm text-zinc-600 dark:text-zinc-300">GitHub is not connected yet.</p>
-                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Connect it from Settings to sync repos and import code faster.</p>
+                    <p className="mt-1 text-xs text-fg-muted">Connect it from Settings to sync repos and import code faster.</p>
                   </div>
                 )}
               </div>
@@ -202,8 +202,8 @@ export default function Profile() {
               <span className={`inline-flex h-11 w-11 items-center justify-center rounded-lg ${accent}`}>
                 <Icon size={18} />
               </span>
-              <p className="mt-4 text-3xl font-semibold text-zinc-900 dark:text-white">{isLoading ? "-" : value}</p>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{label}</p>
+              <p className="mt-4 text-3xl font-semibold text-fg">{isLoading ? "-" : value}</p>
+              <p className="mt-1 text-sm text-fg-muted">{label}</p>
             </div>
           ))}
         </Motion.section>
@@ -213,7 +213,7 @@ export default function Profile() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Recent workspaces</p>
-                <h2 className="mt-1 text-xl font-semibold text-zinc-900 dark:text-white">Jump back into your latest rooms</h2>
+                <h2 className="mt-1 text-xl font-semibold text-fg">Jump back into your latest rooms</h2>
               </div>
               <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
                 View all
@@ -225,7 +225,7 @@ export default function Profile() {
                 <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-950/50">
                   <FolderGit2 size={24} className="mx-auto text-zinc-400" />
                   <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No workspaces yet</p>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Create a room to start collaborating.</p>
+                  <p className="mt-1 text-xs text-fg-muted">Create a room to start collaborating.</p>
                 </div>
               ) : (
                 recentRooms.map((room) => (
@@ -236,10 +236,10 @@ export default function Profile() {
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{room.name}</p>
+                        <p className="truncate text-sm font-semibold text-fg">{room.name}</p>
                         <RolePill role={room.accessRole} />
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-fg-muted">
                         <span>{room.templateName || "Blank workspace"}</span>
                         <span>{room.fileCount || 0} files</span>
                         <span>Updated {formatDateLabel(room.updatedAt)}</span>
@@ -261,7 +261,7 @@ export default function Profile() {
                     <div className="flex items-center gap-2">
                       <RolePill role={role} />
                     </div>
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-white">{isLoading ? "-" : roleSummary[role]}</span>
+                    <span className="text-sm font-semibold text-fg">{isLoading ? "-" : roleSummary[role]}</span>
                   </div>
                 ))}
               </div>
@@ -276,14 +276,14 @@ export default function Profile() {
               </div>
               <div className="mt-4 space-y-3">
                 {collaborators.length === 0 ? (
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">No collaborators yet.</p>
+                  <p className="text-sm text-fg-muted">No collaborators yet.</p>
                 ) : (
                   collaborators.slice(0, 6).map((collaborator, index) => (
                     <div key={collaborator.id || index} className="flex items-center gap-3 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
                       <UserAvatar username={collaborator.username} size="sm" />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{collaborator.username}</p>
-                        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{collaborator.email || "Workspace collaborator"}</p>
+                        <p className="truncate text-sm font-semibold text-fg">{collaborator.username}</p>
+                        <p className="truncate text-xs text-fg-muted">{collaborator.email || "Workspace collaborator"}</p>
                       </div>
                     </div>
                   ))
@@ -305,7 +305,7 @@ export default function Profile() {
                     onClick={() => navigate(path)}
                     className="flex items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
                   >
-                    <Icon size={16} className="text-zinc-500 dark:text-zinc-400" />
+                    <Icon size={16} className="text-fg-muted" />
                     <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{label}</span>
                   </button>
                 ))}

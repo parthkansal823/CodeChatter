@@ -11,8 +11,8 @@ export default function EmptyWorkspaceState({
   onOpenTutorial,
 }) {
   return (
-    <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-white dark:bg-zinc-950">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.12),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.1),transparent_35%)]" />
+    <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-canvas">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(0, 120, 212,0.12),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.1),transparent_35%)]" />
 
       <div className="relative w-full max-w-3xl px-6">
         <div className="rounded-xl border border-zinc-200 bg-white/90 p-8 text-center shadow-xl shadow-zinc-200/40 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90 dark:shadow-black/20">
@@ -20,10 +20,10 @@ export default function EmptyWorkspaceState({
             <Sparkles size={24} />
           </div>
 
-          <p className="mt-5 text-2xl font-semibold text-zinc-900 dark:text-white">
+          <p className="mt-5 text-2xl font-semibold text-fg">
             Start this workspace your way
           </p>
-          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 text-sm text-fg-muted">
             Add the first file or folder and everyone in the room will immediately see the same workspace.
           </p>
 
@@ -43,7 +43,7 @@ export default function EmptyWorkspaceState({
           </div>
 
           <div className="mt-6 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 p-4 text-left dark:border-zinc-800 dark:bg-zinc-900/50">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fg-muted">
               Quick starters
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -64,8 +64,8 @@ export default function EmptyWorkspaceState({
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
                 <FilePlus2 size={18} />
               </div>
-              <p className="mt-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Start coding fast</p>
-              <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <p className="mt-3 text-sm font-semibold text-fg">Start coding fast</p>
+              <p className="mt-1 text-xs leading-5 text-fg-muted">
                 Drop in a starter file and begin editing right away with realtime sync.
               </p>
             </div>
@@ -74,8 +74,8 @@ export default function EmptyWorkspaceState({
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
                 <FolderPlus size={18} />
               </div>
-              <p className="mt-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Organize clearly</p>
-              <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <p className="mt-3 text-sm font-semibold text-fg">Organize clearly</p>
+              <p className="mt-1 text-xs leading-5 text-fg-muted">
                 Create folders for components, notes, solutions, or anything your team needs.
               </p>
             </div>
@@ -84,8 +84,8 @@ export default function EmptyWorkspaceState({
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
                 <Users size={18} />
               </div>
-              <p className="mt-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Collaborate live</p>
-              <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <p className="mt-3 text-sm font-semibold text-fg">Collaborate live</p>
+              <p className="mt-1 text-xs leading-5 text-fg-muted">
                 Invite others, code together, and watch presence updates once they join the room.
               </p>
             </div>

@@ -25,9 +25,9 @@ function Pill({ children, className = "" }) {
 
 function SectionHeader({ icon: Icon, title, action }) {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-800">
+    <div className="flex items-center justify-between px-4 py-2.5 border-b border-edge-subtle">
       <div className="flex items-center gap-2">
-        <Icon size={13} className="text-zinc-400 dark:text-zinc-500" />
+        <Icon size={13} className="text-fg-subtle" />
         <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">{title}</span>
       </div>
       {action}
@@ -317,10 +317,10 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-5 px-6 py-10 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-900">
-          <Github size={28} className="text-zinc-600 dark:text-zinc-400" />
+          <Github size={28} className="text-fg-muted" />
         </div>
         <div>
-          <p className="font-semibold text-zinc-900 dark:text-white">Connect GitHub</p>
+          <p className="font-semibold text-fg">Connect GitHub</p>
           <p className="mt-1 text-xs text-zinc-500">
             Link your GitHub account to import repos, push files, and create gists right from the editor.
           </p>
@@ -365,7 +365,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
             className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${
               selectedId === r.id
                 ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300"
+                : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 text-fg"
             }`}
           >
             {r.private ? <Lock size={11} className="shrink-0 text-zinc-400" /> : <Unlock size={11} className="shrink-0 text-zinc-400" />}
@@ -385,7 +385,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
           <button onClick={() => { setView("home"); setSelectedRepo(null); setRepoTree(null); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
             <X size={14} />
           </button>
-          <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Import from GitHub</span>
+          <span className="text-sm font-semibold text-fg">Import from GitHub</span>
         </div>
         <div className="flex-1 overflow-y-auto space-y-4 p-4">
           {!selectedRepo ? (
@@ -400,7 +400,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
             <>
               <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
                 <BookOpen size={13} className="text-brand-500" />
-                <span className="flex-1 truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">{selectedRepo.fullName}</span>
+                <span className="flex-1 truncate text-xs font-medium text-fg">{selectedRepo.fullName}</span>
                 <button onClick={() => { setSelectedRepo(null); setRepoTree(null); }} className="text-zinc-400 hover:text-zinc-600">
                   <X size={12} />
                 </button>
@@ -441,7 +441,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
                       {repoTree.files.slice(0, 50).map((f) => (
                         <div key={f.path} className="flex items-center gap-2 border-b border-zinc-100 px-3 py-1 last:border-0 dark:border-zinc-800">
                           {f.type === "file" ? <FileCode2 size={10} className="shrink-0 text-zinc-400" /> : <FolderOpen size={10} className="shrink-0 text-warning-400" />}
-                          <span className="truncate text-[11px] text-zinc-600 dark:text-zinc-400">{f.path}</span>
+                          <span className="truncate text-[11px] text-fg-muted">{f.path}</span>
                         </div>
                       ))}
                     </div>
@@ -488,7 +488,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
           <button onClick={() => { setView("home"); setPushRepo(null); setPushed(false); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
             <X size={14} />
           </button>
-          <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Push to GitHub</span>
+          <span className="text-sm font-semibold text-fg">Push to GitHub</span>
         </div>
         <div className="flex-1 overflow-y-auto space-y-4 p-4">
           {!activeFilePath ? (
@@ -497,7 +497,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
             <>
               <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900">
                 <FileCode2 size={12} className="text-brand-500" />
-                <span className="truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">{activeFilePath}</span>
+                <span className="truncate text-xs font-medium text-fg">{activeFilePath}</span>
               </div>
 
               <RepoPicker
@@ -549,7 +549,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
           <button onClick={() => setView("home")} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
             <X size={14} />
           </button>
-          <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Gists</span>
+          <span className="text-sm font-semibold text-fg">Gists</span>
         </div>
 
         {activeFilePath && activeCode && (
@@ -562,7 +562,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
               className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs placeholder-zinc-400 outline-none focus:border-brand-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             />
             <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
+              <label className="flex items-center gap-2 text-xs text-fg-muted cursor-pointer">
                 <input type="checkbox" checked={gistPublic} onChange={(e) => setGistPublic(e.target.checked)} className="accent-brand-600" />
                 Make public
               </label>
@@ -601,7 +601,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
               >
                 <Code2 size={13} className="mt-0.5 shrink-0 text-zinc-400" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">{g.files[0] || "Untitled"}</p>
+                  <p className="truncate text-xs font-medium text-fg">{g.files[0] || "Untitled"}</p>
                   {g.description && <p className="mt-0.5 truncate text-[11px] text-zinc-500">{g.description}</p>}
                 </div>
                 <Pill className={g.public ? "bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}>
@@ -626,7 +626,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
             <img src={profile.avatarUrl} alt={profile.login} className="h-10 w-10 rounded-full ring-2 ring-zinc-200 dark:ring-zinc-700" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{profile.name || profile.login}</p>
+                <p className="truncate text-sm font-semibold text-fg">{profile.name || profile.login}</p>
                 <a href={profile.htmlUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink size={11} className="text-zinc-400 hover:text-zinc-600" />
                 </a>
@@ -634,7 +634,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
               <p className="truncate text-xs text-zinc-500">@{profile.login}</p>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{profile.publicRepos}</p>
+              <p className="text-xs font-semibold text-fg">{profile.publicRepos}</p>
               <p className="text-[10px] text-zinc-500">repos</p>
             </div>
           </div>
@@ -652,12 +652,12 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
       {/* ── Linked repo sync card ─────────────────────────────────────────── */}
       {!linkedLoading && (
         linkedRepo ? (
-          <div className="border-b border-zinc-100 dark:border-zinc-800 p-4 space-y-3">
+          <div className="border-b border-edge-subtle p-4 space-y-3">
             {/* Header row */}
             <div className="flex items-center gap-2">
               <Link2 size={13} className="text-success-500 shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-100 truncate">
+                <p className="text-xs font-semibold text-fg truncate">
                   {linkedRepo.owner}/{linkedRepo.repo}
                 </p>
                 <p className="text-[10px] text-zinc-400 flex items-center gap-1">
@@ -701,7 +701,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
             <label className="flex items-center justify-between cursor-pointer select-none">
               <div className="flex items-center gap-2">
                 <Zap size={12} className={autoSync ? "text-warning-400" : "text-zinc-400"} />
-                <span className="text-xs text-zinc-600 dark:text-zinc-400">Auto-sync on save</span>
+                <span className="text-xs text-fg-muted">Auto-sync on save</span>
               </div>
               <button
                 onClick={() => setAutoSync((v) => !v)}
@@ -722,7 +722,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
           </div>
         ) : (
           /* No linked repo — small hint */
-          <div className="border-b border-zinc-100 dark:border-zinc-800 px-4 py-3 flex items-center gap-2">
+          <div className="border-b border-edge-subtle px-4 py-3 flex items-center gap-2">
             <Link2Off size={12} className="text-zinc-400 shrink-0" />
             <p className="text-[11px] text-zinc-400">No repo linked. Import a repo with auto-sync enabled.</p>
           </div>
@@ -746,7 +746,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
               <Icon size={15} className={color} />
             </div>
             <div>
-              <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{label}</p>
+              <p className="text-xs font-semibold text-fg">{label}</p>
               <p className="text-[10px] text-zinc-500">{desc}</p>
             </div>
           </button>
@@ -764,7 +764,7 @@ export default function GitHubPanel({ roomId, activeFilePath, activeCode }) {
               <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
                 {r.private ? <Lock size={11} className="shrink-0 text-zinc-400" /> : <GitFork size={11} className="shrink-0 text-zinc-400" />}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">{r.name}</p>
+                  <p className="truncate text-xs font-medium text-fg">{r.name}</p>
                   {r.language && <p className="text-[10px] text-zinc-500">{r.language}</p>}
                 </div>
                 <div className="flex items-center gap-1 text-[10px] text-zinc-400">

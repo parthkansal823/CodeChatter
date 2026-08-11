@@ -1,6 +1,26 @@
-export function Card({ children, className = "" }) {
+/**
+ * Card surfaces.
+ *
+ * Uses the theme-token utilities (bg-panel / border-edge-subtle / text-fg),
+ * so these follow the active theme without any `dark:` variants and retune
+ * from src/styles/theme.css.
+ *
+ * Flat by default: an inline card is separated by a 1px border, not by a
+ * shadow or a translucent blur. Elevation is reserved for surfaces that
+ * genuinely float — see `overlay`.
+ */
+export function Card({ children, className = "", overlay = false, ...props }) {
   return (
-    <div className={`rounded-xl border border-zinc-200 bg-white/70 backdrop-blur-md shadow-sm dark:border-zinc-800/80 dark:bg-zinc-900/50 ${className}`}>
+    <div
+      className={[
+        "rounded-md border border-edge-subtle bg-panel",
+        overlay ? "shadow-md" : "",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      {...props}
+    >
       {children}
     </div>
   );
@@ -8,23 +28,31 @@ export function Card({ children, className = "" }) {
 
 export function CardHeader({ title, description, icon: Icon, action, className = "" }) {
   return (
-    <div className={`flex flex-col space-y-1.5 p-6 ${className}`}>
-      <div className="flex items-center gap-3">
-        {Icon && (
-          <div className="rounded-lg bg-brand-100 p-2 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
-            <Icon size={20} />
-          </div>
-        )}
-        <div className="flex-1">
-          {title && <h3 className="font-semibold leading-none tracking-tight text-zinc-900 dark:text-zinc-100">{title}</h3>}
-          {description && <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{description}</p>}
+    <div className={`flex items-start gap-3 px-4 py-3 ${className}`}>
+      {Icon && (
+        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-accent-subtle text-accent">
+          <Icon size={14} aria-hidden="true" />
         </div>
-        {action && <div>{action}</div>}
+      )}
+      <div className="min-w-0 flex-1">
+        {title && <h3 className="truncate text-base font-semibold leading-tight text-fg">{title}</h3>}
+        {description && <p className="mt-0.5 text-sm text-fg-muted">{description}</p>}
       </div>
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
 
 export function CardContent({ children, className = "" }) {
-  return <div className={`p-6 pt-0 ${className}`}>{children}</div>;
+  return <div className={`px-4 pb-4 ${className}`}>{children}</div>;
+}
+
+export function CardFooter({ children, className = "" }) {
+  return (
+    <div
+      className={`flex items-center justify-end gap-2 border-t border-edge-subtle px-4 py-3 ${className}`}
+    >
+      {children}
+    </div>
+  );
 }

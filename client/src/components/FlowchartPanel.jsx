@@ -97,7 +97,7 @@ const LEGEND = [
   { color: "#4ade80", label: "Start / End" },
   { color: "#60a5fa", label: "Process" },
   { color: "#fbbf24", label: "Decision" },
-  { color: "#a78bfa", label: "Function" },
+  { color: "#6cb0e6", label: "Function" },
   { color: "#fb923c", label: "Loop" },
   { color: "#34d399", label: "Input / Output" },
   { color: "#f87171", label: "Error" },
@@ -182,9 +182,9 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         `- Show decisions, loops, I/O, function boundaries, and error paths when present\n` +
         `- Always include these classDefs exactly:\n` +
         `classDef cStart fill:#4ade80,stroke:#16a34a,color:#ffffff,stroke-width:2px\n` +
-        `classDef cProc fill:#60a5fa,stroke:#2563eb,color:#ffffff,stroke-width:2px\n` +
+        `classDef cProc fill:#60a5fa,stroke:#0067b8,color:#ffffff,stroke-width:2px\n` +
         `classDef cDec fill:#fbbf24,stroke:#d97706,color:#111827,stroke-width:2px\n` +
-        `classDef cFunc fill:#a78bfa,stroke:#7c3aed,color:#ffffff,stroke-width:2px\n` +
+        `classDef cFunc fill:#6cb0e6,stroke:#0078d4,color:#ffffff,stroke-width:2px\n` +
         `classDef cLoop fill:#fb923c,stroke:#ea580c,color:#ffffff,stroke-width:2px\n` +
         `classDef cIO fill:#34d399,stroke:#059669,color:#ffffff,stroke-width:2px\n` +
         `classDef cErr fill:#f87171,stroke:#dc2626,color:#ffffff,stroke-width:2px\n` +
@@ -285,8 +285,8 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-zinc-900 dark:text-white">Flowchart</p>
-          <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm font-semibold text-fg">Flowchart</p>
+          <p className="truncate text-xs text-fg-muted">
             {fileName || "Choose a file to map code flow"}
           </p>
         </div>
@@ -319,7 +319,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
       {fileName ? (
         <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 px-3 py-2 dark:border-zinc-800">
           <FileCode2 size={12} className="text-zinc-400" />
-          <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{fileName}</span>
+          <span className="min-w-0 flex-1 truncate text-[11px] text-fg-muted">{fileName}</span>
           <span className="rounded-full bg-info-500/10 px-2 py-0.5 text-[10px] font-semibold text-info-600 dark:text-info-300">
             {detectedLang}
           </span>
@@ -338,8 +338,8 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-info-500/10 text-info-400">
                 <GitBranch size={20} />
               </div>
-              <p className="mt-4 text-sm font-semibold text-zinc-900 dark:text-white">Open a file first</p>
-              <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <p className="mt-4 text-sm font-semibold text-fg">Open a file first</p>
+              <p className="mt-2 text-xs leading-5 text-fg-muted">
                 Flowcharts now generate only when you ask for them, so opening this panel no longer starts automatically.
               </p>
             </div>
@@ -347,8 +347,8 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         ) : isGenerating ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6">
             <Loader2 size={24} className="animate-spin text-info-500" />
-            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">Building flowchart</p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm font-medium text-fg">Building flowchart</p>
+            <p className="text-xs text-fg-muted">
               Reading the {detectedLang} file and mapping its important steps.
             </p>
           </div>
@@ -403,7 +403,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
                     <Sparkles size={20} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-lg font-semibold text-zinc-900 dark:text-white">Generate a clean code map</p>
+                    <p className="text-lg font-semibold text-fg">Generate a clean code map</p>
                     <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                       This turns the current file into a readable flow diagram with loops, decisions, functions, and I/O highlighted.
                     </p>
@@ -418,7 +418,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
                   ].map((item) => (
                     <div key={item.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{item.label}</p>
-                      <p className="mt-1 truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{item.value}</p>
+                      <p className="mt-1 truncate text-sm font-semibold text-fg">{item.value}</p>
                     </div>
                   ))}
                 </div>
@@ -443,7 +443,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
               </div>
 
               <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-                <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-600">What improves here</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">What improves here</p>
                 <div className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
                   <p>Manual generation keeps the panel calm when you only want to inspect or compare files.</p>
                   <p>Color-coded nodes make branches, loops, and helper functions easier to follow quickly.</p>
@@ -471,7 +471,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
               {LEGEND.map(({ color, label }) => (
                 <div key={label} className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: color }} />
-                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400">{label}</span>
+                  <span className="text-[11px] text-fg-muted">{label}</span>
                 </div>
               ))}
             </div>
@@ -481,7 +481,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
 
       {diagramReady ? (
         <div className="shrink-0 border-t border-zinc-200/80 p-3 dark:border-zinc-800">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-600">Download</p>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">Download</p>
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: "SVG", onClick: downloadSVG },

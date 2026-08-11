@@ -81,7 +81,7 @@ export default function PendingRoomAccessScreen({
       {/* ambient glow */}
       <div
         className={`pointer-events-none fixed inset-0 ${statusConfig.glowColor}`}
-        style={{ filter: "blur(120px)" }}
+        style={{ }}
       />
 
       <Motion.div

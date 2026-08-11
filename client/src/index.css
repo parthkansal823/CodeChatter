@@ -1,3 +1,8 @@
+/* Design system: every colour, radius, density and elevation token lives in
+   this one file. Retune the whole product from there.
+   Must precede the Tailwind directives — CSS requires @import to come first. */
+@import "./styles/theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

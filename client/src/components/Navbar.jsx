@@ -93,20 +93,20 @@ export default function Navbar({
           <Motion.button
             onClick={() => goTo("/home")}
             className="flex min-w-0 items-center rounded-lg px-1 py-1 text-left transition-opacity hover:opacity-80"
-            whileHover={{ scale: 1.02 }}
+            
             whileTap={{ scale: 0.97 }}
           >
             <BrandLogo size="sm" />
           </Motion.button>
 
           {contextValue && (
-            <div className="hidden min-w-0 items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400 md:flex">
+            <div className="hidden min-w-0 items-center gap-2 text-sm text-fg-muted md:flex">
               <span>/</span>
-              <span className="truncate font-mono text-zinc-900 dark:text-zinc-100">
+              <span className="truncate font-mono text-fg">
                 {contextValue}
               </span>
               {contextHint && (
-                <span className="text-xs text-zinc-400 dark:text-zinc-500">{contextHint}</span>
+                <span className="text-xs text-fg-subtle">{contextHint}</span>
               )}
             </div>
           )}
@@ -181,7 +181,7 @@ export default function Navbar({
                 <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-zinc-900 ${presenceColor}`} />
               </div>
               {!minimal && (
-                <span className="hidden max-w-[120px] truncate text-sm text-zinc-800 dark:text-zinc-100 xl:block">
+                <span className="hidden max-w-[120px] truncate text-sm text-fg xl:block">
                   {user?.username}
                 </span>
               )}
@@ -200,10 +200,10 @@ export default function Navbar({
                   <div className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">
                     <UserAvatar username={user?.username} size="md" />
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+                      <p className="text-sm font-semibold text-fg">
                         {user?.username}
                       </p>
-                      <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                      <p className="truncate text-xs text-fg-muted">
                         {user?.email}
                       </p>
                     </div>
@@ -213,7 +213,7 @@ export default function Navbar({
                   {contextValue && (
                     <div className="border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
                       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
-                        <span className="font-semibold text-zinc-900 dark:text-white">{contextLabel}:</span>{" "}
+                        <span className="font-semibold text-fg">{contextLabel}:</span>{" "}
                         {contextValue}
                       </div>
                     </div>
@@ -310,7 +310,7 @@ export default function Navbar({
             <div className="mb-3 flex items-center gap-3 rounded-xl border border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
               <UserAvatar username={user?.username} size="sm" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-zinc-900 dark:text-white">{user?.username}</p>
+                <p className="text-sm font-semibold text-fg">{user?.username}</p>
                 <p className="truncate text-xs text-zinc-500">{user?.email}</p>
               </div>
             </div>

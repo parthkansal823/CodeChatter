@@ -24,7 +24,7 @@ function ExplorerPreview() {
           { name: "tests/", indent: 0, folder: true },
         ].map((item) => (
           <div key={item.name}
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${item.active ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "text-zinc-600 dark:text-zinc-400"}`}
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${item.active ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "text-fg-muted"}`}
             style={{ paddingLeft: `${8 + item.indent * 12}px` }}
           >
             <span>{item.folder ? "📁" : "📄"}</span>
@@ -87,7 +87,7 @@ function SidebarPreview() {
     <div className="flex items-center justify-center gap-4 px-4">
       {tools.map(({ icon: Icon, color, label }) => (
         <div key={label} className="flex flex-col items-center gap-1">
-          <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 ${color}`}>
+          <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-hovered ${color}`}>
             <Icon size={16} />
           </div>
           <span className="text-[9px] text-zinc-400">{label}</span>
@@ -107,7 +107,7 @@ function ShortcutsPreview() {
     <div className="mx-4 space-y-1.5">
       {shortcuts.map(([action, keys]) => (
         <div key={action} className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
-          <span className="text-[10px] text-zinc-600 dark:text-zinc-400">{action}</span>
+          <span className="text-[10px] text-fg-muted">{action}</span>
           <kbd className="rounded border border-zinc-200 bg-white px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900">{keys}</kbd>
         </div>
       ))}
@@ -261,8 +261,8 @@ export default function RoomTutorial() {
                 transition={{ duration: 0.18 }}
               >
                 <div className="px-6 pt-4 pb-3">
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{current.title}</h2>
-                  <p className="mt-1.5 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{current.desc}</p>
+                  <h2 className="text-lg font-bold text-fg">{current.title}</h2>
+                  <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">{current.desc}</p>
                 </div>
 
                 {current.visual && (
@@ -285,7 +285,7 @@ export default function RoomTutorial() {
                   <Motion.div key={i}
                     animate={{
                       width: i === step ? 18 : 6,
-                      backgroundColor: i === step ? "#7c3aed" : i < step ? "#a78bfa" : "#d4d4d8",
+                      backgroundColor: i === step ? "#0078d4" : i < step ? "#6cb0e6" : "#d4d4d8",
                     }}
                     transition={SPRING}
                     className="h-1.5 cursor-pointer rounded-full"
@@ -300,7 +300,7 @@ export default function RoomTutorial() {
                     Back
                   </button>
                 )}
-                <Motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={next}
+                <Motion.button  whileTap={{ scale: 0.97 }} onClick={next}
                   className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-sm transition-colors hover:bg-brand-500">
                   {isLast ? "Done" : "Next"}
                   {isLast ? <Check size={14} /> : <ArrowRight size={14} />}

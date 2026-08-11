@@ -16,7 +16,7 @@ const TYPE_META = {
   code_error:  { icon: Code2,     color: "text-danger-500",     bg: "bg-danger-50 dark:bg-danger-900/20" },
   code_save:   { icon: Save,      color: "text-brand-500",  bg: "bg-brand-50 dark:bg-brand-900/20" },
   user_join:   { icon: UserPlus,  color: "text-success-500", bg: "bg-success-50 dark:bg-success-900/20" },
-  user_leave:  { icon: UserMinus, color: "text-zinc-500",    bg: "bg-zinc-100 dark:bg-zinc-800" },
+  user_leave:  { icon: UserMinus, color: "text-zinc-500",    bg: "bg-hovered" },
   ai_query:    { icon: Bot,       color: "text-warning-500",   bg: "bg-warning-50 dark:bg-warning-900/20" },
 };
 
@@ -88,7 +88,7 @@ export default function ActivityLog({ roomId, onBack = null }) {
             </button>
           ) : null}
           <Activity size={14} className="text-brand-400" />
-          <span className="text-sm font-semibold text-zinc-900 dark:text-white">Activity Log</span>
+          <span className="text-sm font-semibold text-fg">Activity Log</span>
           {activities.length > 0 && (
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
               {activities.length}
@@ -125,8 +125,8 @@ export default function ActivityLog({ roomId, onBack = null }) {
             >
               <Activity size={22} className="text-zinc-300 dark:text-zinc-600" />
             </Motion.div>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">No activity yet</p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">Actions in this room appear here</p>
+            <p className="text-sm font-medium text-fg-muted">No activity yet</p>
+            <p className="text-xs text-fg-subtle">Actions in this room appear here</p>
           </div>
         ) : (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
@@ -146,8 +146,8 @@ export default function ActivityLog({ roomId, onBack = null }) {
                       <Icon size={13} className={meta.color} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-zinc-900 dark:text-zinc-100">{a.message}</p>
-                      <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">{timeAgo(a.timestamp)}</p>
+                      <p className="truncate text-xs font-medium text-fg">{a.message}</p>
+                      <p className="mt-0.5 text-[10px] text-fg-subtle">{timeAgo(a.timestamp)}</p>
                     </div>
                   </Motion.div>
                 );

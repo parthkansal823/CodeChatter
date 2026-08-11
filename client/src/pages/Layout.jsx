@@ -9,15 +9,15 @@ export default function Layout({ children, theme, onThemeChange }) {
   const location = useLocation();
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-white dark:bg-zinc-950 text-black dark:text-white">
+    <div className="h-screen flex flex-col overflow-hidden bg-canvas text-black dark:text-white">
       <Navbar theme={currentTheme} onThemeChange={onThemeChange} minimal />
       <main className="flex-1 overflow-auto">
         <AnimatePresence mode="wait">
           <Motion.div
             key={location.pathname}
-            initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(3px)" }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.24, ease: EASE_EXPO }}
           >
             {children}

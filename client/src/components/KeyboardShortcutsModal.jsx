@@ -80,8 +80,8 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
                   <Keyboard size={16} className="text-brand-600 dark:text-brand-400" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Keyboard Shortcuts</h2>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Shortcuts that work across CodeChatter</p>
+                  <h2 className="text-sm font-semibold text-fg">Keyboard Shortcuts</h2>
+                  <p className="text-xs text-fg-muted">Shortcuts that work across CodeChatter</p>
                 </div>
               </div>
               <button
@@ -105,7 +105,7 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
                           key={desc}
                           className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                         >
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">{desc}</span>
+                          <span className="text-sm text-fg">{desc}</span>
                           <div className="flex shrink-0 items-center gap-1">
                             {keys.map((keyLabel, index) => (
                               <span key={`${desc}-${keyLabel}`} className="flex items-center gap-1">

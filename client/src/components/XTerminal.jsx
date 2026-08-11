@@ -38,8 +38,8 @@ export default function XTerminal({ roomId }) {
       theme: {
         background: '#09090b',
         foreground: '#d4d4d8',
-        cursor: '#a78bfa',
-        selectionBackground: '#7c3aed33',
+        cursor: '#6cb0e6',
+        selectionBackground: '#0078d433',
       },
       convertEol: true,
       scrollback: 5000,

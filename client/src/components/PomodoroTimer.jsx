@@ -84,7 +84,7 @@ function sendNotif(title, body) {
 
 function getPhaseConfig(phase) {
   return {
-    work:       { label: "Focus",      color: "#7c3aed", textClass: "text-brand-500 dark:text-brand-400", ringClass: "stroke-brand-500" },
+    work:       { label: "Focus",      color: "#0078d4", textClass: "text-brand-500 dark:text-brand-400", ringClass: "stroke-brand-500" },
     shortBreak: { label: "Short Break",color: "#10b981", textClass: "text-success-500 dark:text-success-400", ringClass: "stroke-success-500" },
     longBreak:  { label: "Long Break", color: "#06b6d4", textClass: "text-info-500 dark:text-info-400",         ringClass: "stroke-info-500" },
   }[phase];
@@ -102,7 +102,7 @@ function SettingsPanel({ custom, onChange, onClose }) {
       className="absolute inset-0 z-20 flex flex-col bg-white dark:bg-[#0d0d10]"
     >
       <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <span className="text-sm font-semibold text-zinc-900 dark:text-white">Custom Timer</span>
+        <span className="text-sm font-semibold text-fg">Custom Timer</span>
         <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
           <X size={15} />
         </button>
@@ -115,8 +115,8 @@ function SettingsPanel({ custom, onChange, onClose }) {
         ].map(({ key, label, min, max }) => (
           <div key={key}>
             <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{label}</label>
-              <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{custom[key]}m</span>
+              <label className="text-xs font-medium text-fg-muted">{label}</label>
+              <span className="text-xs font-semibold text-fg">{custom[key]}m</span>
             </div>
             <input
               type="range"
@@ -292,7 +292,7 @@ export default function PomodoroTimer({ onBack = null }) {
             </button>
           ) : null}
           <Timer size={14} className="text-danger-400" />
-          <span className="text-sm font-semibold text-zinc-900 dark:text-white">Pomodoro</span>
+          <span className="text-sm font-semibold text-fg">Pomodoro</span>
         </div>
         <div className="flex items-center gap-1">
           {/* Today's stats chip */}
@@ -356,7 +356,7 @@ export default function PomodoroTimer({ onBack = null }) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.88 }}
                 transition={{ duration: 0.1 }}
-                className="text-[2rem] font-bold tabular-nums text-zinc-900 dark:text-white leading-none"
+                className="text-[2rem] font-bold tabular-nums text-fg leading-none"
               >
                 {fmt(secs)}
               </Motion.span>
@@ -378,7 +378,7 @@ export default function PomodoroTimer({ onBack = null }) {
             <RefreshCw size={14} />
           </button>
           <Motion.button
-            whileHover={{ scale: 1.06 }}
+            
             whileTap={{ scale: 0.94 }}
             onClick={() => {
               setRunning((v) => {
@@ -422,7 +422,7 @@ export default function PomodoroTimer({ onBack = null }) {
         <label className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
           <div className="flex items-center gap-2">
             <Zap size={12} className={autoStart ? "text-warning-400" : "text-zinc-400"} />
-            <span className="text-xs text-zinc-600 dark:text-zinc-400">Auto-start next phase</span>
+            <span className="text-xs text-fg-muted">Auto-start next phase</span>
           </div>
           <button
             onClick={() => setAutoStart((v) => !v)}
@@ -467,7 +467,7 @@ export default function PomodoroTimer({ onBack = null }) {
             >
               <div className="flex items-center gap-1.5">
                 <Trophy size={12} className="text-warning-400" />
-                <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                <span className="font-medium text-fg">
                   Today — {todayData.pomodoros} sessions · {todayMin}m focus
                 </span>
               </div>
@@ -487,7 +487,7 @@ export default function PomodoroTimer({ onBack = null }) {
                     {[...(todayData.sessions || [])].reverse().slice(0, 8).map((s, i) => (
                       <div key={i} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
                         <CheckCircle2 size={11} className="shrink-0 text-brand-400" />
-                        <span className="flex-1 truncate text-[11px] text-zinc-600 dark:text-zinc-400">{s.task}</span>
+                        <span className="flex-1 truncate text-[11px] text-fg-muted">{s.task}</span>
                         <span className="text-[10px] text-zinc-400">{s.duration}m</span>
                       </div>
                     ))}

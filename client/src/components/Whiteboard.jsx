@@ -16,7 +16,7 @@ const COLORS = [
   { hex: "#eab308", tldraw: "yellow", label: "Yellow" },
   { hex: "#22c55e", tldraw: "green",  label: "Green"  },
   { hex: "#3b82f6", tldraw: "blue",   label: "Blue"   },
-  { hex: "#8b5cf6", tldraw: "violet", label: "Violet" },
+  { hex: "#3794d8", tldraw: "violet", label: "Violet" },
   { hex: "#6b7280", tldraw: "grey",   label: "Grey"   },
   { hex: "#000000", tldraw: "black",  label: "Black"  },
 ];
@@ -53,7 +53,7 @@ function WhiteboardUI({ onBack }) {
 
   const [activeTool,  setActiveTool]  = useState("draw");
   const [activeSize,  setActiveSize]  = useState("m");
-  const [activeColor, setActiveColor] = useState("#8b5cf6");
+  const [activeColor, setActiveColor] = useState("#3794d8");
   const [activeFill,  setActiveFill]  = useState("none");
   const [showExport,  setShowExport]  = useState(false);
 

@@ -46,7 +46,7 @@ export function getFileVisual(name = "") {
   if (name === "package.json") return { Icon: SiNodedotjs, className: "text-success-500" };
   if (name === "vite.config.js" || name === "vite.config.ts") return { Icon: SiVite, className: "text-brand-500" };
   if (name === "tailwind.config.js" || name === "tailwind.config.ts") return { Icon: SiTailwindcss, className: "text-info-500" };
-  if (name === "next.config.js" || name === "next.config.ts") return { Icon: SiNextdotjs, className: "text-zinc-900 dark:text-white" };
+  if (name === "next.config.js" || name === "next.config.ts") return { Icon: SiNextdotjs, className: "text-fg" };
   
   // Notebook files
   if (extension === "nb") return { Icon: FileCode2, className: "text-brand-500" };
@@ -90,7 +90,7 @@ export function getFileVisual(name = "") {
   if (extension === "c" || extension === "h" || extension === "hpp") return { Icon: SiC, className: "text-brand-500" };
 
   // Shell/Bash
-  if (extension === "sh" || extension === "bash" || extension === "zsh") return { Icon: SiGnubash, className: "text-zinc-700 dark:text-zinc-300" };
+  if (extension === "sh" || extension === "bash" || extension === "zsh") return { Icon: SiGnubash, className: "text-fg" };
 
   // Swift
   if (extension === "swift") return { Icon: SiSwift, className: "text-warning-500" };

@@ -76,7 +76,7 @@ function ToolsPreview() {
     { icon: MessageCircleMore, color: "text-success-400 bg-success-50 dark:bg-success-900/20", label: "Chat"      },
     { icon: Bot,               color: "text-brand-400 bg-brand-50 dark:bg-brand-900/20",   label: "AI"        },
     { icon: GitBranch,         color: "text-info-400 bg-info-50 dark:bg-info-900/20",         label: "Flowchart" },
-    { icon: Github,            color: "text-zinc-500 bg-zinc-100 dark:bg-zinc-800",           label: "GitHub"    },
+    { icon: Github,            color: "text-zinc-500 bg-hovered",           label: "GitHub"    },
     { icon: Timer,             color: "text-danger-400 bg-danger-50 dark:bg-danger-900/20",         label: "Pomodoro"  },
   ];
   return (
@@ -252,8 +252,8 @@ export default function OnboardingModal() {
                 transition={{ duration: 0.18 }}
               >
                 <div className="px-6 pt-5 pb-3">
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{current.title}</h2>
-                  <p className="mt-1.5 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{current.desc}</p>
+                  <h2 className="text-lg font-bold text-fg">{current.title}</h2>
+                  <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">{current.desc}</p>
                 </div>
 
                 {/* Visual preview */}
@@ -281,7 +281,7 @@ export default function OnboardingModal() {
                   <Motion.div key={i}
                     animate={{
                       width: i === step ? 18 : 6,
-                      backgroundColor: i === step ? "#7c3aed" : i < step ? "#a78bfa" : "#d4d4d8",
+                      backgroundColor: i === step ? "#0078d4" : i < step ? "#6cb0e6" : "#d4d4d8",
                     }}
                     transition={SPRING}
                     className="h-1.5 cursor-pointer rounded-full"
@@ -296,7 +296,7 @@ export default function OnboardingModal() {
                     Back
                   </button>
                 )}
-                <Motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }} onClick={next}
+                <Motion.button  whileTap={{ scale: 0.97 }} onClick={next}
                   className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-sm transition-colors hover:bg-brand-500">
                   {isLast ? "Done" : "Next"}
                   {isLast ? <Check size={14} /> : <ArrowRight size={14} />}

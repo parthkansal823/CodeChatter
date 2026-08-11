@@ -285,7 +285,7 @@ export default function BottomPanel({
               {execHistory.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 text-center opacity-60">
                   <Clock size={20} className="text-zinc-400" />
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">No execution history yet</p>
+                  <p className="text-xs text-fg-muted">No execution history yet</p>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -339,7 +339,7 @@ export default function BottomPanel({
                     <ShieldOff size={20} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Terminal Access Restricted</p>
+                    <p className="text-sm font-semibold text-fg">Terminal Access Restricted</p>
                     <p className="text-xs text-zinc-500 max-w-[260px]">
                       You don&apos;t have terminal permission for this workspace. Ask the room owner to grant you editor access.
                     </p>

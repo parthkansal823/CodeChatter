@@ -29,7 +29,7 @@ export default function ConfirmModal({
           >
             <h2 className="text-xl font-semibold">{title}</h2>
             {description && (
-              <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
+              <p className="mt-3 text-sm text-fg-muted whitespace-pre-line leading-relaxed">
                 {description}
               </p>
             )}

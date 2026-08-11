@@ -97,11 +97,11 @@ function Field({ label, hint, children }) {
   return (
     <div className="space-y-2">
       <div className="space-y-0.5">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fg-subtle">
           {label}
         </p>
         {hint ? (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>
+          <p className="text-xs text-fg-muted">{hint}</p>
         ) : null}
       </div>
       {children}
@@ -147,12 +147,12 @@ function RoleOptionGrid({ selectedRole, onChange, allowOwner = false, dense = fa
                 <Icon size={14} />
               </span>
               <div>
-                <p className="text-sm font-semibold text-zinc-900 dark:text-white">{option.label}</p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">{option.shortLabel}</p>
+                <p className="text-sm font-semibold text-fg">{option.label}</p>
+                <p className="text-xs text-fg-muted">{option.shortLabel}</p>
               </div>
             </div>
             {!dense ? (
-              <p className="mt-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{option.description}</p>
+              <p className="mt-3 text-xs leading-5 text-fg-muted">{option.description}</p>
             ) : null}
           </button>
         );
@@ -353,7 +353,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                 }`}
               >
                 <p className="text-sm font-semibold">{option.label}</p>
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{option.shortLabel}</p>
+                <p className="mt-1 text-xs text-fg-muted">{option.shortLabel}</p>
               </button>
             ))}
           </div>
@@ -386,8 +386,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                   <Lock size={16} />
                 </span>
                 <div>
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-white">Approval required</p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Owners review every request before access is granted.</p>
+                  <p className="text-sm font-semibold text-fg">Approval required</p>
+                  <p className="text-xs text-fg-muted">Owners review every request before access is granted.</p>
                 </div>
               </div>
             </button>
@@ -406,8 +406,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                   <Unlock size={16} />
                 </span>
                 <div>
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-white">Direct join</p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">People joining with access can enter immediately.</p>
+                  <p className="text-sm font-semibold text-fg">Direct join</p>
+                  <p className="text-xs text-fg-muted">People joining with access can enter immediately.</p>
                 </div>
               </div>
             </button>
@@ -435,7 +435,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
         <Field label="Permission matrix" hint="A quick view of what each role can do inside the workspace.">
           <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
             <table className="w-full text-sm">
-              <thead className="bg-zinc-50 dark:bg-zinc-900/70">
+              <thead className="bg-panel/70">
                 <tr>
                   <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Action</th>
                   {["owner", "editor", "runner", "viewer"].map((role) => (
@@ -499,8 +499,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <UserAvatar username={member.username} size="sm" />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{member.username}</p>
-                    <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{member.email || "No email available"}</p>
+                    <p className="truncate text-sm font-semibold text-fg">{member.username}</p>
+                    <p className="truncate text-xs text-fg-muted">{member.email || "No email available"}</p>
                   </div>
                 </div>
 
@@ -511,7 +511,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
               </div>
 
               {isLastOwner ? (
-                <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="mt-3 text-xs text-fg-muted">
                   This owner cannot be demoted until another owner exists.
                 </p>
               ) : (
@@ -537,7 +537,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
         <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
           <Users size={24} className="text-zinc-400" />
           <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No members yet</p>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Invite teammates to start collaborating here.</p>
+          <p className="mt-1 text-xs text-fg-muted">Invite teammates to start collaborating here.</p>
         </div>
       ) : (
         <>
@@ -554,7 +554,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
         <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
           <Clock3 size={24} className="text-zinc-400" />
           <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No pending requests</p>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Anyone waiting to join will appear here.</p>
+          <p className="mt-1 text-xs text-fg-muted">Anyone waiting to join will appear here.</p>
         </div>
       ) : (
         pendingJoinRequests.map((request) => {
@@ -567,8 +567,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <UserAvatar username={request.username} size="sm" />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{request.username}</p>
-                    <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{request.email || "No email available"}</p>
+                    <p className="truncate text-sm font-semibold text-fg">{request.username}</p>
+                    <p className="truncate text-xs text-fg-muted">{request.email || "No email available"}</p>
                   </div>
                 </div>
                 <span className="text-xs text-zinc-400">{formatRequestedAt(request.requestedAt)}</span>
@@ -648,7 +648,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
             {!room || isLoading ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-3">
                 <Loader2 className="h-6 w-6 animate-spin text-brand-500" />
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading workspace settings...</p>
+                <p className="text-sm text-fg-muted">Loading workspace settings...</p>
               </div>
             ) : (
               <>
@@ -659,8 +659,8 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">
                           Workspace controls
                         </p>
-                        <h2 className="mt-1 text-xl font-semibold text-zinc-900 dark:text-white">{room.name || "Workspace"}</h2>
-                        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                        <h2 className="mt-1 text-xl font-semibold text-fg">{room.name || "Workspace"}</h2>
+                        <p className="mt-2 text-sm text-fg-muted">
                           Manage permissions, member access, and workspace defaults.
                         </p>
                       </div>
@@ -676,11 +676,11 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
                     <div className="mt-5 grid grid-cols-2 gap-2">
                       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                         <p className="text-xs uppercase tracking-[0.16em] text-zinc-400">Members</p>
-                        <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-white">{collaborators.length}</p>
+                        <p className="mt-1 text-lg font-semibold text-fg">{collaborators.length}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950/60">
                         <p className="text-xs uppercase tracking-[0.16em] text-zinc-400">Pending</p>
-                        <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-white">{pendingJoinRequests.length}</p>
+                        <p className="mt-1 text-lg font-semibold text-fg">{pendingJoinRequests.length}</p>
                       </div>
                     </div>
                   </div>

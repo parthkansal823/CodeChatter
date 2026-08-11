@@ -86,7 +86,7 @@ function VideoTile({
     : "aspect-[4/3] rounded-xl";
 
   return (
-    <div className={`group relative overflow-hidden border border-white/10 bg-zinc-950 shadow-[0_20px_50px_rgba(0,0,0,0.35)] ${sizeClasses}`}>
+    <div className={`group relative overflow-hidden border border-white/10 bg-zinc-950 shadow-md ${sizeClasses}`}>
       <video
         ref={videoRef}
         autoPlay
@@ -552,9 +552,9 @@ export default function VideoCall({
   const controlButton = (active, danger = false) =>
     `flex h-12 w-12 items-center justify-center rounded-lg border transition ${
       danger
-        ? "border-danger-400/30 bg-danger-500 text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] hover:bg-danger-400"
+        ? "border-danger-400/30 bg-danger-500 text-white hover:bg-danger-400"
         : active
-          ? "border-info-400/30 bg-info-500 text-white shadow-[0_10px_25px_rgba(14,165,233,0.35)] hover:bg-info-400"
+          ? "border-info-400/30 bg-info-500 text-white hover:bg-info-400"
           : "border-white/8 bg-zinc-800/60 text-zinc-200 hover:bg-zinc-800"
     }`;
 
@@ -757,7 +757,7 @@ export default function VideoCall({
                   <PictureInPicture2 size={18} />
                 </button>
               ) : null}
-              <button onClick={endCall} className="inline-flex h-12 items-center gap-2 rounded-lg border border-danger-400/30 bg-danger-500 px-5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(239,68,68,0.35)] transition hover:bg-danger-400" title="End call">
+              <button onClick={endCall} className="inline-flex h-12 items-center gap-2 rounded-lg border border-danger-400/30 bg-danger-500 px-5 text-sm font-semibold text-white transition hover:bg-danger-400" title="End call">
                 <PhoneOff size={18} />
                 Leave
               </button>

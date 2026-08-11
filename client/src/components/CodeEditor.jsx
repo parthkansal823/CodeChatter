@@ -29,7 +29,7 @@ function Breadcrumb({ filePath, fileName }) {
       <div className="flex flex-shrink-0 items-center gap-1">
         <ChevronRight size={12} />
         <Icon size={14} className={iconClassName} />
-        <span className="font-medium text-zinc-700 dark:text-zinc-300">{fileName}</span>
+        <span className="font-medium text-fg">{fileName}</span>
       </div>
     </div>
   );

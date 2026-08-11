@@ -13,7 +13,7 @@ import {
 const STORAGE_PREFIX = "cc-notes-v2-";
 
 const NOTE_COLORS = [
-  { id: "zinc",   bg: "bg-zinc-100 dark:bg-zinc-800",   border: "border-l-zinc-400",   dot: "bg-zinc-400"   },
+  { id: "zinc",   bg: "bg-hovered",   border: "border-l-zinc-400",   dot: "bg-zinc-400"   },
   { id: "violet", bg: "bg-brand-50 dark:bg-brand-900/20", border: "border-l-brand-400", dot: "bg-brand-400" },
   { id: "amber",  bg: "bg-warning-50 dark:bg-warning-900/20",  border: "border-l-warning-400",  dot: "bg-warning-400"  },
   { id: "emerald",bg: "bg-success-50 dark:bg-success-900/20",border: "border-l-success-400",dot: "bg-success-400"},
@@ -296,7 +296,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
             </button>
           ) : null}
           <StickyNote size={14} className="text-warning-400" />
-          <span className="text-sm font-semibold text-zinc-900 dark:text-white">Notes</span>
+          <span className="text-sm font-semibold text-fg">Notes</span>
           <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
             {notes.length}
           </span>
@@ -355,7 +355,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
                   className={`group relative cursor-pointer rounded-xl border-l-4 p-3 transition hover:shadow-sm ${color.bg} ${color.border}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="flex-1 truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                    <p className="flex-1 truncate text-xs font-semibold text-fg">
                       {note.title || <span className="font-normal italic text-zinc-400">Untitled</span>}
                     </p>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -375,7 +375,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
                     </div>
                   </div>
                   {preview && (
-                    <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500 dark:text-zinc-400">{preview}</p>
+                    <p className="mt-1 line-clamp-2 text-[11px] text-fg-muted">{preview}</p>
                   )}
                   <div className="mt-1.5 flex items-center gap-2">
                     {note.pinned && <Pin size={9} className="text-warning-400" />}

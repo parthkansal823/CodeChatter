@@ -73,7 +73,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">
             <div className="flex items-center gap-2">
               <Bell size={14} className="text-zinc-700 dark:text-zinc-200" />
-              <span className="text-sm font-semibold text-zinc-900 dark:text-white">Notifications</span>
+              <span className="text-sm font-semibold text-fg">Notifications</span>
               {unreadCount > 0 && (
                 <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand-600 px-1.5 text-[10px] font-bold text-white">
                   {unreadCount}
@@ -107,8 +107,8 @@ export default function NotificationsPanel({ isOpen, onClose }) {
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
                 <BellOff size={24} className="text-zinc-300 dark:text-zinc-600" />
-                <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">All caught up!</p>
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">No notifications yet</p>
+                <p className="text-sm font-medium text-fg-muted">All caught up!</p>
+                <p className="text-xs text-fg-subtle">No notifications yet</p>
               </div>
             ) : (
               notifications.map(notif => {
@@ -128,8 +128,8 @@ export default function NotificationsPanel({ isOpen, onClose }) {
                       <div className="flex items-start justify-between gap-2">
                         <p className={`text-xs font-semibold leading-snug ${
                           notif.read
-                            ? "text-zinc-700 dark:text-zinc-300"
-                            : "text-zinc-900 dark:text-white"
+                            ? "text-fg"
+                            : "text-fg"
                         }`}>
                           {notif.title}
                         </p>
@@ -137,8 +137,8 @@ export default function NotificationsPanel({ isOpen, onClose }) {
                           <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
                         )}
                       </div>
-                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{notif.message}</p>
-                      <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">{timeAgo(notif.timestamp)}</p>
+                      <p className="mt-0.5 text-xs text-fg-muted">{notif.message}</p>
+                      <p className="mt-1 text-[10px] text-fg-subtle">{timeAgo(notif.timestamp)}</p>
                     </button>
                     <button
                       onClick={() => removeNotification(notif.id)}

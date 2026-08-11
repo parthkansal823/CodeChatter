@@ -21,13 +21,11 @@ const slideVariant = {
     opacity: 0,
     x: dir * 22,
     scale: 0.97,
-    filter: "blur(5px)",
   }),
   visible: {
     opacity: 1,
     x: 0,
     scale: 1,
-    filter: "blur(0px)",
     transition: {
       type: "spring",
       stiffness: 340,
@@ -40,7 +38,6 @@ const slideVariant = {
     opacity: 0,
     x: dir * -18,
     scale: 0.97,
-    filter: "blur(4px)",
     transition: { duration: 0.18, ease: "easeIn" },
   }),
 };
@@ -103,7 +100,7 @@ function OtpInput({ value, onChange }) {
             value={value[i] || ""}
             onChange={(e) => handleChange(i, e)}
             onKeyDown={(e) => handleKeyDown(i, e)}
-            className="h-12 w-10 rounded-xl border border-zinc-800 bg-zinc-800/60 text-center text-lg font-bold text-white caret-transparent transition-all duration-150 focus:scale-105 focus:border-brand-500 focus:bg-zinc-800 focus:outline-none sm:h-[3.25rem] sm:w-11 sm:text-xl"
+            className="h-12 w-10 rounded-xl border border-edge-subtle bg-hovered/60 text-center text-lg font-bold text-fg caret-transparent transition-all duration-150 focus:scale-105 focus:border-brand-500 focus:bg-zinc-800 focus:outline-none sm:h-[3.25rem] sm:w-11 sm:text-xl"
             autoComplete="one-time-code"
           />
         </Motion.div>
@@ -244,9 +241,9 @@ export default function Auth() {
         <AnimatePresence mode="wait">
           <Motion.div
             key="otp-step"
-            initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2, ease: EASE_EXPO }}
             className="w-full"
           >
@@ -258,7 +255,7 @@ export default function Auth() {
               transition={{ delay: 0.1, duration: 0.2, ease: EASE_EXPO }}
               whileHover={{ x: -3 }}
               whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors mb-8"
+              className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-zinc-200 transition-colors mb-8"
             >
               <ArrowLeft size={15} />
               Back
@@ -279,7 +276,7 @@ export default function Auth() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.2, ease: EASE_EXPO }}
-                className="text-2xl font-bold tracking-tight text-white"
+                className="text-2xl font-bold tracking-tight text-fg"
               >
                 Check your email
               </Motion.h1>
@@ -287,10 +284,10 @@ export default function Auth() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.27, duration: 0.2, ease: EASE_EXPO }}
-                className="text-[13px] text-gray-400 mt-1.5 max-w-xs leading-relaxed"
+                className="text-[13px] text-fg-muted mt-1.5 max-w-xs leading-relaxed"
               >
                 We sent a 6-digit code to{" "}
-                <span className="text-gray-200 font-medium">{maskedEmail}</span>
+                <span className="text-fg font-medium">{maskedEmail}</span>
               </Motion.p>
             </div>
 
@@ -302,11 +299,11 @@ export default function Auth() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.52, duration: 0.2, ease: EASE_EXPO }}
-                whileHover={{ scale: 1.03, y: -2, boxShadow: "0 0 28px rgba(124,58,237,0.45)" }}
+                
                 whileTap={{ scale: 0.97 }}
                 type="submit"
                 disabled={loading || otp.replace(/\D/g, "").length < 6}
-                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2.5 rounded-xl font-semibold text-sm text-fg bg-accent hover:bg-accent-hover transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -322,14 +319,14 @@ export default function Auth() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6, duration: 0.2 }}
-              className="flex items-center justify-center gap-1.5 mt-6 text-[12.5px] text-gray-500"
+              className="flex items-center justify-center gap-1.5 mt-6 text-[12.5px] text-fg-muted"
             >
               <span>Didn't receive it?</span>
               <button
                 type="button"
                 onClick={handleResend}
                 disabled={resendCooldown > 0}
-                className="flex items-center gap-1 text-gray-300 hover:text-brand-400 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors font-medium"
+                className="flex items-center gap-1 text-fg hover:text-brand-400 disabled:text-zinc-600 disabled:cursor-not-allowed transition-colors font-medium"
               >
                 <RotateCcw size={11} />
                 {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
@@ -340,7 +337,7 @@ export default function Auth() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.65, duration: 0.2 }}
-              className="text-center text-[11px] text-gray-600 mt-5"
+              className="text-center text-[11px] text-fg-subtle mt-5"
             >
               Code expires in 5 minutes
             </Motion.p>
@@ -358,7 +355,7 @@ export default function Auth() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-6 mb-8 border-b border-zinc-800">
+      <div className="flex gap-6 mb-8 border-b border-edge-subtle">
         {[
           { key: "login",  label: "Sign in" },
           { key: "signup", label: "Create account" },
@@ -367,7 +364,7 @@ export default function Auth() {
             key={key}
             onClick={() => changeMode(key)}
             className={`pb-3 text-sm font-semibold transition-colors duration-200 relative ${
-              mode === key ? "text-white" : "text-gray-500 hover:text-gray-300"
+              mode === key ? "text-fg" : "text-fg-muted hover:text-zinc-300"
             }`}
           >
             {label}
@@ -393,10 +390,10 @@ export default function Auth() {
           exit="exit"
           className="mb-7"
         >
-          <h1 className="text-2xl font-bold tracking-tight text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-fg">
             {mode === "login" ? "Welcome back" : "Get started free"}
           </h1>
-          <p className="text-[13px] text-gray-400 mt-1.5">
+          <p className="text-[13px] text-fg-muted mt-1.5">
             {mode === "login"
               ? "Sign in to your CodeChatter workspace"
               : "Create your account — no credit card required"}
@@ -407,7 +404,7 @@ export default function Auth() {
       {/* OAuth buttons */}
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {[
-          { icon: Github,   label: "GitHub", color: "text-gray-300", action: () => startOAuth(API_ENDPOINTS.GITHUB_LOGIN) },
+          { icon: Github,   label: "GitHub", color: "text-fg", action: () => startOAuth(API_ENDPOINTS.GITHUB_LOGIN) },
           { icon: FcGoogle, label: "Google", color: "",              action: () => startOAuth(API_ENDPOINTS.GOOGLE_LOGIN) },
         ].map(({ icon: Icon, label, action }, i) => (
           <Motion.button
@@ -415,14 +412,14 @@ export default function Auth() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08 + i * 0.06, duration: 0.2, ease: EASE_EXPO }}
-            whileHover={{ scale: 1.03, y: -2 }}
+            
             whileTap={{ scale: 0.97 }}
             type="button"
             onClick={action}
-            className="flex items-center justify-center gap-2.5 py-2.5 rounded-xl bg-zinc-800/60 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 transition-colors duration-200 group"
+            className="flex items-center justify-center gap-2.5 py-2.5 rounded-xl bg-hovered/60 border border-edge-subtle hover:bg-zinc-800 hover:border-zinc-700 transition-colors duration-200 group"
           >
-            <Icon size={16} className={`${label === "GitHub" ? "text-gray-300 group-hover:text-white" : ""} transition-colors`} />
-            <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
+            <Icon size={16} className={`${label === "GitHub" ? "text-fg group-hover:text-white" : ""} transition-colors`} />
+            <span className="text-sm font-medium text-fg group-hover:text-white transition-colors">
               {label}
             </span>
           </Motion.button>
@@ -437,10 +434,10 @@ export default function Auth() {
         className="relative mb-6"
       >
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-zinc-800" />
+          <div className="w-full border-t border-edge-subtle" />
         </div>
         <div className="relative flex justify-center">
-          <span className="px-3 bg-[#08080f] text-[11px] text-gray-500 uppercase tracking-wider">
+          <span className="px-3 bg-[#08080f] text-[11px] text-fg-muted uppercase tracking-wider">
             or with email
           </span>
         </div>
@@ -479,23 +476,23 @@ export default function Auth() {
                 icon={Lock}
               />
               <div className="flex justify-between items-center mt-2.5">
-                <label className="flex items-center gap-2 text-[12.5px] text-gray-400 cursor-pointer hover:text-gray-200 transition-colors select-none">
-                  <input type="checkbox" className="w-3.5 h-3.5 rounded accent-brand-500 bg-zinc-800/60 border-zinc-700" />
+                <label className="flex items-center gap-2 text-[12.5px] text-fg-muted cursor-pointer hover:text-zinc-200 transition-colors select-none">
+                  <input type="checkbox" className="w-3.5 h-3.5 rounded accent-brand-500 bg-hovered/60 border-edge" />
                   Remember me
                 </label>
-                <button type="button" className="text-[12.5px] text-gray-400 hover:text-brand-400 transition-colors">
+                <button type="button" className="text-[12.5px] text-fg-muted hover:text-brand-400 transition-colors">
                   Forgot password?
                 </button>
               </div>
             </div>
 
             <Motion.button
-              whileHover={{ scale: 1.03, y: -2, boxShadow: "0 0 32px rgba(124,58,237,0.45)" }}
+              
               whileTap={{ scale: 0.97 }}
               transition={SPRING}
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-fg bg-accent hover:bg-accent-hover transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -527,12 +524,12 @@ export default function Auth() {
               value={signupConfirm} onChange={(e) => setSignupConfirm(e.target.value)} icon={Lock} />
 
             <Motion.button
-              whileHover={{ scale: 1.03, y: -2, boxShadow: "0 0 32px rgba(124,58,237,0.45)" }}
+              
               whileTap={{ scale: 0.97 }}
               transition={SPRING}
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-brand-600 to-info-600 hover:from-brand-500 hover:to-info-500 transition-colors duration-200 shadow-[0_0_20px_rgba(124,58,237,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-2 py-2.5 rounded-xl font-semibold text-sm text-fg bg-accent hover:bg-accent-hover transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -550,19 +547,19 @@ export default function Auth() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.4, duration: 0.2 }}
-        className="text-center text-[12.5px] text-gray-500 mt-7"
+        className="text-center text-[12.5px] text-fg-muted mt-7"
       >
         {mode === "login" ? (
           <>
             No account?{" "}
-            <button onClick={() => changeMode("signup")} className="text-gray-200 hover:text-brand-400 font-medium transition-colors">
+            <button onClick={() => changeMode("signup")} className="text-fg hover:text-brand-400 font-medium transition-colors">
               Sign up for free
             </button>
           </>
         ) : (
           <>
             Already have an account?{" "}
-            <button onClick={() => changeMode("login")} className="text-gray-200 hover:text-brand-400 font-medium transition-colors">
+            <button onClick={() => changeMode("login")} className="text-fg hover:text-brand-400 font-medium transition-colors">
               Sign in
             </button>
           </>
@@ -573,12 +570,12 @@ export default function Auth() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.45, duration: 0.2 }}
-        className="text-center text-[11px] text-gray-600 mt-4"
+        className="text-center text-[11px] text-fg-subtle mt-4"
       >
         By continuing, you agree to our{" "}
-        <span className="text-gray-500 hover:text-gray-300 cursor-pointer transition-colors">Terms</span>{" "}
+        <span className="text-fg-muted hover:text-zinc-300 cursor-pointer transition-colors">Terms</span>{" "}
         and{" "}
-        <span className="text-gray-500 hover:text-gray-300 cursor-pointer transition-colors">Privacy Policy</span>.
+        <span className="text-fg-muted hover:text-zinc-300 cursor-pointer transition-colors">Privacy Policy</span>.
       </Motion.p>
     </AuthFormLayout>
   );

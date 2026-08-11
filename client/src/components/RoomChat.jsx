@@ -82,10 +82,10 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
           <ArrowLeft size={16} />
         </button>
         <Hash size={16} className="text-success-500" />
-        <span className="text-sm font-semibold text-zinc-900 dark:text-white">Room Chat</span>
-        <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800/50 cursor-default" title="End-to-End Encrypted">
-          <Lock size={10} className="text-zinc-400 dark:text-zinc-500" />
-          <span className="text-[10px] font-semibold tracking-wider text-zinc-400 dark:text-zinc-500 uppercase">E2EE</span>
+        <span className="text-sm font-semibold text-fg">Room Chat</span>
+        <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded-full bg-hovered/50 cursor-default" title="End-to-End Encrypted">
+          <Lock size={10} className="text-fg-subtle" />
+          <span className="text-[10px] font-semibold tracking-wider text-fg-subtle uppercase">E2EE</span>
         </div>
       </div>
 
@@ -97,7 +97,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
             <div key={msg.id || `msg-${idx}`} className={`flex flex-col ${isSenderYou ? "items-end" : "items-start"}`}>
               {msg.isSystem ? (
                 <div className="w-full text-center my-2">
-                  <span className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800/50 rounded-full text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                  <span className="px-3 py-1 bg-hovered/50 rounded-full text-[11px] font-medium text-fg-muted">
                     {msg.text}
                   </span>
                 </div>
@@ -108,19 +108,19 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                   </div>
                   <div className={`flex flex-col ${isSenderYou ? "items-end" : "items-start"}`}>
                     <div className="flex items-baseline gap-2 mb-1 px-1">
-                      <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                      <span className="text-[11px] font-semibold text-fg">
                         {isSenderYou ? "You" : msg.sender}
                       </span>
-                      <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{msg.time}</span>
+                      <span className="text-[9px] text-fg-subtle">{msg.time}</span>
                     </div>
 
                     {msg.msgType === "file" && msg.fileUrl ? (
                       <div className={`p-3 text-sm leading-relaxed shadow-sm break-words flex items-center gap-3 ${
                         isSenderYou
                           ? "bg-brand-600 border border-brand-500 text-white rounded-lg rounded-br-sm shadow-sm"
-                          : "bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-lg rounded-bl-sm"
+                          : "bg-panel border border-zinc-200/50 dark:border-zinc-800 text-fg rounded-lg rounded-bl-sm"
                       }`}>
-                        <div className={`p-2 rounded-lg ${isSenderYou ? "bg-zinc-800 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-brand-500"}`}>
+                        <div className={`p-2 rounded-lg ${isSenderYou ? "bg-zinc-800 text-white" : "bg-hovered text-brand-500"}`}>
                           <FileText size={18} />
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">
@@ -134,7 +134,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                           download={msg.fileName}
                           target="_blank"
                           rel="noreferrer"
-                          className={`ml-2 p-1.5 rounded-full hover:bg-black/10 transition-colors ${isSenderYou ? "text-white" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"}`}
+                          className={`ml-2 p-1.5 rounded-full hover:bg-black/10 transition-colors ${isSenderYou ? "text-white" : "text-fg-muted hover:text-zinc-900 dark:hover:text-white"}`}
                           title="Download File"
                         >
                           <Download size={16} />
@@ -145,7 +145,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                         className={`px-3.5 py-2.5 text-sm leading-relaxed shadow-sm break-words whitespace-pre-wrap ${
                           isSenderYou
                             ? "bg-brand-600 text-white rounded-lg rounded-br-sm shadow-sm"
-                            : "bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-lg rounded-bl-sm"
+                            : "bg-panel border border-zinc-200/50 dark:border-zinc-800 text-fg rounded-lg rounded-bl-sm"
                         }`}
                       >
                         {msg.text}
@@ -182,7 +182,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
               disabled={isUploading}
-              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full pl-4 pr-10 py-2.5 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all shadow-sm disabled:opacity-50"
+              className="w-full bg-panel border border-edge-subtle rounded-full pl-4 pr-10 py-2.5 text-sm text-fg placeholder-zinc-400 focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all shadow-sm disabled:opacity-50"
             />
             <button
               type="submit"

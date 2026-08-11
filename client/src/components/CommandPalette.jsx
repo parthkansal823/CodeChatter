@@ -408,7 +408,7 @@ export default function CommandPalette({ theme, onThemeChange }) {
 
             <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090b]/80">
               <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
-                <Search className="text-zinc-400 dark:text-zinc-500" size={20} />
+                <Search className="text-fg-subtle" size={20} />
                 <input
                   ref={inputRef}
                   value={query}
@@ -428,9 +428,9 @@ export default function CommandPalette({ theme, onThemeChange }) {
 
               <div className="max-h-[60vh] overflow-y-auto p-2">
                 {filtered.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                  <div className="px-4 py-8 text-center text-sm text-fg-muted">
                     No commands found for{" "}
-                    <span className="text-zinc-900 dark:text-white">"{query}"</span>
+                    <span className="text-fg">"{query}"</span>
                   </div>
                 ) : (
                   (() => {
@@ -481,7 +481,7 @@ export default function CommandPalette({ theme, onThemeChange }) {
                                   <p className="text-sm font-medium">{command.title}</p>
                                   {command.subtitle && (
                                     <p className={`mt-0.5 text-xs ${
-                                      isSelected ? "text-white/75" : "text-zinc-400 dark:text-zinc-500"
+                                      isSelected ? "text-white/75" : "text-fg-subtle"
                                     }`}>
                                       {command.subtitle}
                                     </p>

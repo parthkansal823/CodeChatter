@@ -118,15 +118,15 @@ function MessageText({ text }) {
     if (inCode) { codeLines.push(line); return; }
 
     if (line.startsWith("### ")) {
-      elements.push(<p key={i} className="mb-1 mt-3 text-[12px] font-bold text-zinc-800 dark:text-zinc-100">{line.slice(4)}</p>);
+      elements.push(<p key={i} className="mb-1 mt-3 text-[12px] font-bold text-fg">{line.slice(4)}</p>);
       return;
     }
     if (line.startsWith("## ")) {
-      elements.push(<p key={i} className="mb-1 mt-3 text-[13px] font-bold text-zinc-900 dark:text-white">{line.slice(3)}</p>);
+      elements.push(<p key={i} className="mb-1 mt-3 text-[13px] font-bold text-fg">{line.slice(3)}</p>);
       return;
     }
     if (line.startsWith("# ")) {
-      elements.push(<p key={i} className="mb-1 mt-3 text-[14px] font-bold text-zinc-900 dark:text-white">{line.slice(2)}</p>);
+      elements.push(<p key={i} className="mb-1 mt-3 text-[14px] font-bold text-fg">{line.slice(2)}</p>);
       return;
     }
     if (/^[-*] /.test(line)) {
@@ -296,10 +296,10 @@ export default function AIHelper({
   const charCount = input.length;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-white dark:bg-zinc-950">
+    <div className="flex h-full flex-col overflow-hidden bg-canvas">
 
       {/* ── Header ── */}
-      <div className="relative shrink-0 overflow-hidden border-b border-zinc-200 dark:border-zinc-800">
+      <div className="relative shrink-0 overflow-hidden border-b border-edge-subtle">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/10 via-brand-500/5 to-transparent dark:from-brand-600/20 dark:via-brand-600/10" />
         <div className="relative px-3 pb-3 pt-3">
 
@@ -313,12 +313,12 @@ export default function AIHelper({
             >
               <ArrowLeft size={15} />
             </button>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 shadow-lg shadow-sm">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent shadow-lg shadow-sm">
               <Bot size={14} className="text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-white">Workspace AI</p>
-              <p className="mt-0.5 flex items-center gap-1 text-[10px] leading-none text-zinc-500 dark:text-zinc-400">
+              <p className="text-sm font-semibold leading-none text-fg">Workspace AI</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[10px] leading-none text-fg-muted">
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-success-400" />
                 Gemini 2.5 Flash
               </p>
@@ -356,8 +356,8 @@ export default function AIHelper({
               <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${langClass}`}>
                 {context.languageLabel}
               </span>
-              <span className="min-w-0 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-300">{context.fileName}</span>
-              <span className="ml-auto shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500">{context.signals.nonEmptyLineCount}L</span>
+              <span className="min-w-0 truncate text-[11px] font-medium text-fg">{context.fileName}</span>
+              <span className="ml-auto shrink-0 text-[10px] text-fg-subtle">{context.signals.nonEmptyLineCount}L</span>
             </div>
           ) : (
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-[11px] text-warning-700 dark:border-warning-500/20 dark:bg-warning-500/10 dark:text-warning-300">
@@ -429,10 +429,10 @@ export default function AIHelper({
               >
                 {!isUser && (
                   <div className="mb-1.5 flex items-center gap-1.5">
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent">
                       <Bot size={10} className="text-white" />
                     </div>
-                    <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Gemini AI</span>
+                    <span className="text-[10px] font-medium text-fg-muted">Gemini AI</span>
                   </div>
                 )}
 
@@ -484,7 +484,7 @@ export default function AIHelper({
 
         {isTyping && (
           <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent">
               <Bot size={10} className="text-white" />
             </div>
             <div className="flex items-center gap-1 rounded-lg rounded-tl-sm border border-zinc-200 bg-zinc-50 px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -530,7 +530,7 @@ export default function AIHelper({
         <div className="mt-1.5 flex items-center justify-between px-1">
           <p className="text-[10px] text-zinc-400 dark:text-zinc-600">Enter to send · Shift+Enter for newline</p>
           {charCount > 500 && (
-            <span className={`text-[10px] font-medium ${charCount > 1500 ? "text-danger-500" : "text-zinc-400 dark:text-zinc-500"}`}>
+            <span className={`text-[10px] font-medium ${charCount > 1500 ? "text-danger-500" : "text-fg-subtle"}`}>
               {charCount}/2000
             </span>
           )}
