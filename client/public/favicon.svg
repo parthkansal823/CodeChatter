@@ -1,14 +1,16 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!--
-    Flat, single-colour app mark.
+    Flat, single-colour app mark — a terminal prompt: chevron plus cursor.
 
-    A favicon is rendered at 16px. The previous version used three gradients,
-    a Gaussian glow and a drop-shadow filter, all of which collapse into a
-    smudge at that size. Solid fill + thick strokes stay legible instead.
+    A favicon is rendered at 16px. Solid fill plus thick strokes stay legible
+    at that size; gradients, glows and thin detail collapse into a smudge.
+
+    Kept in step with BrandMark in src/components/BrandLogo.jsx — the geometry
+    here is that 32px path scaled by 16.
   -->
-  <rect width="512" height="512" rx="112" fill="#0078D4"/>
-  <g stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M196 186 L126 256 L196 326"/>
-    <path d="M316 186 L386 256 L316 326"/>
+  <rect x="16" y="16" width="480" height="480" rx="144" fill="#0078D4"/>
+  <g stroke="#FFFFFF" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M168 184 L240 256 L168 328"/>
+    <path d="M296 328 L352 328"/>
   </g>
 </svg>

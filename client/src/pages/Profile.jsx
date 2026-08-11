@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import {
-  ArrowRight, Calendar, Clock3, Code2, FolderGit2, Github, Mail,
-  PlayCircle, Settings, Shield, Sparkles, Users,
+  ArrowRight, Calendar, FolderGit2, Github, Mail, PlayCircle, Settings, Users,
 } from "lucide-react";
 
 import { useAuth } from "../hooks/useAuth";
@@ -24,24 +23,51 @@ const itemVariants = {
 };
 
 function formatDateLabel(value) {
-  if (!value) return "Recently";
+  if (!value) return "recently";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Recently";
+  if (Number.isNaN(parsed.getTime())) return "recently";
   return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function RolePill({ role }) {
-  const palette = {
-    owner: "bg-warning-50 text-warning-700 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20",
-    editor: "bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/10 dark:text-brand-300 dark:border-brand-500/20",
-    runner: "bg-warning-50 text-warning-700 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20",
-    viewer: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-700/20 dark:text-zinc-300 dark:border-zinc-700/40",
-  };
+  const isOwner = role === "owner";
 
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${palette[role] || palette.viewer}`}>
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+        isOwner ? "bg-warning-500/15 text-warning-600" : "bg-hovered text-fg-muted"
+      }`}
+    >
       {role || "viewer"}
     </span>
+  );
+}
+
+function StatTile({ label, value, icon: Icon, isLoading }) {
+  return (
+    <div className="rounded-lg border border-edge-subtle bg-panel p-4">
+      <div className="flex items-center gap-2 text-fg-subtle">
+        <Icon size={14} />
+        <p className="truncate text-[11px] font-semibold uppercase tracking-wider">{label}</p>
+      </div>
+      <p className="mt-2 text-2xl font-semibold leading-none text-fg">
+        {isLoading ? "—" : value}
+      </p>
+    </div>
+  );
+}
+
+function Panel({ title, action, children }) {
+  return (
+    <section className="rounded-lg border border-edge-subtle bg-panel">
+      <div className="flex items-center justify-between gap-3 border-b border-edge-subtle px-4 py-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+          {title}
+        </h2>
+        {action}
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }
 
@@ -85,232 +111,192 @@ export default function Profile() {
     };
   }, [token]);
 
-  const ownedRooms = useMemo(() => rooms.filter((room) => room.ownerId === user?.id), [rooms, user?.id]);
-  const joinedRooms = useMemo(() => rooms.filter((room) => room.ownerId !== user?.id), [rooms, user?.id]);
-  const editableRooms = useMemo(() => rooms.filter((room) => room.canEdit).length, [rooms]);
-  const runnableRooms = useMemo(() => rooms.filter((room) => room.canRun).length, [rooms]);
+  const ownedCount = useMemo(
+    () => rooms.filter((room) => room.ownerId === user?.id).length,
+    [rooms, user?.id],
+  );
+  const runnableCount = useMemo(() => rooms.filter((room) => room.canRun).length, [rooms]);
   const recentRooms = useMemo(
     () => [...rooms].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)).slice(0, 6),
     [rooms],
   );
 
-  const roleSummary = useMemo(() => {
-    return rooms.reduce((summary, room) => {
-      const role = room.accessRole || "viewer";
-      summary[role] = (summary[role] || 0) + 1;
-      return summary;
-    }, { owner: 0, editor: 0, runner: 0, viewer: 0 });
-  }, [rooms]);
-
   const memberSince = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long" })
-    : "New member";
-
-  const stats = [
-    { label: "Owned workspaces", value: ownedRooms.length, icon: FolderGit2, accent: "bg-brand-100 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300" },
-    { label: "Joined workspaces", value: joinedRooms.length, icon: Users, accent: "bg-info-100 text-info-700 dark:bg-info-500/10 dark:text-info-300" },
-    { label: "Can run code", value: runnableRooms, icon: PlayCircle, accent: "bg-success-100 text-success-700 dark:bg-success-500/10 dark:text-success-300" },
-    { label: "Collaborators", value: collaborators.length, icon: Sparkles, accent: "bg-warning-100 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300" },
-  ];
+    : null;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(0, 120, 212,0.12),_transparent_32%),linear-gradient(to_bottom,_#fafafa,_#ffffff)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(0, 120, 212,0.18),_transparent_28%),linear-gradient(to_bottom,_#09090b,_#111827)]">
+    <div className="min-h-screen bg-canvas text-fg">
       <Motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
         className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8"
       >
-        <Motion.section variants={itemVariants} className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="h-28 bg-[linear-gradient(135deg,#18181b_0%,#4f46e5_45%,#14b8a6_100%)]" />
-          <div className="px-6 pb-6">
-            <div className="-mt-12 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-                <div className="rounded-full ring-4 ring-white dark:ring-zinc-900">
-                  <UserAvatar username={user?.username} hue={user?.avatarHue} size="lg" />
-                </div>
-                <div>
-                  <h1 className="text-3xl font-semibold text-fg">{user?.username}</h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-fg-muted">
-                    <span className="inline-flex items-center gap-1.5"><Mail size={14} />{user?.email}</span>
-                    <span className="inline-flex items-center gap-1.5"><Calendar size={14} />Member since {memberSince}</span>
-                    <span className="inline-flex items-center gap-1.5"><Shield size={14} />Verified account</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => navigate("/home")}
-                  className="inline-flex h-11 items-center gap-2 rounded-lg bg-zinc-900 px-5 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                >
-                  Open Dashboard
-                </button>
-                <button
-                  onClick={() => navigate("/settings")}
-                  className="inline-flex h-11 items-center gap-2 rounded-lg border border-zinc-200 px-5 text-sm font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-brand-500 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
-                >
-                  <Settings size={16} />
-                  Account Settings
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Workspace snapshot</p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <p className="text-2xl font-semibold text-fg">{isLoading ? "-" : rooms.length}</p>
-                    <p className="text-sm text-fg-muted">Total workspaces</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-semibold text-fg">{isLoading ? "-" : editableRooms}</p>
-                    <p className="text-sm text-fg-muted">Editable workspaces</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-semibold text-fg">{isLoading ? "-" : runnableRooms}</p>
-                    <p className="text-sm text-fg-muted">Runnable workspaces</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/70">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Connected account</p>
-                {githubProfile ? (
-                  <div className="mt-4 flex items-center gap-3">
-                    <img src={githubProfile.avatarUrl} alt={githubProfile.login} className="h-12 w-12 rounded-lg object-cover" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-fg">{githubProfile.name || githubProfile.login}</p>
-                      <p className="truncate text-sm text-fg-muted">@{githubProfile.login}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-4">
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300">GitHub is not connected yet.</p>
-                    <p className="mt-1 text-xs text-fg-muted">Connect it from Settings to sync repos and import code faster.</p>
-                  </div>
-                )}
+        {/* Identity */}
+        <Motion.header
+          variants={itemVariants}
+          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <UserAvatar username={user?.username} hue={user?.avatarHue} size="lg" />
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-semibold tracking-tight text-fg">
+                {user?.username}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-fg-muted">
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail size={13} />
+                  {user?.email}
+                </span>
+                {memberSince ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Calendar size={13} />
+                    Joined {memberSince}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
-        </Motion.section>
 
-        <Motion.section variants={itemVariants} className="mt-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
-          {stats.map(({ label, value, icon: Icon, accent }) => (
-            <div key={label} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <span className={`inline-flex h-11 w-11 items-center justify-center rounded-lg ${accent}`}>
-                <Icon size={18} />
-              </span>
-              <p className="mt-4 text-3xl font-semibold text-fg">{isLoading ? "-" : value}</p>
-              <p className="mt-1 text-sm text-fg-muted">{label}</p>
-            </div>
-          ))}
-        </Motion.section>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              onClick={() => navigate("/home")}
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-sm font-semibold text-fg-accent transition-colors hover:bg-accent-hover"
+            >
+              Open dashboard
+            </button>
+            <button
+              onClick={() => navigate("/settings")}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-edge px-4 text-sm font-semibold text-fg transition-colors hover:border-edge-strong hover:bg-hovered"
+            >
+              <Settings size={15} />
+              Settings
+            </button>
+          </div>
+        </Motion.header>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-          <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Recent workspaces</p>
-                <h2 className="mt-1 text-xl font-semibold text-fg">Jump back into your latest rooms</h2>
-              </div>
-              <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
-                View all
-              </button>
-            </div>
+        {/* One row of numbers, each measuring something different. */}
+        <Motion.div variants={itemVariants} className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile label="Workspaces" value={rooms.length} icon={FolderGit2} isLoading={isLoading} />
+          <StatTile label="You own" value={ownedCount} icon={FolderGit2} isLoading={isLoading} />
+          <StatTile label="Can run code" value={runnableCount} icon={PlayCircle} isLoading={isLoading} />
+          <StatTile label="Collaborators" value={collaborators.length} icon={Users} isLoading={isLoading} />
+        </Motion.div>
 
-            <div className="mt-5 space-y-3">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1.5fr_1fr]">
+          <Motion.div variants={itemVariants}>
+            <Panel
+              title="Recent workspaces"
+              action={
+                <button
+                  onClick={() => navigate("/home")}
+                  className="text-xs font-semibold text-accent transition-colors hover:underline"
+                >
+                  View all
+                </button>
+              }
+            >
               {recentRooms.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-950/50">
-                  <FolderGit2 size={24} className="mx-auto text-zinc-400" />
-                  <p className="mt-3 text-sm font-medium text-zinc-700 dark:text-zinc-200">No workspaces yet</p>
+                <div className="rounded-md border border-dashed border-edge px-6 py-10 text-center">
+                  <FolderGit2 size={22} className="mx-auto text-fg-subtle" />
+                  <p className="mt-3 text-sm font-medium text-fg">No workspaces yet</p>
                   <p className="mt-1 text-xs text-fg-muted">Create a room to start collaborating.</p>
                 </div>
               ) : (
-                recentRooms.map((room) => (
-                  <button
-                    key={room.id}
-                    onClick={() => navigate(`/room/${room.id}`)}
-                    className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-4 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-fg">{room.name}</p>
-                        <RolePill role={room.accessRole} />
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-fg-muted">
-                        <span>{room.templateName || "Blank workspace"}</span>
-                        <span>{room.fileCount || 0} files</span>
-                        <span>Updated {formatDateLabel(room.updatedAt)}</span>
-                      </div>
-                    </div>
-                    <ArrowRight size={16} className="shrink-0 text-zinc-400" />
-                  </button>
-                ))
+                <div className="space-y-1">
+                  {recentRooms.map((room) => (
+                    <button
+                      key={room.id}
+                      onClick={() => navigate(`/room/${room.id}`)}
+                      className="group/row flex w-full items-center gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-hovered"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-fg">{room.name}</span>
+                          <RolePill role={room.accessRole} />
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-fg-muted">
+                          {room.templateName || "Blank workspace"}
+                          {" · "}{room.fileCount || 0} files
+                          {" · "}updated {formatDateLabel(room.updatedAt)}
+                        </span>
+                      </span>
+                      <ArrowRight
+                        size={14}
+                        className="shrink-0 text-fg-subtle opacity-0 transition-all group-hover/row:translate-x-0.5 group-hover/row:text-accent group-hover/row:opacity-100"
+                      />
+                    </button>
+                  ))}
+                </div>
               )}
-            </div>
-          </Motion.section>
+            </Panel>
+          </Motion.div>
 
           <div className="space-y-6">
-            <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Role distribution</p>
-              <div className="mt-4 space-y-3">
-                {["owner", "editor", "runner", "viewer"].map((role) => (
-                  <div key={role} className="flex items-center justify-between rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
-                    <div className="flex items-center gap-2">
-                      <RolePill role={role} />
+            <Motion.div variants={itemVariants}>
+              <Panel title="GitHub">
+                {githubProfile ? (
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={githubProfile.avatarUrl}
+                      alt=""
+                      className="h-10 w-10 rounded-md object-cover"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-fg">
+                        {githubProfile.name || githubProfile.login}
+                      </p>
+                      <p className="truncate text-xs text-fg-muted">@{githubProfile.login}</p>
                     </div>
-                    <span className="text-sm font-semibold text-fg">{isLoading ? "-" : roleSummary[role]}</span>
                   </div>
-                ))}
-              </div>
-            </Motion.section>
-
-            <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Collaborators</p>
-                <button onClick={() => navigate("/home")} className="text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
-                  Open rooms
-                </button>
-              </div>
-              <div className="mt-4 space-y-3">
-                {collaborators.length === 0 ? (
-                  <p className="text-sm text-fg-muted">No collaborators yet.</p>
                 ) : (
-                  collaborators.slice(0, 6).map((collaborator, index) => (
-                    <div key={collaborator.id || index} className="flex items-center gap-3 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-950/60">
-                      <UserAvatar username={collaborator.username} hue={collaborator.avatarHue} size="sm" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-fg">{collaborator.username}</p>
-                        <p className="truncate text-xs text-fg-muted">{collaborator.email || "Workspace collaborator"}</p>
-                      </div>
-                    </div>
-                  ))
+                  <div>
+                    <p className="text-sm text-fg-muted">Not connected.</p>
+                    <button
+                      onClick={() => navigate("/settings")}
+                      className="mt-3 inline-flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-edge-strong hover:bg-hovered"
+                    >
+                      <Github size={14} />
+                      Connect GitHub
+                    </button>
+                  </div>
                 )}
-              </div>
-            </Motion.section>
+              </Panel>
+            </Motion.div>
 
-            <Motion.section variants={itemVariants} className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Quick actions</p>
-              <div className="mt-4 grid gap-3">
-                {[
-                  { label: "Go to dashboard", icon: Code2, path: "/home" },
-                  { label: "Open settings", icon: Settings, path: "/settings" },
-                  { label: "Review recent work", icon: Clock3, path: "/home" },
-                  { label: "Connect GitHub", icon: Github, path: "/settings" },
-                ].map(({ label, icon: Icon, path }) => (
-                  <button
-                    key={label}
-                    onClick={() => navigate(path)}
-                    className="flex items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50 dark:border-zinc-800 dark:hover:border-brand-500 dark:hover:bg-brand-500/10"
-                  >
-                    <Icon size={16} className="text-fg-muted" />
-                    <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{label}</span>
-                  </button>
-                ))}
-              </div>
-            </Motion.section>
+            <Motion.div variants={itemVariants}>
+              <Panel title="Collaborators">
+                {collaborators.length === 0 ? (
+                  <p className="text-sm text-fg-muted">
+                    No collaborators yet. Share a workspace to add people.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {collaborators.slice(0, 6).map((collaborator, index) => (
+                      <div
+                        key={collaborator.id || index}
+                        className="flex items-center gap-3 rounded-md px-1 py-1.5"
+                      >
+                        <UserAvatar
+                          username={collaborator.username}
+                          hue={collaborator.avatarHue}
+                          size="base"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-fg">
+                            {collaborator.username}
+                          </p>
+                          <p className="truncate text-xs text-fg-muted">
+                            {collaborator.email || "Workspace collaborator"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+            </Motion.div>
           </div>
         </div>
       </Motion.div>

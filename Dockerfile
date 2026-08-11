@@ -63,6 +63,14 @@ CMD ["sh", "-c", "python -m uvicorn server.main:app --host 0.0.0.0 --port ${PORT
 # /app/server, so the COPY in the runtime stage is just a fallback here.
 FROM runtime AS server-dev
 
+# Test and lint tooling, so `docker compose -f docker-compose.dev.yml exec api
+# sh -c "cd /app/server && python -m pytest"` works without installing anything
+# into a running container first.
+USER root
+COPY server/requirements-dev.txt /tmp/requirements-dev.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-dev.txt
+USER codechatter
+
 # uvicorn is installed without the [standard] extra, so --reload falls back to
 # StatReload, which polls. That is what we want: inotify events do not cross a
 # Docker Desktop bind mount, so an event-based watcher would never fire.

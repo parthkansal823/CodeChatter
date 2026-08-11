@@ -32,19 +32,21 @@ export function BrandMark({ size = 26, tone = "accent", className = "" }) {
       aria-label="CodeChatter"
       className={className}
     >
-      {/* Rounded tile with a chat tail cut into the lower-left corner. */}
-      <path
-        d="M6 2h20a4 4 0 0 1 4 4v14a4 4 0 0 1-4 4H13l-7 5.5V24a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4Z"
-        fill={tile}
-      />
+      {/* Squircle tile. The previous mark cut a chat tail out of one corner,
+          which turned to mush below ~20px; a plain rounded square holds its
+          silhouette in a 16px favicon. */}
+      <rect x="1" y="1" width="30" height="30" rx="9" fill={tile} />
+
+      {/* A terminal prompt: chevron plus cursor. One stroke weight, round caps,
+          and enough clearance from the tile edge to survive small sizes. */}
       <g
         stroke={glyph}
-        strokeWidth="2.1"
+        strokeWidth="2.6"
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M12.5 9.5 8.5 13l4 3.5" />
-        <path d="M19.5 9.5 23.5 13l-4 3.5" />
+        <path d="M10.5 11.5 15 16l-4.5 4.5" />
+        <path d="M18.5 20.5h3.5" />
       </g>
     </svg>
   );

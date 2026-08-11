@@ -1598,11 +1598,19 @@ class MongoRepository:
     oauth_accounts = user.get("oauth_accounts") or {}
     oauth_usernames = user.get("oauth_usernames") or {}
     oauth_avatars = user.get("oauth_avatars") or {}
+
+    # Stored as a datetime; the client only ever formats it, so hand over an
+    # ISO string rather than letting the JSON encoder pick a representation.
+    created_at = user.get("created_at")
+    if isinstance(created_at, datetime):
+      created_at = created_at.isoformat()
+
     return {
       "id": user["id"],
       "email": user["email"],
       "username": user["username"],
       "avatarHue": user.get("avatar_hue"),
+      "createdAt": created_at,
       "githubConnected": bool(oauth_accounts.get("github")),
       "githubUsername": oauth_usernames.get("github") or None,
       "githubAvatarUrl": oauth_avatars.get("github") or None,
