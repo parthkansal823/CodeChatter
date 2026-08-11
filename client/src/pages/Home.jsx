@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   Trash2,
+  UserPlus,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -19,6 +20,7 @@ import toast from "react-hot-toast";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import ConfirmModal from "../components/ConfirmModal";
+import ShareModal from "../components/ShareModal";
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch, validateRoomId } from "../utils/security";
@@ -73,6 +75,7 @@ export default function Home() {
   const [bookmarks, setBookmarks] = useState(getBookmarks);
   const [recentRooms, setRecentRooms] = useState(getRecentRooms);
   const [roomToDelete, setRoomToDelete] = useState(null);
+  const [shareRoom, setShareRoom] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
   const pendingRequestCountsRef = useRef({});
 
@@ -470,7 +473,7 @@ export default function Home() {
                   }`}
                 >
                   <BookmarkCheck size={12} />
-                  Bookmarked ({bookmarks.length})
+                  Bookmarked
                 </button>
               )}
             </div>
@@ -536,6 +539,18 @@ export default function Home() {
                     </button>
 
                     <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShareRoom(room);
+                        }}
+                        title="Share workspace"
+                        aria-label={`Share ${room.name}`}
+                        className="shrink-0 rounded-md p-1.5 text-fg-subtle transition-colors hover:bg-hovered hover:text-fg"
+                      >
+                        <UserPlus size={15} />
+                      </button>
+
                       {/* Bookmark toggle */}
                       <button
                         onClick={(e) => {
@@ -834,7 +849,21 @@ export default function Home() {
         onConfirm={confirmDeleteRoom}
         onCancel={() => setRoomToDelete(null)}
       />
+
+      <ShareModal
+        room={shareRoom}
+        isOpen={Boolean(shareRoom)}
+        onClose={() => setShareRoom(null)}
+        onUpdate={(updatedRoom) => {
+          setRooms((currentRooms) =>
+            currentRooms.map((currentRoom) =>
+              currentRoom.id === updatedRoom.id
+                ? { ...currentRoom, ...updatedRoom }
+                : currentRoom,
+            ),
+          );
+        }}
+      />
     </div>
   );
 }
-
