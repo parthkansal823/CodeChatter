@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import logging
+import base64
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import httpx
+
 try:
   from ..core.settings import (
     ENVIRONMENT,
+    GMAIL_CLIENT_ID,
+    GMAIL_CLIENT_SECRET,
+    GMAIL_REFRESH_TOKEN,
+    GMAIL_SENDER,
+    MAIL_PROVIDER,
     SMTP_FROM,
     SMTP_HOST,
     SMTP_PASS,
@@ -18,6 +26,11 @@ try:
 except ImportError:
   from core.settings import (
     ENVIRONMENT,
+    GMAIL_CLIENT_ID,
+    GMAIL_CLIENT_SECRET,
+    GMAIL_REFRESH_TOKEN,
+    GMAIL_SENDER,
+    MAIL_PROVIDER,
     SMTP_FROM,
     SMTP_HOST,
     SMTP_PASS,
@@ -49,30 +62,115 @@ ROLE_BLURBS = {
 }
 
 
-def _send_html_email(to_email: str, subject: str, html_body: str, log_prefix: str) -> bool:
-  """Deliver one HTML message. Returns whether it actually went out."""
+GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+
+
+def _mail_is_configured() -> bool:
+  if MAIL_PROVIDER == "gmail":
+    return gmail_is_configured()
+
+  return bool(SMTP_HOST and SMTP_USER)
+
+
+def gmail_is_configured() -> bool:
+  return bool(GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN)
+
+
+def _gmail_access_token() -> str | None:
+  """Trade the long-lived refresh token for a short-lived access token.
+
+  Not cached: tokens last an hour and we send a handful of mails a day, so the
+  extra round trip is cheaper than getting cache invalidation wrong.
+  """
+  try:
+    response = httpx.post(
+      GMAIL_TOKEN_URL,
+      data={
+        "client_id": GMAIL_CLIENT_ID,
+        "client_secret": GMAIL_CLIENT_SECRET,
+        "refresh_token": GMAIL_REFRESH_TOKEN,
+        "grant_type": "refresh_token",
+      },
+      timeout=10.0,
+    )
+    response.raise_for_status()
+  except httpx.HTTPError as error:
+    logger.error("[Gmail] Could not refresh the access token: %s", error)
+    return None
+
+  return response.json().get("access_token")
+
+
+def _build_message(to_email: str, subject: str, html_body: str, sender: str) -> MIMEMultipart:
+  msg = MIMEMultipart("alternative")
+  msg["Subject"] = subject
+  msg["From"] = sender
+  msg["To"] = to_email
+  msg.attach(MIMEText(html_body, "html"))
+  return msg
+
+
+def _send_via_gmail(to_email: str, subject: str, html_body: str, log_prefix: str) -> bool:
+  access_token = _gmail_access_token()
+
+  if not access_token:
+    return False
+
+  message = _build_message(to_email, subject, html_body, GMAIL_SENDER or "me")
+  # Gmail wants the whole RFC-822 message, base64url encoded.
+  raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+  try:
+    response = httpx.post(
+      GMAIL_SEND_URL,
+      headers={"Authorization": f"Bearer {access_token}"},
+      json={"raw": raw},
+      timeout=15.0,
+    )
+    response.raise_for_status()
+  except httpx.HTTPError as error:
+    logger.error("%s Gmail API rejected the send to %s: %s", log_prefix, mask_email(to_email), error)
+    return False
+
+  logger.info("%s Sent to %s via Gmail API", log_prefix, mask_email(to_email))
+  return True
+
+
+def _send_via_smtp(to_email: str, subject: str, html_body: str, log_prefix: str) -> bool:
   if not SMTP_HOST or not SMTP_USER:
     logger.warning("%s SMTP not configured — no email sent to %s", log_prefix, mask_email(to_email))
     return False
 
-  msg = MIMEMultipart("alternative")
-  msg["Subject"] = subject
-  msg["From"] = SMTP_FROM
-  msg["To"] = to_email
-  msg.attach(MIMEText(html_body, "html"))
+  message = _build_message(to_email, subject, html_body, SMTP_FROM)
 
   try:
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as smtp:
       smtp.ehlo()
       smtp.starttls()
       smtp.login(SMTP_USER, SMTP_PASS)
-      smtp.sendmail(SMTP_FROM, to_email, msg.as_string())
-  except Exception as exc:
+      smtp.sendmail(SMTP_FROM, to_email, message.as_string())
+  except Exception as exc:  # noqa: BLE001 - smtplib raises a wide family
     logger.error("%s Failed to send to %s: %s", log_prefix, mask_email(to_email), exc)
     return False
 
-  logger.info("%s Sent to %s", log_prefix, mask_email(to_email))
+  logger.info("%s Sent to %s via SMTP", log_prefix, mask_email(to_email))
   return True
+
+
+def _send_html_email(to_email: str, subject: str, html_body: str, log_prefix: str) -> bool:
+  """Deliver one HTML message. Returns whether it actually went out."""
+  if MAIL_PROVIDER == "gmail":
+    if gmail_is_configured():
+      return _send_via_gmail(to_email, subject, html_body, log_prefix)
+
+    logger.warning(
+      "%s MAIL_PROVIDER=gmail but no refresh token — run scripts/gmail_authorize.py",
+      log_prefix,
+    )
+    return False
+
+  return _send_via_smtp(to_email, subject, html_body, log_prefix)
 
 
 def send_room_share_email(
@@ -200,19 +298,19 @@ def send_room_share_email(
 
 
 def send_otp_email(to_email: str, otp: str, action: str = "login") -> None:
-  if not SMTP_HOST or not SMTP_USER:
-    # Without SMTP there is no way to deliver the code. Falling back to the
+  if not _mail_is_configured():
+    # With no mail provider there is no way to deliver the code. Falling back to the
     # console keeps local development usable, but a one-time code in the log
     # is a full MFA bypass for anyone who can read logs — so never in production.
     if ENVIRONMENT == "production":
       logger.error(
-        "[MFA] SMTP is not configured — cannot deliver the %s code to %s",
+        "[MFA] No mail provider configured — cannot deliver the %s code to %s",
         action,
         mask_email(to_email),
       )
       return
 
-    logger.warning("[MFA] SMTP not configured — dev-only OTP for %s (%s): %s", to_email, action, otp)
+    logger.warning("[MFA] No mail provider — dev-only OTP for %s (%s): %s", to_email, action, otp)
     return
 
   if action == "login":
@@ -381,20 +479,4 @@ def send_otp_email(to_email: str, otp: str, action: str = "login") -> None:
 </body>
 </html>"""
 
-  msg = MIMEMultipart("alternative")
-  msg["Subject"] = subject
-  msg["From"] = SMTP_FROM
-  msg["To"] = to_email
-  msg.attach(MIMEText(html_body, "html"))
-
-  try:
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as smtp:
-      smtp.ehlo()
-      smtp.starttls()
-      smtp.login(SMTP_USER, SMTP_PASS)
-      smtp.sendmail(SMTP_FROM, to_email, msg.as_string())
-    logger.info(f"[MFA] OTP email sent successfully to {to_email}")
-  except Exception as exc:
-    logger.error(
-      f"[MFA] Failed to send OTP email to {to_email} within {SMTP_TIMEOUT_SECONDS} seconds: {exc}"
-    )
+  _send_html_email(to_email, subject, html_body, "[MFA]")

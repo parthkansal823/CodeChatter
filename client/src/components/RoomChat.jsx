@@ -72,11 +72,11 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-zinc-200/80 px-4 py-3 dark:border-zinc-800">
+      <div className="flex items-center gap-2 border-b border-edge-subtle px-4 py-3">
         <button
           type="button"
           onClick={onBack}
-          className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+          className="rounded-lg p-2 text-fg-muted transition-colors hover:bg-hovered hover:text-fg"
           title="Back to tools"
         >
           <ArrowLeft size={16} />
@@ -94,7 +94,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
           const isSenderYou = msg.sender === "You" || msg.userId === user?.id;
           
           return (
-            <div key={msg.id || `msg-${idx}`} className={`flex flex-col ${isSenderYou ? "items-end" : "items-start"}`}>
+            <div key={msg.id || `msg-${idx}`} className={`flex flex-col ${isSenderYou ?"items-end" : "items-start"}`}>
               {msg.isSystem ? (
                 <div className="w-full text-center my-2">
                   <span className="px-3 py-1 bg-hovered/50 rounded-full text-[11px] font-medium text-fg-muted">
@@ -102,11 +102,11 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                   </span>
                 </div>
               ) : (
-                <div className={`flex max-w-[85%] gap-2 ${isSenderYou ? "flex-row-reverse" : "flex-row"}`}>
+                <div className={`flex max-w-[85%] gap-2 ${isSenderYou ?"flex-row-reverse" : "flex-row"}`}>
                   <div className="flex-shrink-0 mt-auto mb-1">
                      <UserAvatar username={isSenderYou ? user?.username : msg.sender} size="sm" />
                   </div>
-                  <div className={`flex flex-col ${isSenderYou ? "items-end" : "items-start"}`}>
+                  <div className={`flex flex-col ${isSenderYou ?"items-end" : "items-start"}`}>
                     <div className="flex items-baseline gap-2 mb-1 px-1">
                       <span className="text-[11px] font-semibold text-fg">
                         {isSenderYou ? "You" : msg.sender}
@@ -116,16 +116,16 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
 
                     {msg.msgType === "file" && msg.fileUrl ? (
                       <div className={`p-3 text-sm leading-relaxed shadow-sm break-words flex items-center gap-3 ${
-                        isSenderYou
-                          ? "bg-brand-600 border border-brand-500 text-white rounded-lg rounded-br-sm shadow-sm"
-                          : "bg-panel border border-zinc-200/50 dark:border-zinc-800 text-fg rounded-lg rounded-bl-sm"
+ isSenderYou
+ ?"bg-brand-600 border border-brand-500 text-white rounded-lg rounded-br-sm shadow-sm"
+                          : "bg-panel border border-edge-subtle text-fg rounded-lg rounded-bl-sm"
                       }`}>
-                        <div className={`p-2 rounded-lg ${isSenderYou ? "bg-zinc-800 text-white" : "bg-hovered text-brand-500"}`}>
+                        <div className={`p-2 rounded-lg ${isSenderYou ?"bg-panel text-white" : "bg-hovered text-brand-500"}`}>
                           <FileText size={18} />
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">
                           <span className="font-semibold truncate max-w-[150px]">{msg.fileName}</span>
-                          <span className={`${isSenderYou ? "text-white/70" : "text-zinc-500"} text-xs mt-0.5`}>
+                          <span className={`${isSenderYou ?"text-white/70" : "text-fg-muted"} text-xs mt-0.5`}>
                             {msg.fileSize ? (msg.fileSize / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown size'}
                           </span>
                         </div>
@@ -134,7 +134,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                           download={msg.fileName}
                           target="_blank"
                           rel="noreferrer"
-                          className={`ml-2 p-1.5 rounded-full hover:bg-black/10 transition-colors ${isSenderYou ? "text-white" : "text-fg-muted hover:text-zinc-900 dark:hover:text-white"}`}
+                          className={`ml-2 p-1.5 rounded-full hover:bg-black/10 transition-colors ${isSenderYou ?"text-white" : "text-fg-muted hover:text-fg"}`}
                           title="Download File"
                         >
                           <Download size={16} />
@@ -143,9 +143,9 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
                     ) : (
                       <div
                         className={`px-3.5 py-2.5 text-sm leading-relaxed shadow-sm break-words whitespace-pre-wrap ${
-                          isSenderYou
-                            ? "bg-brand-600 text-white rounded-lg rounded-br-sm shadow-sm"
-                            : "bg-panel border border-zinc-200/50 dark:border-zinc-800 text-fg rounded-lg rounded-bl-sm"
+ isSenderYou
+ ?"bg-brand-600 text-white rounded-lg rounded-br-sm shadow-sm"
+                            : "bg-panel border border-edge-subtle text-fg rounded-lg rounded-bl-sm"
                         }`}
                       >
                         {msg.text}
@@ -159,7 +159,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
         })}
       </div>
 
-      <div className="p-3 border-t border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50 dark:bg-[#09090b]">
+      <div className="p-3 border-t border-edge-subtle/50 bg-panel">
         <form onSubmit={handleSend} className="relative flex items-center gap-2">
           <input 
             type="file" 
@@ -171,7 +171,7 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex-shrink-0 p-2.5 rounded-full text-zinc-400 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-brand-500/10 transition-colors disabled:opacity-50"
+            className="flex-shrink-0 p-2.5 rounded-full text-fg-subtle hover:text-brand-500 hover:bg-brand-50 transition-colors disabled:opacity-50"
             title="Attach file"
           >
             {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
@@ -182,12 +182,12 @@ export default function RoomChat({ roomId, onBack, chatMessages = [], sendChatMe
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
               disabled={isUploading}
-              className="w-full bg-panel border border-edge-subtle rounded-full pl-4 pr-10 py-2.5 text-sm text-fg placeholder-zinc-400 focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all shadow-sm disabled:opacity-50"
+              className="w-full bg-panel border border-edge-subtle rounded-full pl-4 pr-10 py-2.5 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all shadow-sm disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={!input.trim() || isUploading}
-              className="absolute right-1.5 top-1.5 w-[30px] h-[30px] flex items-center justify-center rounded-full bg-brand-600 text-white disabled:opacity-50 disabled:bg-zinc-200 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500 transition-colors shadow-sm"
+              className="absolute right-1.5 top-1.5 w-[30px] h-[30px] flex items-center justify-center rounded-full bg-brand-600 text-white disabled:opacity-50 disabled:bg-selected transition-colors shadow-sm"
             >
               <Send size={14} className="ml-0.5" />
             </button>

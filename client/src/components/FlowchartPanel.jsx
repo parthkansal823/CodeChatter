@@ -270,11 +270,11 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
   };
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-[#0a0a0f]">
-      <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 px-3 py-3 dark:border-zinc-800">
+    <div className="flex h-full flex-col bg-panel">
+      <div className="flex shrink-0 items-center gap-2 border-b border-edge-subtle px-3 py-3">
         <button
           onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          className="flex h-8 w-8 items-center justify-center rounded-xl text-fg-muted transition hover:bg-hovered hover:text-fg"
           title="Back to tools"
         >
           <ChevronLeft size={15} />
@@ -295,9 +295,9 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
           <button
             onClick={() => setShowSource((value) => !value)}
             className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${
-              showSource
-                ? "bg-info-500/15 text-info-400"
-                : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+ showSource
+ ?"bg-info-500/15 text-info-400"
+                : "text-fg-muted hover:bg-hovered hover:text-fg"
             }`}
             title={showSource ? "Show diagram" : "View Mermaid source"}
           >
@@ -317,14 +317,14 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
       </div>
 
       {fileName ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/80 px-3 py-2 dark:border-zinc-800">
-          <FileCode2 size={12} className="text-zinc-400" />
+        <div className="flex shrink-0 items-center gap-2 border-b border-edge-subtle px-3 py-2">
+          <FileCode2 size={12} className="text-fg-subtle" />
           <span className="min-w-0 flex-1 truncate text-[11px] text-fg-muted">{fileName}</span>
-          <span className="rounded-full bg-info-500/10 px-2 py-0.5 text-[10px] font-semibold text-info-600 dark:text-info-300">
+          <span className="rounded-full bg-info-500/10 px-2 py-0.5 text-[10px] font-semibold text-info-600">
             {detectedLang}
           </span>
           {generatedAt ? (
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
+            <span className="rounded-full bg-hovered px-2 py-0.5 text-[10px] font-medium text-fg-muted">
               Generated {formatTime(generatedAt)}
             </span>
           ) : null}
@@ -334,7 +334,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {!activeCode?.trim() ? (
           <div className="flex flex-1 items-center justify-center p-5">
-            <div className="w-full max-w-sm rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-5 text-center dark:border-zinc-700 dark:bg-zinc-900">
+            <div className="w-full max-w-sm rounded-xl border border-dashed border-edge bg-panel p-5 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-info-500/10 text-info-400">
                 <GitBranch size={20} />
               </div>
@@ -353,12 +353,12 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
             </p>
           </div>
         ) : genError ? (
-          <div className="m-3 rounded-xl border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/20 dark:bg-warning-500/10">
+          <div className="m-3 rounded-xl border border-warning-200 bg-warning-50 p-4">
             <div className="flex items-start gap-3">
               <AlertCircle size={16} className="mt-0.5 shrink-0 text-warning-500" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-warning-800 dark:text-warning-200">{genError}</p>
-                <p className="mt-1 text-xs text-warning-700/80 dark:text-warning-200/70">
+                <p className="text-sm font-semibold text-warning-800">{genError}</p>
+                <p className="mt-1 text-xs text-warning-700/80">
                   Try regenerating after saving the current file or simplifying the code region.
                 </p>
                 <button
@@ -373,11 +373,11 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
           </div>
         ) : renderError ? (
           <div className="m-3 space-y-3">
-            <div className="rounded-xl border border-danger-200 bg-danger-50 p-4 dark:border-danger-500/20 dark:bg-danger-500/10">
+            <div className="rounded-xl border border-danger-200 bg-danger-50 p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle size={16} className="mt-0.5 shrink-0 text-danger-500" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-danger-800 dark:text-danger-200">{renderError}</p>
+                  <p className="text-sm font-semibold text-danger-800">{renderError}</p>
                   <button
                     onClick={generate}
                     className="mt-3 inline-flex items-center gap-2 rounded-xl bg-danger-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-danger-400"
@@ -389,7 +389,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
               </div>
             </div>
             {mermaidCode ? (
-              <pre className="overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4 font-mono text-[11px] leading-6 text-zinc-700 dark:border-zinc-800 dark:bg-black/30 dark:text-zinc-300">
+              <pre className="overflow-auto rounded-xl border border-edge-subtle bg-panel p-4 font-mono text-[11px] leading-6 text-fg">
                 {mermaidCode}
               </pre>
             ) : null}
@@ -397,14 +397,14 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
         ) : !mermaidCode ? (
           <div className="flex flex-1 overflow-y-auto p-4">
             <div className="w-full space-y-4">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-gradient-to-br dark:from-info-500/10 dark:via-white/[0.04] dark:to-brand-500/10">
+              <div className="rounded-xl border border-edge-subtle bg-panel p-5">
                 <div className="flex items-start gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-info-500/15 text-info-400">
                     <Sparkles size={20} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-lg font-semibold text-fg">Generate a clean code map</p>
-                    <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                    <p className="mt-2 text-sm leading-6 text-fg-muted">
                       This turns the current file into a readable flow diagram with loops, decisions, functions, and I/O highlighted.
                     </p>
                   </div>
@@ -416,8 +416,8 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
                     { label: "Language", value: detectedLang },
                     { label: "Mode", value: "Manual generate" },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-800/60">
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{item.label}</p>
+                    <div key={item.label} className="rounded-lg border border-edge-subtle bg-panel px-3 py-3">
+                      <p className="text-[11px] text-fg-muted">{item.label}</p>
                       <p className="mt-1 truncate text-sm font-semibold text-fg">{item.value}</p>
                     </div>
                   ))}
@@ -434,7 +434,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
                   <button
                     onClick={() => setShowSource((value) => !value)}
                     disabled
-                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-4 py-3 text-sm font-semibold text-zinc-400 dark:border-zinc-800 dark:text-zinc-500"
+                    className="inline-flex items-center gap-2 rounded-lg border border-edge-subtle px-4 py-3 text-sm font-semibold text-fg-subtle"
                   >
                     <Code2 size={15} />
                     Mermaid source
@@ -442,9 +442,9 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
                 </div>
               </div>
 
-              <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="rounded-xl border border-edge-subtle bg-panel p-5">
                 <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">What improves here</p>
-                <div className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                <div className="mt-3 space-y-2 text-sm text-fg-muted">
                   <p>Manual generation keeps the panel calm when you only want to inspect or compare files.</p>
                   <p>Color-coded nodes make branches, loops, and helper functions easier to follow quickly.</p>
                   <p>SVG, PNG, and Mermaid downloads stay available once a diagram is ready.</p>
@@ -454,15 +454,15 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
           </div>
         ) : showSource ? (
           <div className="flex-1 overflow-auto p-3">
-            <pre className="h-full overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4 font-mono text-[11px] leading-6 text-zinc-700 dark:border-zinc-800 dark:bg-black/30 dark:text-zinc-300">
+            <pre className="h-full overflow-auto rounded-xl border border-edge-subtle bg-panel p-4 font-mono text-[11px] leading-6 text-fg">
               {mermaidCode}
             </pre>
           </div>
         ) : (
           <div className="flex-1 overflow-auto p-3">
-            <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-[#101119]">
+            <div className="rounded-xl border border-edge-subtle bg-panel p-4">
               <div
-                className="overflow-auto rounded-xl bg-white p-3 dark:bg-[#0d1117]"
+                className="overflow-auto rounded-xl bg-panel p-3"
                 dangerouslySetInnerHTML={{ __html: svgHtml }}
               />
             </div>
@@ -480,7 +480,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
       </div>
 
       {diagramReady ? (
-        <div className="shrink-0 border-t border-zinc-200/80 p-3 dark:border-zinc-800">
+        <div className="shrink-0 border-t border-edge-subtle p-3">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">Download</p>
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -491,7 +491,7 @@ export default function FlowchartPanel({ onBack, roomId, activeFilePath, activeC
               <button
                 key={label}
                 onClick={onClick}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-info-300 hover:bg-info-50 hover:text-info-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-info-500/40 dark:hover:bg-info-500/10"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-edge-subtle bg-panel px-3 py-2 text-xs font-semibold text-fg transition hover:border-info-300 hover:bg-info-50 hover:text-info-700"
               >
                 <Download size={12} />
                 {label}

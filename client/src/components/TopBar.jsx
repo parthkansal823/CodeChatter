@@ -64,32 +64,32 @@ function getPresenceTone(collaborator, fallbackOnly = false) {
 function toneClasses(tone) {
   if (tone === "typing") {
     return {
-      chip: "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300",
+      chip: "bg-warning-50 text-warning-700",
       dot: "bg-warning-400",
-      avatar: "border-warning-200 bg-white dark:border-warning-500/30 dark:bg-zinc-900",
+      avatar: "border-warning-200 bg-panel ",
     };
   }
 
   if (tone === "active") {
     return {
-      chip: "bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300",
+      chip: "bg-success-50 text-success-700",
       dot: "bg-success-400",
-      avatar: "border-success-200 bg-white dark:border-success-500/30 dark:bg-zinc-900",
+      avatar: "border-success-200 bg-panel ",
     };
   }
 
   if (tone === "member") {
     return {
-      chip: "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300",
-      dot: "bg-zinc-400",
-      avatar: "border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800",
+      chip: "bg-hovered text-fg-muted  ",
+      dot: "bg-fg-subtle",
+      avatar: "border-edge-subtle bg-hovered  ",
     };
   }
 
   return {
-    chip: "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300",
-    dot: "bg-zinc-400",
-    avatar: "border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800",
+    chip: "bg-hovered text-fg-muted  ",
+    dot: "bg-fg-subtle",
+    avatar: "border-edge-subtle bg-hovered  ",
   };
 }
 
@@ -193,7 +193,7 @@ export default function TopBar({
   ];
 
   return (
-    <div className="border-b border-zinc-100 bg-white/85 backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090b]/90">
+    <div className="border-b border-edge-subtle bg-panel/85 backdrop-blur-xl/90">
       <div className="flex flex-col gap-2 px-2 py-2 sm:px-3">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-start gap-2 sm:items-center">
@@ -201,9 +201,9 @@ export default function TopBar({
             <button
               onClick={onToggleExplorer}
               className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                explorerOpen
-                  ? "bg-brand-500/10 text-brand-400"
-                  : "text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-300"
+ explorerOpen
+ ?"bg-brand-500/10 text-brand-400"
+                  : "text-fg-muted hover:bg-selected/60 hover:text-fg"
               }`}
               title={explorerOpen ? "Hide files" : "Show files"}
             >
@@ -216,17 +216,17 @@ export default function TopBar({
                   {room?.name || "Workspace"}
                 </p>
                 {room?.templateName && (
-                  <PresenceChip className="bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                  <PresenceChip className="bg-hovered text-fg-muted">
                     {room.templateName}
                   </PresenceChip>
                 )}
                 <PresenceChip
                   className={
                     saveStatus === "error"
-                      ? "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300"
+                      ? "bg-warning-50 text-warning-700"
                       : liveConnected
-                        ? "bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300"
-                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+                        ? "bg-success-50 text-success-700"
+                        : "bg-hovered text-fg-muted  "
                   }
                 >
                   <Radio size={12} />
@@ -234,10 +234,10 @@ export default function TopBar({
                 </PresenceChip>
                 {room?.accessRole && (() => {
                   const roleStyles = {
-                    owner:  "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300",
-                    editor: "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300",
-                    runner: "bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300",
-                    viewer: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+                    owner:  "bg-warning-50 text-warning-700",
+                    editor: "bg-brand-50 text-brand-700",
+                    runner: "bg-warning-50 text-warning-700",
+                    viewer: "bg-hovered text-fg-muted  ",
                   };
                   const roleLabels = { owner: "Owner", editor: "Editor", runner: "Runner", viewer: "Viewer" };
                   return (
@@ -270,13 +270,13 @@ export default function TopBar({
 
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 xl:justify-end">
             {activeCollaborators.length > 0 && (
-              <PresenceChip className="bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300">
+              <PresenceChip className="bg-success-50 text-success-700">
                 {activeCollaborators.length} live
               </PresenceChip>
             )}
 
             {typingCollaborators.length > 0 && (
-              <PresenceChip className="bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300">
+              <PresenceChip className="bg-warning-50 text-warning-700">
                 {typingCollaborators.length === 1
                   ? `${typingCollaborators[0].username} typing`
                   : `${typingCollaborators.length} typing`}
@@ -308,12 +308,12 @@ export default function TopBar({
                         size="sm"
                         className="border-0 bg-transparent shadow-none ring-0"
                       />
-                      <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-[#09090b] ${toneClass.dot}`} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${toneClass.dot}`} />
                     </div>
                   );
                 })}
                 {extraCollaborators > 0 && (
-                  <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                  <span className="rounded-full bg-hovered px-2 py-1 text-[11px] font-medium text-fg-muted">
                     +{extraCollaborators}
                   </span>
                 )}
@@ -323,7 +323,7 @@ export default function TopBar({
             <button
               onClick={onRun}
               disabled={isRunning || !canRun}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-success-600 px-2.5 text-xs font-medium text-white shadow-sm transition-all hover:bg-success-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-success-600 dark:hover:bg-success-500 sm:gap-2 sm:px-3.5 sm:text-sm"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-success-600 px-2.5 text-xs font-medium text-white shadow-sm transition-all hover:bg-success-700 disabled:cursor-not-allowed disabled:opacity-50 sm:gap-2 sm:px-3.5 sm:text-sm"
               title={canRun ? "Run active file" : "You need at least runner access to run files"}
             >
               <Play size={13} fill="currentColor" />
@@ -334,7 +334,7 @@ export default function TopBar({
               <button
                 ref={shareBtnRef}
                 onClick={openShare}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-selected/60 hover:text-fg sm:gap-2 sm:px-2.5 sm:text-sm"
                 title="Share & Settings"
               >
                 <Share2 size={14} />
@@ -345,16 +345,16 @@ export default function TopBar({
                 <div
                   ref={shareRef}
                   style={{ position: "fixed", top: sharePos.top, right: sharePos.right }}
-                  className="z-[9999] w-72 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-800 dark:bg-zinc-900"
+                  className="z-[9999] w-72 overflow-hidden rounded-xl border border-edge-subtle bg-panel shadow-2xl shadow-black/10"
                 >
                   {/* Invite link */}
-                  <div className="border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Invite Link</p>
+                  <div className="border-b border-edge-subtle px-4 py-2.5">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">Invite Link</p>
                     <button
                       onClick={() => { onCopyInvite(); setShareOpen(false); }}
-                      className="flex w-full items-center gap-2.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      className="flex w-full items-center gap-2.5 rounded-lg border border-edge-subtle bg-panel px-3 py-2 text-sm text-fg transition-colors hover:bg-hovered"
                     >
-                      <Copy size={13} className="shrink-0 text-zinc-400" />
+                      <Copy size={13} className="shrink-0 text-fg-subtle" />
                       <span className="truncate">Copy invite link</span>
                     </button>
                   </div>
@@ -364,7 +364,7 @@ export default function TopBar({
                     <div className="border-t border-edge-subtle">
                       <button
                         onClick={() => { onOpenSettings(); setShareOpen(false); }}
-                        className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-zinc-600 transition-colors hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
+                        className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-panel"
                       >
                         <Settings size={13} />
                         Room Settings
@@ -378,7 +378,7 @@ export default function TopBar({
 
             <button
               onClick={() => navigate("/home")}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 sm:gap-2 sm:px-2.5 sm:text-sm"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-selected/60 hover:text-fg sm:gap-2 sm:px-2.5 sm:text-sm"
               title="Back to dashboard"
             >
               <Home size={14} />
@@ -392,7 +392,7 @@ export default function TopBar({
           {workspaceStats.map((stat) => (
             <PresenceChip
               key={stat.label}
-              className="bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+              className="bg-hovered text-fg-muted"
             >
               <span className="font-semibold text-fg">{stat.value}</span>
               <span>{stat.label}</span>

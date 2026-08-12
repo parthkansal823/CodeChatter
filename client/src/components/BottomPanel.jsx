@@ -174,9 +174,9 @@ export default function BottomPanel({
     <div
       ref={panelRef}
       style={heightStyle}
-      className={`relative flex flex-col border-t border-zinc-200 bg-zinc-50 transition-[height] ${
-        isResizing ? "duration-0" : "duration-200"
-      } dark:border-zinc-800 dark:bg-[#0d0d10]`}
+      className={`relative flex flex-col border-t border-edge-subtle bg-panel transition-[height] ${
+ isResizing ?"duration-0" : "duration-200"
+      }`}
     >
       {!isMinimized && (
         <div
@@ -185,11 +185,11 @@ export default function BottomPanel({
           className="absolute left-0 top-0 z-20 h-2 w-full cursor-row-resize"
           title="Resize panel"
         >
-          <div className={`mx-auto mt-0.5 h-px w-full transition-colors ${isResizing ? "bg-brand-500" : "bg-transparent hover:bg-zinc-700"}`} />
+          <div className={`mx-auto mt-0.5 h-px w-full transition-colors ${isResizing ?"bg-brand-500" : "bg-transparent hover:bg-fg-subtle"}`} />
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-2 py-1.5 sm:gap-3 sm:px-3 dark:border-zinc-800">
+      <div className="flex items-center justify-between gap-2 border-b border-edge-subtle px-2 py-1.5 sm:gap-3 sm:px-3">
         <div className="flex items-center gap-1 overflow-x-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -199,9 +199,9 @@ export default function BottomPanel({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors sm:gap-2 sm:px-2.5 sm:text-sm ${
-                  activeTab === tab.id
-                    ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-white"
-                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+ activeTab === tab.id
+ ?"bg-selected text-fg"
+                    : "text-fg-muted hover:bg-hovered hover:text-fg"
                 }`}
               >
                 <Icon size={14} />
@@ -219,7 +219,7 @@ export default function BottomPanel({
           ) : runResult ? (
             <div className="hidden items-center gap-3 text-xs sm:flex">
               {typeof runResult.runtimeMs === "number" && (
-                <span className="text-zinc-500">
+                <span className="text-fg-muted">
                   {runResult.runtimeMs}ms
                 </span>
               )}
@@ -237,7 +237,7 @@ export default function BottomPanel({
 
           <button
             onClick={handleCopy}
-            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+            className="rounded-md p-2 text-fg-muted transition-colors hover:bg-hovered hover:text-fg"
             title="Copy panel content"
           >
             <Copy size={15} />
@@ -245,7 +245,7 @@ export default function BottomPanel({
 
           <button
             onClick={() => setIsMinimized((current) => !current)}
-            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+            className="rounded-md p-2 text-fg-muted transition-colors hover:bg-hovered hover:text-fg"
             title={isMinimized ? "Expand panel" : "Minimize panel"}
           >
             {isMinimized ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -254,11 +254,11 @@ export default function BottomPanel({
       </div>
 
       {!isMinimized && (
-        <div className="min-h-0 flex-1 overflow-auto bg-white px-4 py-3 font-mono text-xs leading-6 text-zinc-700 dark:bg-[#111114] dark:text-zinc-300">
+        <div className="min-h-0 flex-1 overflow-auto bg-panel px-4 py-3 font-mono text-xs leading-6 text-fg">
           {activeTab === "console" ? (
             <div className="flex h-full min-h-[96px] w-full flex-col gap-4 sm:flex-row">
               <div className="flex flex-1 flex-col">
-                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                   Standard Input
                 </label>
                 <textarea
@@ -266,14 +266,14 @@ export default function BottomPanel({
                   onChange={(event) => onStdinChange?.(event.target.value)}
                   placeholder="Optional stdin for the active file..."
                   disabled={!runEnabled}
-                  className="w-full flex-1 resize-none rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs outline-none transition focus:border-zinc-400 dark:border-zinc-800 dark:bg-black/20 dark:focus:border-zinc-500"
+                  className="w-full flex-1 resize-none rounded-md border border-edge-subtle bg-panel px-3 py-3 font-mono text-xs outline-none transition focus:border-edge"
                 />
               </div>
               <div className="flex flex-1 flex-col">
-                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <label className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
                   Execution Output
                 </label>
-                <div className="flex-1 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs dark:border-zinc-800 dark:bg-black/20">
+                <div className="flex-1 overflow-auto rounded-md border border-edge-subtle bg-panel px-3 py-3 font-mono text-xs">
                   <pre className="whitespace-pre-wrap break-words">
                     {getPanelContent("output", runResult)}
                   </pre>
@@ -284,7 +284,7 @@ export default function BottomPanel({
             <div className="h-full min-h-[96px] w-full">
               {execHistory.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 text-center opacity-60">
-                  <Clock size={20} className="text-zinc-400" />
+                  <Clock size={20} className="text-fg-subtle" />
                   <p className="text-xs text-fg-muted">No execution history yet</p>
                 </div>
               ) : (
@@ -298,9 +298,9 @@ export default function BottomPanel({
                         key={entry.id}
                         onClick={() => setSelectedHistory(isSelected ? null : entry)}
                         className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
-                          isSelected
-                            ? "border-brand-300 bg-brand-50 dark:border-brand-800 dark:bg-brand-900/20"
-                            : "border-zinc-200 bg-zinc-50 hover:border-zinc-300 dark:border-zinc-800 dark:bg-black/20 dark:hover:border-zinc-800"
+ isSelected
+ ?"border-brand-300 bg-brand-50"
+                            : "border-edge-subtle bg-panel hover:border-edge-subtle"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -309,17 +309,17 @@ export default function BottomPanel({
                               ? <CheckCircle size={12} className="shrink-0 text-success-500" />
                               : <XCircle size={12} className="shrink-0 text-danger-400" />
                             }
-                            <span className="truncate text-[11px] font-mono text-zinc-600 dark:text-zinc-300">
+                            <span className="truncate text-[11px] font-mono text-fg-muted">
                               {entry.command || "code run"}
                             </span>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2 text-[10px] text-zinc-400">
+                          <div className="flex shrink-0 items-center gap-2 text-[10px] text-fg-subtle">
                             {typeof entry.runtimeMs === "number" && <span>{entry.runtimeMs}ms</span>}
                             <span>{ts}</span>
                           </div>
                         </div>
                         {isSelected && (entry.stdout || entry.stderr) && (
-                          <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded border border-zinc-200 bg-white p-2 text-[10px] text-zinc-700 dark:border-zinc-800 dark:bg-black/30 dark:text-zinc-300">
+                          <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded border border-edge-subtle bg-panel p-2 text-[10px] text-fg">
                             {entry.stdout || entry.stderr}
                           </pre>
                         )}
@@ -334,13 +334,13 @@ export default function BottomPanel({
               {terminalEnabled ? (
                 <XTerminal roomId={roomId} />
               ) : (
-                <div className="flex h-full min-h-[96px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-zinc-200 bg-zinc-50 px-6 py-4 text-center dark:border-zinc-800 dark:bg-black/20">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800">
+                <div className="flex h-full min-h-[96px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-edge-subtle bg-panel px-6 py-4 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-hovered text-fg-muted">
                     <ShieldOff size={20} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <p className="text-sm font-semibold text-fg">Terminal Access Restricted</p>
-                    <p className="text-xs text-zinc-500 max-w-[260px]">
+                    <p className="text-xs text-fg-muted max-w-[260px]">
                       You don&apos;t have terminal permission for this workspace. Ask the room owner to grant you editor access.
                     </p>
                   </div>

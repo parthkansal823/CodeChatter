@@ -45,11 +45,11 @@ export default function TabBar({
   }
 
   return (
-    <div className="flex items-center border-b border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-[#18181b]">
+    <div className="flex items-center border-b border-edge-subtle bg-hovered">
       {canScrollLeft && (
         <button
           onClick={() => scroll("left")}
-          className="flex-shrink-0 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          className="flex-shrink-0 p-1.5 text-fg-subtle hover:text-fg-muted transition-colors"
           title="Scroll left"
         >
           <ChevronLeft size={16} />
@@ -73,9 +73,9 @@ export default function TabBar({
               onClick={() => onSelectFile?.(file)}
               onKeyDown={(e) => e.key === "Enter" && onSelectFile?.(file)}
               className={`group relative flex min-w-[110px] max-w-[220px] cursor-pointer items-center gap-2 border-t-2 px-2.5 py-1.5 text-xs transition-colors sm:min-w-[120px] sm:px-3 sm:text-sm ${
-                isActive
-                  ? "border-t-brand-500 bg-white text-zinc-900 dark:bg-[#1e1e1e] dark:text-white"
-                  : "border-t-transparent bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-[#18181b] dark:text-zinc-400 dark:hover:bg-[#1d1d20]"
+ isActive
+ ?"border-t-brand-500 bg-panel text-fg"
+                  : "border-t-transparent bg-hovered text-fg-muted hover:bg-selected"
               }`}
               title={file.name}
             >
@@ -94,7 +94,7 @@ export default function TabBar({
                   e.stopPropagation();
                   onCloseFile?.(file);
                 }}
-                className={`ml-auto flex-shrink-0 rounded-sm p-0.5 text-zinc-400 transition-all hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                className={`ml-auto flex-shrink-0 rounded-sm p-0.5 text-fg-subtle transition-all hover:bg-selected hover:text-fg ${isActive ?"opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                 title="Close file"
               >
                 <X size={14} />
@@ -107,7 +107,7 @@ export default function TabBar({
       {canScrollRight && (
         <button
           onClick={() => scroll("right")}
-          className="flex-shrink-0 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          className="flex-shrink-0 p-1.5 text-fg-subtle hover:text-fg-muted transition-colors"
           title="Scroll right"
         >
           <ChevronRight size={16} />

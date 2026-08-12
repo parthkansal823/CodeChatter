@@ -1,14 +1,26 @@
 import { useState, useEffect } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowRight, Check, X,
-  LayoutGrid, Plus, Users, Share2,
-  Bot, GitBranch, MessageCircleMore,
-  Settings, Sparkles, Code2,
-  FolderOpen, Play, Timer, Github,
+  ArrowRight,
+  Check,
+  X,
+  LayoutGrid,
+  Plus,
+  Users,
+  Share2,
+  Bot,
+  GitBranch,
+  MessageCircleMore,
+  Settings,
+  Sparkles,
+  Code2,
+  FolderOpen,
+  Play,
+  Timer,
 } from "lucide-react";
 import { HOME_TUTORIAL_KEY } from "./tutorialKeys";
 import { useAuth } from "../hooks/useAuth";
+import { SiGithub } from "react-icons/si";
 
 // ── Mini UI preview components ──────────────────────────────────────────────
 
@@ -77,7 +89,7 @@ function ToolsPreview() {
     { icon: MessageCircleMore, color: "text-success-400 bg-success-50 dark:bg-success-900/20", label: "Chat"      },
     { icon: Bot,               color: "text-brand-400 bg-brand-50 dark:bg-brand-900/20",   label: "AI"        },
     { icon: GitBranch,         color: "text-info-400 bg-info-50 dark:bg-info-900/20",         label: "Flowchart" },
-    { icon: Github,            color: "text-zinc-500 bg-hovered",           label: "GitHub"    },
+    { icon: SiGithub,            color: "text-zinc-500 bg-hovered",           label: "GitHub"    },
     { icon: Timer,             color: "text-danger-400 bg-danger-50 dark:bg-danger-900/20",         label: "Pomodoro"  },
   ];
   return (

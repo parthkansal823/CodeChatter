@@ -317,7 +317,9 @@ export const secureFetch = async (url, options = {}, token = null) => {
     return await response.json();
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error('Request timeout');
+      // Keep the abort as the cause: without it the stack stops here and a
+      // timeout is indistinguishable from any other failed request.
+      throw new Error('Request timeout', { cause: error });
     }
     throw error;
   } finally {

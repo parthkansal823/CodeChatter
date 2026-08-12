@@ -9,15 +9,15 @@ export const ACTIVITY_STORAGE_PREFIX = "cc-activity-";
 const MAX_ENTRIES = 60;
 
 const TYPE_META = {
-  file_open:   { icon: File,      color: "text-info-500",     bg: "bg-info-50 dark:bg-info-900/20" },
-  file_create: { icon: File,      color: "text-success-500", bg: "bg-success-50 dark:bg-success-900/20" },
-  file_delete: { icon: Trash2,    color: "text-danger-500",     bg: "bg-danger-50 dark:bg-danger-900/20" },
-  code_run:    { icon: Play,      color: "text-success-500",   bg: "bg-success-50 dark:bg-success-900/20" },
-  code_error:  { icon: Code2,     color: "text-danger-500",     bg: "bg-danger-50 dark:bg-danger-900/20" },
-  code_save:   { icon: Save,      color: "text-brand-500",  bg: "bg-brand-50 dark:bg-brand-900/20" },
-  user_join:   { icon: UserPlus,  color: "text-success-500", bg: "bg-success-50 dark:bg-success-900/20" },
-  user_leave:  { icon: UserMinus, color: "text-zinc-500",    bg: "bg-hovered" },
-  ai_query:    { icon: Bot,       color: "text-warning-500",   bg: "bg-warning-50 dark:bg-warning-900/20" },
+  file_open:   { icon: File,      color: "text-info-500",     bg: "bg-info-50" },
+  file_create: { icon: File,      color: "text-success-500", bg: "bg-success-50" },
+  file_delete: { icon: Trash2,    color: "text-danger-500",     bg: "bg-danger-50" },
+  code_run:    { icon: Play,      color: "text-success-500",   bg: "bg-success-50" },
+  code_error:  { icon: Code2,     color: "text-danger-500",     bg: "bg-danger-50" },
+  code_save:   { icon: Save,      color: "text-brand-500",  bg: "bg-brand-50" },
+  user_join:   { icon: UserPlus,  color: "text-success-500", bg: "bg-success-50" },
+  user_leave:  { icon: UserMinus, color: "text-fg-muted",    bg: "bg-hovered" },
+  ai_query:    { icon: Bot,       color: "text-warning-500",   bg: "bg-warning-50" },
 };
 
 function timeAgo(iso) {
@@ -74,14 +74,14 @@ export default function ActivityLog({ roomId, onBack = null }) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">
+    <div className="flex h-full flex-col bg-panel">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="flex items-center justify-between border-b border-edge-subtle px-4 py-3">
         <div className="flex items-center gap-2">
           {onBack ? (
             <button
               onClick={onBack}
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200"
+              className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-hovered hover:text-fg"
               title="Back to tools"
             >
               <ArrowLeft size={13} />
@@ -90,7 +90,7 @@ export default function ActivityLog({ roomId, onBack = null }) {
           <Activity size={14} className="text-brand-400" />
           <span className="text-sm font-semibold text-fg">Activity Log</span>
           {activities.length > 0 && (
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+            <span className="rounded-full bg-hovered px-2 py-0.5 text-[10px] font-medium text-fg-muted">
               {activities.length}
             </span>
           )}
@@ -98,7 +98,7 @@ export default function ActivityLog({ roomId, onBack = null }) {
         <div className="flex items-center gap-1">
           <button
             onClick={load}
-            className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200"
+            className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-hovered hover:text-fg"
             title="Refresh"
           >
             <RefreshCw size={13} />
@@ -106,7 +106,7 @@ export default function ActivityLog({ roomId, onBack = null }) {
           {activities.length > 0 && (
             <button
               onClick={clear}
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-900/20 dark:hover:text-danger-400"
+              className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-danger-50 hover:text-danger-500"
               title="Clear log"
             >
               <Trash2 size={13} />
@@ -123,13 +123,13 @@ export default function ActivityLog({ roomId, onBack = null }) {
               animate={{ y: [0, -4, 0] }}
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             >
-              <Activity size={22} className="text-zinc-300 dark:text-zinc-600" />
+              <Activity size={22} className="text-fg" />
             </Motion.div>
             <p className="text-sm font-medium text-fg-muted">No activity yet</p>
             <p className="text-xs text-fg-subtle">Actions in this room appear here</p>
           </div>
         ) : (
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+          <div className="divide-y divide-edge-subtle">
             <AnimatePresence initial={false}>
               {activities.map((a) => {
                 const meta = TYPE_META[a.type] || TYPE_META.code_save;

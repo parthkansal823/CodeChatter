@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react-swc'
+import react from '@vitejs/plugin-react'
 
 /*
  * Chunking notes
@@ -41,16 +41,24 @@ const LEAF_VENDOR_CHUNKS = [
 export default defineConfig({
   plugins: [react()],
 
+  // Both of these exist only for the containerised dev stack, and both are
+  // wrong on a normal host run — which is why they are switched off by default
+  // rather than left on "just in case".
+  //
+  //   host    a container must bind 0.0.0.0 to be reachable from the host. On
+  //           the host that binds every adapter instead, so Vite prints a URL
+  //           for each virtual NIC (Docker, WSL, VirtualBox, VMware) and the
+  //           dev server becomes reachable from the whole LAN.
+  //   watch   inotify events do not cross a Docker Desktop bind mount, so in a
+  //           container the default watcher never sees host edits and HMR
+  //           silently stops. Polling is slower but is the only thing that
+  //           fires there.
+  //
+  // VITE_DOCKER is set by docker-compose.dev.yml.
   server: {
-    host: true,
+    host: Boolean(process.env.VITE_DOCKER),
     port: 5173,
-    // Inotify events do not cross a Docker Desktop bind mount, so inside a
-    // container the default watcher never sees host edits and HMR silently
-    // stops working. Polling is slower but is the only thing that fires there.
-    // Set by docker-compose.dev.yml; unset on a normal host run.
-    watch: process.env.VITE_DOCKER
-      ? { usePolling: true, interval: 300 }
-      : undefined,
+    watch: process.env.VITE_DOCKER ? { usePolling: true, interval: 300 } : undefined,
   },
 
   build: {

@@ -11,19 +11,19 @@ import { useNotifications } from "../context/NotificationsContext";
 const TYPE_META = {
   join_request: {
     icon: UserPlus,
-    colorClass: "text-brand-500 bg-brand-50 dark:bg-brand-900/20",
+    colorClass: "text-brand-500 bg-brand-50",
   },
   room_invite: {
     icon: FolderGit2,
-    colorClass: "text-success-500 bg-success-50 dark:bg-success-900/20",
+    colorClass: "text-success-500 bg-success-50",
   },
   room_deleted: {
     icon: AlertCircle,
-    colorClass: "text-danger-500 bg-danger-50 dark:bg-danger-900/20",
+    colorClass: "text-danger-500 bg-danger-50",
   },
   info: {
     icon: Info,
-    colorClass: "text-info-500 bg-info-50 dark:bg-info-900/20",
+    colorClass: "text-info-500 bg-info-50",
   },
 };
 
@@ -67,12 +67,12 @@ export default function NotificationsPanel({ isOpen, onClose }) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -6, scale: 0.97 }}
           transition={{ duration: 0.14 }}
-          className="absolute right-0 top-10 z-50 w-80 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl shadow-black/10 dark:border-zinc-800 dark:bg-zinc-900"
+          className="absolute right-0 top-10 z-50 w-80 overflow-hidden rounded-lg border border-edge-subtle bg-panel shadow-2xl shadow-black/10"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3.5 dark:border-zinc-800">
+          <div className="flex items-center justify-between border-b border-edge-subtle px-4 py-3.5">
             <div className="flex items-center gap-2">
-              <Bell size={14} className="text-zinc-700 dark:text-zinc-200" />
+              <Bell size={14} className="text-fg" />
               <span className="text-sm font-semibold text-fg">Notifications</span>
               {unreadCount > 0 && (
                 <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand-600 px-1.5 text-[10px] font-bold text-white">
@@ -84,7 +84,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
               {unreadCount > 0 && (
                 <button
                   onClick={markAllRead}
-                  className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-hovered hover:text-fg"
                   title="Mark all read"
                 >
                   <CheckCheck size={14} />
@@ -93,7 +93,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
               {notifications.length > 0 && (
                 <button
                   onClick={clearAll}
-                  className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-900/20 dark:hover:text-danger-400"
+                  className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-danger-50 hover:text-danger-500"
                   title="Clear all"
                 >
                   <Trash2 size={14} />
@@ -106,7 +106,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
           <div className="max-h-[380px] overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-                <BellOff size={24} className="text-zinc-300 dark:text-zinc-600" />
+                <BellOff size={24} className="text-fg" />
                 <p className="text-sm font-medium text-fg-muted">All caught up!</p>
                 <p className="text-xs text-fg-subtle">No notifications yet</p>
               </div>
@@ -117,8 +117,8 @@ export default function NotificationsPanel({ isOpen, onClose }) {
                 return (
                   <div
                     key={notif.id}
-                    className={`relative flex gap-3 border-b border-zinc-100 px-4 py-3.5 last:border-b-0 dark:border-zinc-800 ${
-                      !notif.read ? "bg-brand-50/40 dark:bg-brand-900/5" : ""
+                    className={`relative flex gap-3 border-b border-edge-subtle px-4 py-3.5 last:border-b-0 ${
+ !notif.read ?"bg-brand-50/40" : ""
                     }`}
                   >
                     <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${meta.colorClass}`}>
@@ -127,8 +127,8 @@ export default function NotificationsPanel({ isOpen, onClose }) {
                     <button className="flex-1 text-left" onClick={() => handleClick(notif)}>
                       <div className="flex items-start justify-between gap-2">
                         <p className={`text-xs font-semibold leading-snug ${
-                          notif.read
-                            ? "text-fg"
+ notif.read
+ ?"text-fg"
                             : "text-fg"
                         }`}>
                           {notif.title}
@@ -142,7 +142,7 @@ export default function NotificationsPanel({ isOpen, onClose }) {
                     </button>
                     <button
                       onClick={() => removeNotification(notif.id)}
-                      className="mt-0.5 shrink-0 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                      className="mt-0.5 shrink-0 rounded-md p-1 text-fg-subtle transition-colors hover:bg-hovered hover:text-fg-muted"
                     >
                       <X size={12} />
                     </button>

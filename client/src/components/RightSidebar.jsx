@@ -4,7 +4,6 @@ import {
   Bot,
   LayoutDashboard,
   FileText,
-  Github,
   GitBranch,
   MessageCircleMore,
   PencilRuler,
@@ -25,6 +24,7 @@ import QuickNotes from "./QuickNotes";
 import PomodoroTimer from "./PomodoroTimer";
 import UserAvatar from "./UserAvatar";
 import { useAuth } from "../hooks/useAuth";
+import { SiGithub } from "react-icons/si";
 
 // These three panels carry the heaviest dependencies in the app (tldraw,
 // mermaid, and the WebRTC stack). Loading them on demand keeps several
@@ -35,8 +35,8 @@ const VideoCall = lazy(() => import("./VideoCall"));
 
 function PanelFallback({ label }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-400">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-600 border-t-brand-500" />
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-fg-subtle">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-edge-subtle border-t-brand-500" />
       <p className="text-xs tracking-wide">Loading {label}...</p>
     </div>
   );
@@ -89,11 +89,11 @@ const TOOLS = [
     id: "github",
     name: "GitHub",
     section: "Coding",
-    icon: Github,
+    icon: SiGithub,
     color: "text-fg-muted",
-    bg: "hover:bg-zinc-500/10",
-    activeBg: "bg-zinc-500/10",
-    activeBorder: "border-zinc-500/40",
+    bg: "hover:bg-selected",
+    activeBg: "bg-panel",
+    activeBorder: "border-edge-subtle",
   },
   // ── Utilities ───────────────────────────────────────
   {
@@ -169,18 +169,18 @@ function formatRoleLabel(role = "") {
 
 function ToolHeader({ icon: Icon, title, description, onBack, actions = null }) {
   return (
-    <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+    <div className="flex items-center gap-3 border-b border-edge-subtle px-4 py-3">
       {onBack ? (
         <button
           type="button"
           onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition hover:bg-hovered hover:text-fg"
           title="Back to tools"
         >
           <ChevronLeft size={15} />
         </button>
       ) : null}
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-hovered text-fg">
         <Icon size={16} />
       </div>
       <div className="min-w-0 flex-1">
@@ -218,7 +218,7 @@ function OverviewPanel({
       : "No recent runs";
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">
+    <div className="flex h-full flex-col bg-panel">
       <ToolHeader
         icon={LayoutDashboard}
         title="Workspace Overview"
@@ -226,7 +226,7 @@ function OverviewPanel({
       />
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-xl border border-edge-subtle bg-panel p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-fg">{room?.name || "Workspace"}</p>
@@ -235,9 +235,9 @@ function OverviewPanel({
               </p>
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-              liveConnected
-                ? "bg-success-500/10 text-success-600 dark:text-success-300"
-                : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+ liveConnected
+ ?"bg-success-500/10 text-success-600"
+                : "bg-selected text-fg-muted  "
             }`}>
               {liveConnected ? "Live" : "Offline"}
             </span>
@@ -245,8 +245,8 @@ function OverviewPanel({
 
           <div className="mt-4 grid grid-cols-2 gap-2">
             {overviewStats.map((stat) => (
-              <div key={stat.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{stat.label}</p>
+              <div key={stat.label} className="rounded-lg border border-edge-subtle bg-panel px-3 py-2.5">
+                <p className="text-[11px] text-fg-muted">{stat.label}</p>
                 <p className="mt-1 text-sm font-semibold text-fg">{stat.value}</p>
               </div>
             ))}
@@ -259,14 +259,14 @@ function OverviewPanel({
             { label: "Can edit", value: canEdit ? "Yes" : "No" },
             { label: "Can run", value: canRun ? "Yes" : "No" },
           ].map((item) => (
-            <div key={item.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{item.label}</p>
+            <div key={item.label} className="rounded-lg border border-edge-subtle bg-panel px-3 py-3">
+              <p className="text-[11px] text-fg-muted">{item.label}</p>
               <p className="mt-1 text-sm font-semibold text-fg">{item.value}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mt-4 rounded-xl border border-edge-subtle bg-panel p-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">Current file</p>
           <p className="mt-2 truncate text-sm font-medium text-fg">
             {activeFilePath || "No file selected"}
@@ -278,32 +278,32 @@ function OverviewPanel({
             <button
               type="button"
               onClick={() => openTool("ai")}
-              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-zinc-800 dark:text-zinc-200 dark:hover:border-brand-500/40 dark:hover:bg-brand-500/10"
+              className="rounded-xl border border-edge-subtle px-3 py-2 text-xs font-semibold text-fg transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
             >
               Open AI Help
             </button>
             <button
               type="button"
               onClick={() => openTool("flowchart")}
-              className="rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-info-300 hover:bg-info-50 hover:text-info-700 dark:border-zinc-800 dark:text-zinc-200 dark:hover:border-info-500/40 dark:hover:bg-info-500/10"
+              className="rounded-xl border border-edge-subtle px-3 py-2 text-xs font-semibold text-fg transition hover:border-info-300 hover:bg-info-50 hover:text-info-700"
             >
               Open Flowchart
             </button>
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mt-4 rounded-xl border border-edge-subtle bg-panel p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">Run status</p>
               <p className="mt-2 text-sm font-medium text-fg">{lastRunLabel}</p>
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-              runResult?.status === "running"
-                ? "bg-warning-500/10 text-warning-600 dark:text-warning-300"
+ runResult?.status ==="running"
+                ? "bg-warning-500/10 text-warning-600"
                 : lastRunFailed
-                  ? "bg-danger-500/10 text-danger-600 dark:text-danger-300"
-                  : "bg-success-500/10 text-success-600 dark:text-success-300"
+                  ? "bg-danger-500/10 text-danger-600"
+                  : "bg-success-500/10 text-success-600"
             }`}>
               {runResult?.status === "running" ? "Running" : lastRunFailed ? "Errors" : "Ready"}
             </span>
@@ -313,7 +313,7 @@ function OverviewPanel({
           ) : null}
         </div>
 
-        <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mt-4 rounded-xl border border-edge-subtle bg-panel p-4">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">People in room</p>
             <span className="text-xs text-fg-muted">
@@ -327,11 +327,11 @@ function OverviewPanel({
               allCollaborators.slice(0, 6).map((collaborator) => {
                 const isLive = activeCollaborators.some((active) => active.userId === collaborator.id || active.id === collaborator.id);
                 return (
-                  <div key={collaborator.id} className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
+                  <div key={collaborator.id} className="flex items-center gap-3 rounded-lg border border-edge-subtle bg-panel px-3 py-2">
                     <div className="relative">
                       <UserAvatar username={collaborator.username} hue={collaborator.avatarHue} size="xs" />
                       {isLive ? (
-                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white bg-success-500 dark:border-[#0d0d10]" />
+                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-panel bg-success-500" />
                       ) : null}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -347,7 +347,7 @@ function OverviewPanel({
         </div>
 
         {!canManage ? null : (
-          <div className="mt-4 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="mt-4 rounded-xl border border-dashed border-edge bg-panel p-4">
             <p className="text-sm font-semibold text-fg">Owner controls available</p>
             <p className="mt-1 text-xs text-fg-muted">
               You can review access requests and manage member roles from the workspace settings modal.
@@ -617,7 +617,7 @@ export default function RightSidebar({
       {activeFeature === "github" && (
         <Motion.div key="github" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.15 }} className="flex h-full flex-col overflow-hidden">
           <ToolHeader
-            icon={Github}
+            icon={SiGithub}
             title="GitHub"
             description="Import repos, push changes, and manage sync."
             onBack={closeTool}
@@ -650,11 +650,11 @@ export default function RightSidebar({
       <button
         key={tool.id}
         onClick={() => openTool(tool.id)}
-        className={`group relative flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 text-left transition hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/60 ${
-          compact ? "px-4 py-3" : "px-4 py-4"
+        className={`group relative flex items-center gap-3 rounded-lg border border-edge-subtle bg-panel text-left transition hover:border-edge hover:bg-hovered-subtle ${
+ compact ?"px-4 py-3" : "px-4 py-4"
         }`}
       >
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 transition group-hover:scale-105 dark:bg-zinc-800/60 ${tool.color}`}>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-hovered transition group-hover:scale-105 ${tool.color}`}>
           <Icon size={18} />
         </div>
         <div className="min-w-0 flex-1">
@@ -674,18 +674,18 @@ export default function RightSidebar({
   const iconRail = (
     <div
       style={{ width: `${RAIL_WIDTH}px` }}
-      className="flex h-full shrink-0 flex-col border-l border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-[#0d0d10]"
+      className="flex h-full shrink-0 flex-col border-l border-edge-subtle bg-panel"
     >
       {/* Collapse / expand toggle */}
       <button
         onClick={onToggle}
-        className="flex h-11 w-full items-center justify-center text-zinc-500 transition hover:text-zinc-700 dark:text-zinc-600 dark:hover:text-zinc-300"
+        className="flex h-11 w-full items-center justify-center text-fg-muted transition hover:text-fg"
         title={isOpen ? "Collapse sidebar" : "Expand sidebar"}
       >
         {isOpen ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
       </button>
 
-      <div className="h-px w-full bg-zinc-200 dark:bg-zinc-800/60" />
+      <div className="h-px w-full bg-selected/60" />
 
       {/* Tool icons */}
       <div className="flex flex-col items-center gap-1 py-3">
@@ -704,19 +704,19 @@ export default function RightSidebar({
               }}
               title={tool.name}
               className={`relative flex h-9 w-9 items-center justify-center rounded-lg border transition-all ${
-                isActive
-                  ? `${tool.activeBg} ${tool.activeBorder} ${tool.color}`
+ isActive
+ ?`${tool.activeBg} ${tool.activeBorder} ${tool.color}`
                   : `border-transparent ${tool.color} ${tool.bg} opacity-60 hover:opacity-100`
               }`}
             >
               <Icon size={17} />
               {badge && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger-500 text-[9px] font-bold text-white ring-2 ring-zinc-50 dark:ring-[#0d0d10]">
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger-500 text-[9px] font-bold text-white ring-2 ring-edge-subtle">
                   {badge > 9 ? "9+" : badge}
                 </span>
               )}
               {showGithubDot && (
-                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-zinc-50 bg-success-500 dark:border-[#0d0d10]" />
+                <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-panel bg-success-500" />
               )}
             </button>
           );
@@ -724,10 +724,10 @@ export default function RightSidebar({
       </div>
 
       <div className="mt-auto">
-        <div className="h-px w-full bg-zinc-200 dark:bg-zinc-800/60" />
+        <div className="h-px w-full bg-selected/60" />
         {/* Live presence avatars — mini stack */}
         <div className="flex flex-col items-center gap-1.5 py-3">
-          <div className="flex items-center gap-1 text-[10px] text-zinc-400 dark:text-zinc-700">
+          <div className="flex items-center gap-1 text-[10px] text-fg-subtle">
             <Radio size={9} className={liveConnected ? "text-success-500" : ""} />
             {liveCount > 0 ? liveCount : ""}
           </div>
@@ -740,7 +740,7 @@ export default function RightSidebar({
             </div>
           ))}
           {allCollaborators.length > 4 && (
-            <span className="text-[10px] text-zinc-400 dark:text-zinc-700">+{allCollaborators.length - 4}</span>
+            <span className="text-[10px] text-fg-subtle">+{allCollaborators.length - 4}</span>
           )}
         </div>
       </div>
@@ -752,12 +752,12 @@ export default function RightSidebar({
     if (!isOpen) return null;
     return (
       <div className="fixed inset-0 z-50 flex justify-end lg:hidden">
-        <button className="flex-1 bg-zinc-950/60 backdrop-blur-sm" onClick={onClose} aria-label="Close tools" />
-        <div className="flex h-full w-[88vw] max-w-[400px] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-[#0d0d10]">
+        <button className="flex-1 bg-canvas backdrop-blur-sm" onClick={onClose} aria-label="Close tools" />
+        <div className="flex h-full w-[88vw] max-w-[400px] flex-col border-l border-edge-subtle bg-panel shadow-2xl">
           {/* Mobile header */}
-          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <div className="flex items-center justify-between border-b border-edge-subtle px-4 py-3">
             <p className="text-sm font-semibold text-fg">Workspace Tools</p>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200">
+            <button onClick={onClose} className="rounded-lg p-1.5 text-fg-muted hover:bg-hovered hover:text-fg">
               <X size={16} />
             </button>
           </div>
@@ -765,31 +765,31 @@ export default function RightSidebar({
             <div className="flex-1 overflow-hidden">{featurePanel}</div>
           ) : (
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="rounded-lg border border-edge-subtle bg-panel p-4">
                 <p className="text-sm font-semibold text-fg">{room?.name || "Workspace"}</p>
                 <p className="mt-1 text-xs text-fg-muted">
                   {liveConnected ? "Live collaboration connected" : "Live collaboration offline"}
                 </p>
               </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="rounded-lg border border-edge-subtle bg-panel p-4">
                 <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">Workspace overview</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {overviewStats.map((stat) => (
-                    <div key={stat.label} className="rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{stat.label}</p>
+                    <div key={stat.label} className="rounded-xl border border-edge-subtle bg-panel px-3 py-2">
+                      <p className="text-[11px] text-fg-muted">{stat.label}</p>
                       <p className="mt-1 text-sm font-semibold text-fg">{stat.value}</p>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="rounded-lg border border-edge-subtle bg-panel p-3">
                 <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
                   <input
                     value={toolQuery}
                     onChange={(event) => setToolQuery(event.target.value)}
                     placeholder="Search tools"
-                    className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+                    className="w-full rounded-xl border border-edge-subtle bg-panel py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-400"
                   />
                 </div>
               </div>
@@ -819,11 +819,11 @@ export default function RightSidebar({
   }
 
   return (
-    <div className={`flex h-full ${isResizing ? "pointer-events-none select-none" : ""}`}>
+    <div className={`flex h-full ${isResizing ?"pointer-events-none select-none" : ""}`}>
       {/* Main content panel */}
       <div
         style={{ width: `${sidebarWidth}px` }}
-        className="relative flex h-full flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-[#0d0d10]"
+        className="relative flex h-full flex-col border-l border-edge-subtle bg-panel"
       >
         {/* Resize handle */}
         <div
@@ -832,7 +832,7 @@ export default function RightSidebar({
         >
           <div
             className={`h-full w-[2px] transition-colors ${
-              isResizing ? "bg-brand-500" : "bg-transparent group-hover:bg-zinc-700"
+ isResizing ?"bg-brand-500" : "bg-transparent group-hover:bg-fg-subtle"
             }`}
           />
         </div>
@@ -842,13 +842,13 @@ export default function RightSidebar({
         ) : (
           /* Default state: tool launcher */
           <div className="flex h-full flex-col">
-            <div className="border-b border-zinc-200 px-4 py-3.5 dark:border-zinc-800">
+            <div className="border-b border-edge-subtle px-4 py-3.5">
               <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">Workspace Tools</p>
               <p className="mt-1 text-sm font-semibold text-fg">Everything important, easier to reach</p>
             </div>
 
-            <div className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="border-b border-edge-subtle px-4 py-4">
+              <div className="rounded-lg border border-edge-subtle bg-panel p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-fg">
@@ -860,9 +860,9 @@ export default function RightSidebar({
                     </p>
                   </div>
                   <div className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                    liveConnected
-                      ? "bg-success-500/10 text-success-600 dark:text-success-300"
-                      : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+ liveConnected
+ ?"bg-success-500/10 text-success-600"
+                      : "bg-selected text-fg-muted  "
                   }`}>
                     {liveConnected ? "Live" : "Offline"}
                   </div>
@@ -870,16 +870,16 @@ export default function RightSidebar({
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   {overviewStats.map((stat) => (
-                    <div key={stat.label} className="rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-500">{stat.label}</p>
+                    <div key={stat.label} className="rounded-xl border border-edge-subtle bg-panel px-3 py-2">
+                      <p className="text-[11px] text-fg-muted">{stat.label}</p>
                       <p className="mt-1 text-sm font-semibold text-fg">{stat.value}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-4 rounded-xl border border-dashed border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                <div className="mt-4 rounded-xl border border-dashed border-edge-subtle px-3 py-2">
                   <p className="text-[11px] font-semibold uppercase tracking-widest text-fg-subtle">Active file</p>
-                  <p className="mt-1 truncate text-xs text-zinc-600 dark:text-zinc-300">{activeFilePath || "No file selected yet"}</p>
+                  <p className="mt-1 truncate text-xs text-fg-muted">{activeFilePath || "No file selected yet"}</p>
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -891,7 +891,7 @@ export default function RightSidebar({
                         key={tool.id}
                         type="button"
                         onClick={() => openTool(tool.id)}
-                        className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-brand-500/40 dark:hover:bg-brand-500/10"
+                        className="rounded-xl border border-edge-subtle bg-panel px-3 py-2 text-xs font-semibold text-fg transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
                       >
                         {tool.name}
                       </button>
@@ -905,12 +905,12 @@ export default function RightSidebar({
             <div className="border-b border-edge-subtle">
               <div className="flex items-center gap-3 px-4 py-3">
                 <div className="flex items-center gap-1.5">
-                  <Radio size={11} className={liveConnected ? "text-success-500" : "text-zinc-400 dark:text-zinc-600"} />
-                  <span className="text-xs text-zinc-500">{liveConnected ? "Live" : "Offline"}</span>
+                  <Radio size={11} className={liveConnected ? "text-success-500" : "text-fg-subtle"} />
+                  <span className="text-xs text-fg-muted">{liveConnected ? "Live" : "Offline"}</span>
                 </div>
                 {allCollaborators.length > 0 && (
                   <>
-                    <div className="h-3.5 w-px bg-zinc-200 dark:bg-zinc-800/60" />
+                    <div className="h-3.5 w-px bg-selected/60" />
                     <div className="flex items-center gap-1.5">
                       <div className="flex -space-x-1.5">
                         {allCollaborators.slice(0, 5).map((c) => (
@@ -934,23 +934,23 @@ export default function RightSidebar({
                 <div className="px-4 pb-3 space-y-1">
                   {allCollaborators.map((c) => {
                     const isLive = activeCollaborators.some((a) => a.userId === c.id || a.id === c.id);
-                    const roleDot = { owner: "bg-warning-400", editor: "bg-brand-400", runner: "bg-warning-400", viewer: "bg-zinc-500" };
+                    const roleDot = { owner: "bg-warning-400", editor: "bg-brand-400", runner: "bg-warning-400", viewer: "bg-panel" };
                     const roleLabel = { owner: "Owner", editor: "Editor", runner: "Runner", viewer: "Viewer" };
                     const role = c.accessRole || "editor";
                     return (
-                      <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
+                      <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hovered">
                         <div className="relative shrink-0">
                           <UserAvatar username={c.username} hue={c.avatarHue} size="xs" />
-                          {isLive && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-white bg-success-500 dark:border-[#0d0d10]" />}
+                          {isLive && <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-panel bg-success-500" />}
                         </div>
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg">{c.username}</span>
                         <span className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                          role === "owner"  ? "bg-warning-500/10 text-warning-600 dark:text-warning-300" :
-                          role === "editor" ? "bg-brand-500/10 text-brand-600 dark:text-brand-300" :
-                          role === "runner" ? "bg-warning-500/10 text-warning-600 dark:text-warning-300" :
-                          "bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500"
+ role ==="owner"  ? "bg-warning-500/10 text-warning-600" :
+                          role === "editor" ? "bg-brand-500/10 text-brand-600" :
+                          role === "runner" ? "bg-warning-500/10 text-warning-600" :
+                          "bg-selected text-fg-muted  "
                         }`}>
-                          <span className={`h-1 w-1 rounded-full ${roleDot[role] || "bg-zinc-500"}`} />
+                          <span className={`h-1 w-1 rounded-full ${roleDot[role] ||"bg-panel"}`} />
                           {roleLabel[role] || role}
                         </span>
                       </div>
@@ -961,14 +961,14 @@ export default function RightSidebar({
             </div>
 
             {/* Tool cards */}
-            <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+            <div className="border-b border-edge-subtle px-4 py-3">
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
                 <input
                   value={toolQuery}
                   onChange={(event) => setToolQuery(event.target.value)}
                   placeholder="Search sidebar tools"
-                  className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+                  className="w-full rounded-xl border border-edge-subtle bg-panel py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-400"
                 />
               </div>
             </div>
@@ -986,8 +986,8 @@ export default function RightSidebar({
                   </div>
                 ))}
                 {groupedTools.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-center dark:border-zinc-800">
-                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">No tools match that search</p>
+                  <div className="rounded-lg border border-dashed border-edge px-4 py-8 text-center">
+                    <p className="text-sm font-medium text-fg">No tools match that search</p>
                     <p className="mt-1 text-xs text-fg-muted">Try a different word like chat, notes, or github.</p>
                   </div>
                 ) : null}

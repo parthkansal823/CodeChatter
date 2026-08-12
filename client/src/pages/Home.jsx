@@ -70,7 +70,7 @@ export default function Home() {
   const [roomDescription, setRoomDescription] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
   const [selectedShell, setSelectedShell] = useState(defaultTerminalShell);
-  const [starterLanguage, setStarterLanguage] = useState("python");
+  const [chosenLanguage, setChosenLanguage] = useState("python");
   const [roomSearch, setRoomSearch] = useState("");
   const [bookmarks, setBookmarks] = useState(getBookmarks);
   const [recentRooms, setRecentRooms] = useState(getRecentRooms);
@@ -105,18 +105,22 @@ export default function Home() {
     [selectedTemplate]
   );
 
-  useEffect(() => {
+  // Derived, not synced. Picking a template whose language list excludes the
+  // current choice used to run an effect that corrected it on a second render —
+  // so the picker briefly highlighted a language the template does not offer.
+  const starterLanguage = useMemo(() => {
     if (selectedTemplateLanguages.length === 0) {
-      return;
+      return chosenLanguage;
     }
 
-    const supportedLanguageIds = new Set(selectedTemplateLanguages.map((language) => language.id));
-    const preferredLanguage = selectedTemplate?.defaultLanguage || selectedTemplateLanguages[0]?.id || "python";
+    const supported = new Set(selectedTemplateLanguages.map((language) => language.id));
 
-    if (!supportedLanguageIds.has(starterLanguage)) {
-      setStarterLanguage(preferredLanguage);
+    if (supported.has(chosenLanguage)) {
+      return chosenLanguage;
     }
-  }, [starterLanguage, selectedTemplate, selectedTemplateLanguages]);
+
+    return selectedTemplate?.defaultLanguage || selectedTemplateLanguages[0]?.id || "python";
+  }, [chosenLanguage, selectedTemplate, selectedTemplateLanguages]);
 
   useEffect(() => {
     if (!token) {
@@ -292,7 +296,7 @@ export default function Home() {
       setRoomDescription("");
       setSelectedTemplateId("blank");
       setSelectedShell(defaultTerminalShell);
-      setStarterLanguage("python");
+      setChosenLanguage("python");
       toast.success("Room created");
       recordVisit(room.id, room.name);
       navigate(`/room/${room.id}`);
@@ -308,7 +312,7 @@ export default function Home() {
     setRoomDescription("");
     setSelectedTemplateId("blank");
     setSelectedShell(defaultTerminalShell);
-    setStarterLanguage("python");
+    setChosenLanguage("python");
     setCreateModalOpen(true);
   };
 
@@ -809,7 +813,7 @@ export default function Home() {
                           <button
                             key={lang.id}
                             type="button"
-                            onClick={() => setStarterLanguage(lang.id)}
+                            onClick={() => setChosenLanguage(lang.id)}
                             aria-pressed={starterLanguage === lang.id}
                             className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${starterLanguage === lang.id
                               ? "border-accent bg-accent text-fg-accent"

@@ -76,11 +76,11 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: 16, scale: 0.97 }}
       transition={{ type: "spring", stiffness: 380, damping: 28 }}
-      className="flex h-full flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+      className="flex h-full flex-col border-l border-edge-subtle bg-panel"
       style={{ width: 260 }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="flex items-center justify-between border-b border-edge-subtle px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
           <Clock size={14} className="shrink-0 text-brand-400" />
           <div className="min-w-0">
@@ -92,7 +92,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
         </div>
         <button
           onClick={onClose}
-          className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+          className="rounded-lg p-1.5 text-fg-subtle transition-colors hover:bg-hovered hover:text-fg-muted"
         >
           <X size={14} />
         </button>
@@ -102,21 +102,21 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
       <div className="flex-1 overflow-y-auto">
         {versions.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center px-4">
-            <Clock size={20} className="text-zinc-300 dark:text-zinc-600" />
+            <Clock size={20} className="text-fg" />
             <p className="text-xs font-medium text-fg-muted">No saved versions</p>
             <p className="text-[11px] text-fg-subtle">
               Press Ctrl+S to save a version snapshot
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <div className="divide-y divide-edge-subtle">
             {versions.map((entry, i) => (
               <div key={entry.id} className="group flex items-start gap-2 px-3 py-3">
-                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[9px] font-bold text-brand-600 dark:bg-brand-900/20 dark:text-brand-400">
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[9px] font-bold text-brand-600">
                   {versions.length - i}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium text-zinc-700 dark:text-zinc-200">
+                  <p className="text-[11px] font-medium text-fg">
                     {i === 0 ? "Latest save" : timeLabel(entry.timestamp)}
                   </p>
                   <p className="text-[10px] text-fg-subtle">
@@ -127,7 +127,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
                 <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
                     onClick={() => handleRestore(entry)}
-                    className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
+                    className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-brand-50 hover:text-brand-600"
                     title="Restore this version"
                   >
                     <AnimatePresence mode="wait">
@@ -145,7 +145,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
                   {i > 0 && (
                     <button
                       onClick={() => deleteVersion(entry.id)}
-                      className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-900/20 dark:hover:text-danger-400"
+                      className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-danger-50 hover:text-danger-500"
                       title="Delete this version"
                     >
                       <Trash2 size={13} />
@@ -158,7 +158,7 @@ export default function FileVersionHistory({ roomId, filePath, fileName, onResto
         )}
       </div>
 
-      <div className="border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
+      <div className="border-t border-edge-subtle px-4 py-3">
         <p className="text-[10px] text-fg-subtle">
           Up to {MAX_VERSIONS} versions per file · Ctrl+S to snapshot
         </p>

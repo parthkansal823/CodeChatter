@@ -72,14 +72,14 @@ function OutputBlock({ outputs }) {
       {outputs.map((out, i) => {
         if (out.type === "error") {
           return (
-            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-danger-500 dark:text-danger-400 bg-danger-50 dark:bg-danger-500/[0.06]">
+            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-danger-500 bg-danger-50/[0.06]">
               {stripAnsi(out.text)}
             </pre>
           );
         }
         if (out.type === "stderr") {
           return (
-            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-warning-600 dark:text-warning-400 bg-warning-50 dark:bg-warning-500/[0.06]">
+            <pre key={i} className="overflow-x-auto whitespace-pre-wrap break-words px-4 py-2 font-mono text-[11.5px] leading-relaxed text-warning-600 bg-warning-50/[0.06]">
               {stripAnsi(out.text)}
             </pre>
           );
@@ -97,13 +97,13 @@ function OutputBlock({ outputs }) {
 function CellStatusBadge({ count, running }) {
   if (running) {
     return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-500/20">
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100">
         <Loader2 size={10} className="animate-spin text-brand-500" />
       </span>
     );
   }
   return (
-    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-zinc-100 px-1 text-[10px] font-mono font-bold text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
+    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-hovered px-1 text-[10px] font-mono font-bold text-fg-muted">
       {count != null ? count : "·"}
     </span>
   );
@@ -296,13 +296,13 @@ export default function NotebookEditor({
         key={cell.id}
         onClick={() => setActiveCellId(cell.id)}
         className={`group relative rounded-xl border transition-all ${
-          isActive
-            ? "border-brand-400/60 shadow-sm dark:border-brand-500/40"
-            : "border-edge-subtle hover:border-zinc-300 dark:hover:border-zinc-700"
-        } bg-white dark:bg-[#0d0d10]`}
+ isActive
+ ?"border-brand-400/60 shadow-sm"
+            : "border-edge-subtle hover:border-edge-subtle"
+        } bg-panel`}
       >
         {/* Cell header */}
-        <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-zinc-800">
+        <div className="flex items-center gap-1.5 border-b border-edge-subtle px-3 py-1.5">
           {/* Cell type icon */}
           {cell.type === "code" ? (
             <Code2 size={12} className="text-brand-400 shrink-0" />
@@ -315,19 +315,19 @@ export default function NotebookEditor({
             <CellStatusBadge count={cell.executionCount} running={isRunning} />
           )}
 
-          <span className="flex-1 text-[10px] text-zinc-400">
+          <span className="flex-1 text-[10px] text-fg-subtle">
             {cell.type === "code" ? notebook.language : "markdown"}
           </span>
 
           {/* Action buttons — visible on hover / when active */}
-          <div className={`flex items-center gap-0.5 transition-opacity ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+          <div className={`flex items-center gap-0.5 transition-opacity ${isActive ?"opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
             {!readOnly && (
               <>
                 {cell.type === "markdown" && (
                   <button
                     onClick={(e) => { e.stopPropagation(); setMarkdownEditing((prev) => { const n = new Set(prev); n.has(cell.id) ? n.delete(cell.id) : n.add(cell.id); return n; }); }}
                     title={isMarkdownPreview ? "Edit" : "Preview"}
-                    className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    className="flex h-6 w-6 items-center justify-center rounded text-fg-subtle hover:bg-hovered hover:text-fg"
                   >
                     {isMarkdownPreview ? <Code2 size={11} /> : <Type size={11} />}
                   </button>
@@ -336,7 +336,7 @@ export default function NotebookEditor({
                   onClick={(e) => { e.stopPropagation(); moveCell(cell.id, "up"); }}
                   disabled={idx === 0}
                   title="Move up"
-                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-30"
+                  className="flex h-6 w-6 items-center justify-center rounded text-fg-subtle hover:bg-hovered hover:text-fg disabled:opacity-30"
                 >
                   <ChevronUp size={11} />
                 </button>
@@ -344,7 +344,7 @@ export default function NotebookEditor({
                   onClick={(e) => { e.stopPropagation(); moveCell(cell.id, "down"); }}
                   disabled={idx === notebook.cells.length - 1}
                   title="Move down"
-                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 disabled:opacity-30"
+                  className="flex h-6 w-6 items-center justify-center rounded text-fg-subtle hover:bg-hovered hover:text-fg disabled:opacity-30"
                 >
                   <ChevronDown size={11} />
                 </button>
@@ -352,7 +352,7 @@ export default function NotebookEditor({
                   <button
                     onClick={(e) => { e.stopPropagation(); updateCell(cell.id, { outputs: [], executionCount: null }); }}
                     title="Clear output"
-                    className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    className="flex h-6 w-6 items-center justify-center rounded text-fg-subtle hover:bg-hovered hover:text-fg"
                   >
                     <RotateCcw size={11} />
                   </button>
@@ -360,7 +360,7 @@ export default function NotebookEditor({
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteCell(cell.id); }}
                   title="Delete cell"
-                  className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-500/10 dark:hover:text-danger-400"
+                  className="flex h-6 w-6 items-center justify-center rounded text-fg-subtle hover:bg-danger-50 hover:text-danger-500"
                 >
                   <Trash2 size={11} />
                 </button>
@@ -371,7 +371,7 @@ export default function NotebookEditor({
                 onClick={(e) => { e.stopPropagation(); runCell(cell.id, false); }}
                 disabled={isRunning || readOnly}
                 title="Run cell (Shift+Enter)"
-                className="flex h-6 w-6 items-center justify-center rounded bg-brand-100 text-brand-600 hover:bg-brand-200 dark:bg-brand-500/20 dark:text-brand-400 dark:hover:bg-brand-500/30 disabled:opacity-50"
+                className="flex h-6 w-6 items-center justify-center rounded bg-brand-100 text-brand-600 hover:bg-brand-200 disabled:opacity-50"
               >
                 {isRunning ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
               </button>
@@ -397,7 +397,7 @@ export default function NotebookEditor({
               spellCheck={false}
               placeholder="# Write code here…"
               rows={Math.max(3, cell.source.split("\n").length + 1)}
-              className="w-full resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-zinc-800 outline-none placeholder-zinc-300 dark:text-zinc-200 dark:placeholder-zinc-600"
+              className="w-full resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-fg outline-none placeholder:text-fg-subtle"
               style={{ minHeight: "3.5rem", maxHeight: "60vh", overflowY: "auto" }}
             />
           </div>
@@ -409,7 +409,7 @@ export default function NotebookEditor({
           >
             {cell.source
               ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{cell.source}</ReactMarkdown>
-              : <p className="text-zinc-400 dark:text-zinc-600 italic text-xs">Double-click to add markdown…</p>
+              : <p className="text-fg-subtle italic text-xs">Double-click to add markdown…</p>
             }
           </div>
         ) : (
@@ -422,7 +422,7 @@ export default function NotebookEditor({
             spellCheck={false}
             placeholder="Write markdown here… (click outside to preview)"
             rows={Math.max(4, cell.source.split("\n").length + 1)}
-            className="w-full resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-zinc-800 outline-none placeholder-zinc-300 dark:text-zinc-200 dark:placeholder-zinc-600"
+            className="w-full resize-none bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-fg outline-none placeholder:text-fg-subtle"
             style={{ minHeight: "4rem", maxHeight: "60vh", overflowY: "auto" }}
           />
         )}
@@ -435,13 +435,13 @@ export default function NotebookEditor({
           <div className="absolute -bottom-4 left-0 right-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
             <button
               onClick={(e) => { e.stopPropagation(); addCell(cell.id, "code"); }}
-              className="flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-zinc-500 shadow-sm hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-brand-500 dark:hover:text-brand-400"
+              className="flex items-center gap-1 rounded-full border border-edge-subtle bg-panel px-2.5 py-0.5 text-[10px] font-semibold text-fg-muted shadow-sm hover:border-brand-300 hover:text-brand-600"
             >
               <Plus size={9} /> Code
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); addCell(cell.id, "markdown"); }}
-              className="flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-zinc-500 shadow-sm hover:border-warning-300 hover:text-warning-600 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-warning-500 dark:hover:text-warning-400"
+              className="flex items-center gap-1 rounded-full border border-edge-subtle bg-panel px-2.5 py-0.5 text-[10px] font-semibold text-fg-muted shadow-sm hover:border-warning-300 hover:text-warning-600"
             >
               <Plus size={9} /> Markdown
             </button>
@@ -454,17 +454,17 @@ export default function NotebookEditor({
   // ── full render ───────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full flex-col bg-zinc-50 dark:bg-[#0b0b0c]">
+    <div className="flex h-full flex-col bg-panel">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b border-zinc-200 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-[#0d0d10]">
-        <span className="mr-1 text-[11px] font-bold uppercase tracking-widest text-zinc-400">Notebook</span>
+      <div className="flex items-center gap-2 border-b border-edge-subtle bg-panel px-4 py-2">
+        <span className="mr-1 text-[11px] font-bold uppercase tracking-widest text-fg-subtle">Notebook</span>
 
         {/* Language selector */}
         <select
           value={notebook.language}
           disabled={readOnly}
           onChange={(e) => updateNotebook((nb) => ({ ...nb, language: e.target.value }))}
-          className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-600 outline-none focus:border-brand-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+          className="rounded-md border border-edge-subtle bg-panel px-2 py-1 text-[11px] text-fg-muted outline-none focus:border-brand-400"
         >
           {SUPPORTED_LANGUAGES.map((l) => (
             <option key={l} value={l}>{l}</option>
@@ -477,22 +477,22 @@ export default function NotebookEditor({
               <button
                 onClick={() => addCell(null, "code")}
                 title="Add code cell"
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-brand-500 dark:hover:text-brand-400"
+                className="flex items-center gap-1.5 rounded-lg border border-edge-subtle px-2.5 py-1.5 text-[11px] font-semibold text-fg-muted hover:border-brand-300 hover:text-brand-600"
               >
                 <Plus size={11} /> Code
               </button>
               <button
                 onClick={() => addCell(null, "markdown")}
                 title="Add markdown cell"
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:border-warning-300 hover:text-warning-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-warning-500 dark:hover:text-warning-400"
+                className="flex items-center gap-1.5 rounded-lg border border-edge-subtle px-2.5 py-1.5 text-[11px] font-semibold text-fg-muted hover:border-warning-300 hover:text-warning-600"
               >
                 <Plus size={11} /> Markdown
               </button>
-              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+              <div className="h-4 w-px bg-selected" />
               <button
                 onClick={clearOutputs}
                 title="Clear all outputs"
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 dark:border-zinc-700 dark:text-zinc-500 dark:hover:border-zinc-500 dark:hover:text-zinc-300"
+                className="flex items-center gap-1.5 rounded-lg border border-edge-subtle px-2.5 py-1.5 text-[11px] font-semibold text-fg-muted hover:border-edge hover:text-fg"
               >
                 <RotateCcw size={11} /> Clear
               </button>
@@ -517,17 +517,17 @@ export default function NotebookEditor({
         {/* Add first cell if empty */}
         {!readOnly && notebook.cells.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <p className="text-sm text-zinc-400">No cells yet</p>
+            <p className="text-sm text-fg-subtle">No cells yet</p>
             <div className="flex gap-2">
               <button
                 onClick={() => addCell(null, "code")}
-                className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-400"
+                className="flex items-center gap-2 rounded-xl border border-edge-subtle px-4 py-2 text-sm font-medium text-fg-muted hover:border-brand-300 hover:text-brand-600"
               >
                 <Plus size={14} /> Code cell
               </button>
               <button
                 onClick={() => addCell(null, "markdown")}
-                className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:border-warning-300 hover:text-warning-600 dark:border-zinc-700 dark:text-zinc-400"
+                className="flex items-center gap-2 rounded-xl border border-edge-subtle px-4 py-2 text-sm font-medium text-fg-muted hover:border-warning-300 hover:text-warning-600"
               >
                 <Plus size={14} /> Markdown cell
               </button>

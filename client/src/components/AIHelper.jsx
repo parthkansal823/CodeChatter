@@ -22,16 +22,16 @@ const QUICK_ACTIONS = [
 ];
 
 const LANG_COLOR = {
-  python:     "bg-info-500/15 text-info-600 dark:text-info-400",
-  javascript: "bg-warning-500/15 text-warning-700 dark:text-warning-400",
-  typescript: "bg-info-600/15 text-info-700 dark:text-info-300",
-  cpp:        "bg-info-500/15 text-info-700 dark:text-info-400",
-  java:       "bg-warning-500/15 text-warning-700 dark:text-warning-400",
-  rust:       "bg-warning-600/15 text-warning-700 dark:text-warning-300",
-  go:         "bg-info-500/15 text-info-700 dark:text-info-400",
-  html:       "bg-danger-500/15 text-danger-700 dark:text-danger-400",
-  css:        "bg-brand-500/15 text-brand-700 dark:text-brand-400",
-  default:    "bg-brand-500/15 text-brand-700 dark:text-brand-300",
+  python:     "bg-info-500/15 text-info-600",
+  javascript: "bg-warning-500/15 text-warning-700",
+  typescript: "bg-info-600/15 text-info-700",
+  cpp:        "bg-info-500/15 text-info-700",
+  java:       "bg-warning-500/15 text-warning-700",
+  rust:       "bg-warning-600/15 text-warning-700",
+  go:         "bg-info-500/15 text-info-700",
+  html:       "bg-danger-500/15 text-danger-700",
+  css:        "bg-brand-500/15 text-brand-700",
+  default:    "bg-brand-500/15 text-brand-700",
 };
 
 function getTimeStamp() {
@@ -48,7 +48,7 @@ function buildFallbackMessage(localReply, errorMessage = "") {
 
 function InlineCode({ children }) {
   return (
-    <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-[11px] text-brand-700 ring-1 ring-zinc-200 dark:bg-black/40 dark:text-success-300 dark:ring-white/10">
+    <code className="rounded bg-hovered px-1 py-0.5 font-mono text-[11px] text-brand-700 ring-1 ring-edge-subtle">
       {children}
     </code>
   );
@@ -65,16 +65,16 @@ function CodeBlock({ code, lang }) {
   return (
     <div className="group/code relative my-2">
       {lang && (
-        <div className="rounded-t-lg border border-b-0 border-zinc-200 bg-zinc-100 px-3 py-1 text-[10px] font-mono text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-500">
+        <div className="rounded-t-lg border border-b-0 border-edge-subtle bg-hovered px-3 py-1 text-[10px] font-mono text-fg-muted">
           {lang}
         </div>
       )}
-      <pre className={`overflow-auto bg-zinc-50 p-3 pr-10 font-mono text-[11px] text-zinc-800 ring-1 ring-zinc-200 dark:bg-black/40 dark:text-success-300 dark:ring-white/10 ${lang ? "rounded-b-lg rounded-tr-lg" : "rounded-lg"}`}>
+      <pre className={`overflow-auto bg-panel p-3 pr-10 font-mono text-[11px] text-fg ring-1 ring-edge-subtle ${lang ?"rounded-b-lg rounded-tr-lg" : "rounded-lg"}`}>
         {code}
       </pre>
       <button
         onClick={copy}
-        className="absolute right-2 top-2 rounded border border-zinc-200 bg-white p-1 text-zinc-400 opacity-0 shadow transition-opacity group-hover/code:opacity-100 hover:text-zinc-700 dark:border-zinc-800 dark:bg-zinc-800/80 dark:hover:text-white"
+        className="absolute right-2 top-2 rounded border border-edge-subtle bg-panel p-1 text-fg-subtle opacity-0 shadow transition-opacity group-hover/code:opacity-100 hover:text-fg"
         title="Copy code"
       >
         {copied ? <Check size={10} className="text-success-500" /> : <Copy size={10} />}
@@ -151,7 +151,7 @@ function MessageText({ text }) {
       }
     }
     if (/^---+$/.test(line.trim())) {
-      elements.push(<div key={i} className="my-2 h-px w-full bg-zinc-200 dark:bg-zinc-800/60" />);
+      elements.push(<div key={i} className="my-2 h-px w-full bg-selected/60" />);
       return;
     }
     if (line.trim() === "") {
@@ -300,7 +300,7 @@ export default function AIHelper({
 
       {/* ── Header ── */}
       <div className="relative shrink-0 overflow-hidden border-b border-edge-subtle">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/10 via-brand-500/5 to-transparent dark:from-brand-600/20 dark:via-brand-600/10" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/10 via-brand-500/5 to-transparent" />
         <div className="relative px-3 pb-3 pt-3">
 
           {/* Title row */}
@@ -308,7 +308,7 @@ export default function AIHelper({
             <button
               type="button"
               onClick={onBack}
-              className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-white"
+              className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-hovered hover:text-fg"
               title="Back"
             >
               <ArrowLeft size={15} />
@@ -329,7 +329,7 @@ export default function AIHelper({
               type="button"
               onClick={handleCopyConversation}
               disabled={messages.length <= 1}
-              className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-30 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200"
+              className="rounded-lg p-1.5 text-fg-subtle transition-colors hover:bg-hovered hover:text-fg-muted disabled:opacity-30"
               title="Copy conversation"
             >
               {copied === "conversation"
@@ -343,7 +343,7 @@ export default function AIHelper({
               type="button"
               onClick={handleClear}
               disabled={messages.length <= 1}
-              className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-danger-500 disabled:opacity-30 dark:hover:bg-zinc-800/60 dark:hover:text-danger-400"
+              className="rounded-lg p-1.5 text-fg-subtle transition-colors hover:bg-hovered hover:text-danger-500 disabled:opacity-30"
               title="Clear chat"
             >
               <Trash2 size={13} />
@@ -352,7 +352,7 @@ export default function AIHelper({
 
           {/* Context pill */}
           {context.filePath ? (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-edge-subtle bg-panel px-3 py-2">
               <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${langClass}`}>
                 {context.languageLabel}
               </span>
@@ -360,7 +360,7 @@ export default function AIHelper({
               <span className="ml-auto shrink-0 text-[10px] text-fg-subtle">{context.signals.nonEmptyLineCount}L</span>
             </div>
           ) : (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-[11px] text-warning-700 dark:border-warning-500/20 dark:bg-warning-500/10 dark:text-warning-300">
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-[11px] text-warning-700">
               <Zap size={11} />
               Open a file to give Gemini richer context
             </div>
@@ -371,7 +371,7 @@ export default function AIHelper({
             <button
               type="button"
               onClick={() => setActionsOpen((v) => !v)}
-              className="mb-2 flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              className="mb-2 flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-fg-subtle hover:text-fg-muted"
             >
               <span>Quick Actions</span>
               {actionsOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
@@ -395,7 +395,7 @@ export default function AIHelper({
                           type="button"
                           onClick={() => void submitPrompt(action.prompt)}
                           disabled={isTyping}
-                          className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-[11px] font-medium text-zinc-600 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-brand-400/30 dark:hover:bg-brand-500/10 dark:hover:text-brand-200"
+                          className="flex items-center gap-2 rounded-lg border border-edge-subtle bg-panel px-2.5 py-2 text-[11px] font-medium text-fg-muted transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-40"
                         >
                           <Icon size={11} className="shrink-0" />
                           {action.label}
@@ -413,7 +413,7 @@ export default function AIHelper({
       {/* ── Messages ── */}
       <div
         ref={scrollRef}
-        className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800"
+        className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4"
       >
         <AnimatePresence initial={false}>
           {messages.map((msg) => {
@@ -425,7 +425,7 @@ export default function AIHelper({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.18 }}
-                className={`group flex flex-col ${isUser ? "items-end" : "items-start"}`}
+                className={`group flex flex-col ${isUser ?"items-end" : "items-start"}`}
               >
                 {!isUser && (
                   <div className="mb-1.5 flex items-center gap-1.5">
@@ -438,9 +438,9 @@ export default function AIHelper({
 
                 <div
                   className={`relative max-w-[92%] rounded-lg px-3.5 py-2.5 ${
-                    isUser
-                      ? "rounded-tr-sm bg-brand-600 text-white shadow-lg shadow-sm"
-                      : "rounded-tl-sm border border-zinc-200 bg-zinc-50 text-zinc-800 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+ isUser
+ ?"rounded-tr-sm bg-brand-600 text-white shadow-lg shadow-sm"
+                      : "rounded-tl-sm border border-edge-subtle bg-panel text-fg shadow-sm   "
                   }`}
                 >
                   {isUser ? (
@@ -452,7 +452,7 @@ export default function AIHelper({
                   {!isUser && (
                     <button
                       onClick={() => handleCopy(msg.text, msg.id)}
-                      className="absolute -right-1 -top-1 hidden rounded-md border border-zinc-200 bg-white p-1 text-zinc-400 opacity-0 shadow transition-opacity group-hover:flex group-hover:opacity-100 hover:text-zinc-700 dark:border-zinc-800 dark:bg-zinc-800 dark:hover:text-white"
+                      className="absolute -right-1 -top-1 hidden rounded-md border border-edge-subtle bg-panel p-1 text-fg-subtle opacity-0 shadow transition-opacity group-hover:flex group-hover:opacity-100 hover:text-fg"
                       title="Copy message"
                     >
                       {copied === msg.id ? (
@@ -465,11 +465,11 @@ export default function AIHelper({
                 </div>
 
                 <div className="mt-1 flex items-center gap-2 px-1">
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-600">{msg.time}</span>
+                  <span className="text-[10px] text-fg-subtle">{msg.time}</span>
                   {isLastAI && !isTyping && (
                     <button
                       onClick={handleRegenerate}
-                      className="flex items-center gap-1 text-[10px] text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-400"
+                      className="flex items-center gap-1 text-[10px] text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-fg-muted-subtle"
                       title="Regenerate response"
                     >
                       <RotateCcw size={9} />
@@ -487,7 +487,7 @@ export default function AIHelper({
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent">
               <Bot size={10} className="text-white" />
             </div>
-            <div className="flex items-center gap-1 rounded-lg rounded-tl-sm border border-zinc-200 bg-zinc-50 px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center gap-1 rounded-lg rounded-tl-sm border border-edge-subtle bg-panel px-4 py-3 shadow-sm">
               {[0, 150, 300].map((d, i) => (
                 <span
                   key={i}
@@ -501,10 +501,10 @@ export default function AIHelper({
       </div>
 
       {/* ── Input ── */}
-      <div className="shrink-0 border-t border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="shrink-0 border-t border-edge-subtle bg-panel p-3">
         <form
           onSubmit={handleSend}
-          className="relative flex items-end gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm transition-all focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400/30 dark:border-zinc-800 dark:bg-zinc-900 dark:focus-within:border-brand-500/40 dark:focus-within:ring-brand-500/30"
+          className="relative flex items-end gap-2 rounded-xl border border-edge-subtle bg-panel px-3 py-2 shadow-sm transition-all focus-within:border-brand-400 focus-within:ring-1 focus-within:ring-brand-400/30"
         >
           <textarea
             ref={textareaRef}
@@ -515,22 +515,22 @@ export default function AIHelper({
             }}
             placeholder="Ask Gemini anything about your code…"
             rows={1}
-            className="flex-1 resize-none bg-transparent py-1 text-sm text-zinc-800 placeholder-zinc-400 focus:outline-none dark:text-zinc-200 dark:placeholder-zinc-500"
+            className="flex-1 resize-none bg-transparent py-1 text-sm text-fg placeholder:text-fg-subtle focus:outline-none"
             style={{ minHeight: "24px", maxHeight: "120px" }}
           />
           <button
             type="submit"
             disabled={!input.trim() || isTyping}
-            className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md shadow-sm transition-all hover:bg-brand-500 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+            className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-md shadow-sm transition-all hover:bg-brand-500 disabled:bg-selected disabled:text-fg-subtle disabled:shadow-none"
           >
             {isTyping ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} className="ml-0.5" />}
           </button>
         </form>
 
         <div className="mt-1.5 flex items-center justify-between px-1">
-          <p className="text-[10px] text-zinc-400 dark:text-zinc-600">Enter to send · Shift+Enter for newline</p>
+          <p className="text-[10px] text-fg-subtle">Enter to send · Shift+Enter for newline</p>
           {charCount > 500 && (
-            <span className={`text-[10px] font-medium ${charCount > 1500 ? "text-danger-500" : "text-fg-subtle"}`}>
+            <span className={`text-[10px] font-medium ${charCount > 1500 ?"text-danger-500" : "text-fg-subtle"}`}>
               {charCount}/2000
             </span>
           )}

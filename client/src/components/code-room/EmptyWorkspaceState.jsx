@@ -15,8 +15,8 @@ export default function EmptyWorkspaceState({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(0, 120, 212,0.12),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.1),transparent_35%)]" />
 
       <div className="relative w-full max-w-3xl px-6">
-        <div className="rounded-xl border border-zinc-200 bg-white/90 p-8 text-center shadow-xl shadow-zinc-200/40 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90 dark:shadow-black/20">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+        <div className="rounded-xl border border-edge-subtle bg-panel/90 p-8 text-center shadow-xl shadow-zinc-200/40 backdrop-blur-sm-subtle dark:shadow-black/20">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
             <Sparkles size={24} />
           </div>
 
@@ -42,7 +42,7 @@ export default function EmptyWorkspaceState({
             </Button>
           </div>
 
-          <div className="mt-6 rounded-lg border border-dashed border-zinc-200 bg-zinc-50/80 p-4 text-left dark:border-zinc-800 dark:bg-zinc-900/50">
+          <div className="mt-6 rounded-lg border border-dashed border-edge-subtle bg-hovered p-4 text-left-subtle">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fg-muted">
               Quick starters
             </p>
@@ -51,7 +51,7 @@ export default function EmptyWorkspaceState({
                 <button
                   key={fileName}
                   onClick={() => onCreateStarterFile?.(fileName)}
-                  className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:border-brand-400 hover:text-brand-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+                  className="rounded-full border border-edge-subtle bg-panel px-3 py-1.5 text-xs font-medium text-fg transition-colors hover:border-brand-400 hover:text-brand-700-subtle"
                 >
                   {fileName}
                 </button>
@@ -60,8 +60,8 @@ export default function EmptyWorkspaceState({
           </div>
 
           <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
+            <div className="rounded-lg border border-edge-subtle bg-hovered p-4-subtle">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-panel text-fg shadow-sm">
                 <FilePlus2 size={18} />
               </div>
               <p className="mt-3 text-sm font-semibold text-fg">Start coding fast</p>
@@ -70,8 +70,8 @@ export default function EmptyWorkspaceState({
               </p>
             </div>
 
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
+            <div className="rounded-lg border border-edge-subtle bg-hovered p-4-subtle">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-panel text-fg shadow-sm">
                 <FolderPlus size={18} />
               </div>
               <p className="mt-3 text-sm font-semibold text-fg">Organize clearly</p>
@@ -80,8 +80,8 @@ export default function EmptyWorkspaceState({
               </p>
             </div>
 
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-zinc-700 shadow-sm dark:bg-zinc-950 dark:text-zinc-200">
+            <div className="rounded-lg border border-edge-subtle bg-hovered p-4-subtle">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-panel text-fg shadow-sm">
                 <Users size={18} />
               </div>
               <p className="mt-3 text-sm font-semibold text-fg">Collaborate live</p>

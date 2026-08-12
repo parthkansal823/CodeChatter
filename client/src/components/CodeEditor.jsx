@@ -18,7 +18,7 @@ function Breadcrumb({ filePath, fileName }) {
   const { Icon, className: iconClassName } = getFileVisual(fileName);
 
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[11px] text-zinc-500 dark:border-zinc-800 dark:bg-[#111114] dark:text-zinc-400">
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-edge-subtle bg-panel px-3 py-1.5 text-[11px] text-fg-muted">
       <FolderTree size={13} className="flex-shrink-0" />
       {parts.slice(0, -1).map((part, idx) => (
         <div key={idx} className="flex items-center gap-1">
@@ -202,10 +202,10 @@ export default function CodeEditor({
   }, []);
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-100 dark:bg-zinc-950">
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-hovered">
       <Breadcrumb filePath={selectedFilePath} fileName={selectedFileName} />
 
-      <div className={`flex min-h-0 flex-1 ${isMarkdown ? "flex-col xl:flex-row" : ""}`}>
+      <div className={`flex min-h-0 flex-1 ${isMarkdown ?"flex-col xl:flex-row" : ""}`}>
         <div className={isMarkdown ? "min-h-[55%] xl:min-h-0 xl:w-[58%]" : "w-full"}>
           <Editor
             height="100%"
@@ -279,9 +279,9 @@ export default function CodeEditor({
         </div>
 
         {isMarkdown && (
-          <div className="min-h-[45%] border-t border-zinc-200 bg-zinc-50 xl:min-h-0 xl:w-[42%] xl:border-l xl:border-t-0 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="min-h-[45%] border-t border-edge-subtle bg-panel xl:min-h-0 xl:w-[42%] xl:border-l xl:border-t-0">
             <div className={`h-full overflow-auto p-6 ${
-              theme === "vs-dark"
+ theme ==="vs-dark"
                 ? "prose prose-invert"
                 : "prose text-black"
             }`}>
@@ -292,15 +292,15 @@ export default function CodeEditor({
       </div>
 
       {/* Status bar */}
-      <div className="flex items-center gap-2 border-t border-zinc-200 bg-zinc-50 px-2 py-1 text-[10px] text-zinc-500 sm:gap-3 sm:px-3 sm:text-[11px] dark:border-zinc-800/60 dark:bg-[#0d0d10] dark:text-zinc-600">
-        <span className="font-semibold uppercase tracking-wider text-zinc-500">
+      <div className="flex items-center gap-2 border-t border-edge-subtle bg-panel px-2 py-1 text-[10px] text-fg-muted sm:gap-3 sm:px-3 sm:text-[11px]">
+        <span className="font-semibold uppercase tracking-wider text-fg-muted">
           {readOnly ? <span className="text-warning-400">View only</span>
             : isMarkdown ? "Markdown"
             : selectedLanguage}
         </span>
-        <span className="hidden text-zinc-400 dark:text-zinc-700 sm:inline">·</span>
+        <span className="hidden text-fg-subtle sm:inline">·</span>
         <span>Ln {cursorPosition.line}, Col {cursorPosition.column}</span>
-        <span className="ml-auto hidden text-zinc-400 dark:text-zinc-700 md:inline">{lineCount} lines · {characterCount} chars</span>
+        <span className="ml-auto hidden text-fg-subtle md:inline">{lineCount} lines · {characterCount} chars</span>
         {selectedFileName && (
           <button
             onClick={() => {
@@ -311,7 +311,7 @@ export default function CodeEditor({
               URL.revokeObjectURL(url);
             }}
             title="Download file"
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-300"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors hover:bg-selected hover:text-fg"
           >
             <Download size={11} />
             <span className="hidden sm:inline">Download</span>
@@ -322,9 +322,9 @@ export default function CodeEditor({
             onClick={() => setShowVersionHistory(v => !v)}
             title="Version history (Ctrl+S to save)"
             className={`flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors ${
-              showVersionHistory
-                ? "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400"
-                : "hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-300"
+ showVersionHistory
+ ?"bg-brand-100 text-brand-600"
+                : "hover:bg-selected hover:text-fg"
             }`}
           >
             <Clock size={11} />
@@ -352,7 +352,7 @@ export default function CodeEditor({
       </AnimatePresence>
 
       {!isEditorReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-100/90 text-zinc-500 dark:bg-zinc-950/90 dark:text-zinc-400">
+        <div className="absolute inset-0 flex items-center justify-center bg-hovered/90 text-fg-muted">
           Loading editor...
         </div>
       )}

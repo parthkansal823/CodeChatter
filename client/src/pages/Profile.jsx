@@ -2,13 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import {
-  ArrowRight, Calendar, FolderGit2, Github, Mail, PlayCircle, Settings, Users,
+  ArrowRight,
+  Calendar,
+  FolderGit2,
+  Mail,
+  PlayCircle,
+  Settings,
+  Users,
 } from "lucide-react";
 
 import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { secureFetch } from "../utils/security";
 import UserAvatar from "../components/UserAvatar";
+import { SiGithub } from "react-icons/si";
 
 const SPRING = { type: "spring", stiffness: 320, damping: 28 };
 
@@ -257,7 +264,7 @@ export default function Profile() {
                       onClick={() => navigate("/settings")}
                       className="mt-3 inline-flex items-center gap-2 rounded-md border border-edge px-3 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-edge-strong hover:bg-hovered"
                     >
-                      <Github size={14} />
+                      <SiGithub size={14} />
                       Connect GitHub
                     </button>
                   </div>

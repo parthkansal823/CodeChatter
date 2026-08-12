@@ -123,28 +123,28 @@ function WhiteboardUI({ onBack }) {
     `flex items-center justify-center rounded-md transition-all ${
       active
         ? "bg-brand-500/20 text-brand-300 ring-1 ring-brand-500/30"
-        : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+        : "text-fg-subtle hover:bg-panel hover:text-fg"
     }`;
 
   const sideBtn = (active = false) =>
     `flex w-9 items-center justify-center rounded-lg transition-all ${
       active
         ? "bg-brand-500/20 text-brand-300 ring-1 ring-brand-500/40"
-        : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+        : "text-fg-subtle hover:bg-panel hover:text-fg"
     }`;
 
   return (
     <>
       {/* ═══ Top Bar ═══════════════════════════════════════════════════════ */}
-      <div className="pointer-events-auto absolute left-0 right-0 top-0 z-[300] flex h-10 items-center gap-0.5 border-b border-zinc-800 bg-zinc-950/96 px-1.5 backdrop-blur-sm">
+      <div className="pointer-events-auto absolute left-0 right-0 top-0 z-[300] flex h-10 items-center gap-0.5 border-b border-edge-subtle bg-canvas px-1.5 backdrop-blur-sm">
 
         {/* Back + title */}
         <button onClick={onBack} className={`${topBtn()} h-8 w-8`} title="Back to room">
           <ArrowLeft size={14} />
         </button>
-        <span className="mr-1.5 select-none text-[11px] font-semibold text-zinc-300">Board</span>
+        <span className="mr-1.5 select-none text-[11px] font-semibold text-fg">Board</span>
 
-        <div className="mx-1 h-4 w-px bg-zinc-800" />
+        <div className="mx-1 h-4 w-px bg-panel" />
 
         {/* Undo / Redo */}
         <button
@@ -164,7 +164,7 @@ function WhiteboardUI({ onBack }) {
           <Redo2 size={13} />
         </button>
 
-        <div className="mx-1 h-4 w-px bg-zinc-800" />
+        <div className="mx-1 h-4 w-px bg-panel" />
 
         {/* Grid toggle */}
         <button
@@ -180,7 +180,7 @@ function WhiteboardUI({ onBack }) {
           <Maximize2 size={13} />
         </button>
 
-        <div className="mx-1 h-4 w-px bg-zinc-800" />
+        <div className="mx-1 h-4 w-px bg-panel" />
 
         {/* Zoom controls */}
         <button onClick={() => editor.zoomOut()} className={`${topBtn()} h-7 w-7`} title="Zoom out">
@@ -188,7 +188,7 @@ function WhiteboardUI({ onBack }) {
         </button>
         <button
           onClick={() => editor.resetZoom()}
-          className="w-10 rounded px-1 text-center font-mono text-[10px] font-semibold text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+          className="w-10 rounded px-1 text-center font-mono text-[10px] font-semibold text-fg-subtle transition-colors hover:bg-panel hover:text-fg"
           title="Reset zoom (100%)"
         >
           {zoom}%
@@ -219,19 +219,19 @@ function WhiteboardUI({ onBack }) {
           </button>
           {showExport && (
             <div
-              className="absolute right-0 top-full z-10 mt-1 min-w-[120px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/50"
+              className="absolute right-0 top-full z-10 mt-1 min-w-[120px] overflow-hidden rounded-xl border border-edge-subtle bg-panel shadow-2xl shadow-black/50"
               onMouseLeave={() => setShowExport(false)}
             >
               <button
                 onClick={() => handleExport("png")}
-                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-fg transition-colors hover:bg-panel hover:text-white"
               >
                 <Download size={11} />
                 Export PNG
               </button>
               <button
                 onClick={() => handleExport("svg")}
-                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-fg transition-colors hover:bg-panel hover:text-white"
               >
                 <Download size={11} />
                 Export SVG
@@ -240,7 +240,7 @@ function WhiteboardUI({ onBack }) {
           )}
         </div>
 
-        <div className="mx-1 h-4 w-px bg-zinc-800" />
+        <div className="mx-1 h-4 w-px bg-panel" />
 
         {/* Clear */}
         <button
@@ -253,12 +253,12 @@ function WhiteboardUI({ onBack }) {
       </div>
 
       {/* ═══ Left Toolbar ══════════════════════════════════════════════════ */}
-      <div className="pointer-events-auto absolute bottom-0 left-0 top-10 z-[300] flex w-[52px] flex-col items-center gap-0.5 overflow-y-auto border-r border-zinc-800 bg-zinc-950/96 py-2 scrollbar-none backdrop-blur-sm">
+      <div className="pointer-events-auto absolute bottom-0 left-0 top-10 z-[300] flex w-[52px] flex-col items-center gap-0.5 overflow-y-auto border-r border-edge-subtle bg-canvas py-2 scrollbar-none backdrop-blur-sm">
 
         {/* Tool groups */}
         {TOOL_GROUPS.map((group, gi) => (
           <div key={gi} className="flex w-full flex-col items-center gap-0.5">
-            {gi > 0 && <div className="my-1 h-px w-8 bg-zinc-800/60" />}
+            {gi > 0 && <div className="my-1 h-px w-8 bg-panel" />}
             {group.map((t) => (
               <button
                 key={t.id}
@@ -272,10 +272,10 @@ function WhiteboardUI({ onBack }) {
           </div>
         ))}
 
-        <div className="my-1 h-px w-8 bg-zinc-800/60" />
+        <div className="my-1 h-px w-8 bg-panel" />
 
         {/* Size — visual dots */}
-        <p className="mb-0.5 text-[8px] tracking-widest text-zinc-600">SIZE</p>
+        <p className="mb-0.5 text-[8px] tracking-widest text-fg-muted">SIZE</p>
         {SIZES.map(({ val, px }) => (
           <button
             key={val}
@@ -290,22 +290,22 @@ function WhiteboardUI({ onBack }) {
           </button>
         ))}
 
-        <div className="my-1 h-px w-8 bg-zinc-800/60" />
+        <div className="my-1 h-px w-8 bg-panel" />
 
         {/* Fill toggle */}
-        <p className="mb-0.5 text-[8px] tracking-widest text-zinc-600">FILL</p>
+        <p className="mb-0.5 text-[8px] tracking-widest text-fg-muted">FILL</p>
         <button
           onClick={() => setFill(activeFill === "none" ? "solid" : "none")}
-          className={`${sideBtn(activeFill === "solid")} h-9 text-base`}
+          className={`${sideBtn(activeFill ==="solid")} h-9 text-base`}
           title={activeFill === "solid" ? "Filled — click for outline" : "Outline — click for filled"}
         >
           <span className="leading-none">{activeFill === "solid" ? "■" : "□"}</span>
         </button>
 
-        <div className="my-1 h-px w-8 bg-zinc-800/60" />
+        <div className="my-1 h-px w-8 bg-panel" />
 
         {/* Color swatches */}
-        <p className="mb-1 text-[8px] tracking-widest text-zinc-600">COLOR</p>
+        <p className="mb-1 text-[8px] tracking-widest text-fg-muted">COLOR</p>
         <div className="grid grid-cols-2 gap-[5px] px-2">
           {COLORS.map((c) => (
             <button
@@ -314,9 +314,9 @@ function WhiteboardUI({ onBack }) {
               title={c.label}
               style={{ backgroundColor: c.hex, width: 18, height: 18 }}
               className={`rounded-full border-2 transition-all hover:scale-125 ${
-                activeColor === c.hex
-                  ? "scale-125 border-white shadow-sm"
-                  : "border-zinc-700 hover:border-zinc-400"
+ activeColor === c.hex
+ ?"scale-125 border-white shadow-sm"
+                  : "border-edge-subtle hover:border-edge"
               }`}
             />
           ))}
@@ -330,7 +330,7 @@ function WhiteboardUI({ onBack }) {
 
 export default function Whiteboard({ onBack }) {
   return (
-    <div className="relative h-full w-full overflow-hidden bg-zinc-950">
+    <div className="relative h-full w-full overflow-hidden bg-canvas">
       <Tldraw persistenceKey="cc-whiteboard" hideUi>
         <WhiteboardUI onBack={onBack} />
       </Tldraw>

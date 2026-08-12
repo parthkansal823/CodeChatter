@@ -12,9 +12,9 @@ import { ROOM_TUTORIAL_KEY } from "./tutorialKeys";
 
 function ExplorerPreview() {
   return (
-    <div className="mx-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-      <div className="border-b border-zinc-100 bg-zinc-50 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-800/80">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Explorer</p>
+    <div className="mx-4 overflow-hidden rounded-xl border border-edge-subtle bg-panel">
+      <div className="border-b border-edge-subtle bg-panel px-3 py-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">Explorer</p>
       </div>
       <div className="px-2 py-1.5 space-y-0.5">
         {[
@@ -24,7 +24,7 @@ function ExplorerPreview() {
           { name: "tests/", indent: 0, folder: true },
         ].map((item) => (
           <div key={item.name}
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${item.active ? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "text-fg-muted"}`}
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] ${item.active ?"bg-brand-50 text-brand-700" : "text-fg-muted"}`}
             style={{ paddingLeft: `${8 + item.indent * 12}px` }}
           >
             <span>{item.folder ? "📁" : "📄"}</span>
@@ -38,19 +38,19 @@ function ExplorerPreview() {
 
 function EditorPreview() {
   return (
-    <div className="mx-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-900 font-mono text-[10px] leading-5 dark:border-zinc-700">
-      <div className="flex items-center gap-1 border-b border-zinc-700 bg-zinc-800 px-3 py-1">
+    <div className="mx-4 overflow-hidden rounded-xl border border-edge-subtle bg-panel font-mono text-[10px] leading-5">
+      <div className="flex items-center gap-1 border-b border-edge-subtle bg-panel px-3 py-1">
         <div className="h-1.5 w-1.5 rounded-full bg-danger-400" />
         <div className="h-1.5 w-1.5 rounded-full bg-warning-400" />
         <div className="h-1.5 w-1.5 rounded-full bg-success-400" />
-        <span className="ml-2 text-zinc-400">main.py</span>
+        <span className="ml-2 text-fg-subtle">main.py</span>
         <span className="ml-auto rounded-full bg-brand-600/30 px-1.5 py-0.5 text-[9px] text-brand-300">Saved</span>
       </div>
       <div className="px-3 py-2">
-        <p><span className="text-brand-400">def</span> <span className="text-warning-300">factorial</span><span className="text-zinc-300">(n):</span></p>
-        <p className="pl-4"><span className="text-info-400">if</span> <span className="text-zinc-300">n &lt;= 1:</span></p>
+        <p><span className="text-brand-400">def</span> <span className="text-warning-300">factorial</span><span className="text-fg">(n):</span></p>
+        <p className="pl-4"><span className="text-info-400">if</span> <span className="text-fg">n &lt;= 1:</span></p>
         <p className="pl-8"><span className="text-success-400">return</span> <span className="text-warning-300">1</span></p>
-        <p className="pl-4"><span className="text-success-400">return</span> <span className="text-zinc-300">n * factorial(n-1)</span></p>
+        <p className="pl-4"><span className="text-success-400">return</span> <span className="text-fg">n * factorial(n-1)</span></p>
       </div>
     </div>
   );
@@ -58,18 +58,18 @@ function EditorPreview() {
 
 function TopBarPreview() {
   return (
-    <div className="mx-4 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
-      <div className="flex items-center gap-1.5 rounded-lg bg-success-50 px-2.5 py-1 dark:bg-success-900/20">
+    <div className="mx-4 flex items-center gap-2 rounded-xl border border-edge-subtle bg-panel px-3 py-2">
+      <div className="flex items-center gap-1.5 rounded-lg bg-success-50 px-2.5 py-1">
         <Play size={10} className="text-success-500" />
-        <span className="text-[10px] font-semibold text-success-600 dark:text-success-400">Run</span>
+        <span className="text-[10px] font-semibold text-success-600">Run</span>
       </div>
-      <div className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1 dark:border-zinc-700">
-        <Share2 size={10} className="text-zinc-500" />
-        <span className="text-[10px] font-medium text-zinc-500">Share</span>
+      <div className="flex items-center gap-1.5 rounded-lg border border-edge-subtle px-2.5 py-1">
+        <Share2 size={10} className="text-fg-muted" />
+        <span className="text-[10px] font-medium text-fg-muted">Share</span>
       </div>
       <div className="ml-auto flex -space-x-1.5">
         {["bg-brand-400", "bg-info-400", "bg-warning-400"].map((c, i) => (
-          <div key={i} className={`h-5 w-5 rounded-full border-2 border-white dark:border-zinc-800 ${c}`} />
+          <div key={i} className={`h-5 w-5 rounded-full border-2 border-white ${c}`} />
         ))}
       </div>
     </div>
@@ -90,7 +90,7 @@ function SidebarPreview() {
           <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-hovered ${color}`}>
             <Icon size={16} />
           </div>
-          <span className="text-[9px] text-zinc-400">{label}</span>
+          <span className="text-[9px] text-fg-subtle">{label}</span>
         </div>
       ))}
     </div>
@@ -106,9 +106,9 @@ function ShortcutsPreview() {
   return (
     <div className="mx-4 space-y-1.5">
       {shortcuts.map(([action, keys]) => (
-        <div key={action} className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
+        <div key={action} className="flex items-center justify-between rounded-lg border border-edge-subtle bg-panel px-3 py-1.5">
           <span className="text-[10px] text-fg-muted">{action}</span>
-          <kbd className="rounded border border-zinc-200 bg-white px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900">{keys}</kbd>
+          <kbd className="rounded border border-edge-subtle bg-panel px-1.5 py-0.5 font-mono text-[9px] text-fg-muted">{keys}</kbd>
         </div>
       ))}
     </div>
@@ -135,7 +135,7 @@ const ROOM_STEPS = [
     tip: "Right-click a file or folder for quick actions like rename and delete.",
   },
   {
-    gradient: "from-zinc-600 to-zinc-800",
+    gradient: "from-fg-muted to-fg",
     icon: Code2,
     title: "Code Editor",
     desc: "The central editor supports syntax highlighting, auto-completion, and real-time collaboration. See your teammates' cursors live as they type.",
@@ -216,19 +216,19 @@ export default function RoomTutorial() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-canvas p-4 backdrop-blur-sm"
         >
           <Motion.div
             initial={{ opacity: 0, scale: 0.88, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 8 }}
             transition={SPRING}
-            className="relative w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+            className="relative w-full max-w-md overflow-hidden rounded-xl border border-edge-subtle bg-panel shadow-2xl"
           >
             {/* Close */}
             <button
               onClick={dismiss}
-              className="absolute right-4 top-4 z-10 rounded-xl p-1.5 text-white/70 transition-colors hover:bg-zinc-800/60 hover:text-white"
+              className="absolute right-4 top-4 z-10 rounded-xl p-1.5 text-white/70 transition-colors hover:bg-panel hover:text-white"
             >
               <X size={16} />
             </button>
@@ -270,16 +270,16 @@ export default function RoomTutorial() {
                 )}
 
                 {current.tip && (
-                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-brand-50 px-3 py-2 dark:bg-brand-900/20">
+                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-brand-50 px-3 py-2">
                     <span className="mt-px text-brand-500">💡</span>
-                    <p className="text-[11px] leading-relaxed text-brand-700 dark:text-brand-300">{current.tip}</p>
+                    <p className="text-[11px] leading-relaxed text-brand-700">{current.tip}</p>
                   </div>
                 )}
               </Motion.div>
             </AnimatePresence>
 
             {/* Footer */}
-            <div className="flex items-center justify-between border-t border-zinc-100 px-6 py-3.5 dark:border-zinc-800">
+            <div className="flex items-center justify-between border-t border-edge-subtle px-6 py-3.5">
               <div className="flex items-center gap-1.5">
                 {ROOM_STEPS.map((_, i) => (
                   <Motion.div key={i}
@@ -296,7 +296,7 @@ export default function RoomTutorial() {
               <div className="flex items-center gap-2">
                 {step > 0 && (
                   <button onClick={() => setStep((s) => s - 1)}
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800">
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-hovered">
                     Back
                   </button>
                 )}

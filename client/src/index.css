@@ -3,9 +3,15 @@
    Must precede the Tailwind directives — CSS requires @import to come first. */
 @import "./styles/theme.css";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind 4 replaces the three @tailwind directives with one import. */
+@import "tailwindcss";
+
+/* Tailwind 4 is CSS-first, but it still reads a JS config when pointed at one.
+   The 263-line config in tailwind.config.cjs is the bridge between these theme
+   tokens and the utility names the whole app is written in — porting it to
+   @theme would be a rewrite of the design system, not an upgrade, so it stays
+   where it is and v4 reads it from here. */
+@config "../tailwind.config.cjs";
 
 /* ============================================================
    Base

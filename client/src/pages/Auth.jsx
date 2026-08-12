@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
-import { Github, Mail, Lock, User, ArrowLeft, RotateCcw, ShieldCheck } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  User,
+  ArrowLeft,
+  RotateCcw,
+  ShieldCheck,
+} from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import toast from "react-hot-toast";
 import FloatingInput from "../components/FloatingInput";
@@ -10,6 +17,7 @@ import AuthFormLayout from "../components/AuthFormLayout";
 import BrandLogo from "../components/BrandLogo";
 import { API_ENDPOINTS } from "../config/security";
 import { useAuth } from "../hooks/useAuth";
+import { SiGithub } from "react-icons/si";
 
 // ── Animation config ───────────────────────────────────────────────────────────
 const EASE_EXPO  = [0.22, 1, 0.36, 1];
@@ -112,9 +120,12 @@ function OtpInput({ value, onChange }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Auth() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [mode, setMode]               = useState(
-    () => (searchParams.get("mode") === "signup" ? "signup" : "login")
-  );
+
+  // Read straight off the URL rather than mirroring it into state. The old
+  // version kept both and used an effect to copy one into the other, which
+  // meant a back/forward navigation rendered the previous tab for one frame
+  // before the effect corrected it.
+  const mode = searchParams.get("mode") === "signup" ? "signup" : "login";
   const [loading, setLoading]         = useState(false);
   const [loginEmail, setLoginEmail]   = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -133,16 +144,10 @@ export default function Auth() {
   const { login, signup, verifyOtp, resendOtp } = useAuth();
 
   useEffect(() => {
-    const requestedMode = searchParams.get("mode") === "signup" ? "signup" : "login";
-    setMode((currentMode) => (currentMode === requestedMode ? currentMode : requestedMode));
-  }, [searchParams]);
-
-  useEffect(() => {
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
   }, []);
 
   const changeMode = (nextMode) => {
-    setMode(nextMode);
     const nextSearchParams = new URLSearchParams(searchParams);
 
     if (nextMode === "signup") {
@@ -404,7 +409,7 @@ export default function Auth() {
       {/* OAuth buttons */}
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {[
-          { icon: Github,   label: "GitHub", color: "text-fg", action: () => startOAuth(API_ENDPOINTS.GITHUB_LOGIN) },
+          { icon: SiGithub,   label: "GitHub", color: "text-fg", action: () => startOAuth(API_ENDPOINTS.GITHUB_LOGIN) },
           { icon: FcGoogle, label: "Google", color: "",              action: () => startOAuth(API_ENDPOINTS.GOOGLE_LOGIN) },
         ].map(({ icon: Icon, label, action }, i) => (
           <Motion.button

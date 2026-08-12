@@ -35,7 +35,7 @@ try:
     UPLOADS_DIR,
     repository,
   )
-  from ..services.ai import build_gemini_prompt, request_gemini_completion
+  from ..services.ai import build_gemini_prompt, request_ai_completion
   from ..services.email import send_room_share_email
   from ..services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 except ImportError:
@@ -67,7 +67,7 @@ except ImportError:
     UPLOADS_DIR,
     repository,
   )
-  from services.ai import build_gemini_prompt, request_gemini_completion
+  from services.ai import build_gemini_prompt, request_ai_completion
   from services.email import send_room_share_email
   from services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 
@@ -371,7 +371,7 @@ async def assist_with_gemini(
     current_user=current_user,
     active_file_path=active_file_path,
   )
-  answer = await request_gemini_completion(prompt)
+  answer = await request_ai_completion(prompt)
 
   return {
     "answer": answer,

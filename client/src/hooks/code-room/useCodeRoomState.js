@@ -281,7 +281,9 @@ export function useCodeRoomState({
         return validFileIds.has(fileId);
       });
 
-      let resolvedActiveFileId = null;
+      // No initialiser: every branch below assigns, so `null` here would only
+      // ever be overwritten.
+      let resolvedActiveFileId;
       if (activeFileIdRef.current && validFileIds.has(activeFileIdRef.current)) {
         resolvedActiveFileId = activeFileIdRef.current;
       } else if (preservedOpenFileIds.length > 0) {

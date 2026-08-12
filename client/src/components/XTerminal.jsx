@@ -162,7 +162,7 @@ export default function XTerminal({ roomId }) {
     <div className="relative h-full w-full bg-[#09090b] p-2 overflow-hidden">
       <div ref={terminalRef} className="h-full w-full" />
       {isDisconnected && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/60 backdrop-blur-sm">
+        <div className="absolute inset-0 flex items-center justify-center bg-canvas backdrop-blur-sm">
           <button
             onClick={reconnect}
             className="flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sm transition-all hover:bg-brand-500 active:scale-95"

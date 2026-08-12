@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, ChevronsDownUp, FilePlus2, FolderPlus, Search, X } from "lucide-react";
+import { ChevronRight, FilePlus2, FolderPlus, Search, X } from "lucide-react";
 
 import FileItem from "./FileItem";
-import { countFiles, flattenWorkspaceTree } from "../utils/workspace";
+import { flattenWorkspaceTree } from "../utils/workspace";
 
 const EXPLORER_DEFAULT_WIDTH = 272;
 const EXPLORER_MIN_WIDTH = 220;
@@ -125,12 +125,7 @@ export default function FileExplorer({
   const explorerEntries = useMemo(() => flattenWorkspaceTree(tree), [tree]);
   const folderIds = useMemo(() => collectFolderIds(tree), [tree]);
   const folderIdSet = useMemo(() => new Set(folderIds), [folderIds]);
-  const collapseAllFolders = useCallback(
-    () => setCollapsedFolders(new Set(folderIds)),
-    [folderIds],
-  );
   const activeFolderCount = folderIds.length;
-  const activeFileCount = useMemo(() => countFiles(tree), [tree]);
   const focusedEntry = explorerEntries.find((entry) => entry.id === focusedNodeId) || null;
   const defaultCreateParentId = focusedEntry?.type === "folder"
     ? focusedEntry.id
@@ -304,8 +299,6 @@ export default function FileExplorer({
             isExpanded={isExpanded}
             onToggleFolder={toggleFolder}
             onSelect={onSelectNode}
-            onCreateFile={(folderId) => startCreate("file", folderId)}
-            onCreateFolder={(folderId) => startCreate("folder", folderId)}
             onDelete={onDeleteNode}
             onRename={onRenameNode}
             onMove={onMoveNode}
@@ -415,17 +408,6 @@ export default function FileExplorer({
                   </button>
                 </>
               )}
-              <button
-                onClick={collapseAllFolders}
-                title="Collapse folders"
-                aria-label="Collapse folders"
-                className="flex h-6 w-6 items-center justify-center rounded-md text-fg-subtle opacity-0 transition-colors hover:bg-hovered hover:text-fg focus-visible:opacity-100 group-hover/toolbar:opacity-100"
-              >
-                <ChevronsDownUp size={15} />
-              </button>
-              <span className="ml-1 whitespace-nowrap text-[11px] tabular-nums text-fg-subtle">
-                {activeFileCount}F {activeFolderCount}D
-              </span>
             </div>
           </div>
 

@@ -1,6 +1,8 @@
 """Auth, MFA, and account-lifecycle behaviour."""
 from __future__ import annotations
 
+import os
+
 
 def test_health_reports_database(client):
   response = client.get("/api/health")
@@ -93,77 +95,36 @@ def test_duplicate_email_is_rejected(client, register):
   assert response.status_code == 409
 
 
-# ── Development MFA bypass ────────────────────────────────────────────────────
+# ── Health ────────────────────────────────────────────────────────────────────
 
 
-def _reload_auth_with(monkeypatch, *, environment: str, flag: str):
-  """Re-import settings and the auth routes with a different environment."""
-  import importlib
+def test_full_health_reports_every_subsystem(client):
+  response = client.get("/api/health/full")
 
-  import core.settings as settings_module
+  assert response.status_code == 200
+  body = response.json()
 
-  monkeypatch.setenv("ENVIRONMENT", environment)
-  monkeypatch.setenv("DEV_SKIP_MFA", flag)
-  importlib.reload(settings_module)
-
-  import routes.auth as auth_module
-
-  return importlib.reload(auth_module), settings_module
-
-
-def test_dev_skip_mfa_signs_up_and_logs_in_without_a_code(client, monkeypatch):
-  auth_module, _ = _reload_auth_with(monkeypatch, environment="development", flag="1")
-
-  try:
-    signup = client.post(
-      "/api/auth/signup",
-      json={"email": "fast@example.com", "username": "fast", "password": "Str0ng!Passw0rd"},
-    )
-    assert signup.status_code == 200, signup.text
-
-    body = signup.json()
-    assert "mfa_token" not in body
-    assert body["token"]
-    assert body["user"]["email"] == "fast@example.com"
-
-    login = client.post(
-      "/api/auth/login",
-      json={"email": "fast@example.com", "password": "Str0ng!Passw0rd"},
-    )
-    assert login.status_code == 200, login.text
-    assert "mfa_token" not in login.json()
-    assert login.json()["token"]
-  finally:
-    _reload_auth_with(monkeypatch, environment="development", flag="")
-    del auth_module
+  assert set(body["checks"]) == {
+    "database", "ai", "codeRunner", "email", "oauth", "storage",
+  }
+  assert body["status"] in {"ok", "degraded"}
+  # `degraded` must be exactly the subsystems that reported not-ok, so the list
+  # alone is enough to see what needs attention.
+  assert body["degraded"] == [n for n, c in body["checks"].items() if not c["ok"]]
 
 
-def test_the_bypass_cannot_be_switched_on_in_production(monkeypatch):
-  import importlib
+def test_a_down_subsystem_names_itself_and_says_how_to_fix_it(client, monkeypatch):
+  import routes.auth as auth_routes
 
-  import core.settings as settings_module
+  async def unreachable():
+    return {"reachable": False, "error": "connection refused", "models": []}
 
-  monkeypatch.setenv("ENVIRONMENT", "production")
-  monkeypatch.setenv("DEV_SKIP_MFA", "1")
-  monkeypatch.setenv("SECRET_KEY", "prod-secret-for-this-test-only")
-  monkeypatch.setenv("SESSION_SECRET_KEY", "prod-session-secret-for-this-test")
+  monkeypatch.setattr(auth_routes, "AI_PROVIDER", "ollama")
+  monkeypatch.setattr(auth_routes, "check_ollama", unreachable)
 
-  try:
-    importlib.reload(settings_module)
-    assert settings_module.DEV_SKIP_MFA is False
-  finally:
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv("DEV_SKIP_MFA", "")
-    importlib.reload(settings_module)
-    importlib.reload(importlib.import_module("routes.auth"))
+  body = client.get("/api/health/full").json()
 
-
-def test_mfa_still_applies_when_the_flag_is_off(client, sent_otps):
-  signup = client.post(
-    "/api/auth/signup",
-    json={"email": "slow@example.com", "username": "slow", "password": "Str0ng!Passw0rd"},
-  )
-
-  assert signup.status_code == 200, signup.text
-  assert signup.json()["requires_mfa"] is True
-  assert sent_otps, "an OTP should have been issued"
+  assert body["status"] == "degraded"
+  assert "ai" in body["degraded"]
+  assert body["checks"]["ai"]["ok"] is False
+  assert "ollama serve" in body["checks"]["ai"]["hint"]

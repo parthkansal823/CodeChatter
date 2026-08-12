@@ -25,7 +25,23 @@ try:
     utc_now,
     verify_password,
   )
-  from ..core.settings import DEV_SKIP_MFA, repository
+  from ..core.settings import (
+    AI_PROVIDER,
+    DATA_DIR,
+    ENVIRONMENT,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    MAIL_PROVIDER,
+    SMTP_HOST,
+    SMTP_USER,
+    repository,
+  )
+  from ..services.ai import check_ollama
+  from ..services.email import gmail_is_configured
+  from ..services.oauth import REGISTERED_OAUTH_PROVIDERS
+  from ..services.workspace_runtime import LANGUAGE_TOOLCHAINS, is_language_runnable
   from ..services.email import mask_email, send_otp_email
 except ImportError:
   from core.schemas import (
@@ -44,7 +60,23 @@ except ImportError:
     utc_now,
     verify_password,
   )
-  from core.settings import DEV_SKIP_MFA, repository
+  from core.settings import (
+    AI_PROVIDER,
+    DATA_DIR,
+    ENVIRONMENT,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    MAIL_PROVIDER,
+    SMTP_HOST,
+    SMTP_USER,
+    repository,
+  )
+  from services.ai import check_ollama
+  from services.email import gmail_is_configured
+  from services.oauth import REGISTERED_OAUTH_PROVIDERS
+  from services.workspace_runtime import LANGUAGE_TOOLCHAINS, is_language_runnable
   from services.email import mask_email, send_otp_email
 
 router = APIRouter()
@@ -74,29 +106,6 @@ def _issue_mfa_challenge(
   user_id: str | None = None,
   pending_signup: dict | None = None,
 ) -> dict[str, Any]:
-  # Development shortcut: hand back a session instead of mailing a code. Gated
-  # in settings on both the flag and a non-production environment, so this
-  # branch is unreachable on a deployed instance.
-  if DEV_SKIP_MFA:
-    if challenge_type == "login":
-      user = repository.get_user_by_id(user_id)
-
-      if not user:
-        raise HTTPException(
-          status_code=status.HTTP_401_UNAUTHORIZED,
-          detail="User no longer exists",
-        )
-
-      return _signed_in_response(user)
-
-    created = repository.create_user(
-      email=pending_signup["email"],
-      username=pending_signup["username"],
-      password_hash=pending_signup["password_hash"],
-      password_salt=pending_signup["password_salt"],
-    )
-    return _signed_in_response(created)
-
   otp = _generate_otp()
   otp_hash = _hash_otp(otp)
   mfa_token = secrets.token_hex(24)  # 48 hex chars
@@ -123,9 +132,106 @@ def _issue_mfa_challenge(
 
 @router.get("/api/health")
 def health() -> dict[str, Any]:
+  """Liveness only — cheap enough for a container healthcheck to hit on a loop."""
   return {
     "status": "ok",
     "database": repository.health(),
+  }
+
+
+@router.get("/api/health/full")
+async def health_full() -> dict[str, Any]:
+  """Every subsystem, with a reason whenever one is not usable.
+
+  Separate from /api/health because this one talks to the model server and the
+  filesystem: fine to open in a browser, too slow to run every 30 seconds.
+  """
+  checks: dict[str, Any] = {}
+
+  # ── Database ───────────────────────────────────────────────────────────────
+  try:
+    database = repository.health()
+    checks["database"] = {"ok": True, **database}
+  except Exception as error:  # noqa: BLE001 - report any driver failure verbatim
+    checks["database"] = {"ok": False, "error": str(error)}
+
+  # ── AI assistant ───────────────────────────────────────────────────────────
+  if AI_PROVIDER == "gemini":
+    checks["ai"] = {
+      "ok": bool(GEMINI_API_KEY),
+      "provider": "gemini",
+      "model": GEMINI_MODEL,
+      "hint": None if GEMINI_API_KEY else "Set GEMINI_API_KEY in server/.env",
+    }
+  else:
+    probe = await check_ollama()
+
+    if not probe["reachable"]:
+      hint = f"Start it with `ollama serve` (expected at {OLLAMA_BASE_URL})"
+    elif not probe.get("modelInstalled"):
+      hint = f"Run `ollama pull {OLLAMA_MODEL}`"
+    else:
+      hint = None
+
+    checks["ai"] = {
+      "ok": probe["reachable"] and bool(probe.get("modelInstalled")),
+      "provider": "ollama",
+      "model": OLLAMA_MODEL,
+      "endpoint": OLLAMA_BASE_URL,
+      "installedModels": probe.get("models", []),
+      "hint": hint,
+    }
+
+  # ── Code runner ────────────────────────────────────────────────────────────
+  runnable = sorted(lang for lang in LANGUAGE_TOOLCHAINS if is_language_runnable(lang))
+  missing = sorted(set(LANGUAGE_TOOLCHAINS) - set(runnable))
+  checks["codeRunner"] = {
+    "ok": bool(runnable),
+    "runnable": runnable,
+    "unavailable": missing,
+  }
+
+  # ── Email ──────────────────────────────────────────────────────────────────
+  if MAIL_PROVIDER == "gmail":
+    configured = gmail_is_configured()
+    checks["email"] = {
+      "ok": configured,
+      "provider": "gmail",
+      "hint": None if configured else "Run: python scripts/gmail_authorize.py",
+    }
+  else:
+    configured = bool(SMTP_HOST and SMTP_USER)
+    checks["email"] = {
+      "ok": configured,
+      "provider": "smtp",
+      "host": SMTP_HOST or None,
+      "hint": None if configured else "Set SMTP_HOST / SMTP_USER, or switch MAIL_PROVIDER=gmail",
+    }
+
+  # ── OAuth ──────────────────────────────────────────────────────────────────
+  providers = sorted(REGISTERED_OAUTH_PROVIDERS)
+  checks["oauth"] = {
+    "ok": bool(providers),
+    "providers": providers,
+    "hint": None if providers else "Set GOOGLE_CLIENT_ID / GITHUB_CLIENT_ID to enable",
+  }
+
+  # ── Storage ────────────────────────────────────────────────────────────────
+  try:
+    probe_file = DATA_DIR / ".health-probe"
+    probe_file.write_text("ok", encoding="utf-8")
+    probe_file.unlink()
+    checks["storage"] = {"ok": True, "path": str(DATA_DIR)}
+  except OSError as error:
+    checks["storage"] = {"ok": False, "path": str(DATA_DIR), "error": str(error)}
+
+  degraded = [name for name, value in checks.items() if not value.get("ok")]
+
+  return {
+    "status": "ok" if not degraded else "degraded",
+    "environment": ENVIRONMENT,
+    "degraded": degraded,
+    "checks": checks,
   }
 
 

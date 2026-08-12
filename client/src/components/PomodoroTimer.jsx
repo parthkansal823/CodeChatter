@@ -84,9 +84,9 @@ function sendNotif(title, body) {
 
 function getPhaseConfig(phase) {
   return {
-    work:       { label: "Focus",      color: "#0078d4", textClass: "text-brand-500 dark:text-brand-400", ringClass: "stroke-brand-500" },
-    shortBreak: { label: "Short Break",color: "#10b981", textClass: "text-success-500 dark:text-success-400", ringClass: "stroke-success-500" },
-    longBreak:  { label: "Long Break", color: "#06b6d4", textClass: "text-info-500 dark:text-info-400",         ringClass: "stroke-info-500" },
+    work:       { label: "Focus",      color: "#0078d4", textClass: "text-brand-500", ringClass: "stroke-brand-500" },
+    shortBreak: { label: "Short Break",color: "#10b981", textClass: "text-success-500", ringClass: "stroke-success-500" },
+    longBreak:  { label: "Long Break", color: "#06b6d4", textClass: "text-info-500",         ringClass: "stroke-info-500" },
   }[phase];
 }
 
@@ -99,11 +99,11 @@ function SettingsPanel({ custom, onChange, onClose }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
-      className="absolute inset-0 z-20 flex flex-col bg-white dark:bg-[#0d0d10]"
+      className="absolute inset-0 z-20 flex flex-col bg-panel"
     >
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="flex items-center justify-between border-b border-edge-subtle px-4 py-3">
         <span className="text-sm font-semibold text-fg">Custom Timer</span>
-        <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+        <button onClick={onClose} className="text-fg-subtle hover:text-fg-muted">
           <X size={15} />
         </button>
       </div>
@@ -126,12 +126,12 @@ function SettingsPanel({ custom, onChange, onClose }) {
               onChange={(e) => onChange({ ...custom, [key]: Number(e.target.value) })}
               className="w-full accent-brand-600"
             />
-            <div className="flex justify-between text-[10px] text-zinc-400">
+            <div className="flex justify-between text-[10px] text-fg-subtle">
               <span>{min}m</span><span>{max}m</span>
             </div>
           </div>
         ))}
-        <p className="text-[10px] text-zinc-400">Changes apply on next reset.</p>
+        <p className="text-[10px] text-fg-subtle">Changes apply on next reset.</p>
       </div>
     </Motion.div>
   );
@@ -267,7 +267,7 @@ export default function PomodoroTimer({ onBack = null }) {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative flex h-full flex-col bg-white dark:bg-[#0d0d10]">
+    <div className="relative flex h-full flex-col bg-panel">
       {/* Settings overlay */}
       <AnimatePresence>
         {showSettings && (
@@ -280,12 +280,12 @@ export default function PomodoroTimer({ onBack = null }) {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-zinc-800">
+      <div className="flex items-center justify-between border-b border-edge-subtle px-4 py-2.5">
         <div className="flex items-center gap-2">
           {onBack ? (
             <button
               onClick={onBack}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-muted hover:bg-hovered hover:text-fg"
               title="Back to tools"
             >
               <ArrowLeft size={13} />
@@ -296,20 +296,20 @@ export default function PomodoroTimer({ onBack = null }) {
         </div>
         <div className="flex items-center gap-1">
           {/* Today's stats chip */}
-          <div className="flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+          <div className="flex items-center gap-1 rounded-full bg-hovered px-2 py-0.5 text-[10px] font-semibold text-fg-muted">
             <Flame size={10} className="text-danger-400" />
             {todayData.pomodoros || 0} · {Math.round(todayMin)}m
           </div>
           <button
             onClick={() => setSoundOn((v) => !v)}
             title={soundOn ? "Mute sounds" : "Enable sounds"}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-muted hover:bg-hovered"
           >
             {soundOn ? <Bell size={13} /> : <BellOff size={13} className="opacity-40" />}
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-muted hover:bg-hovered"
           >
             <Settings size={13} />
           </button>
@@ -327,18 +327,18 @@ export default function PomodoroTimer({ onBack = null }) {
             return (
               <div
                 key={i}
-                className={`h-2 w-2 rounded-full transition-colors ${i < filled ? "bg-brand-500" : "bg-zinc-200 dark:bg-zinc-700"}`}
+                className={`h-2 w-2 rounded-full transition-colors ${i < filled ?"bg-brand-500" : "bg-selected"}`}
               />
             );
           })}
-          <span className="ml-1 text-[10px] text-zinc-400">until long break</span>
+          <span className="ml-1 text-[10px] text-fg-subtle">until long break</span>
         </div>
 
         {/* SVG ring */}
         <div className="relative flex items-center justify-center">
           <svg width="148" height="148" className="-rotate-90">
             <circle cx="74" cy="74" r={radius} fill="none" stroke="currentColor"
-              className="text-zinc-100 dark:text-zinc-800" strokeWidth="9" />
+              className="text-fg" strokeWidth="9" />
             <Motion.circle
               cx="74" cy="74" r={radius} fill="none"
               stroke={pc.color} strokeWidth="9"
@@ -364,7 +364,7 @@ export default function PomodoroTimer({ onBack = null }) {
             <span className={`text-[11px] font-semibold uppercase tracking-wide ${pc.textClass}`}>
               {pc.label}
             </span>
-            <span className="text-[10px] text-zinc-400">Round {round}</span>
+            <span className="text-[10px] text-fg-subtle">Round {round}</span>
           </div>
         </div>
 
@@ -373,7 +373,7 @@ export default function PomodoroTimer({ onBack = null }) {
           <button
             onClick={reset}
             title="Reset"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-edge-subtle text-fg-muted hover:bg-hovered hover:text-fg"
           >
             <RefreshCw size={14} />
           </button>
@@ -389,8 +389,8 @@ export default function PomodoroTimer({ onBack = null }) {
               });
             }}
             className={`flex h-13 w-13 h-[52px] w-[52px] items-center justify-center rounded-full text-white shadow-lg transition-colors ${
-              running
-                ? "bg-zinc-700 shadow-zinc-700/30 hover:bg-zinc-600"
+ running
+ ?"bg-fg-subtle hover:bg-selected"
                 : "bg-brand-600 shadow-sm hover:bg-brand-500"
             }`}
           >
@@ -399,7 +399,7 @@ export default function PomodoroTimer({ onBack = null }) {
           <button
             onClick={skip}
             title="Skip phase"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-edge-subtle text-fg-muted hover:bg-hovered hover:text-fg"
           >
             <SkipForward size={14} />
           </button>
@@ -407,28 +407,28 @@ export default function PomodoroTimer({ onBack = null }) {
 
         {/* Task input */}
         <div className="w-full">
-          <div className="flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900 focus-within:border-brand-400">
-            <Target size={12} className="shrink-0 text-zinc-400" />
+          <div className="flex items-center gap-1.5 rounded-xl border border-edge-subtle bg-panel px-3 py-2 focus-within:border-brand-400">
+            <Target size={12} className="shrink-0 text-fg-subtle" />
             <input
               value={task}
               onChange={(e) => setTask(e.target.value)}
               placeholder="What are you working on?"
-              className="flex-1 bg-transparent text-xs text-zinc-700 outline-none placeholder-zinc-400 dark:text-zinc-200 dark:placeholder-zinc-600"
+              className="flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
             />
           </div>
         </div>
 
         {/* Auto-start toggle */}
-        <label className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
+        <label className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-edge-subtle px-3 py-2">
           <div className="flex items-center gap-2">
-            <Zap size={12} className={autoStart ? "text-warning-400" : "text-zinc-400"} />
+            <Zap size={12} className={autoStart ? "text-warning-400" : "text-fg-subtle"} />
             <span className="text-xs text-fg-muted">Auto-start next phase</span>
           </div>
           <button
             onClick={() => setAutoStart((v) => !v)}
-            className={`relative h-5 w-9 rounded-full transition-colors ${autoStart ? "bg-brand-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+            className={`relative h-5 w-9 rounded-full transition-colors ${autoStart ?"bg-brand-500" : "bg-panel "}`}
           >
-            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${autoStart ? "left-[18px]" : "left-0.5"}`} />
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-panel shadow transition-all ${autoStart ?"left-[18px]" : "left-0.5"}`} />
           </button>
         </label>
 
@@ -439,9 +439,9 @@ export default function PomodoroTimer({ onBack = null }) {
               key={p.label}
               onClick={() => selectPreset(i)}
               className={`flex-1 rounded-xl border py-2 text-center text-[11px] font-semibold transition-colors ${
-                preset === i && !custom
-                  ? "border-brand-400 bg-brand-50 text-brand-700 dark:border-brand-600 dark:bg-brand-900/20 dark:text-brand-300"
-                  : "border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400"
+ preset === i && !custom
+ ?"border-brand-400 bg-brand-50 text-brand-700"
+                  : "border-edge-subtle text-fg-muted hover:border-edge "
               }`}
             >
               <p>{p.label}</p>
@@ -450,7 +450,7 @@ export default function PomodoroTimer({ onBack = null }) {
           ))}
           {custom && (
             <button
-              className="flex-1 rounded-xl border border-brand-400 bg-brand-50 py-2 text-center text-[11px] font-semibold text-brand-700 dark:border-brand-600 dark:bg-brand-900/20 dark:text-brand-300"
+              className="flex-1 rounded-xl border border-brand-400 bg-brand-50 py-2 text-center text-[11px] font-semibold text-brand-700"
             >
               <p>Custom</p>
               <p className="mt-0.5 font-normal opacity-60">{custom.work}m</p>
@@ -463,7 +463,7 @@ export default function PomodoroTimer({ onBack = null }) {
           <div className="w-full">
             <button
               onClick={() => setShowHistory((v) => !v)}
-              className="flex w-full items-center justify-between rounded-xl border border-zinc-200 px-3 py-2 text-xs text-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              className="flex w-full items-center justify-between rounded-xl border border-edge-subtle px-3 py-2 text-xs text-fg-muted hover:bg-panel"
             >
               <div className="flex items-center gap-1.5">
                 <Trophy size={12} className="text-warning-400" />
@@ -471,7 +471,7 @@ export default function PomodoroTimer({ onBack = null }) {
                   Today — {todayData.pomodoros} sessions · {todayMin}m focus
                 </span>
               </div>
-              <ChevronRight size={12} className={`transition-transform ${showHistory ? "rotate-90" : ""}`} />
+              <ChevronRight size={12} className={`transition-transform ${showHistory ?"rotate-90" : ""}`} />
             </button>
 
             <AnimatePresence>
@@ -483,12 +483,12 @@ export default function PomodoroTimer({ onBack = null }) {
                   transition={{ duration: 0.15 }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-1 space-y-1 rounded-xl border border-zinc-100 p-2 dark:border-zinc-800">
+                  <div className="mt-1 space-y-1 rounded-xl border border-edge-subtle p-2">
                     {[...(todayData.sessions || [])].reverse().slice(0, 8).map((s, i) => (
                       <div key={i} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
                         <CheckCircle2 size={11} className="shrink-0 text-brand-400" />
                         <span className="flex-1 truncate text-[11px] text-fg-muted">{s.task}</span>
-                        <span className="text-[10px] text-zinc-400">{s.duration}m</span>
+                        <span className="text-[10px] text-fg-subtle">{s.duration}m</span>
                       </div>
                     ))}
                   </div>

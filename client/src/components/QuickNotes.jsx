@@ -13,12 +13,12 @@ import {
 const STORAGE_PREFIX = "cc-notes-v2-";
 
 const NOTE_COLORS = [
-  { id: "zinc",   bg: "bg-hovered",   border: "border-l-zinc-400",   dot: "bg-zinc-400"   },
-  { id: "violet", bg: "bg-brand-50 dark:bg-brand-900/20", border: "border-l-brand-400", dot: "bg-brand-400" },
-  { id: "amber",  bg: "bg-warning-50 dark:bg-warning-900/20",  border: "border-l-warning-400",  dot: "bg-warning-400"  },
-  { id: "emerald",bg: "bg-success-50 dark:bg-success-900/20",border: "border-l-success-400",dot: "bg-success-400"},
-  { id: "rose",   bg: "bg-danger-50 dark:bg-danger-900/20",    border: "border-l-danger-400",   dot: "bg-danger-400"   },
-  { id: "sky",    bg: "bg-info-50 dark:bg-info-900/20",      border: "border-l-info-400",    dot: "bg-info-400"    },
+  { id: "zinc",   bg: "bg-hovered",   border: "border-l-fg-subtle",   dot: "bg-fg-subtle"   },
+  { id: "violet", bg: "bg-brand-50", border: "border-l-brand-400", dot: "bg-brand-400" },
+  { id: "amber",  bg: "bg-warning-50",  border: "border-l-warning-400",  dot: "bg-warning-400"  },
+  { id: "emerald",bg: "bg-success-50",border: "border-l-success-400",dot: "bg-success-400"},
+  { id: "rose",   bg: "bg-danger-50",    border: "border-l-danger-400",   dot: "bg-danger-400"   },
+  { id: "sky",    bg: "bg-info-50",      border: "border-l-info-400",    dot: "bg-info-400"    },
 ];
 
 function colorOf(id) {
@@ -98,7 +98,7 @@ function FormatToolbar({ taRef, onChange }) {
   };
 
   return (
-    <div className="flex items-center gap-0.5 border-b border-zinc-100 px-2 py-1.5 dark:border-zinc-800">
+    <div className="flex items-center gap-0.5 border-b border-edge-subtle px-2 py-1.5">
       {[
         { icon: Bold,  title: "Bold",        action: (ta) => wrapSelection(ta, "**") },
         { icon: Italic,title: "Italic",      action: (ta) => wrapSelection(ta, "_") },
@@ -112,7 +112,7 @@ function FormatToolbar({ taRef, onChange }) {
           key={title}
           title={title}
           onMouseDown={(e) => { e.preventDefault(); fmt(action); }}
-          className="flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          className="flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-hovered hover:text-fg"
         >
           <Icon size={12} />
         </button>
@@ -186,12 +186,12 @@ export default function QuickNotes({ roomId, onBack = null }) {
     const _color = colorOf(openNote.color);
 
     return (
-      <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">
+      <div className="flex h-full flex-col bg-panel">
         {/* Header */}
-        <div className="flex items-center gap-2 border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
+        <div className="flex items-center gap-2 border-b border-edge-subtle px-3 py-2.5">
           <button
             onClick={() => setOpenId(null)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-muted hover:bg-hovered hover:text-fg"
           >
             <ArrowLeft size={14} />
           </button>
@@ -200,7 +200,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
             value={openNote.title}
             onChange={(e) => updateNote(openNote.id, { title: e.target.value })}
             placeholder="Note title…"
-            className="flex-1 bg-transparent text-sm font-semibold text-zinc-900 outline-none placeholder-zinc-400 dark:text-white dark:placeholder-zinc-600"
+            className="flex-1 bg-transparent text-sm font-semibold text-fg outline-none placeholder:text-fg-subtle"
           />
 
           <Motion.span
@@ -214,9 +214,9 @@ export default function QuickNotes({ roomId, onBack = null }) {
             onClick={() => setPreview((v) => !v)}
             title={preview ? "Edit" : "Preview"}
             className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
-              preview
-                ? "bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400"
-                : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+ preview
+ ?"bg-brand-100 text-brand-600"
+                : "text-fg-muted hover:bg-hovered"
             }`}
           >
             {preview ? <Type size={13} /> : <Eye size={13} />}
@@ -224,19 +224,19 @@ export default function QuickNotes({ roomId, onBack = null }) {
 
           <button
             onClick={() => deleteNote(openNote.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-danger-50 hover:text-danger-500 dark:hover:bg-danger-500/10 dark:hover:text-danger-400"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-muted hover:bg-danger-50 hover:text-danger-500"
           >
             <Trash2 size={13} />
           </button>
         </div>
 
         {/* Color picker */}
-        <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-1.5 dark:border-zinc-800">
+        <div className="flex items-center gap-1.5 border-b border-edge-subtle px-3 py-1.5">
           {NOTE_COLORS.map((c) => (
             <button
               key={c.id}
               onClick={() => updateNote(openNote.id, { color: c.id })}
-              className={`h-4 w-4 rounded-full transition-transform ${c.dot} ${openNote.color === c.id ? "ring-2 ring-offset-1 ring-zinc-400 scale-110" : "opacity-60 hover:opacity-100 hover:scale-110"}`}
+              className={`h-4 w-4 rounded-full transition-transform ${c.dot} ${openNote.color === c.id ?"ring-2 ring-offset-1 ring-edge-subtle scale-110" : "opacity-60 hover:opacity-100 hover:scale-110"}`}
             />
           ))}
         </div>
@@ -255,7 +255,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
             <div className="prose prose-sm prose-zinc dark:prose-invert max-w-none px-4 py-3 text-sm">
               {openNote.content
                 ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{openNote.content}</ReactMarkdown>
-                : <p className="italic text-zinc-400">Nothing here yet…</p>
+                : <p className="italic text-fg-subtle">Nothing here yet…</p>
               }
             </div>
           ) : (
@@ -264,16 +264,16 @@ export default function QuickNotes({ roomId, onBack = null }) {
               value={openNote.content}
               onChange={(e) => updateNote(openNote.id, { content: e.target.value })}
               placeholder={`Start writing…\n\nSupports **markdown** — toggle preview to render.\n\n- [ ] todo items\n- [x] checked todos`}
-              className="h-full min-h-full w-full resize-none bg-transparent px-4 py-3 font-mono text-xs leading-6 text-zinc-800 outline-none placeholder:text-zinc-400 dark:text-zinc-200 dark:placeholder:text-zinc-600"
+              className="h-full min-h-full w-full resize-none bg-transparent px-4 py-3 font-mono text-xs leading-6 text-fg outline-none placeholder:text-fg-subtle"
               spellCheck={false}
             />
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-zinc-100 px-3 py-1.5 dark:border-zinc-800">
-          <span className="text-[10px] text-zinc-400">Updated {relativeTime(openNote.updatedAt)}</span>
-          <span className="text-[10px] text-zinc-400">{openNote.content.length.toLocaleString()} chars</span>
+        <div className="flex items-center justify-between border-t border-edge-subtle px-3 py-1.5">
+          <span className="text-[10px] text-fg-subtle">Updated {relativeTime(openNote.updatedAt)}</span>
+          <span className="text-[10px] text-fg-subtle">{openNote.content.length.toLocaleString()} chars</span>
         </div>
       </div>
     );
@@ -282,14 +282,14 @@ export default function QuickNotes({ roomId, onBack = null }) {
   // ── List view ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-[#0d0d10]">
+    <div className="flex h-full flex-col bg-panel">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
+      <div className="flex items-center justify-between border-b border-edge-subtle px-3 py-2.5">
         <div className="flex items-center gap-2">
           {onBack ? (
             <button
               onClick={onBack}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-muted hover:bg-hovered hover:text-fg"
               title="Back to tools"
             >
               <ArrowLeft size={14} />
@@ -297,7 +297,7 @@ export default function QuickNotes({ roomId, onBack = null }) {
           ) : null}
           <StickyNote size={14} className="text-warning-400" />
           <span className="text-sm font-semibold text-fg">Notes</span>
-          <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+          <span className="rounded-full bg-hovered px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted">
             {notes.length}
           </span>
         </div>
@@ -311,14 +311,14 @@ export default function QuickNotes({ roomId, onBack = null }) {
       </div>
 
       {/* Search */}
-      <div className="border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+      <div className="border-b border-edge-subtle px-3 py-2">
         <div className="relative">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search notes…"
-            className="w-full rounded-md border border-zinc-200 bg-zinc-50 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-warning-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            className="w-full rounded-md border border-edge-subtle bg-panel py-1.5 pl-7 pr-2 text-xs outline-none focus:border-warning-400"
           />
         </div>
       </div>
@@ -328,8 +328,8 @@ export default function QuickNotes({ roomId, onBack = null }) {
         <AnimatePresence initial={false}>
           {sortedNotes.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
-              <FileText size={28} className="text-zinc-300 dark:text-zinc-700" />
-              <p className="text-xs text-zinc-400">{search ? "No notes match your search" : "No notes yet"}</p>
+              <FileText size={28} className="text-fg" />
+              <p className="text-xs text-fg-subtle">{search ? "No notes match your search" : "No notes yet"}</p>
               {!search && (
                 <button
                   onClick={createNote}
@@ -356,19 +356,19 @@ export default function QuickNotes({ roomId, onBack = null }) {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="flex-1 truncate text-xs font-semibold text-fg">
-                      {note.title || <span className="font-normal italic text-zinc-400">Untitled</span>}
+                      {note.title || <span className="font-normal italic text-fg-subtle">Untitled</span>}
                     </p>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => { e.stopPropagation(); togglePin(note.id); }}
                         title={note.pinned ? "Unpin" : "Pin"}
-                        className={`flex h-5 w-5 items-center justify-center rounded ${note.pinned ? "text-warning-500" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"}`}
+                        className={`flex h-5 w-5 items-center justify-center rounded ${note.pinned ?"text-warning-500" : "text-fg-subtle hover:text-fg"}`}
                       >
                         {note.pinned ? <Pin size={10} /> : <PinOff size={10} />}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                        className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:text-danger-500 dark:hover:text-danger-400"
+                        className="flex h-5 w-5 items-center justify-center rounded text-fg-subtle hover:text-danger-500"
                       >
                         <Trash2 size={10} />
                       </button>
@@ -379,9 +379,9 @@ export default function QuickNotes({ roomId, onBack = null }) {
                   )}
                   <div className="mt-1.5 flex items-center gap-2">
                     {note.pinned && <Pin size={9} className="text-warning-400" />}
-                    <span className="text-[10px] text-zinc-400">{relativeTime(note.updatedAt)}</span>
-                    <span className="text-[10px] text-zinc-300 dark:text-zinc-700">·</span>
-                    <span className="text-[10px] text-zinc-400">{note.content.length} chars</span>
+                    <span className="text-[10px] text-fg-subtle">{relativeTime(note.updatedAt)}</span>
+                    <span className="text-[10px] text-fg">·</span>
+                    <span className="text-[10px] text-fg-subtle">{note.content.length} chars</span>
                   </div>
                 </Motion.div>
               );

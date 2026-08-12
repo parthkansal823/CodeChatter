@@ -1,12 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import {
-  ChevronRight,
-  FilePlus2,
-  FolderOpen,
-  FolderPlus,
-  Trash2,
-  Pencil
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { getFileVisual, getFolderVisual } from "../utils/fileIcons";
 
 export default function FileItem({
@@ -18,8 +11,6 @@ export default function FileItem({
   isExpanded = false,
   onToggleFolder,
   onSelect,
-  onCreateFile,
-  onCreateFolder,
   onDelete,
   onRename,
   onMove,
@@ -30,6 +21,7 @@ export default function FileItem({
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(node.name);
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -79,18 +71,32 @@ export default function FileItem({
   const handleDragStart = (e) => {
     e.stopPropagation();
     e.dataTransfer.setData("nodeId", node.id);
+    e.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (e) => {
-    if (canEdit && isFolder) {
-      e.preventDefault();
-    }
+    if (!canEdit || !isFolder) return;
+
+    // Without preventDefault the browser refuses the drop outright.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setIsDropTarget(true);
+  };
+
+  const handleDragLeave = (e) => {
+    // dragleave also fires when the pointer crosses onto a child element, which
+    // would flicker the highlight off and on. Ignore those.
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setIsDropTarget(false);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    setIsDropTarget(false);
+
     if (!canEdit || !isFolder) return;
+
     const draggedNodeId = e.dataTransfer.getData("nodeId");
     if (draggedNodeId && draggedNodeId !== node.id) {
       onMove?.(draggedNodeId, node.id);
@@ -103,6 +109,8 @@ export default function FileItem({
       draggable={canEdit && !isRenaming}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDragEnd={() => setIsDropTarget(false)}
       onDrop={handleDrop}
       onKeyDown={handleItemKeyDown}
       onDoubleClick={(e) => {
@@ -112,11 +120,13 @@ export default function FileItem({
         }
       }}
       className={`group flex cursor-pointer select-none items-center gap-1 border-l-2 outline-none transition-colors ${
-        isActive
-          ? "border-accent bg-selected text-fg"
-          : isFocused
-            ? "border-transparent bg-hovered text-fg"
-            : "border-transparent text-fg-muted hover:bg-hovered hover:text-fg"
+        isDropTarget
+          ? "border-accent bg-accent-subtle text-fg ring-1 ring-inset ring-accent"
+          : isActive
+            ? "border-accent bg-selected text-fg"
+            : isFocused
+              ? "border-transparent bg-hovered text-fg"
+              : "border-transparent text-fg-muted hover:bg-hovered hover:text-fg"
       }`}
       style={{ paddingLeft: `${depth * 12 + 4}px` }}
       onClick={() => {
@@ -171,60 +181,6 @@ export default function FileItem({
         )}
       </div>
 
-      {canEdit && (
-        <div className="mr-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100">
-          {isFolder && (
-            <>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onCreateFile?.(node.id);
-                }}
-                className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-selected hover:text-fg"
-                title={`New file in ${node.name}`}
-              >
-                <FilePlus2 size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onCreateFolder?.(node.id);
-                }}
-                className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-selected hover:text-fg"
-                title={`New folder in ${node.name}`}
-              >
-                <FolderPlus size={13} />
-              </button>
-            </>
-          )}
-
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setIsRenaming(true);
-            }}
-            className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-selected hover:text-accent"
-            title={`Rename ${node.name} (F2)`}
-          >
-            <Pencil size={13} />
-          </button>
-
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete?.(node);
-            }}
-            className="rounded-sm p-0.5 text-fg-subtle transition-colors hover:bg-danger-500/15 hover:text-danger-500"
-            title={`Delete ${node.name} (Del)`}
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      )}
     </div>
   );
 }

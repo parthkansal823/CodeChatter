@@ -26,25 +26,6 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_DAYS = int(os.getenv("JWT_EXPIRATION_DAYS", "7"))
 
 
-def _flag(name: str) -> bool:
-  return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-# Sign in without the emailed one-time code. This exists so local development is
-# not gated on reading a mailbox (or a log line) on every single login.
-#
-# Two locks, both of which must be open: the flag has to be set AND the app must
-# not be in production. The environment check is not a formality — it is what
-# makes it impossible to turn multi-factor auth off on a deployed instance by
-# leaking one env var into the wrong place.
-DEV_SKIP_MFA = _flag("DEV_SKIP_MFA") and ENVIRONMENT != "production"
-
-if DEV_SKIP_MFA:
-  logger.warning(
-    "DEV_SKIP_MFA is on - login and signup will NOT ask for an email code. "
-    "Development only.",
-  )
-
 
 def _require_secret(name: str) -> str:
   """Read a signing secret, generating an ephemeral one only outside production.
@@ -88,6 +69,24 @@ DEFAULT_FRONTEND_URL = os.getenv(
 )
 DEFAULT_CALLBACK_URL = f"{DEFAULT_FRONTEND_URL.rstrip('/')}/auth/callback"
 
+# ── Mail ──────────────────────────────────────────────────────────────────────
+# "gmail" sends through the Gmail API using the same Google Cloud project as
+# sign-in — no app password, no SMTP port, and it keeps working when a network
+# blocks outbound 587. It needs a one-time consent to get a refresh token; see
+# scripts/gmail_authorize.py.
+#
+# "smtp" is the older path and stays available for any other mail host.
+MAIL_PROVIDER = os.getenv("MAIL_PROVIDER", "gmail").strip().lower()
+
+# Reuses GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET unless overridden, so one
+# Cloud Console project covers both sign-in and sending.
+GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "").strip() or os.getenv("GOOGLE_CLIENT_ID", "").strip()
+GMAIL_CLIENT_SECRET = (
+  os.getenv("GMAIL_CLIENT_SECRET", "").strip() or os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+)
+GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "").strip()
+GMAIL_SENDER = os.getenv("GMAIL_SENDER", "").strip()
+
 SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
@@ -96,6 +95,22 @@ SMTP_FROM = os.getenv("SMTP_FROM", "") or SMTP_USER
 SMTP_TIMEOUT_SECONDS = float(os.getenv("SMTP_TIMEOUT_SECONDS", "5"))
 
 RUN_TIMEOUT_SECONDS = int(os.getenv("CODE_RUN_TIMEOUT_SECONDS", "15"))
+# ── AI assistant ──────────────────────────────────────────────────────────────
+# Two backends. "ollama" runs an open-weights model on this machine: no API key,
+# no per-token cost, no code leaving the network — which matters here because the
+# assistant is handed the user's source file as context. "gemini" is the hosted
+# fallback for machines that cannot spare the RAM.
+#
+# Default is ollama. If it is not running the request fails with instructions
+# rather than silently falling back, so you always know which one answered.
+AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").strip().lower()
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+# qwen2.5-coder:7b is the strongest code model that still fits comfortably in
+# ~8 GB of RAM. Swap for a larger variant (14b/32b) if the machine allows.
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b").strip() or "qwen2.5-coder:7b"
+OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))

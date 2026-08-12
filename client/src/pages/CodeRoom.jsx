@@ -226,7 +226,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-zinc-50 text-black dark:bg-[#09090b] dark:text-white">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-canvas text-fg">
       {!focusMode && (
         <Navbar
           theme={theme}
@@ -246,7 +246,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
             exit={{ opacity: 0, y: -8 }}
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
             onClick={() => setFocusMode(false)}
-            className="absolute left-1/2 top-3 z-50 inline-flex -translate-x-1/2 items-center gap-2 rounded-full bg-zinc-900/80 px-3 py-1.5 text-[11px] font-medium text-zinc-300 shadow-xl backdrop-blur-sm hover:bg-zinc-800 dark:bg-zinc-100/10 dark:text-zinc-200 sm:px-4 sm:text-xs"
+            className="absolute left-1/2 top-3 z-50 inline-flex -translate-x-1/2 items-center gap-2 rounded-full bg-overlay px-3 py-1.5 text-[11px] font-medium text-fg shadow-xl backdrop-blur-sm hover:bg-fg-subtle sm:px-4 sm:text-xs"
           >
             <Minimize2 size={12} />
             <span className="whitespace-nowrap">Focus mode</span>

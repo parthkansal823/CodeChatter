@@ -1,8 +1,26 @@
 import {
-  LockKeyhole, Palette, UserRound, Code2, Bell, Users,
-  Zap, Shield, LogOut, Trash2, Github, Mail, Copy, Check,
-  ChevronRight, Moon, Sun, ExternalLink, Link2, Link2Off, Loader2,
-  HelpCircle, RotateCcw,
+  LockKeyhole,
+  Palette,
+  UserRound,
+  Code2,
+  Bell,
+  Users,
+  Zap,
+  Shield,
+  LogOut,
+  Trash2,
+  Mail,
+  Copy,
+  Check,
+  ChevronRight,
+  Moon,
+  Sun,
+  ExternalLink,
+  Link2,
+  Link2Off,
+  Loader2,
+  HelpCircle,
+  RotateCcw,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
@@ -17,6 +35,7 @@ import UserAvatar from "../components/UserAvatar";
 import { avatarBackground } from "../utils/avatar";
 import { secureFetch } from "../utils/security";
 import { API_ENDPOINTS } from "../config/security";
+import { SiGithub } from "react-icons/si";
 
 const NAV = [
   { id: "profile", label: "Profile", icon: UserRound },
@@ -272,7 +291,7 @@ export default function Settings() {
                     onClick={handleConnectGitHub}
                     className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-white dark:hover:bg-white dark:hover:text-zinc-900"
                   >
-                    <Github size={12} />
+                    <SiGithub size={12} />
                     Connect GitHub
                   </button>
                 )

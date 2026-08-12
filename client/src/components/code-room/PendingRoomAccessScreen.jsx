@@ -91,10 +91,10 @@ export default function PendingRoomAccessScreen({
         className="relative w-full max-w-lg"
       >
         {/* Card */}
-        <div className={`overflow-hidden rounded-lg border border-zinc-800 bg-[#0f0f12] shadow-2xl ring-1 ${statusConfig.ringColor}`}>
+        <div className={`overflow-hidden rounded-lg border border-edge-subtle bg-[#0f0f12] shadow-2xl ring-1 ${statusConfig.ringColor}`}>
           {/* Status bar */}
           {isPending && (
-            <div className="flex items-center gap-3 border-b border-zinc-800 bg-brand-950/30 px-5 py-3">
+            <div className="flex items-center gap-3 border-b border-edge-subtle bg-brand-950/30 px-5 py-3">
               <PulsingDot />
               <p className="text-xs font-medium text-brand-300">Waiting for owner approval…</p>
             </div>
@@ -103,38 +103,38 @@ export default function PendingRoomAccessScreen({
           <div className="p-6 sm:p-8">
             {/* Eyebrow + Title */}
             <div className="mb-6">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-600">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-muted">
                 {statusConfig.eyebrow}
               </p>
               <h1 className="text-2xl font-bold text-white sm:text-3xl">
                 {statusConfig.title}
               </h1>
-              <p className="mt-3 text-sm leading-7 text-zinc-400">
+              <p className="mt-3 text-sm leading-7 text-fg-muted">
                 {message || statusConfig.description}
               </p>
             </div>
 
             {/* Info grid */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div className="col-span-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4 sm:col-span-1">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Workspace</p>
-                <p className="mt-2 truncate text-sm font-semibold text-zinc-200">{roomName || "Workspace"}</p>
-                <p className="mt-0.5 font-mono text-xs text-zinc-600">{roomId}</p>
+              <div className="col-span-2 rounded-xl border border-edge-subtle bg-panel p-4 sm:col-span-1">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Workspace</p>
+                <p className="mt-2 truncate text-sm font-semibold text-fg">{roomName || "Workspace"}</p>
+                <p className="mt-0.5 font-mono text-xs text-fg-muted">{roomId}</p>
               </div>
 
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Your Role</p>
+              <div className="rounded-xl border border-edge-subtle bg-panel p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Your Role</p>
                 <div className="mt-2 flex items-center gap-1.5">
                   <RoleIcon size={12} className="text-brand-400" />
-                  <p className="text-sm font-semibold text-zinc-200">{roleInfo.label}</p>
+                  <p className="text-sm font-semibold text-fg">{roleInfo.label}</p>
                 </div>
-                <p className="mt-0.5 text-[11px] text-zinc-600">{roleInfo.text}</p>
+                <p className="mt-0.5 text-[11px] text-fg-muted">{roleInfo.text}</p>
               </div>
 
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Requested</p>
-                <p className="mt-2 text-sm font-semibold text-zinc-200">{requestedAtLabel}</p>
-                <p className="mt-0.5 text-[11px] text-zinc-600">Join request sent</p>
+              <div className="rounded-xl border border-edge-subtle bg-panel p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-fg-muted">Requested</p>
+                <p className="mt-2 text-sm font-semibold text-fg">{requestedAtLabel}</p>
+                <p className="mt-0.5 text-[11px] text-fg-muted">Join request sent</p>
               </div>
             </div>
 
@@ -144,7 +144,7 @@ export default function PendingRoomAccessScreen({
                 type="button"
                 variant="ghost"
                 onClick={onGoHome}
-                className="border border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                className="border border-edge-subtle text-fg-muted hover:text-fg"
               >
                 <ArrowLeft size={14} className="mr-2 shrink-0" />
                 Back to dashboard
@@ -165,7 +165,7 @@ export default function PendingRoomAccessScreen({
 
           {/* Rejected state footer */}
           {!isPending && (
-            <div className="flex items-center gap-3 border-t border-zinc-800 bg-danger-950/20 px-5 py-3">
+            <div className="flex items-center gap-3 border-t border-edge-subtle bg-danger-950/20 px-5 py-3">
               <ShieldAlert size={14} className="shrink-0 text-danger-400" />
               <p className="text-xs text-danger-400">Contact the room owner to request a new invite link.</p>
             </div>
@@ -178,7 +178,7 @@ export default function PendingRoomAccessScreen({
             key={tick}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mt-4 text-center text-xs text-zinc-700"
+            className="mt-4 text-center text-xs text-fg"
           >
             This page automatically checks every 4 seconds
           </Motion.p>

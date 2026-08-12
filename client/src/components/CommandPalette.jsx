@@ -8,7 +8,6 @@ import {
   FileText,
   FolderGit2,
   FolderPlus,
-  Github,
   Home,
   Keyboard,
   LogOut,
@@ -32,6 +31,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useNotifications } from "../context/NotificationsContext";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
+import { SiGithub } from "react-icons/si";
 
 const STATIC_COMMANDS = [
   { id: "home", title: "Go to Dashboard", icon: Home, section: "Navigation", path: "/home" },
@@ -169,7 +169,7 @@ function getWorkspaceCommands(roomContext, normalizedQuery) {
       id: "room-github",
       title: "Open GitHub",
       subtitle: roomContext.roomName,
-      icon: Github,
+      icon: SiGithub,
       section: "Tools",
       action: () => roomContext.actions?.openTool?.("github"),
     },
@@ -404,10 +404,10 @@ export default function CommandPalette({ theme, onThemeChange }) {
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]">
-            <div className="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
+            <div className="fixed inset-0 bg-canvas backdrop-blur-sm" onClick={() => setIsOpen(false)} />
 
-            <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-zinc-800 dark:bg-[#09090b]/80">
-              <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
+            <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-edge-subtle bg-panel/95 shadow-2xl backdrop-blur-xl/80">
+              <div className="flex items-center gap-3 border-b border-edge-subtle px-4 py-4">
                 <Search className="text-fg-subtle" size={20} />
                 <input
                   ref={inputRef}
@@ -419,9 +419,9 @@ export default function CommandPalette({ theme, onThemeChange }) {
                   placeholder={activeRoomContext
                     ? "Search files, tools, and workspace actions..."
                     : "Type a command or search..."}
-                  className="flex-1 bg-transparent text-base text-zinc-900 placeholder-zinc-400 outline-none dark:text-white dark:placeholder-zinc-600"
+                  className="flex-1 bg-transparent text-base text-fg placeholder:text-fg-subtle outline-none"
                 />
-                <div className="flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <div className="flex items-center gap-1 rounded bg-hovered px-1.5 py-0.5 text-[10px] font-medium text-fg-muted">
                   <span>esc</span>
                 </div>
               </div>
@@ -446,7 +446,7 @@ export default function CommandPalette({ theme, onThemeChange }) {
 
                     return sections.map((section) => (
                       <div key={section} className="mb-1">
-                        <p className="mb-1 px-3 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
+                        <p className="mb-1 px-3 pt-2 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">
                           {section}
                         </p>
                         {filtered
@@ -463,16 +463,16 @@ export default function CommandPalette({ theme, onThemeChange }) {
                                 whileHover={{ x: 2 }}
                                 transition={{ duration: 0.1 }}
                                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                                  isSelected
-                                    ? "bg-brand-600 text-white shadow-md shadow-sm"
-                                    : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+ isSelected
+ ?"bg-brand-600 text-white shadow-md shadow-sm"
+                                    : "text-fg hover:bg-hovered"
                                 }`}
                               >
                                 <div
                                   className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                                    isSelected
-                                      ? "bg-zinc-800 text-white"
-                                      : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+ isSelected
+ ?"bg-panel text-white"
+                                      : "bg-hovered text-fg-muted  "
                                   }`}
                                 >
                                   <command.icon size={15} />
@@ -481,14 +481,14 @@ export default function CommandPalette({ theme, onThemeChange }) {
                                   <p className="text-sm font-medium">{command.title}</p>
                                   {command.subtitle && (
                                     <p className={`mt-0.5 text-xs ${
-                                      isSelected ? "text-white/75" : "text-fg-subtle"
+ isSelected ?"text-white/75" : "text-fg-subtle"
                                     }`}>
                                       {command.subtitle}
                                     </p>
                                   )}
                                 </div>
                                 {isSelected && (
-                                  <kbd className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-white/80">
+                                  <kbd className="rounded bg-panel px-1.5 py-0.5 text-[10px] font-medium text-white/80">
                                     Enter
                                   </kbd>
                                 )}
@@ -501,8 +501,8 @@ export default function CommandPalette({ theme, onThemeChange }) {
                 )}
               </div>
 
-              <div className="border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-[#050505] dark:text-zinc-400">
-                <span className="font-semibold text-zinc-900 dark:text-zinc-300">Tip:</span> Use arrows to navigate and enter to select.
+              <div className="border-t border-edge-subtle bg-panel px-4 py-3 text-xs text-fg-muted">
+                <span className="font-semibold text-fg">Tip:</span> Use arrows to navigate and enter to select.
               </div>
             </div>
           </div>
