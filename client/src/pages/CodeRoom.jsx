@@ -17,6 +17,7 @@ import RoomSettingsModal from "../components/RoomSettingsModal";
 import TabBar from "../components/TabBar";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
+import { useRoomCrdt } from "../hooks/useRoomCrdt";
 import { useCodeRoomState } from "../hooks/code-room/useCodeRoomState";
 import { useRunNotifications, useCollaboratorNotifications } from "../hooks/useRunNotifications";
 import RoomTutorial from "../components/RoomTutorial";
@@ -27,6 +28,8 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { token, user } = useAuth();
+  // Shared editing document for the whole room; survives tab switches.
+  const { doc: crdtDoc, provider: crdtProvider } = useRoomCrdt(roomId, token, user);
   const [focusMode, setFocusMode] = useState(false);
   const [requestedSidebarFeature, setRequestedSidebarFeature] = useState(null);
   const handleOpenTutorial = useCallback(() => {
@@ -101,6 +104,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
     canManageRoom,
     chatMessages,
     sendChatMessage,
+    collaborationSessionId,
     sendVideoSignal,
     setVideoSignalListener,
     unreadChatMessagesCount,
@@ -329,6 +333,8 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                   remoteCursors={remoteCursors}
                   readOnly={!canEditRoom}
                   roomId={roomId}
+                  crdtDoc={crdtDoc}
+                  crdtProvider={crdtProvider}
                 />
                 )
               ) : (
@@ -361,6 +367,7 @@ export default function CodeRoom({ theme = "vs-dark", onThemeChange }) {
                 accessRole={room?.accessRole}
                 chatMessages={chatMessages}
                 sendChatMessage={sendChatMessage}
+                collaborationSessionId={collaborationSessionId}
                 sendVideoSignal={sendVideoSignal}
                 setVideoSignalListener={setVideoSignalListener}
                 unreadChatMessagesCount={unreadChatMessagesCount}

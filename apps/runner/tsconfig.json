@@ -1,0 +1,6 @@
+{
+  "extends": "@codechatter/config/tsconfig.node.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "declaration": false, "lib": ["ES2023", "DOM"] },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@codechatter/collab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "node --enable-source-maps --env-file-if-exists=../../.env dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@codechatter/auth": "workspace:*",
+    "@codechatter/contracts": "workspace:*",
+    "@codechatter/db": "workspace:*",
+    "@codechatter/workspace-model": "workspace:*",
+    "@hocuspocus/extension-redis": "4.7.0",
+    "@hocuspocus/server": "4.7.0",
+    "drizzle-orm": "0.45.3",
+    "ioredis": "^5",
+    "yjs": "13.6.33",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@codechatter/config": "workspace:*",
+    "@hocuspocus/provider": "4.7.0",
+    "@types/node": "^24",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "ws": "^8.21.3"
+  }
+}

@@ -1,0 +1,38 @@
+# One origin for the whole app in development: http://localhost:8080
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	encode zstd gzip
+
+	# Live previews of dev servers: p3000-team22.preview.localhost:8080 (a
+	# separate origin; browsers resolve *.localhost to this machine). The API
+	# checks access and forwards into the room's sandbox.
+	@preview header_regexp Host ^p[0-9]+-[a-z0-9]{6}\.preview\.localhost(:[0-9]+)?$
+	handle @preview {
+		reverse_proxy host.docker.internal:4000
+	}
+
+	# NestJS: REST, Better Auth, Socket.IO, terminal/LSP sockets
+	handle /api/* {
+		reverse_proxy host.docker.internal:4000
+	}
+	handle /socket.io/* {
+		reverse_proxy host.docker.internal:4000
+	}
+	handle /ws/* {
+		reverse_proxy host.docker.internal:4000
+	}
+
+	# Hocuspocus (path prefix stripped)
+	handle_path /collab* {
+		reverse_proxy host.docker.internal:4100
+	}
+
+	# Next.js (pages, assets, HMR)
+	handle {
+		reverse_proxy host.docker.internal:3000
+	}
+}

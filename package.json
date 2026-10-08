@@ -1,0 +1,29 @@
+{
+  "name": "codechatter",
+  "private": true,
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "setup": "pnpm infra:up && pnpm db:migrate && pnpm seed && pnpm sandbox:build",
+    "dev": "turbo run dev --filter=./apps/* --filter=./packages/*",
+    "dev:stop": "node scripts/stop-dev.mjs",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "infra:up": "docker compose -f infra/compose.dev.yaml up -d --wait",
+    "infra:down": "docker compose -f infra/compose.dev.yaml down",
+    "db:generate": "pnpm --filter @codechatter/db generate",
+    "db:migrate": "pnpm --filter @codechatter/db build && pnpm --filter @codechatter/db migrate",
+    "seed": "pnpm --filter @codechatter/api build && pnpm --filter @codechatter/api seed:dev",
+    "sandbox:build": "docker build -t codechatter-sandbox:dev -f sandbox/image/Dockerfile sandbox"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9",
+    "turbo": "2.11.3",
+    "typescript": "6.0.3"
+  }
+}

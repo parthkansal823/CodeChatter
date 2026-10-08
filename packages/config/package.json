@@ -1,0 +1,13 @@
+{
+  "name": "@codechatter/config",
+  "version": "0.0.0",
+  "private": true,
+  "files": ["tsconfig.*.json", "eslint.config.mjs"],
+  "exports": {
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.node.json": "./tsconfig.node.json",
+    "./tsconfig.nest.json": "./tsconfig.nest.json",
+    "./tsconfig.next.json": "./tsconfig.next.json",
+    "./eslint": "./eslint.config.mjs"
+  }
+}

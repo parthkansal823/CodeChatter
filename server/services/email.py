@@ -429,7 +429,7 @@ def send_otp_email(to_email: str, otp: str, action: str = "login") -> None:
                       <tr>
                         <td style="padding:12px 18px;">
                           <span style="font-size:13px;color:#6ee7b7;">&#129302;&nbsp;</span>
-                          <span style="font-size:13px;color:#d1d5db;">AI assistant powered by Gemini</span>
+                          <span style="font-size:13px;color:#d1d5db;">AI assistant that runs on your machine</span>
                         </td>
                       </tr>
                     </table>

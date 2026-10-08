@@ -1,0 +1,21 @@
+# Used instead of the root .dockerignore when building app.Dockerfile.
+# Allow-list: the build sees the v2 workspace and nothing else, so v1
+# (client/, server/), spikes, uploads and every .env stay out of the images.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!.pnpmfile.cjs
+!turbo.json
+!apps/
+!packages/
+!sandbox/
+
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/.env*
+**/*.log
+**/test-results
+**/playwright-report

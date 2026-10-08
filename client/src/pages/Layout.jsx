@@ -9,7 +9,7 @@ export default function Layout({ children, theme, onThemeChange }) {
   const location = useLocation();
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-canvas text-black dark:text-white">
+    <div className="h-screen flex flex-col overflow-hidden bg-canvas text-black">
       <Navbar theme={currentTheme} onThemeChange={onThemeChange} minimal />
       <main className="flex-1 overflow-auto">
         <AnimatePresence mode="wait">

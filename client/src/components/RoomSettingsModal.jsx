@@ -11,6 +11,7 @@ import { useAuth } from "../hooks/useAuth";
 import { API_ENDPOINTS } from "../config/security";
 import { sanitizeInput, secureFetch } from "../utils/security";
 import { getDefaultTerminalShell, getTerminalShellOptions } from "../utils/terminal";
+import { buildRoomInviteLink } from "../utils/room/invite";
 import UserAvatar from "./UserAvatar";
 
 const ACCESS_ROLE_OPTIONS = [
@@ -226,7 +227,7 @@ export default function RoomSettingsModal({ room, isOpen, isLoading = false, onC
   ]);
 
   const inviteLink = typeof window !== "undefined" && room?.inviteToken
-    ? `${window.location.origin}/room/${room.id}?token=${room.inviteToken}`
+    ? buildRoomInviteLink({ roomId: room.id, inviteToken: room.inviteToken })
     : "";
 
   const handleSave = async (event) => {

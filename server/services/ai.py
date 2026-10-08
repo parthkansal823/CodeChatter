@@ -6,28 +6,20 @@ import httpx
 from fastapi import HTTPException, status
 
 try:
-  from ..core.schemas import GeminiAssistRequest
+  from ..core.schemas import AssistRequest
   from ..core.settings import (
-    AI_PROVIDER,
-    GEMINI_API_BASE_URL,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
-    GEMINI_TIMEOUT_SECONDS,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
+    OLLAMA_KEEP_ALIVE,
     OLLAMA_TIMEOUT_SECONDS,
     logger,
   )
 except ImportError:
-  from core.schemas import GeminiAssistRequest
+  from core.schemas import AssistRequest
   from core.settings import (
-    AI_PROVIDER,
-    GEMINI_API_BASE_URL,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
-    GEMINI_TIMEOUT_SECONDS,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
+    OLLAMA_KEEP_ALIVE,
     OLLAMA_TIMEOUT_SECONDS,
     logger,
   )
@@ -63,8 +55,8 @@ def summarize_run_result_for_ai(run_result: dict[str, Any] | None) -> str:
   return "\n\n".join(summary_parts) if summary_parts else "No recent run result was provided."
 
 
-def build_gemini_prompt(
-  payload: GeminiAssistRequest,
+def build_assistant_prompt(
+  payload: AssistRequest,
   *,
   current_user: dict[str, Any],
   active_file_path: str | None,
@@ -96,88 +88,6 @@ def build_gemini_prompt(
   return "\n".join(sections)
 
 
-def extract_gemini_text(response_payload: dict[str, Any]) -> str:
-  for candidate in response_payload.get("candidates", []):
-    content = candidate.get("content", {})
-    parts = content.get("parts", [])
-    text_parts = [
-      str(part.get("text", "")).strip()
-      for part in parts
-      if str(part.get("text", "")).strip()
-    ]
-
-    if text_parts:
-      return "\n\n".join(text_parts)
-
-  raise HTTPException(
-    status_code=status.HTTP_502_BAD_GATEWAY,
-    detail="Gemini returned an empty response",
-  )
-
-
-async def request_gemini_completion(prompt: str) -> str:
-  if not GEMINI_API_KEY:
-    raise HTTPException(
-      status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-      detail="Gemini is not configured yet. Add GEMINI_API_KEY to server/.env.local and restart the backend.",
-    )
-
-  request_payload = {
-    "system_instruction": {
-      "parts": [
-        {
-          "text": (
-            "You are CodeChatter AI, a collaborative coding assistant. "
-            "Focus on code explanation, debugging, and concrete next steps."
-          ),
-        },
-      ],
-    },
-    "contents": [
-      {
-        "role": "user",
-        "parts": [{"text": prompt}],
-      },
-    ],
-    "generationConfig": {
-      "temperature": 0.35,
-      "maxOutputTokens": 1024,
-    },
-  }
-
-  try:
-    async with httpx.AsyncClient(timeout=GEMINI_TIMEOUT_SECONDS) as client:
-      response = await client.post(
-        f"{GEMINI_API_BASE_URL}/models/{GEMINI_MODEL}:generateContent",
-        headers={
-          "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY,
-        },
-        json=request_payload,
-      )
-      response.raise_for_status()
-  except httpx.HTTPStatusError as error:
-    detail = "Gemini request failed"
-
-    try:
-      error_payload = error.response.json()
-      api_message = error_payload.get("error", {}).get("message")
-      if isinstance(api_message, str) and api_message.strip():
-        detail = api_message.strip()
-    except ValueError:
-      detail = error.response.text or detail
-
-    raise HTTPException(
-      status_code=status.HTTP_502_BAD_GATEWAY,
-      detail=f"Gemini request failed: {detail}",
-    ) from error
-  except httpx.HTTPError as error:
-    raise HTTPException(
-      status_code=status.HTTP_502_BAD_GATEWAY,
-      detail=f"Gemini request failed: {error}",
-    ) from error
-
-  return extract_gemini_text(response.json())
 
 
 # ── Local model (Ollama) ──────────────────────────────────────────────────────
@@ -218,6 +128,9 @@ async def request_ollama_completion(prompt: str) -> str:
     ],
     "stream": False,
     "options": {"temperature": 0.35, "num_predict": 1024},
+    # Keep the model resident between questions instead of paying the load
+    # cost again after a few idle minutes.
+    "keep_alive": OLLAMA_KEEP_ALIVE,
   }
 
   try:
@@ -230,7 +143,6 @@ async def request_ollama_completion(prompt: str) -> str:
       detail=(
         f"No local model server at {OLLAMA_BASE_URL}. Install Ollama, then run "
         f"`ollama pull {OLLAMA_MODEL}` and leave `ollama serve` running. "
-        "To use the hosted model instead, set AI_PROVIDER=gemini."
       ),
     ) from error
   except httpx.HTTPStatusError as error:
@@ -266,11 +178,44 @@ async def request_ollama_completion(prompt: str) -> str:
 
 
 async def request_ai_completion(prompt: str) -> str:
-  """Send `prompt` to whichever backend this deployment is configured for."""
-  if AI_PROVIDER == "gemini":
-    return await request_gemini_completion(prompt)
-
-  if AI_PROVIDER != "ollama":
-    logger.warning("Unknown AI_PROVIDER %r - falling back to ollama", AI_PROVIDER)
-
+  """Send `prompt` to the local model."""
   return await request_ollama_completion(prompt)
+
+
+async def warm_up_model() -> None:
+  """Load the model into memory at boot so the first question is not the slow one.
+
+  A cold qwen2.5-coder:7b takes several seconds to load; asking for a single
+  token forces that now, in the background, rather than making whoever opens
+  the assistant first wait for it. Every failure here is logged and swallowed —
+  the server must still start when Ollama is not running.
+  """
+  probe = await check_ollama()
+
+  if not probe["reachable"]:
+    logger.warning(
+      "[ai] No model server at %s — the assistant will not answer until "
+      "`ollama serve` is running.",
+      OLLAMA_BASE_URL,
+    )
+    return
+
+  if not probe.get("modelInstalled"):
+    logger.warning("[ai] Model %s is not pulled. Run: ollama pull %s", OLLAMA_MODEL, OLLAMA_MODEL)
+    return
+
+  try:
+    async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT_SECONDS) as client:
+      await client.post(
+        f"{OLLAMA_BASE_URL}/api/chat",
+        json={
+          "model": OLLAMA_MODEL,
+          "messages": [{"role": "user", "content": "ok"}],
+          "stream": False,
+          "keep_alive": OLLAMA_KEEP_ALIVE,
+          "options": {"num_predict": 1},
+        },
+      )
+    logger.info("[ai] %s is loaded and pinned in memory", OLLAMA_MODEL)
+  except httpx.HTTPError as error:
+    logger.warning("[ai] Warm-up failed (the assistant will still work): %s", error)

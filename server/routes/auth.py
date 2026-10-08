@@ -26,11 +26,8 @@ try:
     verify_password,
   )
   from ..core.settings import (
-    AI_PROVIDER,
     DATA_DIR,
     ENVIRONMENT,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
     MAIL_PROVIDER,
@@ -61,11 +58,8 @@ except ImportError:
     verify_password,
   )
   from core.settings import (
-    AI_PROVIDER,
     DATA_DIR,
     ENVIRONMENT,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
     MAIL_PROVIDER,
@@ -156,31 +150,23 @@ async def health_full() -> dict[str, Any]:
     checks["database"] = {"ok": False, "error": str(error)}
 
   # ── AI assistant ───────────────────────────────────────────────────────────
-  if AI_PROVIDER == "gemini":
-    checks["ai"] = {
-      "ok": bool(GEMINI_API_KEY),
-      "provider": "gemini",
-      "model": GEMINI_MODEL,
-      "hint": None if GEMINI_API_KEY else "Set GEMINI_API_KEY in server/.env",
-    }
+  probe = await check_ollama()
+
+  if not probe["reachable"]:
+    hint = f"Start it with `ollama serve` (expected at {OLLAMA_BASE_URL})"
+  elif not probe.get("modelInstalled"):
+    hint = f"Run `ollama pull {OLLAMA_MODEL}`"
   else:
-    probe = await check_ollama()
+    hint = None
 
-    if not probe["reachable"]:
-      hint = f"Start it with `ollama serve` (expected at {OLLAMA_BASE_URL})"
-    elif not probe.get("modelInstalled"):
-      hint = f"Run `ollama pull {OLLAMA_MODEL}`"
-    else:
-      hint = None
-
-    checks["ai"] = {
-      "ok": probe["reachable"] and bool(probe.get("modelInstalled")),
-      "provider": "ollama",
-      "model": OLLAMA_MODEL,
-      "endpoint": OLLAMA_BASE_URL,
-      "installedModels": probe.get("models", []),
-      "hint": hint,
-    }
+  checks["ai"] = {
+    "ok": probe["reachable"] and bool(probe.get("modelInstalled")),
+    "provider": "ollama",
+    "model": OLLAMA_MODEL,
+    "endpoint": OLLAMA_BASE_URL,
+    "installedModels": probe.get("models", []),
+    "hint": hint,
+  }
 
   # ── Code runner ────────────────────────────────────────────────────────────
   runnable = sorted(lang for lang in LANGUAGE_TOOLCHAINS if is_language_runnable(lang))

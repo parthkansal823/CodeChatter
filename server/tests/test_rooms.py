@@ -371,3 +371,43 @@ def test_a_malformed_share_email_is_rejected(client, register):
     headers=owner["headers"],
   )
   assert response.status_code == 422
+
+
+def test_joining_a_public_room_grants_viewer_not_editor(client, register):
+  owner = register("owner")
+  stranger = register("stranger")
+  room = create_room(client, owner, is_public=True)
+
+  joined = client.post("/api/rooms/join", json={"roomId": room["id"]}, headers=stranger["headers"])
+  assert joined.status_code == 200
+  assert joined.json()["accessRole"] == "viewer"
+
+  # Editor would unlock Run and the terminal; a public listing must not.
+  blocked = client.post(
+    f"/api/rooms/{room['id']}/run-snippet",
+    json={"language": "python", "code": "print(1)"},
+    headers=stranger["headers"],
+  )
+  assert blocked.status_code == 403
+
+
+def test_public_room_listing_hides_member_emails(client, register):
+  owner = register("owner")
+  create_room(client, owner, is_public=True)
+
+  listing = client.get("/api/rooms/public")
+  assert listing.status_code == 200
+  assert owner["user"]["email"] not in listing.text
+
+
+def test_user_code_does_not_inherit_server_secrets(monkeypatch, tmp_path):
+  from services.workspace_runtime import sandbox_env
+
+  monkeypatch.setenv("SECRET_KEY", "must-not-leak")
+  monkeypatch.setenv("MONGODB_URI", "mongodb://user:pass@host")
+  env = sandbox_env(tmp_path)
+
+  assert "SECRET_KEY" not in env
+  assert "MONGODB_URI" not in env
+  assert env["HOME"] == str(tmp_path)
+  assert "PATH" in env

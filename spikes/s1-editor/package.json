@@ -1,0 +1,29 @@
+{
+  "name": "spike-s1-editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite preview --port 4317 --strictPort",
+    "check": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "@codingame/monaco-vscode-api": "37.1.0",
+    "@codingame/monaco-vscode-standalone-typescript-language-features": "37.1.0",
+    "@codingame/monaco-vscode-standalone-languages": "37.1.0",
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@37.1.0",
+    "monaco-languageclient": "11.0.2",
+    "vscode": "npm:@codingame/monaco-vscode-extension-api@37.1.0",
+    "y-monaco": "0.1.6",
+    "y-protocols": "1.0.7",
+    "yjs": "13.6.33"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1",
+    "typescript": "6.0.3",
+    "vite": "8.3.1"
+  },
+  "overrides": {
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@37.1.0"
+  }
+}

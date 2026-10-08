@@ -1,0 +1,7 @@
+client/
+server/
+spikes/
+pnpm-lock.yaml
+**/drizzle/meta/
+**/.next/
+**/dist/

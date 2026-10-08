@@ -51,6 +51,29 @@ def clear_room_workspace_snapshot(room_id: str) -> None:
     shutil.rmtree(workspace_root, ignore_errors=True)
 
 
+# Variables user code may inherit. Everything else in os.environ is withheld:
+# load_dotenv() puts SECRET_KEY, MONGODB_URI, OAuth and mail credentials into
+# the server's environment, and user code (Run and the terminal) must never
+# see them. Windows needs a few extra system variables or toolchains fail to
+# start at all.
+_SANDBOX_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "TZ")
+_SANDBOX_ENV_ALLOWLIST_NT = (
+  "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "SYSTEMDRIVE",
+  "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMDATA", "NUMBER_OF_PROCESSORS",
+  "PROCESSOR_ARCHITECTURE",
+)
+
+
+def sandbox_env(workdir: str | os.PathLike[str]) -> dict[str, str]:
+  names = _SANDBOX_ENV_ALLOWLIST + (_SANDBOX_ENV_ALLOWLIST_NT if os.name == "nt" else ())
+  env = {name: os.environ[name] for name in names if name in os.environ}
+  home = str(workdir)
+  env.update(HOME=home, TMPDIR=home, TERM="xterm-256color")
+  if os.name == "nt":
+    env.update(USERPROFILE=home, TEMP=home, TMP=home)
+  return env
+
+
 def find_installed_command(*candidates: str) -> str | None:
   for candidate in candidates:
     executable_path = shutil.which(candidate)
@@ -118,6 +141,7 @@ def run_process(
       timeout=RUN_TIMEOUT_SECONDS,
       shell=False,
       check=False,
+      env=sandbox_env(cwd),
     )
   except subprocess.TimeoutExpired as error:
     return {

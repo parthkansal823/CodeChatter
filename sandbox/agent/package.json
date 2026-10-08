@@ -1,0 +1,20 @@
+{
+  "name": "@codechatter/sandbox-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "build": "esbuild src/agent.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/agent.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@codechatter/config": "workspace:*",
+    "@codechatter/contracts": "workspace:*",
+    "@types/node": "^24",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3",
+    "vitest": "5.0.1"
+  }
+}

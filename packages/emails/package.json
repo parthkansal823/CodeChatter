@@ -1,0 +1,25 @@
+{
+  "name": "@codechatter/emails",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@react-email/components": "1.0.12",
+    "@react-email/render": "2.1.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@codechatter/config": "workspace:*",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "typescript": "6.0.3"
+  }
+}

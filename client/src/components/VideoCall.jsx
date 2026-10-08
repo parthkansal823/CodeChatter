@@ -24,13 +24,40 @@ import { useAuth } from "../hooks/useAuth";
 import UserAvatar from "./UserAvatar";
 import { logActivity } from "./ActivityLog";
 
+/**
+ * STUN alone only works when at least one side's NAT is cooperative. Behind a
+ * symmetric NAT — most college and office networks, and a lot of mobile data —
+ * the peers discover each other's candidates and still cannot connect, so the
+ * call sits at "connecting" forever. A TURN server relays the media in that
+ * case and is the difference between the feature working sometimes and working.
+ *
+ * Configure with VITE_TURN_URL / VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL.
+ */
+const TURN_URL = import.meta.env.VITE_TURN_URL?.trim();
+
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    ...(TURN_URL
+      ? [
+          {
+            urls: TURN_URL,
+            username: import.meta.env.VITE_TURN_USERNAME,
+            credential: import.meta.env.VITE_TURN_CREDENTIAL,
+          },
+        ]
+      : []),
   ],
 };
+
+if (!TURN_URL && import.meta.env.DEV) {
+  console.info(
+    "[VideoCall] No TURN server configured. Calls will work on the same " +
+      "network but may never connect across restrictive NATs. Set VITE_TURN_URL.",
+  );
+}
 
 function formatDuration(seconds) {
   const hours = Math.floor(seconds / 3600);
@@ -131,6 +158,7 @@ export default function VideoCall({
   onBack,
   roomId,
   roomName,
+  sessionId,
   sendVideoSignal,
   setVideoSignalListener,
 }) {
@@ -318,7 +346,34 @@ export default function VideoCall({
       }
 
       if (type === "video_offer") {
-        const peer = makePeer(fromSessionId, username || "Guest");
+        const existing = peersRef.current.get(fromSessionId);
+
+        // Glare: both sides joined at the same moment, so both sent an offer
+        // and both are sitting in have-local-offer. WebRTC cannot resolve this
+        // on its own — without a tie-break the call never connects.
+        //
+        // Perfect negotiation: the peer with the smaller session id is
+        // "polite" and gives way by rolling its offer back; the impolite one
+        // ignores the incoming offer and lets its own stand. Comparing ids
+        // makes both sides reach the same verdict with no extra signalling.
+        const collision = existing?.signalingState === "have-local-offer";
+
+        if (collision) {
+          const isPolite = String(sessionId ?? "") < String(fromSessionId);
+
+          if (!isPolite) {
+            return;
+          }
+
+          try {
+            await existing.setLocalDescription({ type: "rollback" });
+          } catch (error) {
+            console.error("[VideoCall] rollback failed:", error);
+            return;
+          }
+        }
+
+        const peer = collision ? existing : makePeer(fromSessionId, username || "Guest");
         try {
           await peer.setRemoteDescription(new RTCSessionDescription(payload));
           const answer = await peer.createAnswer();
@@ -336,7 +391,11 @@ export default function VideoCall({
 
       if (type === "video_answer") {
         const peer = peersRef.current.get(fromSessionId);
-        if (peer && peer.signalingState !== "stable") {
+        // An answer is only valid while we are waiting on one. The old check
+        // was "not stable", which also lets an answer through in
+        // have-remote-offer — setRemoteDescription then throws and the call
+        // dies with a console error instead of connecting.
+        if (peer && peer.signalingState === "have-local-offer") {
           try {
             await peer.setRemoteDescription(new RTCSessionDescription(payload));
           } catch (error) {

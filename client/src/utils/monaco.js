@@ -1,5 +1,16 @@
 import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
+
+// The language services — typescriptDefaults, cssDefaults and friends — used to
+// come with the package's main entry. monaco-editor 0.56 split them out, so a
+// bare `import * as monaco from "monaco-editor"` now yields an editor whose
+// `languages.typescript` is undefined, and configureLanguageDefaults() below
+// throws on mount. Importing the contributions registers them onto the same
+// monaco instance; each is a side-effect import with nothing to bind.
+import "monaco-editor/language/typescript/monaco.contribution";
+import "monaco-editor/language/css/monaco.contribution";
+import "monaco-editor/language/html/monaco.contribution";
+import "monaco-editor/language/json/monaco.contribution";
 // Worker entry points, addressed through the package's own subpath exports.
 // monaco-editor 0.56 added an exports map of `"./*": "./esm/vs/*.js"`, so the
 // old "monaco-editor/esm/vs/..." paths now expand to esm/vs/esm/vs/... — Rollup
@@ -112,25 +123,51 @@ function registerCompletionProvider(languageId) {
   });
 }
 
+/**
+ * The TypeScript language service, wherever this monaco build keeps it.
+ *
+ * monaco-editor 0.56 moved it: it used to hang off `languages.typescript`, and
+ * is now a top-level `typescript` export. Checking both keeps this working
+ * across the upgrade instead of throwing on whichever one is missing.
+ */
+function getTypeScriptApi() {
+  return monaco.typescript ?? monaco.languages?.typescript ?? null;
+}
+
 function configureLanguageDefaults() {
-  monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
-  monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true);
+  const typescriptApi = getTypeScriptApi();
+
+  // Editor autocomplete and diagnostics are a nicety. Losing them must not stop
+  // the room from opening — this file is imported for its side effects during
+  // mount, so anything thrown here blanks the whole page.
+  if (!typescriptApi?.javascriptDefaults) {
+    console.warn(
+      "monaco: TypeScript language service unavailable; editing works, " +
+        "IntelliSense and type diagnostics are off.",
+    );
+    return;
+  }
+
+  const { javascriptDefaults, typescriptDefaults } = typescriptApi;
+
+  javascriptDefaults.setEagerModelSync(true);
+  typescriptDefaults.setEagerModelSync(true);
 
   const compilerOptions = {
     allowJs: true,
     allowNonTsExtensions: true,
-    target: monaco.languages.typescript.ScriptTarget.ES2022,
-    module: monaco.languages.typescript.ModuleKind.ESNext,
-    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-    jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+    target: typescriptApi.ScriptTarget.ES2022,
+    module: typescriptApi.ModuleKind.ESNext,
+    moduleResolution: typescriptApi.ModuleResolutionKind.NodeJs,
+    jsx: typescriptApi.JsxEmit.ReactJSX,
     strict: false,
     noEmit: true,
     esModuleInterop: true,
     resolveJsonModule: true,
   };
 
-  monaco.languages.typescript.javascriptDefaults.setCompilerOptions(compilerOptions);
-  monaco.languages.typescript.typescriptDefaults.setCompilerOptions(compilerOptions);
+  javascriptDefaults.setCompilerOptions(compilerOptions);
+  typescriptDefaults.setCompilerOptions(compilerOptions);
 
   const diagnosticsOptions = {
     noSemanticValidation: false,
@@ -138,8 +175,8 @@ function configureLanguageDefaults() {
     onlyVisible: false,
   };
 
-  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(diagnosticsOptions);
-  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(diagnosticsOptions);
+  javascriptDefaults.setDiagnosticsOptions(diagnosticsOptions);
+  typescriptDefaults.setDiagnosticsOptions(diagnosticsOptions);
 }
 
 if (globalScope && !globalScope.__CODECHATTER_MONACO_READY__) {
@@ -165,8 +202,17 @@ if (globalScope && !globalScope.__CODECHATTER_MONACO_READY__) {
     },
   };
 
-  configureLanguageDefaults();
-  Object.keys(COMPLETION_SETS).forEach(registerCompletionProvider);
+  // Everything below is optional polish on top of a working editor. This module
+  // runs at import time, so an exception here escapes before React can render
+  // and takes the whole room down with a blank page — which is exactly what a
+  // monaco API move did. Hand the editor over even if the extras fail.
+  try {
+    configureLanguageDefaults();
+    Object.keys(COMPLETION_SETS).forEach(registerCompletionProvider);
+  } catch (error) {
+    console.error("monaco: language setup failed; the editor still works.", error);
+  }
+
   loader.config({ monaco });
   globalScope.__CODECHATTER_MONACO_READY__ = true;
 }

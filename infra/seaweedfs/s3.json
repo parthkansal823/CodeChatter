@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "codechatter",
+      "credentials": [{ "accessKey": "codechatter", "secretKey": "codechatter-dev" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

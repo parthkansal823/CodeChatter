@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from pycrdt import YMessageType
 
 try:
   from ..core.security import (
@@ -18,8 +19,15 @@ try:
     validate_websocket_origin,
   )
   from ..core.settings import logger, repository
+  from ..services.collab import (
+    docs as collab_docs,
+  )
+  from ..services.collab import (
+    handle_client_message,
+    send_initial_sync,
+  )
   from ..services.collaboration import collaboration_manager
-  from ..services.workspace_runtime import sync_workspace_to_disk
+  from ..services.workspace_runtime import sandbox_env, sync_workspace_to_disk
 except ImportError:
   from core.security import (
     build_cursor_payload,
@@ -31,8 +39,15 @@ except ImportError:
     validate_websocket_origin,
   )
   from core.settings import logger, repository
+  from services.collab import (
+    docs as collab_docs,
+  )
+  from services.collab import (
+    handle_client_message,
+    send_initial_sync,
+  )
   from services.collaboration import collaboration_manager
-  from services.workspace_runtime import sync_workspace_to_disk
+  from services.workspace_runtime import sandbox_env, sync_workspace_to_disk
 
 router = APIRouter()
 
@@ -423,12 +438,13 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
       import winpty
 
       git_bash = r"C:\Program Files\Git\bin\bash.exe"
+      shell_env = sandbox_env(workspace_dir)
       if terminal_shell == "bash" and os.path.exists(git_bash):
-        proc = winpty.PtyProcess.spawn([git_bash, "--login", "-i"], cwd=workspace_dir)
+        proc = winpty.PtyProcess.spawn([git_bash, "--login", "-i"], cwd=workspace_dir, env=shell_env)
       elif terminal_shell == "powershell":
-        proc = winpty.PtyProcess.spawn("powershell.exe", cwd=workspace_dir)
+        proc = winpty.PtyProcess.spawn("powershell.exe", cwd=workspace_dir, env=shell_env)
       else:
-        proc = winpty.PtyProcess.spawn("cmd.exe", cwd=workspace_dir)
+        proc = winpty.PtyProcess.spawn("cmd.exe", cwd=workspace_dir, env=shell_env)
 
       stop_event = asyncio.Event()
 
@@ -504,6 +520,7 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
         stdout=slave_fd,
         stderr=slave_fd,
         cwd=workspace_dir,
+        env=sandbox_env(workspace_dir),
         preexec_fn=os.setsid,
       )
       os.close(slave_fd)
@@ -565,3 +582,76 @@ async def terminal_websocket(websocket: WebSocket, room_id: str, token: str):
         await websocket.close()
       except Exception:
         pass
+
+
+@router.websocket("/api/rooms/{room_id}/crdt")
+async def crdt_websocket(websocket: WebSocket, room_id: str, token: str):
+  """Binary y-protocol channel for the shared editor document.
+
+  Deliberately separate from /collaborate, which stays as the JSON channel for
+  chat, presence and file-tree operations. Mixing a binary CRDT stream into a
+  JSON protocol would mean framing every delta as base64 inside an envelope —
+  more bytes, on the one path where bytes matter most.
+  """
+  normalized_room_id: str | None = None
+  room_doc = None
+
+  try:
+    validate_websocket_origin(websocket)
+    current_user = await asyncio.to_thread(get_current_user_from_token, token)
+    normalized_room_id = validate_room_id_value(room_id)
+    room = await asyncio.to_thread(repository.get_room_by_id, normalized_room_id)
+
+    if room is None:
+      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+    if not repository.user_can_access_room(current_user["id"], room):
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this room",
+      )
+
+    # Viewers may follow along but must not mutate the document.
+    can_edit = repository.user_can_edit_room(current_user["id"], room)
+
+    await websocket.accept()
+  except HTTPException as error:
+    logger.warning("CRDT WebSocket rejection: %s", error.detail)
+    try:
+      await websocket.close(code=1008, reason=str(error.detail))
+    except Exception:
+      pass
+    return
+  except Exception as error:
+    logger.exception("Unexpected error during CRDT handshake: %s", error)
+    try:
+      await websocket.close(code=1008)
+    except Exception:
+      pass
+    return
+
+  try:
+    room_doc = await collab_docs.acquire(normalized_room_id, seed_tree=room.get("workspace_tree"))
+    room_doc.sockets.add(websocket)
+    await send_initial_sync(room_doc, websocket)
+
+    while True:
+      message = await websocket.receive_bytes()
+
+      if not can_edit:
+        # Awareness (cursors) is still welcome from a viewer; document updates
+        # are not, and are dropped rather than answered with an error so a
+        # read-only client does not spin retrying.
+        if message and message[0] == YMessageType.AWARENESS:
+          await handle_client_message(room_doc, websocket, message)
+        continue
+
+      await handle_client_message(room_doc, websocket, message)
+  except WebSocketDisconnect:
+    pass
+  except Exception as error:  # noqa: BLE001 - log and close, never leak the room
+    logger.warning("CRDT WebSocket error in room %s: %s", normalized_room_id, error)
+  finally:
+    if room_doc is not None:
+      room_doc.sockets.discard(websocket)
+      await collab_docs.release(normalized_room_id)

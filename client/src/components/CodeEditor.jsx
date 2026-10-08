@@ -1,4 +1,5 @@
 import Editor from "@monaco-editor/react";
+import { MonacoBinding } from "y-monaco";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -39,6 +40,8 @@ export default function CodeEditor({
   selectedFileName,
   selectedFilePath,
   code = "",
+  crdtDoc = null,
+  crdtProvider = null,
   theme = "vs-dark",
   readOnly = false,
   onCodeChange,
@@ -49,6 +52,10 @@ export default function CodeEditor({
   const { preferences } = usePreferences();
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
+  const bindingRef = useRef(null);
+  // Only bind once the document has a path to bind to. Before that, and for a
+  // read-only viewer, the plain controlled editor is still the right thing.
+  const isCollaborative = Boolean(crdtDoc && crdtProvider && selectedFilePath && !readOnly);
   const remoteDecorationIdsRef = useRef([]);
   const remoteCursorStyleRef = useRef(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
@@ -97,6 +104,64 @@ export default function CodeEditor({
       // Ignore if monaco is not fully available yet
     }
   };
+
+  // Hand the buffer over to the CRDT.
+  //
+  // Once bound, an edit is applied to the local model first and travels as a
+  // delta — no request, no server round trip before the character appears. The
+  // binding is rebuilt when the file changes because each file is its own
+  // Y.Text; leaving the old one attached would write into the wrong document.
+  useEffect(() => {
+    if (!isEditorReady || !isCollaborative) {
+      return undefined;
+    }
+
+    const model = editorRef.current?.getModel();
+
+    if (!model) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let binding = null;
+
+    (async () => {
+      try {
+        const { getFileText } = await import("../utils/crdt");
+
+        if (cancelled) return;
+
+        const text = getFileText(crdtDoc, selectedFilePath);
+
+        // First writer seeds the document from what was loaded off disk.
+        // Guarding on length keeps a second client from appending a duplicate.
+        if (text.length === 0 && code) {
+          text.insert(0, code);
+        }
+
+        binding = new MonacoBinding(
+          text,
+          model,
+          new Set([editorRef.current]),
+          crdtProvider.awareness,
+        );
+        bindingRef.current = binding;
+      } catch (error) {
+        // Same reasoning as the provider: a failed binding leaves the editor on
+        // its ordinary controlled path instead of blanking the room.
+        console.error("Could not attach the shared document to this file.", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      binding?.destroy();
+      bindingRef.current = null;
+    };
+    // `code` is intentionally omitted: it seeds the document once, and
+    // re-running on every keystroke would tear the binding down mid-type.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditorReady, isCollaborative, crdtDoc, crdtProvider, selectedFilePath]);
 
   useEffect(() => {
     if (!editorRef.current || typeof window === "undefined") return undefined;
@@ -215,8 +280,8 @@ export default function CodeEditor({
             defaultLanguage={selectedLanguage}
             language={selectedLanguage}
             defaultValue={code}
-            value={code}
-            onChange={(value) => onCodeChange?.(value ?? "")}
+            value={isCollaborative ? undefined : code}
+            onChange={isCollaborative ? undefined : (value) => onCodeChange?.(value ?? "")}
             onMount={handleEditorMount}
             saveViewState
             keepCurrentModel

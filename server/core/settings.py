@@ -96,28 +96,18 @@ SMTP_TIMEOUT_SECONDS = float(os.getenv("SMTP_TIMEOUT_SECONDS", "5"))
 
 RUN_TIMEOUT_SECONDS = int(os.getenv("CODE_RUN_TIMEOUT_SECONDS", "15"))
 # ── AI assistant ──────────────────────────────────────────────────────────────
-# Two backends. "ollama" runs an open-weights model on this machine: no API key,
-# no per-token cost, no code leaving the network — which matters here because the
-# assistant is handed the user's source file as context. "gemini" is the hosted
-# fallback for machines that cannot spare the RAM.
-#
-# Default is ollama. If it is not running the request fails with instructions
-# rather than silently falling back, so you always know which one answered.
-AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").strip().lower()
-
+# Local only. The assistant is handed the user's source file as context, and
+# an open-weights model on this machine means that never leaves the network —
+# no API key, no per-token cost, no third party in the loop.
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 # qwen2.5-coder:7b is the strongest code model that still fits comfortably in
 # ~8 GB of RAM. Swap for a larger variant (14b/32b) if the machine allows.
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b").strip() or "qwen2.5-coder:7b"
 OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+# Ollama unloads an idle model after ~5 minutes; the reload costs several
+# seconds on the next question. "-1" pins it in memory for the process's life.
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "-1").strip() or "-1"
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
-GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
-GEMINI_API_BASE_URL = os.getenv(
-  "GEMINI_API_BASE_URL",
-  "https://generativelanguage.googleapis.com/v1beta",
-).rstrip("/")
 
 CLIENT_DIST_DIR = APP_DIR.parent / "client" / "dist"
 CLIENT_INDEX_FILE = CLIENT_DIST_DIR / "index.html"

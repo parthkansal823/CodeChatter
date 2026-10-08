@@ -1,0 +1,41 @@
+{
+  "name": "@codechatter/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./service-token": {
+      "types": "./dist/service-token.d.ts",
+      "default": "./dist/service-token.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "generate-schema": "auth generate --config src/cli-config.ts --output ../db/src/schema/auth.ts --yes && node scripts/postprocess-schema.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codechatter/db": "workspace:*",
+    "@node-rs/argon2": "2.2.1",
+    "better-auth": "1.7.5",
+    "ioredis": "^5",
+    "drizzle-orm": "0.45.3",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@codechatter/config": "workspace:*",
+    "@types/node": "^24",
+    "auth": "1.7.5",
+    "typescript": "6.0.3",
+    "vitest": "5.0.1"
+  }
+}

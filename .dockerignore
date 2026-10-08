@@ -15,3 +15,12 @@ server/__pycache__
 
 **/__pycache__
 *.pyc
+
+# v2 monorepo
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/.env
+**/.env.local
+spikes

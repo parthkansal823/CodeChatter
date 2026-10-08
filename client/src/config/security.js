@@ -62,7 +62,7 @@ export const API_ENDPOINTS = {
   INVITE_COLLABORATOR: `${API_BASE_URL}/api/collaborators/invite`,
 
   // AI
-  AI_ASSIST: `${API_BASE_URL}/api/ai/gemini`,
+  AI_ASSIST: `${API_BASE_URL}/api/ai/assist`,
 
   // MFA
   VERIFY_OTP: `${API_BASE_URL}/api/auth/verify-otp`,

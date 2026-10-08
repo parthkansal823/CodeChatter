@@ -19,6 +19,7 @@ server/ws-debug.log
 .env
 .env.local
 .env.*.local
+.env.production
 client/.env
 client/.env.local
 client/src/.env
@@ -52,6 +53,16 @@ server/data/*
 !server/data/.gitkeep
 !server/data/README.md
 
+# v2 monorepo build output and caches
+.next/
+.turbo/
+next-env.d.ts
+*.tsbuildinfo
+playwright-report/
+test-results/
+spikes/**/node_modules/
+spikes/**/dist/
+
 # Coverage / temp
 coverage/
 htmlcov/
@@ -66,3 +77,6 @@ temp/
 .trunk/tools/
 .trunk/plugins/
 .trunk/tmp/
+
+# Claude Code personal settings
+.claude/settings.local.json

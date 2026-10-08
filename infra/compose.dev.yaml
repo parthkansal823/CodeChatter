@@ -1,0 +1,42 @@
+# Local infrastructure for v2. The apps themselves run on the host with
+# `pnpm dev`; Caddy stitches them into one origin at http://localhost:8080 so
+# session cookies and every WebSocket are same-origin, exactly as in production.
+name: codechatter-dev
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: codechatter
+      POSTGRES_PASSWORD: codechatter
+      POSTGRES_DB: codechatter
+    ports: ["15432:5432"]
+    volumes: [pg-data:/var/lib/postgresql]
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "codechatter"], interval: 2s, retries: 30 }
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    ports: ["16379:6379"]
+
+  # Catches every email in dev (sign-up verification, resets, invites).
+  # UI: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025", "1025:1025"]
+
+  # S3-compatible object storage for dev (MinIO no longer publishes images).
+  # The apps use the AWS S3 SDK, so production can point at any S3 provider.
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -dir=/data
+    ports: ["8333:8333"]
+    volumes: ["seaweed-data:/data", "./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro"]
+
+  caddy:
+    image: caddy:2.11-alpine
+    ports: ["8080:8080"]
+    volumes: ["./caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+
+volumes:
+  pg-data:
+  seaweed-data:

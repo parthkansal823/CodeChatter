@@ -32,12 +32,12 @@ function RoomCardPreview() {
         { name: "web-app",      lang: "React",  color: "bg-info-500"   },
         { name: "api-service",  lang: "Go",     color: "bg-success-500"},
       ].map((r) => (
-        <div key={r.name} className="flex-1 rounded-xl border border-zinc-200 bg-white p-2.5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+        <div key={r.name} className="flex-1 rounded-xl border border-edge-subtle bg-white p-2.5 shadow-sm">
           <div className="mb-1.5 flex items-center gap-1.5">
             <div className={`h-2 w-2 rounded-full ${r.color}`} />
-            <p className="truncate text-[10px] font-semibold text-zinc-700 dark:text-zinc-200">{r.name}</p>
+            <p className="truncate text-[10px] font-semibold text-fg">{r.name}</p>
           </div>
-          <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">{r.lang}</span>
+          <span className="rounded-full bg-hovered px-1.5 py-0.5 text-[9px] text-fg-muted">{r.lang}</span>
         </div>
       ))}
     </div>
@@ -47,13 +47,13 @@ function RoomCardPreview() {
 function CreateRoomPreview() {
   return (
     <div className="flex flex-col gap-2 px-4">
-      <div className="rounded-lg border border-brand-300 bg-brand-50 p-2 dark:border-brand-500/40 dark:bg-brand-900/20">
-        <p className="text-[10px] font-semibold text-brand-600 dark:text-brand-300">Room Name</p>
-        <p className="text-xs text-zinc-400">my-awesome-project</p>
+      <div className="rounded-lg border border-brand-300 bg-brand-50 p-2">
+        <p className="text-[10px] font-semibold text-brand-600">Room Name</p>
+        <p className="text-xs text-fg-subtle">my-awesome-project</p>
       </div>
       <div className="grid grid-cols-3 gap-1.5">
         {["Python", "React", "Node.js", "Go", "Java", "Blank"].map((t) => (
-          <div key={t} className={`rounded-lg border px-2 py-1.5 text-center text-[10px] font-medium ${t === "Python" ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"}`}>
+          <div key={t} className={`rounded-lg border px-2 py-1.5 text-center text-[10px] font-medium ${t === "Python" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-edge-subtle text-fg-muted"}`}>
             {t}
           </div>
         ))}
@@ -65,18 +65,18 @@ function CreateRoomPreview() {
 function SharePreview() {
   return (
     <div className="flex flex-col items-center gap-3 px-4">
-      <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
-        <Share2 size={13} className="text-zinc-400" />
-        <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300">Share</span>
+      <div className="flex items-center gap-2 rounded-xl border border-edge-subtle bg-white px-3 py-2 shadow-sm">
+        <Share2 size={13} className="text-fg-subtle" />
+        <span className="text-[11px] font-medium text-fg-muted">Share</span>
       </div>
-      <div className="w-full rounded-xl border border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/60">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Invite Link</p>
-        <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="flex-1 truncate font-mono text-[10px] text-zinc-400">codechatter.app/room/abc…</p>
+      <div className="w-full rounded-xl border border-edge-subtle bg-hovered p-3">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">Invite Link</p>
+        <div className="flex items-center gap-2 rounded-lg border border-edge-subtle bg-white px-2 py-1">
+          <p className="flex-1 truncate font-mono text-[10px] text-fg-subtle">codechatter.app/room/abc…</p>
         </div>
         <div className="mt-2 flex gap-1.5">
           {["Dark", "Light"].map((t) => (
-            <div key={t} className={`flex-1 rounded-lg border py-1 text-center text-[10px] font-medium ${t === "Dark" ? "border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" : "border-zinc-200 text-zinc-500 dark:border-zinc-700"}`}>{t}</div>
+            <div key={t} className={`flex-1 rounded-lg border py-1 text-center text-[10px] font-medium ${t === "Dark" ? "border-brand-400 bg-brand-50 text-brand-700" : "border-edge-subtle text-fg-muted"}`}>{t}</div>
           ))}
         </div>
       </div>
@@ -86,11 +86,11 @@ function SharePreview() {
 
 function ToolsPreview() {
   const tools = [
-    { icon: MessageCircleMore, color: "text-success-400 bg-success-50 dark:bg-success-900/20", label: "Chat"      },
-    { icon: Bot,               color: "text-brand-400 bg-brand-50 dark:bg-brand-900/20",   label: "AI"        },
-    { icon: GitBranch,         color: "text-info-400 bg-info-50 dark:bg-info-900/20",         label: "Flowchart" },
-    { icon: SiGithub,            color: "text-zinc-500 bg-hovered",           label: "GitHub"    },
-    { icon: Timer,             color: "text-danger-400 bg-danger-50 dark:bg-danger-900/20",         label: "Pomodoro"  },
+    { icon: MessageCircleMore, color: "text-success-400 bg-success-500/15", label: "Chat"      },
+    { icon: Bot,               color: "text-brand-400 bg-brand-500/15",   label: "AI"        },
+    { icon: GitBranch,         color: "text-info-400 bg-info-500/15",         label: "Flowchart" },
+    { icon: SiGithub,            color: "text-fg-muted bg-hovered",           label: "GitHub"    },
+    { icon: Timer,             color: "text-danger-400 bg-danger-500/15",         label: "Pomodoro"  },
   ];
   return (
     <div className="flex items-center justify-center gap-3 px-2">
@@ -99,7 +99,7 @@ function ToolsPreview() {
           <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${color}`}>
             <Icon size={16} />
           </div>
-          <span className="text-[9px] text-zinc-400">{label}</span>
+          <span className="text-[9px] text-fg-subtle">{label}</span>
         </div>
       ))}
     </div>
@@ -108,17 +108,17 @@ function ToolsPreview() {
 
 function CodeEditorPreview() {
   return (
-    <div className="mx-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-900 font-mono text-[10px] leading-5 dark:border-zinc-700">
-      <div className="flex items-center gap-1.5 border-b border-zinc-700 bg-zinc-800 px-3 py-1.5">
+    <div className="mx-4 overflow-hidden rounded-xl border border-edge-subtle bg-panel font-mono text-[10px] leading-5">
+      <div className="flex items-center gap-1.5 border-b border-edge-subtle bg-panel px-3 py-1.5">
         <div className="h-2 w-2 rounded-full bg-danger-400" />
         <div className="h-2 w-2 rounded-full bg-warning-400" />
         <div className="h-2 w-2 rounded-full bg-success-400" />
-        <span className="ml-2 text-zinc-400">main.py</span>
+        <span className="ml-2 text-fg-subtle">main.py</span>
       </div>
       <div className="px-3 py-2">
-        <p><span className="text-brand-400">def</span> <span className="text-warning-300">greet</span><span className="text-zinc-300">(name):</span></p>
+        <p><span className="text-brand-400">def</span> <span className="text-warning-300">greet</span><span className="text-fg">(name):</span></p>
         <p className="pl-4"><span className="text-success-400">return</span> <span className="text-warning-300">"Hello, " + name</span></p>
-        <p className="mt-1"><span className="text-zinc-500"># Live collab — 2 online</span></p>
+        <p className="mt-1"><span className="text-fg-muted"># Live collab — 2 online</span></p>
       </div>
     </div>
   );
@@ -231,19 +231,19 @@ export default function OnboardingModal() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-canvas p-4 backdrop-blur-sm"
         >
           <Motion.div
             initial={{ opacity: 0, scale: 0.88, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 8 }}
             transition={SPRING}
-            className="relative w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+            className="relative w-full max-w-md overflow-hidden rounded-xl border border-edge-subtle bg-white shadow-2xl"
           >
             {/* Close */}
             <button
               onClick={dismiss}
-              className="absolute right-4 top-4 z-10 rounded-xl p-1.5 text-white/70 transition-colors hover:bg-zinc-800/60 hover:text-white"
+              className="absolute right-4 top-4 z-10 rounded-xl p-1.5 text-white/70 transition-colors hover:bg-selected hover:text-white"
             >
               <X size={16} />
             </button>
@@ -290,16 +290,16 @@ export default function OnboardingModal() {
 
                 {/* Tip */}
                 {current.tip && (
-                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-brand-50 px-3 py-2 dark:bg-brand-900/20">
+                  <div className="mx-6 mb-3 flex items-start gap-2 rounded-xl bg-brand-50 px-3 py-2">
                     <span className="mt-px text-brand-500">💡</span>
-                    <p className="text-[11px] leading-relaxed text-brand-700 dark:text-brand-300">{current.tip}</p>
+                    <p className="text-[11px] leading-relaxed text-brand-600">{current.tip}</p>
                   </div>
                 )}
               </Motion.div>
             </AnimatePresence>
 
             {/* Footer */}
-            <div className="flex items-center justify-between border-t border-zinc-100 px-6 py-4 dark:border-zinc-800">
+            <div className="flex items-center justify-between border-t border-edge-subtle px-6 py-4">
               {/* Progress dots */}
               <div className="flex items-center gap-1.5">
                 {HOME_STEPS.map((_, i) => (
@@ -317,7 +317,7 @@ export default function OnboardingModal() {
               <div className="flex items-center gap-2">
                 {step > 0 && (
                   <button onClick={() => setStep((s) => s - 1)}
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800">
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-fg-muted transition-colors hover:bg-hovered">
                     Back
                   </button>
                 )}

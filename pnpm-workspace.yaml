@@ -1,0 +1,35 @@
+# v1 (client/, server/) and throwaway spikes stay outside the workspace.
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "sandbox/agent"
+  - "tools/*"
+
+# pnpm blocks dependency build scripts by default; allow only known native
+# binaries (reviewed individually).
+allowBuilds:
+  esbuild: true
+  "@swc/core": true
+  unrs-resolver: true
+  # dockerode (apps/runner) pulls these in; their scripts only build optional
+  # native speed-ups for SSH Docker hosts and a version check. Not needed.
+  ssh2: false
+  cpu-features: false
+  protobufjs: false
+
+# pnpm holds back packages published too recently (supply-chain policy).
+# These exact versions were reviewed and pinned: @nestjs/cli 12.0.6 and the
+# Angular devkit it depends on for schematics; lucide-react icons.
+minimumReleaseAgeExclude:
+  - "@angular-devkit/core@22.2.0"
+  - "@angular-devkit/schematics-cli@22.2.0"
+  - "@angular-devkit/schematics@22.2.0"
+  - "@nestjs/cli@12.0.6"
+  - "lucide-react@1.48.0"
+  - monaco-languageclient@11.0.2
+  - vscode-ws-jsonrpc@4.0.2
+  - socket.io-client@4.8.4
+
+# Monaco runs on the VS Code API build (monaco-languageclient 11; ADR 0001).
+overrides:
+  monaco-editor: "npm:@codingame/monaco-vscode-editor-api@37.1.0"

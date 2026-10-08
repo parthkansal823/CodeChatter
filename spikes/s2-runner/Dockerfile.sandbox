@@ -1,0 +1,14 @@
+# Spike sandbox image: user code runs as uid 10001, the sync agent as 10002.
+# Both share group 10000 so the setgid workspace is writable by each, but
+# neither can signal or ptrace the other's processes.
+FROM python:3.12-slim
+RUN apt-get update && apt-get install --no-install-recommends -y tmux procps \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g 10000 ccshared \
+    && useradd -m -u 10001 -g 10000 ccuser \
+    && useradd -M -u 10002 -g 10000 -s /usr/sbin/nologin ccagent \
+    && mkdir -p /workspace && chown 10002:10000 /workspace && chmod 2775 /workspace
+COPY agent.py /opt/ccagent/agent.py
+USER 10002
+WORKDIR /workspace
+ENTRYPOINT ["python", "-u", "/opt/ccagent/agent.py"]

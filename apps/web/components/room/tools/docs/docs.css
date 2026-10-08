@@ -1,0 +1,259 @@
+/* Page content in the docs tool. Tokens only (app/globals.css); no colour literals. */
+
+.cc-doc-content {
+  outline: none;
+  min-height: 12rem;
+  padding-bottom: 2rem;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--foreground);
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.cc-doc-content > * + * {
+  margin-top: 0.5em;
+}
+
+.cc-doc-content h1,
+.cc-doc-content h2,
+.cc-doc-content h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.cc-doc-content h1 {
+  font-size: 1.6rem;
+  margin-top: 1.4em;
+}
+.cc-doc-content h2 {
+  font-size: 1.3rem;
+  margin-top: 1.3em;
+}
+.cc-doc-content h3 {
+  font-size: 1.1rem;
+  margin-top: 1.1em;
+}
+.cc-doc-content > :first-child {
+  margin-top: 0;
+}
+
+.cc-doc-content a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--muted-foreground);
+  text-underline-offset: 3px;
+}
+.cc-doc-content a:hover {
+  text-decoration-color: var(--foreground);
+}
+
+.cc-doc-content code {
+  font-family: var(--font-neon), ui-monospace, monospace;
+  font-size: 0.85em;
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: var(--muted);
+}
+
+.cc-doc-content pre {
+  font-family: var(--font-neon), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  overflow-x: auto;
+  white-space: pre;
+}
+.cc-doc-content pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.cc-doc-content blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+}
+
+.cc-doc-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+.cc-doc-content hr.ProseMirror-selectednode {
+  border-top-color: var(--ring);
+}
+
+.cc-doc-content ul,
+.cc-doc-content ol {
+  padding-left: 1.5rem;
+}
+.cc-doc-content ul {
+  list-style: disc;
+}
+.cc-doc-content ol {
+  list-style: decimal;
+}
+.cc-doc-content li > p {
+  margin: 0;
+}
+.cc-doc-content li + li {
+  margin-top: 0.15em;
+}
+
+/* To-do lists: checkbox beside the text, done items struck through. */
+.cc-doc-content ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+.cc-doc-content ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.cc-doc-content ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  margin-top: 0.3em;
+  user-select: none;
+}
+.cc-doc-content ul[data-type="taskList"] li > label input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+.cc-doc-content ul[data-type="taskList"] li > div {
+  flex: 1;
+  min-width: 0;
+}
+.cc-doc-content ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+/* Tables */
+.cc-doc-content .tableWrapper {
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+.cc-doc-content table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  font-size: 0.875rem;
+}
+.cc-doc-content th,
+.cc-doc-content td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  vertical-align: top;
+  position: relative;
+  min-width: 4rem;
+}
+.cc-doc-content th {
+  background: var(--panel);
+  font-weight: 600;
+  text-align: left;
+}
+.cc-doc-content td p,
+.cc-doc-content th p {
+  margin: 0;
+}
+.cc-doc-content .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--brand-muted);
+  pointer-events: none;
+}
+
+/* Callouts */
+.cc-doc-content .cc-callout {
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--foreground);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 0.6rem 0.9rem;
+}
+.cc-doc-content .cc-callout[data-kind="warning"] {
+  border-left-color: var(--warning);
+  background: color-mix(in oklch, var(--warning) 8%, var(--background));
+}
+.cc-doc-content .cc-callout > * + * {
+  margin-top: 0.4em;
+}
+
+/* [[Wiki links]] to pages and files. */
+.cc-wikilink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  cursor: pointer;
+  border-radius: 3px;
+  text-decoration: underline;
+  text-decoration-color: var(--muted-foreground);
+  text-underline-offset: 3px;
+}
+.cc-wikilink:hover {
+  text-decoration-color: var(--foreground);
+  background: var(--accent);
+}
+.cc-wikilink-icon {
+  width: 0.85em;
+  height: 0.85em;
+  align-self: center;
+  color: var(--muted-foreground);
+}
+.cc-wikilink.is-missing {
+  color: var(--muted-foreground);
+  text-decoration-style: dashed;
+}
+.ProseMirror-selectednode > .cc-wikilink,
+.cc-wikilink.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* Placeholder in the empty line with the caret. */
+.cc-doc-content .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.cc-doc-content .ProseMirror-gapcursor::after {
+  border-top-color: var(--foreground);
+}
+
+/* Other people's carets and selections, in their presence hue. */
+.cc-doc-caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid var(--caret);
+  word-break: normal;
+  pointer-events: none;
+}
+.cc-doc-caret-label {
+  position: absolute;
+  top: -1.35em;
+  left: -2px;
+  padding: 0 5px;
+  border-radius: 3px 3px 3px 0;
+  background: var(--caret-soft);
+  color: black;
+  font: 500 10.5px/15px var(--font-mona), system-ui, sans-serif;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  z-index: 10;
+}
+.cc-doc-selection {
+  background: color-mix(in oklch, var(--caret) 22%, transparent);
+}

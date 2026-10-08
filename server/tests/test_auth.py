@@ -119,7 +119,6 @@ def test_a_down_subsystem_names_itself_and_says_how_to_fix_it(client, monkeypatc
   async def unreachable():
     return {"reachable": False, "error": "connection refused", "models": []}
 
-  monkeypatch.setattr(auth_routes, "AI_PROVIDER", "ollama")
   monkeypatch.setattr(auth_routes, "check_ollama", unreachable)
 
   body = client.get("/api/health/full").json()

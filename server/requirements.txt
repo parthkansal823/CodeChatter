@@ -15,6 +15,7 @@ pycparser==3.0
 python-multipart==0.0.9
 pydantic==2.12.5
 pydantic_core==2.41.5
+pycrdt==0.14.2
 pymongo==4.15.3
 python-dotenv==1.2.2
 python-jose[cryptography]==3.3.0

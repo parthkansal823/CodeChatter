@@ -205,9 +205,6 @@ function OverviewPanel({
   accessRole,
   openTool,
 }) {
-  const canEdit = Boolean(room?.canEdit);
-  const canRun = Boolean(room?.canRun);
-  const canManage = Boolean(room?.canManage);
   const lastRunFailed = runResult?.status === "completed" && runResult?.exitCode !== 0;
   const lastRunLabel = runResult?.status === "running"
     ? "Running now"
@@ -225,135 +222,152 @@ function OverviewPanel({
         description={room?.name || "Current room summary"}
       />
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="rounded-xl border border-edge-subtle bg-panel p-4">
+      {/* Cards sit on bg-canvas against the panel's bg-panel. Both were
+          bg-panel before, so every card melted into the background and the
+          whole tool read as one flat sheet. */}
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        <section className="rounded-md border border-edge-subtle bg-canvas p-3">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-fg">{room?.name || "Workspace"}</p>
-              <p className="mt-1 text-xs text-fg-muted">
-                {room?.description || "Everything important in this room, in one place."}
-              </p>
-            </div>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
- liveConnected
- ?"bg-success-500/10 text-success-600"
-                : "bg-selected text-fg-muted  "
-            }`}>
+            <p className="min-w-0 truncate text-sm font-semibold text-fg">
+              {room?.name || "Workspace"}
+            </p>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                liveConnected
+                  ? "bg-success-500/15 text-success-600"
+                  : "bg-hovered text-fg-muted"
+              }`}
+            >
               {liveConnected ? "Live" : "Offline"}
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          {room?.description ? (
+            <p className="mt-1 text-xs leading-relaxed text-fg-muted">{room.description}</p>
+          ) : null}
+
+          <div className="mt-3 grid grid-cols-4 gap-2">
             {overviewStats.map((stat) => (
-              <div key={stat.label} className="rounded-lg border border-edge-subtle bg-panel px-3 py-2.5">
-                <p className="text-[11px] text-fg-muted">{stat.label}</p>
-                <p className="mt-1 text-sm font-semibold text-fg">{stat.value}</p>
+              <div key={stat.label} className="min-w-0">
+                <p className="text-sm font-semibold tabular-nums text-fg">{stat.value}</p>
+                <p className="truncate text-[10px] uppercase tracking-wider text-fg-subtle">
+                  {stat.label}
+                </p>
               </div>
             ))}
           </div>
-        </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {[
-            { label: "Your role", value: formatRoleLabel(accessRole) },
-            { label: "Can edit", value: canEdit ? "Yes" : "No" },
-            { label: "Can run", value: canRun ? "Yes" : "No" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-lg border border-edge-subtle bg-panel px-3 py-3">
-              <p className="text-[11px] text-fg-muted">{item.label}</p>
-              <p className="mt-1 text-sm font-semibold text-fg">{item.value}</p>
-            </div>
-          ))}
-        </div>
+          <div className="mt-3 flex items-center gap-2 border-t border-edge-subtle pt-3">
+            <span className="text-[11px] text-fg-subtle">Your role</span>
+            <span className="rounded-full bg-hovered px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+              {formatRoleLabel(accessRole)}
+            </span>
+          </div>
+        </section>
 
-        <div className="mt-4 rounded-xl border border-edge-subtle bg-panel p-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">Current file</p>
-          <p className="mt-2 truncate text-sm font-medium text-fg">
+        <section className="rounded-md border border-edge-subtle bg-canvas p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+            Current file
+          </p>
+          <p className="mt-1.5 truncate font-mono text-xs text-fg">
             {activeFilePath || "No file selected"}
           </p>
-          <p className="mt-1 text-xs text-fg-muted">
-            Open AI Help or Flowchart from here when you want help on the active file.
-          </p>
+
           <div className="mt-3 flex gap-2">
             <button
               type="button"
               onClick={() => openTool("ai")}
-              className="rounded-xl border border-edge-subtle px-3 py-2 text-xs font-semibold text-fg transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+              disabled={!activeFilePath}
+              className="flex-1 rounded-md border border-edge px-2.5 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Open AI Help
+              Ask AI
             </button>
             <button
               type="button"
               onClick={() => openTool("flowchart")}
-              className="rounded-xl border border-edge-subtle px-3 py-2 text-xs font-semibold text-fg transition hover:border-info-300 hover:bg-info-50 hover:text-info-700"
+              disabled={!activeFilePath}
+              className="flex-1 rounded-md border border-edge px-2.5 py-1.5 text-xs font-semibold text-fg transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Open Flowchart
+              Flowchart
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className="mt-4 rounded-xl border border-edge-subtle bg-panel p-4">
+        <section className="rounded-md border border-edge-subtle bg-canvas p-3">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">Run status</p>
-              <p className="mt-2 text-sm font-medium text-fg">{lastRunLabel}</p>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+                Run status
+              </p>
+              <p className="mt-1.5 truncate text-xs text-fg">{lastRunLabel}</p>
             </div>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
- runResult?.status ==="running"
-                ? "bg-warning-500/10 text-warning-600"
-                : lastRunFailed
-                  ? "bg-danger-500/10 text-danger-600"
-                  : "bg-success-500/10 text-success-600"
-            }`}>
-              {runResult?.status === "running" ? "Running" : lastRunFailed ? "Errors" : "Ready"}
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                runResult?.status === "running"
+                  ? "bg-warning-500/15 text-warning-600"
+                  : lastRunFailed
+                    ? "bg-danger-500/15 text-danger-600"
+                    : "bg-hovered text-fg-muted"
+              }`}
+            >
+              {runResult?.status === "running" ? "Running" : lastRunFailed ? "Errors" : "Idle"}
             </span>
           </div>
           {runResult?.filePath ? (
-            <p className="mt-2 truncate text-xs text-fg-muted">{runResult.filePath}</p>
+            <p className="mt-1.5 truncate font-mono text-[11px] text-fg-subtle">
+              {runResult.filePath}
+            </p>
           ) : null}
-        </div>
+        </section>
 
-        <div className="mt-4 rounded-xl border border-edge-subtle bg-panel p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-widest text-fg-subtle">People in room</p>
-            <span className="text-xs text-fg-muted">
-              {activeCollaborators.length > 0 ? `${activeCollaborators.length} active` : `${allCollaborators.length} members`}
+        <section className="rounded-md border border-edge-subtle bg-canvas p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+              People
+            </p>
+            <span className="text-[11px] text-fg-subtle">
+              {activeCollaborators.length > 0
+                ? `${activeCollaborators.length} online`
+                : `${allCollaborators.length} member${allCollaborators.length === 1 ? "" : "s"}`}
             </span>
           </div>
-          <div className="mt-3 space-y-2">
-            {allCollaborators.length === 0 ? (
-              <p className="text-xs text-fg-muted">No collaborators yet.</p>
-            ) : (
-              allCollaborators.slice(0, 6).map((collaborator) => {
-                const isLive = activeCollaborators.some((active) => active.userId === collaborator.id || active.id === collaborator.id);
+
+          {allCollaborators.length === 0 ? (
+            <p className="mt-2 text-xs text-fg-muted">No collaborators yet.</p>
+          ) : (
+            <div className="mt-2 space-y-0.5">
+              {allCollaborators.slice(0, 6).map((collaborator) => {
+                const isLive = activeCollaborators.some(
+                  (active) => active.userId === collaborator.id || active.id === collaborator.id,
+                );
+
                 return (
-                  <div key={collaborator.id} className="flex items-center gap-3 rounded-lg border border-edge-subtle bg-panel px-3 py-2">
-                    <div className="relative">
-                      <UserAvatar username={collaborator.username} hue={collaborator.avatarHue} size="xs" />
+                  <div
+                    key={collaborator.id}
+                    className="flex items-center gap-2.5 rounded-md px-1 py-1.5"
+                  >
+                    <div className="relative shrink-0">
+                      <UserAvatar
+                        username={collaborator.username}
+                        hue={collaborator.avatarHue}
+                        size="xs"
+                      />
                       {isLive ? (
-                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-panel bg-success-500" />
+                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-canvas bg-success-500" />
                       ) : null}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-semibold text-fg">{collaborator.username}</p>
-                      <p className="text-[11px] text-fg-muted">{formatRoleLabel(collaborator.accessRole || "editor")}</p>
-                    </div>
-                    {isLive ? <Radio size={12} className="text-success-500" /> : null}
+                    <p className="min-w-0 flex-1 truncate text-xs font-medium text-fg">
+                      {collaborator.username}
+                    </p>
+                    <span className="shrink-0 text-[10px] uppercase tracking-wider text-fg-subtle">
+                      {formatRoleLabel(collaborator.accessRole || "editor")}
+                    </span>
                   </div>
                 );
-              })
-            )}
-          </div>
-        </div>
-
-        {!canManage ? null : (
-          <div className="mt-4 rounded-xl border border-dashed border-edge bg-panel p-4">
-            <p className="text-sm font-semibold text-fg">Owner controls available</p>
-            <p className="mt-1 text-xs text-fg-muted">
-              You can review access requests and manage member roles from the workspace settings modal.
-            </p>
-          </div>
-        )}
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
@@ -372,6 +386,7 @@ export default function RightSidebar({
   runResult,
   activeCollaborators = [],
   liveConnected = false,
+  collaborationSessionId,
   fileCount = 0,
   folderCount = 0,
   openFileCount = 0,
@@ -593,6 +608,7 @@ export default function RightSidebar({
               onBack={closeTool}
               roomName={room?.name}
               collaborators={activeCollaborators}
+              sessionId={collaborationSessionId}
               sendVideoSignal={sendVideoSignal}
               setVideoSignalListener={setVideoSignalListener}
             />

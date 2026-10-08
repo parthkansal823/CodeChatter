@@ -1379,6 +1379,7 @@ export function useCodeRoomState({
     unreadChatMessagesCount,
     setUnreadChatMessagesCount,
     sendChatMessage,
+    collaborationSessionId,
     sendVideoSignal,
     setVideoSignalListener,
     handleSelectNode,

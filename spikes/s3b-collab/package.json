@@ -1,0 +1,12 @@
+{
+  "name": "spike-s3b-collab",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hocuspocus/extension-redis": "4.7.0",
+    "@hocuspocus/provider": "4.7.0",
+    "@hocuspocus/server": "4.7.0",
+    "postgres": "3.4.9",
+    "yjs": "13.6.33"
+  }
+}

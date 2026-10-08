@@ -1,0 +1,41 @@
+# Production edge: one HTTPS origin for the whole app, same routes as
+# Caddyfile.dev. Certificates for {$DOMAIN} are issued and renewed
+# automatically (Let's Encrypt), so ports 80 and 443 must reach this server.
+{
+	admin off
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(self), microphone=(self), display-capture=(self), geolocation=()"
+		-Server
+	}
+
+	# NestJS: REST, Better Auth, Socket.IO, terminal/LSP sockets
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+	handle /socket.io/* {
+		reverse_proxy api:4000
+	}
+	handle /ws/* {
+		reverse_proxy api:4000
+	}
+
+	# Hocuspocus (path prefix stripped)
+	handle_path /collab* {
+		reverse_proxy collab:4100
+	}
+
+	# Next.js
+	handle {
+		reverse_proxy web:3000
+	}
+}

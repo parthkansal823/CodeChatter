@@ -1260,14 +1260,17 @@ class MongoRepository:
         "message": "You already have a pending join request. The owner will let you in soon.",
       }
 
-    # Public rooms without approval requirement → direct join
+    # Public rooms without approval requirement → direct join, as a viewer.
+    # The role resolvers fall back to "editor" for participants with no
+    # recorded role, and editor unlocks Run and the terminal — far too much
+    # for someone who merely found the room in a public listing.
     if room_is_public and not room.get("require_join_approval", False):
       timestamp = self._utc_now()
       self._rooms.update_one(
         {"id": room_id},
         {
           "$addToSet": {"participant_ids": user_id},
-            "$set": {"updated_at": timestamp},
+            "$set": {"updated_at": timestamp, f"member_access_roles.{user_id}": "viewer"},
         },
       )
       updated_room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
@@ -1582,6 +1585,49 @@ class MongoRepository:
 
     self._rooms.delete_one({"id": room_id})
 
+  def replace_room_file_contents(self, room_id: str, files: dict[str, str]) -> None:
+    """Write CRDT file contents back into the stored tree, in place.
+
+    Only the `content` of existing file nodes is touched — ids, folders and
+    ordering are left alone, because the tree is also the thing the explorer
+    renders and a wholesale replacement would churn React keys on every save.
+    Paths with no matching node are ignored; file creation still goes through
+    update_room_workspace, which is where permissions are enforced.
+    """
+    self.initialize()
+    room = self._strip_mongo_id(self._rooms.find_one({"id": room_id}))
+
+    if room is None:
+      return
+
+    tree = room.get("workspace_tree") or []
+    changed = False
+
+    def walk(nodes: list[dict[str, Any]], prefix: str = "") -> None:
+      nonlocal changed
+
+      for node in nodes:
+        name = node.get("name") or ""
+        path = f"{prefix}{name}"
+
+        if node.get("type") == "folder":
+          walk(node.get("children") or [], f"{path}/")
+          continue
+
+        if path in files and node.get("content") != files[path]:
+          node["content"] = files[path]
+          changed = True
+
+    walk(tree)
+
+    if not changed:
+      return
+
+    self._rooms.update_one(
+      {"id": room_id},
+      {"$set": {"workspace_tree": tree, "updated_at": self._utc_now()}},
+    )
+
   def update_room_workspace(
     self,
     user_id: str,
@@ -1679,6 +1725,11 @@ class MongoRepository:
       for room in self._rooms.find({"is_public": True}).sort("updated_at", DESCENDING)
     ]
     serialized_rooms = [self.serialize_room(room) for room in rooms]
+    # This listing is served without authentication; never hand out addresses.
+    for serialized in serialized_rooms:
+      for collaborator in serialized.get("collaborators", []):
+        collaborator.pop("email", None)
+      serialized.pop("joinRequests", None)
     serialized_rooms.sort(
       key=lambda room: (room["participantCount"], room["updatedAt"] or ""),
       reverse=True,

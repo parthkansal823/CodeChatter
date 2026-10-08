@@ -1,0 +1,40 @@
+
+# --- CodeChatter sandbox ---------------------------------------------------
+# Group-writable files, so the sync agent can update what programs create.
+umask 002
+unset CDPATH
+
+# The terminal stays inside the workspace. cd explains instead of leaving;
+# cc-jail (Landlock) is what actually stops `ls /` and friends.
+cd() {
+  local target
+  case "$#:$1" in
+    0:) target=/workspace ;;
+    1:-) target=${OLDPWD:-/workspace} ;;
+    *) target=${!#} ;; # the last argument, after options like -P
+  esac
+  [ "$target" = "$HOME" ] && target=/workspace
+  local full
+  full=$(realpath -m -- "$target" 2>/dev/null)
+  case "$full" in
+    /workspace | /workspace/*) builtin cd -- "$full" && { [ "$1" != - ] || pwd; } ;;
+    *)
+      printf 'cd: %s is outside the workspace\n' "$target" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Where you are inside the workspace, then an orange prompt mark.
+__cc_dir() {
+  case "$PWD" in
+    /workspace) printf 'workspace' ;;
+    /workspace/*) printf 'workspace/%s' "${PWD#/workspace/}" ;;
+    *) printf '%s' "$PWD" ;;
+  esac
+}
+PS1='\[\e[2m\]$(__cc_dir)\[\e[0m\] \[\e[38;5;208m\]❯\[\e[0m\] '
+alias ls='ls --color=auto'
+alias ll='ls -lah --color=auto'
+alias grep='grep --color=auto'
+case "$PWD" in /workspace | /workspace/*) ;; *) builtin cd /workspace ;; esac

@@ -69,7 +69,7 @@ function Toggle({ checked, onChange }) {
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-[2px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 ${checked ? "bg-brand-600" : "bg-zinc-300 dark:bg-zinc-700"
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-[2px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/40 ${checked ? "bg-brand-600" : "bg-hovered"
         }`}
     >
       <span
@@ -88,10 +88,10 @@ function SectionTitle({ children }) {
 
 function Row({ label, hint, action }) {
   return (
-    <div className="flex flex-col items-start gap-3 border-b border-zinc-100 py-3.5 dark:border-zinc-800/60 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-col items-start gap-3 border-b border-edge-subtle py-3.5 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-fg">{label}</p>
-        {hint && <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-500">{hint}</p>}
+        {hint && <p className="mt-0.5 text-xs text-fg-muted">{hint}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
@@ -247,7 +247,7 @@ export default function Settings() {
               action={
                 <button
                   onClick={handleCopyUserId}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 hover:border-brand-300 hover:text-brand-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-edge-subtle bg-white px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:border-brand-300 hover:text-brand-700 transition-colors"
                 >
                   {copiedId ? <Check size={12} className="text-success-500" /> : <Copy size={12} />}
                   {copiedId ? "Copied!" : "Copy"}
@@ -268,19 +268,19 @@ export default function Settings() {
                         href={`https://github.com/${user.githubUsername}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        className="flex items-center gap-1 text-xs text-fg-muted hover:text-fg"
                       >
                         <ExternalLink size={11} />
                       </a>
                     )}
-                    <span className="flex items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 text-[11px] font-semibold text-success-700 dark:bg-success-500/10 dark:text-success-400">
+                    <span className="flex items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 text-[11px] font-semibold text-success-700">
                       <span className="h-1.5 w-1.5 rounded-full bg-success-500" />
                       Connected
                     </span>
                     <button
                       onClick={handleDisconnectGitHub}
                       disabled={disconnectingGitHub}
-                      className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition hover:border-danger-300 hover:text-danger-600 disabled:opacity-50 dark:border-zinc-700 dark:hover:border-danger-500/40 dark:hover:text-danger-400"
+                      className="flex items-center gap-1.5 rounded-lg border border-edge-subtle px-2.5 py-1.5 text-xs font-medium text-fg-muted transition hover:border-danger-300 hover:text-danger-600 disabled:opacity-50"
                     >
                       {disconnectingGitHub ? <Loader2 size={11} className="animate-spin" /> : <Link2Off size={11} />}
                       Disconnect
@@ -289,7 +289,7 @@ export default function Settings() {
                 ) : (
                   <button
                     onClick={handleConnectGitHub}
-                    className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-white dark:hover:bg-white dark:hover:text-zinc-900"
+                    className="flex items-center gap-1.5 rounded-lg border border-edge-subtle bg-white px-2.5 py-1.5 text-xs font-medium text-fg transition hover:border-edge-strong hover:bg-selected hover:text-white"
                   >
                     <SiGithub size={12} />
                     Connect GitHub
@@ -300,7 +300,7 @@ export default function Settings() {
 
             {/* GitHub features quick links (only if connected) */}
             {user?.githubConnected && (
-              <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <div className="rounded-xl border border-edge-subtle bg-hovered p-4">
                 <p className="mb-3 text-xs font-semibold text-fg">GitHub features available in the Code Editor</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
@@ -309,11 +309,11 @@ export default function Settings() {
                     { icon: "#", label: "Create gists",    desc: "Share code as a gist" },
                     { icon: "⊞", label: "Browse repos",    desc: "View all your repos" },
                   ].map((f) => (
-                    <div key={f.label} className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <div key={f.label} className="flex items-start gap-2 rounded-lg border border-edge-subtle bg-white p-2.5">
                       <span className="text-sm font-bold text-brand-500">{f.icon}</span>
                       <div>
                         <p className="text-xs font-semibold text-fg">{f.label}</p>
-                        <p className="text-[10px] text-zinc-500">{f.desc}</p>
+                        <p className="text-[10px] text-fg-muted">{f.desc}</p>
                       </div>
                     </div>
                   ))}
@@ -385,16 +385,16 @@ export default function Settings() {
                   type="button"
                   onClick={() => handleThemeChange(id)}
                   className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all ${preferences.theme === id
-                      ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-900/10"
-                      : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/50"
+                      ? "border-brand-500 bg-brand-50"
+                      : "border-edge-subtle bg-white hover:border-edge-strong"
                     }`}
                 >
-                  <div className={`rounded-lg p-2 ${preferences.theme === id ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"}`}>
+                  <div className={`rounded-lg p-2 ${preferences.theme === id ? "bg-brand-100 text-brand-700" : "bg-hovered text-fg-muted"}`}>
                     <Icon size={16} />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-fg">{label}</p>
-                    <p className="text-xs text-zinc-500">{desc}</p>
+                    <p className="text-xs text-fg-muted">{desc}</p>
                   </div>
                   {preferences.theme === id && (
                     <span className="mt-1 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">Active</span>
@@ -466,9 +466,9 @@ export default function Settings() {
             <SectionTitle>Keyboard Shortcuts</SectionTitle>
             <div className="space-y-1">
               {SHORTCUTS.map(([action, keys]) => (
-                <div key={action} className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors">
+                <div key={action} className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-hovered transition-colors">
                   <span className="text-sm text-fg">{action}</span>
-                  <kbd className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-1 font-mono text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                  <kbd className="rounded-md border border-edge-subtle bg-hovered px-2 py-1 font-mono text-[11px] text-fg-muted">
                     {keys}
                   </kbd>
                 </div>
@@ -487,7 +487,7 @@ export default function Settings() {
               action={
                 <button
                   onClick={() => { openHomeTutorial(); toast.success("Opening home tutorial…"); }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 dark:border-brand-600/40 dark:bg-brand-900/20 dark:text-brand-300 dark:hover:bg-brand-900/40"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100"
                 >
                   <RotateCcw size={12} /> Restart
                 </button>
@@ -503,7 +503,7 @@ export default function Settings() {
                     window.dispatchEvent(new CustomEvent("cc-open-room-tutorial"));
                     toast.success("Opening room tutorial…");
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 dark:border-brand-600/40 dark:bg-brand-900/20 dark:text-brand-300 dark:hover:bg-brand-900/40"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100"
                 >
                   <RotateCcw size={12} /> Restart
                 </button>
@@ -516,9 +516,9 @@ export default function Settings() {
         return (
           <div>
             <SectionTitle>Account Actions</SectionTitle>
-            <div className="rounded-xl border border-danger-200 bg-danger-50/50 p-5 dark:border-danger-900/50 dark:bg-danger-950/20">
-              <p className="mb-1 text-sm font-semibold text-danger-700 dark:text-danger-300">Danger Zone</p>
-              <p className="mb-4 text-xs text-danger-600 dark:text-danger-400">These actions are permanent and cannot be undone.</p>
+            <div className="rounded-xl border border-danger-200 bg-danger-50/50 p-5">
+              <p className="mb-1 text-sm font-semibold text-danger-600">Danger Zone</p>
+              <p className="mb-4 text-xs text-danger-600">These actions are permanent and cannot be undone.</p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button onClick={() => setShowLogoutConfirm(true)} variant="danger" className="flex-1">
                   <LogOut size={14} className="mr-2" /> Sign out
@@ -545,7 +545,7 @@ export default function Settings() {
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         {/* Page header */}
         <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-600 dark:text-brand-400">Settings</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand-600">Settings</p>
           <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-fg">Preferences</h1>
           <p className="mt-2 text-sm text-fg-muted">Manage your account, editor, and workspace settings.</p>
         </div>
@@ -561,7 +561,7 @@ export default function Settings() {
                   onClick={() => setActiveSection(id)}
                   className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${activeSection === id
                       ? "bg-brand-600 text-white shadow-sm"
-                      : "text-zinc-600 hover:bg-white hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                      : "text-fg-muted hover:bg-white hover:text-fg"
                     }`}
                 >
                   <Icon size={15} />
@@ -581,7 +581,7 @@ export default function Settings() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -8 }}
                 transition={{ duration: 0.15 }}
-                className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60"
+                className="rounded-lg border border-edge-subtle bg-white p-6 shadow-sm"
               >
                 {renderSection()}
               </Motion.div>

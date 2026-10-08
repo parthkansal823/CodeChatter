@@ -273,7 +273,7 @@ class RoomRunRequest(BaseModel):
     return value or ""
 
 
-class GeminiAssistRequest(BaseModel):
+class AssistRequest(BaseModel):
   prompt: str = Field(min_length=1, max_length=4000)
   roomId: str | None = Field(default=None, min_length=6, max_length=20)
   roomName: str | None = Field(default=None, max_length=80)

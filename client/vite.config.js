@@ -55,6 +55,21 @@ export default defineConfig({
   //           fires there.
   //
   // VITE_DOCKER is set by docker-compose.dev.yml.
+  resolve: {
+    alias: {
+      // y-monaco reaches for monaco's old internal path. monaco-editor 0.56
+      // added an exports map ("./*": "./esm/vs/*.js"), so that specifier now
+      // expands to esm/vs/esm/vs/... and Rolldown refuses it.
+      //
+      // Point it at the package root, NOT at editor.api: editor.api is the core
+      // editor only, and aliasing to it deduped the whole app onto a monaco
+      // without language contributions — monaco.languages.typescript came back
+      // undefined and the room white-screened. The root entry registers the
+      // languages and keeps one shared instance.
+      "monaco-editor/esm/vs/editor/editor.api.js": "monaco-editor",
+    },
+  },
+
   server: {
     host: Boolean(process.env.VITE_DOCKER),
     port: 5173,

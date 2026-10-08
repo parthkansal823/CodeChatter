@@ -1,0 +1,19 @@
+name: cc-s3b
+services:
+  valkey:
+    image: valkey/valkey:9-alpine
+  postgres:
+    image: postgres:18-alpine
+    environment: { POSTGRES_PASSWORD: spike, POSTGRES_DB: collab }
+    ports: ["55432:5432"]
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "postgres"], interval: 1s, retries: 30 }
+  a:
+    build: .
+    environment: { INSTANCE: a, DATABASE_URL: "postgres://postgres:spike@postgres:5432/collab" }
+    ports: ["8201:8000"]
+    depends_on: { postgres: { condition: service_healthy }, valkey: { condition: service_started } }
+  b:
+    build: .
+    environment: { INSTANCE: b, DATABASE_URL: "postgres://postgres:spike@postgres:5432/collab" }
+    ports: ["8202:8000"]
+    depends_on: { postgres: { condition: service_healthy }, valkey: { condition: service_started } }

@@ -1,0 +1,32 @@
+{
+  "name": "spike-s1b-next",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "start": "next start -p 4318",
+    "check": "node ../s1-editor/scripts/check.mjs http://localhost:4318/"
+  },
+  "dependencies": {
+    "@codingame/monaco-vscode-api": "37.1.0",
+    "@codingame/monaco-vscode-standalone-typescript-language-features": "37.1.0",
+    "@codingame/monaco-vscode-standalone-languages": "37.1.0",
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@37.1.0",
+    "monaco-languageclient": "11.0.2",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "vscode": "npm:@codingame/monaco-vscode-extension-api@37.1.0",
+    "y-monaco": "0.1.6",
+    "y-protocols": "1.0.7",
+    "yjs": "13.6.33"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@37.1.0"
+  }
+}

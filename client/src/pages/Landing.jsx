@@ -75,7 +75,7 @@ const PLATFORM_DETAILS = [
 // different hues carries no information and is the fastest way to make a product
 // look unfinished; status colours are reserved for actual status.
 const ICON_TILE =
-  "bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400";
+  "bg-brand-500/10 border border-brand-500/20 text-brand-600";
 
 // ─── Fake code for the hero mockup ───────────────────────────────────────────
 
@@ -90,7 +90,7 @@ const CODE = [
   [["","    "],["kw","return "],["fn","merge"],["","(left, right)"]],
 ];
 
-const TOKEN_COLOR = { kw:"text-brand-400", fn:"text-info-400", op:"text-warning-400", num:"text-warning-400", "":"text-zinc-300" };
+const TOKEN_COLOR = { kw:"text-brand-400", fn:"text-info-400", op:"text-warning-400", num:"text-warning-400", "":"text-fg" };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -112,30 +112,30 @@ function HeroMockup() {
   return (
     <div className="rounded-lg overflow-hidden border border-edge-subtle shadow-lg dark:shadow-lg">
       {/* Window chrome */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-zinc-100 dark:bg-[#14141f] border-b border-edge-subtle">
+      <div className="flex items-center gap-3 px-4 py-3 bg-hovered border-b border-edge-subtle">
         <span className="flex gap-1.5">
           <span className="w-3 h-3 rounded-full bg-danger-400" />
           <span className="w-3 h-3 rounded-full bg-warning-400" />
           <span className="w-3 h-3 rounded-full bg-success-400" />
         </span>
-        <span className="flex-1 text-center text-xs text-zinc-400 font-mono">
+        <span className="flex-1 text-center text-xs text-fg-subtle font-mono">
           merge_sort.py — CodeChatter
         </span>
         {/* Live avatars */}
         <span className="flex items-center gap-1.5">
           {[["P","#0078d4"],["N","#0067b8"],["K","#059669"]].map(([l,c]) => (
-            <span key={l} className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center border-2 border-zinc-100 dark:border-[#14141f]" style={{ background: c }}>{l}</span>
+            <span key={l} className="w-5 h-5 rounded-full text-white text-[9px] font-bold flex items-center justify-center border-2 border-edge-subtle" style={{ background: c }}>{l}</span>
           ))}
-          <span className="ml-1 text-[11px] text-zinc-400">3 online</span>
+          <span className="ml-1 text-[11px] text-fg-subtle">3 online</span>
         </span>
       </div>
 
       {/* Editor body — always dark like a real IDE */}
       <div className="bg-[#0d1117] flex text-sm font-mono">
         {/* Line numbers */}
-        <div className="w-10 py-4 pr-3 select-none text-right bg-[#0d1117] border-r border-zinc-800">
+        <div className="w-10 py-4 pr-3 select-none text-right bg-[#0d1117] border-r border-edge-subtle">
           {CODE.map((_, i) => (
-            <div key={i} className="h-6 leading-6 text-[11px] text-zinc-600">{i + 1}</div>
+            <div key={i} className="h-6 leading-6 text-[11px] text-fg-muted">{i + 1}</div>
           ))}
         </div>
 
@@ -179,7 +179,7 @@ export default function Landing({ theme, onThemeChange }) {
   const toggleTheme = () => onThemeChange(isDark ? "vs" : "vs-dark");
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#08080f] text-fg transition-colors duration-200">
+    <div className="min-h-screen bg-white text-fg transition-colors duration-200">
 
       {/* ── Dot-grid overlay ───────────────────────────────────────────────── */}
       <div className="pointer-events-none fixed inset-0 dark:hidden"
@@ -190,14 +190,14 @@ export default function Landing({ theme, onThemeChange }) {
       {/* ╔══════════════════════════════════════════════════════════════════╗ */}
       {/* ║  NAVBAR                                                          ║ */}
       {/* ╚══════════════════════════════════════════════════════════════════╝ */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-14 border-b border-zinc-200/70 dark:border-zinc-800 bg-white/80 dark:bg-[#08080f]/80 backdrop-blur-xl flex items-center">
+      <header className="fixed top-0 left-0 right-0 z-50 h-14 border-b border-edge-subtle bg-white/80/80 backdrop-blur-xl flex items-center">
         <div className="max-w-7xl mx-auto w-full px-5 flex items-center gap-4">
           <Link to="/"><BrandLogo size="sm" /></Link>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6 ml-8 text-[13.5px] font-medium">
             {[["Features","#features"],["Platform","#platform"],["How it works","#how-it-works"]].map(([label, href]) => (
-              <a key={label} href={href} className="text-fg-muted hover:text-zinc-900 dark:hover:text-white transition-colors">
+              <a key={label} href={href} className="text-fg-muted hover:text-fg transition-colors">
                 {label}
               </a>
             ))}
@@ -206,7 +206,7 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="flex items-center gap-2 ml-auto">
             {/* Theme toggle */}
             <button onClick={toggleTheme}
-              className="p-2 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
+              className="p-2 rounded-lg text-fg-subtle hover:text-fg hover:bg-hovered transition-all">
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
@@ -218,7 +218,7 @@ export default function Landing({ theme, onThemeChange }) {
             ) : (
               <>
                 <Link to="/auth"
-                  className="hidden sm:block px-3.5 py-1.5 rounded-lg text-[13.5px] font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
+                  className="hidden sm:block px-3.5 py-1.5 rounded-lg text-[13.5px] font-medium text-fg-muted hover:text-fg hover:bg-hovered transition-all">
                   Sign in
                 </Link>
                 <Link to="/auth?mode=signup"
@@ -230,7 +230,7 @@ export default function Landing({ theme, onThemeChange }) {
 
             {/* Mobile menu toggle */}
             <button onClick={() => setMobileOpen(v => !v)}
-              className="md:hidden p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
+              className="md:hidden p-2 rounded-lg text-fg-muted hover:bg-hovered transition-all">
               {mobileOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
@@ -238,15 +238,15 @@ export default function Landing({ theme, onThemeChange }) {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="absolute top-14 left-0 right-0 bg-white dark:bg-[#0d0d18] border-b border-edge-subtle px-5 py-4 flex flex-col gap-3 md:hidden">
+          <div className="absolute top-14 left-0 right-0 bg-white border-b border-edge-subtle px-5 py-4 flex flex-col gap-3 md:hidden">
             {[["Features","#features"],["Platform","#platform"],["How it works","#how-it-works"]].map(([label,href]) => (
               <a key={label} href={href} onClick={() => setMobileOpen(false)}
-                className="text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white">
+                className="text-sm font-medium text-fg-muted hover:text-fg">
                 {label}
               </a>
             ))}
             <hr className="border-edge-subtle" />
-            <Link to="/auth" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-zinc-600 dark:text-zinc-300">Sign in</Link>
+            <Link to="/auth" onClick={() => setMobileOpen(false)} className="text-sm font-medium text-fg-muted">Sign in</Link>
             <Link to="/auth?mode=signup" onClick={() => setMobileOpen(false)}
               className="text-center py-2 rounded-lg text-sm font-semibold text-white bg-accent hover:bg-accent-hover">
               Get started free
@@ -269,7 +269,7 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="max-w-[680px] mx-auto text-center mb-14">
             <Motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
               {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 mb-6 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-[12.5px] font-semibold">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 mb-6 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-600 text-[12.5px] font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
                 Now in open beta — free for all developers
               </div>
@@ -287,11 +287,11 @@ export default function Landing({ theme, onThemeChange }) {
 
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <Link to="/auth?mode=signup"
-                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-bold text-white text-[15px] bg-accent hover:bg-accent-hover transition-all ">
+                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-bold text-white text-[15px] bg-accent hover:bg-accent-hover transition-all">
                   Start for free <ArrowRight size={16} />
                 </Link>
                 <Link to="/auth"
-                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-[15px] text-zinc-700 dark:text-zinc-200 bg-hovered/60 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-edge-subtle transition-all">
+                  className="flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-[15px] text-fg bg-hovered/60 hover:bg-selected border border-edge-subtle transition-all">
                   Sign in
                 </Link>
               </div>
@@ -338,7 +338,7 @@ export default function Landing({ theme, onThemeChange }) {
       <section id="features" className="py-24 px-5">
         <div className="max-w-7xl mx-auto">
           <FadeUp className="text-center mb-14">
-            <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">Features</p>
+            <p className="text-[13px] font-bold text-brand-600 uppercase tracking-widest mb-3">Features</p>
             <h2 className="text-4xl font-extrabold tracking-tight">Everything in one workspace</h2>
             <p className="mt-4 text-fg-muted max-w-md mx-auto text-[15px] leading-relaxed">
               No more context-switching. Your entire dev workflow, right here.
@@ -351,7 +351,7 @@ export default function Landing({ theme, onThemeChange }) {
                 <Motion.div
                   whileHover={{ y: -3 }}
                   transition={{ duration: 0.2 }}
-                  className="group h-full rounded-lg border border-zinc-200 bg-zinc-50/80 p-6 transition-colors hover:border-brand-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-brand-500/40"
+                  className="group h-full rounded-lg border border-edge-subtle bg-hovered p-6 transition-colors hover:border-brand-300"
                 >
                   <div className={`mb-4 flex h-9 w-9 items-center justify-center rounded-xl ${ICON_TILE}`}>
                     <Icon size={16} />
@@ -371,7 +371,7 @@ export default function Landing({ theme, onThemeChange }) {
       <section id="platform" className="pb-24 px-5">
         <div className="max-w-7xl mx-auto">
           <FadeUp className="text-center mb-14">
-            <p className="text-[13px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-widest mb-3">Platform overview</p>
+            <p className="text-[13px] font-bold text-brand-600 uppercase tracking-widest mb-3">Platform overview</p>
             <h2 className="text-4xl font-extrabold tracking-tight">More than a login page</h2>
             <p className="mt-4 text-fg-muted max-w-2xl mx-auto text-[15px] leading-relaxed">
               CodeChatter gives your team a full website experience from the start: a clear product page, guided authentication, and dedicated collaborative rooms for actual work.
@@ -381,8 +381,8 @@ export default function Landing({ theme, onThemeChange }) {
           <div className="grid gap-5 lg:grid-cols-2">
             {PLATFORM_DETAILS.map(({ icon: Icon, title, desc }, i) => (
               <FadeUp key={title} delay={i * 0.08}>
-                <div className="h-full rounded-lg border border-zinc-200 bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-                  <div className="w-10 h-10 rounded-xl border border-brand-500/20 bg-brand-500/10 text-brand-500 dark:text-brand-300 flex items-center justify-center mb-4">
+                <div className="h-full rounded-lg border border-edge-subtle bg-white/80 p-6 transition-all hover:-translate-y-1 hover:shadow-lg">
+                  <div className="w-10 h-10 rounded-xl border border-brand-500/20 bg-brand-500/10 text-brand-500 flex items-center justify-center mb-4">
                     <Icon size={18} />
                   </div>
                   <h3 className="text-lg font-semibold text-fg">{title}</h3>
@@ -465,7 +465,7 @@ export default function Landing({ theme, onThemeChange }) {
             Join thousands of developers using CodeChatter to collaborate faster and ship better software.
           </p>
           <Link to="/auth?mode=signup"
-            className="inline-flex items-center gap-2.5 px-9 py-4 rounded-xl font-bold text-white text-[15px] bg-accent hover:bg-accent-hover transition-all ">
+            className="inline-flex items-center gap-2.5 px-9 py-4 rounded-xl font-bold text-white text-[15px] bg-accent hover:bg-accent-hover transition-all">
             Create free account <ArrowRight size={18} />
           </Link>
           <p className="mt-4 text-[12px] text-fg-subtle">
@@ -480,13 +480,13 @@ export default function Landing({ theme, onThemeChange }) {
       <footer className="border-t border-edge-subtle py-10 px-5">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-5">
           <BrandLogo size="sm" />
-          <p className="text-[13px] text-zinc-400 text-center">
+          <p className="text-[13px] text-fg-subtle text-center">
             © {new Date().getFullYear()} CodeChatter — built for developers, by developers.
           </p>
-          <div className="flex gap-6 text-[13px] text-zinc-400">
-            <a href="#features" className="hover:text-zinc-700 dark:hover:text-white transition-colors">Features</a>
-            <a href="#platform" className="hover:text-zinc-700 dark:hover:text-white transition-colors">Platform</a>
-            <Link to="/auth" className="hover:text-zinc-700 dark:hover:text-white transition-colors">Auth</Link>
+          <div className="flex gap-6 text-[13px] text-fg-subtle">
+            <a href="#features" className="hover:text-fg transition-colors">Features</a>
+            <a href="#platform" className="hover:text-fg transition-colors">Platform</a>
+            <Link to="/auth" className="hover:text-fg transition-colors">Auth</Link>
           </div>
         </div>
       </footer>

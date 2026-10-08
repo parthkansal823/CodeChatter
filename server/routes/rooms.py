@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 try:
   from ..core.schemas import (
-    GeminiAssistRequest,
+    AssistRequest,
     RoomCreateRequest,
     RoomJoinRequest,
     RoomJoinRequestApprovalRequest,
@@ -30,17 +30,17 @@ try:
   from ..core.settings import (
     ALLOWED_UPLOAD_EXTENSIONS,
     DEFAULT_FRONTEND_URL,
-    GEMINI_MODEL,
+    OLLAMA_MODEL,
     MAX_UPLOAD_BYTES,
     UPLOADS_DIR,
     repository,
   )
-  from ..services.ai import build_gemini_prompt, request_ai_completion
+  from ..services.ai import build_assistant_prompt, request_ai_completion
   from ..services.email import send_room_share_email
   from ..services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 except ImportError:
   from core.schemas import (
-    GeminiAssistRequest,
+    AssistRequest,
     RoomCreateRequest,
     RoomJoinRequest,
     RoomJoinRequestApprovalRequest,
@@ -62,12 +62,12 @@ except ImportError:
   from core.settings import (
     ALLOWED_UPLOAD_EXTENSIONS,
     DEFAULT_FRONTEND_URL,
-    GEMINI_MODEL,
+    OLLAMA_MODEL,
     MAX_UPLOAD_BYTES,
     UPLOADS_DIR,
     repository,
   )
-  from services.ai import build_gemini_prompt, request_ai_completion
+  from services.ai import build_assistant_prompt, request_ai_completion
   from services.email import send_room_share_email
   from services.workspace_runtime import clear_room_workspace_snapshot, execute_code_snippet, execute_workspace_file
 
@@ -331,9 +331,9 @@ def run_snippet(
   return result
 
 
-@router.post("/api/ai/gemini")
-async def assist_with_gemini(
-  payload: GeminiAssistRequest,
+@router.post("/api/ai/assist")
+async def assist(
+  payload: AssistRequest,
   current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
   enforce_rate_limit(
@@ -366,7 +366,7 @@ async def assist_with_gemini(
       detail=str(error),
     ) from error
 
-  prompt = build_gemini_prompt(
+  prompt = build_assistant_prompt(
     payload,
     current_user=current_user,
     active_file_path=active_file_path,
@@ -375,8 +375,8 @@ async def assist_with_gemini(
 
   return {
     "answer": answer,
-    "source": "gemini",
-    "model": GEMINI_MODEL,
+    "source": "local",
+    "model": OLLAMA_MODEL,
   }
 
 

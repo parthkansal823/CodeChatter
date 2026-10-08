@@ -1,0 +1,138 @@
+# Production stack for one Linux server with Docker (see docs/deploy.md).
+# Caddy terminates HTTPS for $DOMAIN and puts every service on that one origin,
+# exactly like the dev setup at http://localhost:8080.
+#
+#   docker compose --env-file infra/.env.production -f infra/compose.yaml up -d --build
+#
+# Only Caddy publishes ports. Postgres and Valkey are reachable from the app
+# containers alone.
+name: codechatter
+
+x-build: &build
+  context: ..
+  dockerfile: infra/docker/app.Dockerfile
+
+x-app: &app
+  restart: unless-stopped
+  init: true
+  logging:
+    driver: local
+    options: { max-size: 20m, max-file: "5" }
+
+x-server-env: &server-env
+  NODE_ENV: production
+  APP_URL: https://${DOMAIN:?set DOMAIN in infra/.env.production}
+  EXTRA_ORIGINS: ${EXTRA_ORIGINS:-}
+  DATABASE_URL: postgres://codechatter:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/codechatter
+  VALKEY_URL: redis://valkey:6379
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+  SERVICE_SECRET: ${SERVICE_SECRET:?set SERVICE_SECRET}
+
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web: { condition: service_healthy }
+      api: { condition: service_healthy }
+      collab: { condition: service_healthy }
+
+  web:
+    <<: *app
+    build: { <<: *build, target: web }
+    environment:
+      API_INTERNAL_URL: http://api:4000
+
+  api:
+    <<: *app
+    build: { <<: *build, target: api }
+    environment:
+      <<: *server-env
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      RUNNER_URL: http://runner:4200
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      valkey: { condition: service_healthy }
+
+  collab:
+    <<: *app
+    build: { <<: *build, target: collab }
+    environment:
+      <<: *server-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      valkey: { condition: service_healthy }
+
+  # Run button and terminals: one sandbox container per room (ADR 0003). The
+  # only service with the Docker socket; reachable only by the API.
+  runner:
+    <<: *app
+    build: { <<: *build, target: runner }
+    environment:
+      NODE_ENV: production
+      SERVICE_SECRET: ${SERVICE_SECRET:?set SERVICE_SECRET}
+      COLLAB_INTERNAL_URL: ws://collab:4100
+      SANDBOX_IMAGE: codechatter-sandbox:latest
+      SANDBOX_MEMORY_MB: ${SANDBOX_MEMORY_MB:-768}
+      SANDBOX_CPUS: ${SANDBOX_CPUS:-1}
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    depends_on:
+      collab: { condition: service_healthy }
+      sandbox-image: { condition: service_completed_successfully }
+
+  # Builds the sandbox image (tagged for the runner), then exits.
+  sandbox-image:
+    build: { context: ../sandbox, dockerfile: image/Dockerfile }
+    image: codechatter-sandbox:latest
+    entrypoint: ["true"]
+    restart: "no"
+    network_mode: none
+
+  # Runs on every `up` and exits; already-applied migrations are skipped.
+  migrate:
+    build: { <<: *build, target: migrate }
+    restart: "no"
+    environment:
+      DATABASE_URL: postgres://codechatter:${POSTGRES_PASSWORD}@postgres:5432/codechatter
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: codechatter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: codechatter
+    volumes: [pg-data:/var/lib/postgresql]
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "codechatter"], interval: 5s, retries: 30 }
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    restart: unless-stopped
+    # Append-only file: rate limits and presence survive a restart.
+    command: ["valkey-server", "--appendonly", "yes"]
+    volumes: [valkey-data:/data]
+    healthcheck: { test: ["CMD", "valkey-cli", "ping"], interval: 5s, retries: 30 }
+
+volumes:
+  caddy-data:
+  caddy-config:
+  pg-data:
+  valkey-data:

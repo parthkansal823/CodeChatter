@@ -1,0 +1,32 @@
+{
+  "includeGitInstructions": false,
+  "disableClaudeAiConnectors": true,
+  "bashOutputMaxChars": 12000,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-shell.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking house rules"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-edited-file.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
