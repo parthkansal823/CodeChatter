@@ -1,6 +1,6 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { JudgeInput, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
-import { Inject, Injectable } from "@nestjs/common";
+import type { DatabaseKind, DatabaseStatus, JudgeInput, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
 import { ENV } from "../infra/tokens.js";
@@ -83,6 +83,35 @@ export class RunnerClient {
 
   async restart(roomId: string, user: RunnerUser): Promise<void> {
     const response = await this.call(`/rooms/${roomId}/sandbox/restart`, { method: "POST", headers: this.headers(roomId, user), body: "{}" });
+    if (!response.ok) throw new RunnerUnavailableError();
+  }
+
+  /** Let the room's sandbox reach package registries for `minutes` (ADR 0007). */
+  async allowInstalls(roomId: string, user: RunnerUser, minutes: number): Promise<NonNullable<SandboxStatus["installs"]>> {
+    const response = await this.call(`/rooms/${roomId}/sandbox/installs`, { method: "PUT", headers: this.headers(roomId, user), body: JSON.stringify({ minutes }) });
+    // The runner explains a proxy that can't start; pass that on.
+    if (response.status === 503) throw new ServiceUnavailableException(((await response.json().catch(() => ({}))) as { error?: string }).error);
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as NonNullable<SandboxStatus["installs"]>;
+  }
+
+  /** The room's databases, with their connections (the caller decides who sees those). */
+  async databases(roomId: string, user: RunnerUser): Promise<DatabaseStatus[]> {
+    const response = await this.call(`/rooms/${roomId}/databases`, { headers: this.headers(roomId, user) });
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as DatabaseStatus[];
+  }
+
+  /** Start, stop or delete one of the room's databases; answers with all of them. */
+  async changeDatabase(roomId: string, user: RunnerUser, kind: DatabaseKind, change: "start" | "stop" | "delete"): Promise<DatabaseStatus[]> {
+    const path = `/rooms/${roomId}/databases/${kind}${change === "stop" ? "/stop" : ""}`;
+    const response = await this.call(path, { method: change === "delete" ? "DELETE" : "POST", headers: this.headers(roomId, user), ...(change !== "delete" && { body: "{}" }) });
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as DatabaseStatus[];
+  }
+
+  async stopInstalls(roomId: string, user: RunnerUser): Promise<void> {
+    const response = await this.call(`/rooms/${roomId}/sandbox/installs`, { method: "DELETE", headers: this.headers(roomId, user) });
     if (!response.ok) throw new RunnerUnavailableError();
   }
 

@@ -98,8 +98,16 @@ export function XtermView({ onReady, onData, onResize, className, label }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The theme provider is a parent, so its effect (which switches the class on <html>) runs after
+  // this component's: reading colours on `resolvedTheme` got the old theme's. Follow the class itself.
   useEffect(() => {
-    if (terminal.current) terminal.current.options.theme = terminalTheme();
+    const recolour = () => {
+      if (terminal.current) terminal.current.options.theme = terminalTheme();
+    };
+    recolour();
+    const observer = new MutationObserver(recolour);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    return () => observer.disconnect();
   }, [resolvedTheme]);
 
   return <div ref={host} className={cn("h-full w-full overflow-hidden px-2 pt-1", className)} />;

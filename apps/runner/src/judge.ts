@@ -1,7 +1,7 @@
-import { runnableLanguage, type JudgeCase, type JudgeEvent } from "@codechatter/contracts";
+import type { JudgeCase, JudgeEvent } from "@codechatter/contracts";
 import { PassThrough } from "node:stream";
 
-import { JAIL } from "./plans.js";
+import { JAIL, judgeStepsFor } from "./plans.js";
 import type { Sandbox } from "./sandbox.js";
 
 const MAX_OUTPUT = 64 * 1024;
@@ -13,26 +13,8 @@ const MAX_OUTPUT = 64 * 1024;
  */
 export type JudgePlan = { build?: string; run: string };
 
-export function judgePlanFor(path: string): JudgePlan | null {
-  switch (runnableLanguage(path)?.language) {
-    case "python":
-      return { run: 'python3 -u "$1"' };
-    case "javascript":
-      return { run: 'node "$1"' };
-    case "typescript":
-      return { run: 'node --experimental-transform-types --disable-warning=ExperimentalWarning "$1"' };
-    case "java":
-      return { run: 'java "$1"' };
-    case "shell":
-      return { run: 'bash "$1"' };
-    case "c":
-      return { build: 'gcc -std=c17 -O2 -o /tmp/cc-judge "$1" -lm', run: "/tmp/cc-judge" };
-    case "cpp":
-      return { build: 'g++ -std=c++20 -O2 -o /tmp/cc-judge "$1"', run: "/tmp/cc-judge" };
-    default:
-      return null;
-  }
-}
+/** Same languages and commands as Run (plans.ts), with the judge's own binary. */
+export const judgePlanFor = (path: string): JudgePlan | null => judgeStepsFor(path);
 
 /** Compare like online judges do: trailing spaces on each line and trailing blank lines don't matter. */
 export function normalizeOutput(text: string): string {

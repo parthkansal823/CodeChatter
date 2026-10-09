@@ -10,15 +10,25 @@ import { cn } from "@/lib/utils";
 
 type Option = { id: string; label: string; cost: string; steps: string[]; env: string };
 
-// Free first: the server owner may not want to pay for an API.
-const OPTIONS: Option[] = [
-  {
+/** Ollama first: free and private. When it already runs on the server, its models are offered. */
+function ollamaOption(local: AiStatus["ollama"]): Option {
+  const models = local?.models ?? [];
+  const steps = !local
+    ? ["Install Ollama from ollama.com.", "Run: ollama pull qwen2.5-coder", "Keep Ollama running while you use the AI."]
+    : models.length > 0
+      ? [`Ollama is running on this server with ${models.join(", ")}. Any of them can be AI_MODEL.`]
+      : ["Ollama is running on this server but has no models yet. Run: ollama pull qwen2.5-coder"];
+  return {
     id: "ollama",
     label: "Ollama",
-    cost: "Free, runs on your computer",
-    steps: ["Install Ollama from ollama.com.", "Run: ollama pull llama3.2", "Keep Ollama running while you use the AI."],
-    env: "AI_PROVIDER=openai\nOPENAI_BASE_URL=http://localhost:11434/v1\nAI_MODEL=llama3.2\nAI_VISION=false",
-  },
+    cost: local ? "Free, already running here" : "Free, runs on your computer",
+    steps,
+    env: `AI_PROVIDER=ollama\nAI_MODEL=${models[0] ?? "qwen2.5-coder"}\n# Only if the API runs in Docker:\n# OLLAMA_URL=http://host.docker.internal:11434`,
+  };
+}
+
+// Free first: the server owner may not want to pay for an API.
+const HOSTED: Option[] = [
   {
     id: "groq",
     label: "Groq",
@@ -51,9 +61,10 @@ const OPTIONS: Option[] = [
 
 /** Shown instead of the chat while the server has no AI provider. */
 export function SetupPanel({ status }: { status: AiStatus }) {
-  const [chosen, setChosen] = useState(OPTIONS[0]!.id);
+  const options = [ollamaOption(status.ollama), ...HOSTED];
+  const [chosen, setChosen] = useState(options[0]!.id);
   const [copied, setCopied] = useState(false);
-  const option = OPTIONS.find((o) => o.id === chosen) ?? OPTIONS[0]!;
+  const option = options.find((o) => o.id === chosen) ?? options[0]!;
 
   const copy = async () => {
     if (!(await copyText(option.env))) return;
@@ -73,7 +84,7 @@ export function SetupPanel({ status }: { status: AiStatus }) {
       {status.problem && <p className="mt-2 rounded-md border bg-background px-2.5 py-2 text-xs">{status.problem}</p>}
 
       <div role="group" aria-label="Provider" className="mt-4 grid gap-1">
-        {OPTIONS.map((o) => (
+        {options.map((o) => (
           <button
             key={o.id}
             type="button"

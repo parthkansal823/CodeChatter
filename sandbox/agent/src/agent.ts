@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 
 import type { AgentEvent, AgentOp, TunnelOp } from "@codechatter/contracts";
 
+import { startRelay } from "./relay.js";
 import { Tunnels, watchPorts } from "./tunnel.js";
 import { TreeWatcher } from "./watcher.js";
 import { Workspace } from "./workspace.js";
@@ -62,6 +63,7 @@ const tunnels = new Tunnels(emit);
 await watcher.watchTree();
 emit({ ev: "ready", pid: process.pid, uid: process.getuid?.() ?? -1 });
 watchPorts(emit);
+startRelay();
 
 // Ops run strictly in order: a delete sent after a write must land after it.
 let queue: Promise<void> = Promise.resolve();

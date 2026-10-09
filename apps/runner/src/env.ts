@@ -21,6 +21,15 @@ const Env = z.object({
   SANDBOX_MEMORY_MB: z.coerce.number().int().min(128).default(768),
   SANDBOX_CPUS: z.coerce.number().positive().default(1),
   SANDBOX_PIDS: z.coerce.number().int().min(32).default(256),
+  /**
+   * Each room's private network is a /26 of this range (1,024 rooms in a /16). Room
+   * networks have no address on the host, so the range only has to stay clear of other
+   * Docker networks.
+   */
+  SANDBOX_SUBNET: z
+    .string()
+    .regex(/^(\d{1,3}\.){3}\d{1,3}\/(8|9|1\d|2[0-6])$/, "SANDBOX_SUBNET must be an IPv4 range of /26 or larger, like 10.213.0.0/16")
+    .default("10.213.0.0/16"),
   /** Stop a room's container after this long with no run and no open terminal. */
   SANDBOX_IDLE_MINUTES: z.coerce.number().positive().default(15),
   RUN_TIMEOUT_MINUTES: z.coerce.number().positive().default(30),

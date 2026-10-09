@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 
 import { fontOf, freehandPath, linearPaths, rotationTransform, STICKY_TEXT, textFrame } from "./draw";
 import type { Editor } from "./editor";
-import { useAtom, useChildIds, useEditor, useShape } from "./hooks";
+import { useAtom, useAtomSelector, useChildIds, useEditor, useShape } from "./hooks";
 import { measureAtom } from "./measure";
 import type { Shape } from "./shape";
 import { alignX, layoutText, lineHeight } from "./text-layout";
@@ -36,12 +36,14 @@ function useIsEditing(editor: Editor, id: string) {
 function ShapeNode({ id, parentLocked }: { id: string; parentLocked: boolean }) {
   const editor = useEditor();
   const shape = useShape(editor, id);
+  // The eraser has touched it: faint until the pointer lifts and it goes.
+  const erasing = useAtomSelector(editor.erasing, (doomed) => doomed.has(id));
   if (!shape || shape.hidden) return null;
   const locked = parentLocked || shape.locked;
   return (
     <g
       data-shape-id={shape.id}
-      opacity={shape.opacity < 1 ? shape.opacity : undefined}
+      opacity={erasing ? 0.2 : shape.opacity < 1 ? shape.opacity : undefined}
       transform={rotationTransform(shape)}
     >
       <ShapeBody shape={shape} locked={locked} />

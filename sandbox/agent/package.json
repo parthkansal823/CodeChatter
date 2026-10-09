@@ -5,7 +5,7 @@
   "type": "module",
   "files": ["dist"],
   "scripts": {
-    "build": "esbuild src/agent.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/agent.mjs",
+    "build": "esbuild src/agent.ts src/egress.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --out-extension:.js=.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

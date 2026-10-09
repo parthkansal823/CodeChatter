@@ -48,6 +48,31 @@ const bars = await page.evaluate(() => {
 });
 check("noStrayScrollbars", bars.length === 0, bars.join(" | "));
 
+// The terminal follows the theme: light page, light terminal; switch, and both are dark (it once lagged a switch behind).
+const terminalMatchesPage = () =>
+  page.evaluate(() => {
+    const parse = (c) => (c.match(/[\d.]+/g) ?? []).map(Number);
+    const light = (c) => {
+      const [r, g, b] = parse(c);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b > 127;
+    };
+    const term = [...document.querySelectorAll(".xterm")].find((el) => el.offsetParent);
+    if (!term) return { ok: false, why: "no visible terminal" };
+    const box = term.getBoundingClientRect();
+    // The colour actually painted at the terminal's centre: the first layer down that isn't transparent.
+    const painted = document
+      .elementsFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+      .map((el) => getComputedStyle(el).backgroundColor)
+      .find((c) => !/rgba\(.*,\s*0\)$/.test(c) && c !== "transparent");
+    const pageColour = getComputedStyle(document.body).backgroundColor;
+    return { ok: Boolean(painted) && light(painted) === light(pageColour.startsWith("lab(") ? (parse(pageColour)[0] > 50 ? "rgb(255,255,255)" : "rgb(0,0,0)") : pageColour), painted, pageColour };
+  });
+const before = await terminalMatchesPage();
+await page.getByRole("button", { name: /theme|dark|light/i }).first().click();
+await page.waitForTimeout(1500);
+const after = await terminalMatchesPage();
+check("terminalFollowsTheme", before.ok && after.ok, JSON.stringify({ before, after }));
+
 await page.screenshot({ path: process.env.SHOT ?? join(tmpdir(), "room-people.png") });
 await browser.close();
 check("noPageErrors", errors.length === 0, errors.join(" | "));

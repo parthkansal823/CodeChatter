@@ -1,6 +1,8 @@
-import { Binary, Braces, Compass, FileText, Globe, Server, Users, type LucideIcon } from "lucide-react";
+import type { TEMPLATE_IDS } from "@codechatter/contracts";
+import { Binary, Boxes, Braces, Compass, FileText, Globe, Server, Users, type LucideIcon } from "lucide-react";
 
-export type TemplateId = "blank" | "python" | "node" | "web" | "dsa" | "interview" | "tour";
+/** The API's list, so a new template can't be offered here without the server knowing it. */
+export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export const TEMPLATES: Array<{ id: TemplateId; name: string; description: string; icon: LucideIcon }> = [
   { id: "blank", name: "Blank", description: "An empty room. Add files as you go.", icon: FileText },
@@ -10,6 +12,7 @@ export const TEMPLATES: Array<{ id: TemplateId; name: string; description: strin
   { id: "dsa", name: "DSA practice", description: "A problem, starter code in your language and tests.", icon: Binary },
   { id: "interview", name: "Interview", description: "A timed session with hidden tests and a private rubric.", icon: Users },
   { id: "tour", name: "Guided tour", description: "Every feature in one room: run, tests, preview, terminal, servers.", icon: Compass },
+  { id: "kubernetes", name: "Kubernetes playground", description: "A real Kubernetes API in the sandbox: kubectl, Helm and sample manifests.", icon: Boxes },
 ];
 
 export const templateName = (id: string | null) => TEMPLATES.find((t) => t.id === id)?.name ?? "Blank";

@@ -3,6 +3,14 @@
 import type { TreeNode } from "@codechatter/workspace-model";
 import { create } from "zustand";
 
+export type MarkdownPreviewMode = "off" | "side" | "full";
+
+/** Ctrl+K V and Ctrl+Shift+V: the same key again turns the preview off. */
+export function toggleMarkdownPreview(mode: Exclude<MarkdownPreviewMode, "off">) {
+  const ui = useEditorUi.getState();
+  ui.setMarkdownPreview(ui.markdownPreview === mode ? "off" : mode);
+}
+
 export type PalettePage = "commands" | "language" | "people" | "line" | "symbols";
 
 /** The one dialog that can be open over the editor at a time. */
@@ -22,7 +30,8 @@ type State = {
   /** The file shown in the second editor on the right, if it is open. */
   splitFileId: string | null;
   diff: { leftId: string; rightId: string } | null;
-  markdownPreview: boolean;
+  /** A Markdown file's preview: off, beside the code (Ctrl+K V), or on its own (Ctrl+Shift+V). */
+  markdownPreview: MarkdownPreviewMode;
   /** User id of the person whose file and cursor this editor follows. */
   following: string | null;
   /** Language modes picked by hand, by file id. They last until you leave the room. */
@@ -32,7 +41,7 @@ type State = {
   setZen: (on: boolean) => void;
   setSplit: (fileId: string | null) => void;
   setDiff: (diff: State["diff"]) => void;
-  setMarkdownPreview: (on: boolean) => void;
+  setMarkdownPreview: (mode: MarkdownPreviewMode) => void;
   follow: (userId: string | null) => void;
   setLanguage: (fileId: string, language: string) => void;
   reset: () => void;
@@ -43,7 +52,7 @@ const INITIAL = {
   zen: false,
   splitFileId: null,
   diff: null,
-  markdownPreview: false,
+  markdownPreview: "off" as MarkdownPreviewMode,
   following: null,
   languageOverrides: {},
 } satisfies Partial<State>;
@@ -57,13 +66,15 @@ export const useEditorUi = create<State>()((set) => ({
   setDiff: (diff) => set({ diff }),
   setMarkdownPreview: (markdownPreview) => set({ markdownPreview }),
   follow: (following) => set({ following }),
-  setLanguage: (fileId, language) => set((s) => ({ languageOverrides: { ...s.languageOverrides, [fileId]: language } })),
+  setLanguage: (fileId, language) =>
+    set((s) => ({ languageOverrides: { ...s.languageOverrides, [fileId]: language } })),
   reset: () => set(INITIAL),
 }));
 
 export const openSettings = () => useEditorUi.getState().open({ kind: "settings" });
 export const openQuickOpen = () => useEditorUi.getState().open({ kind: "quickOpen" });
-export const openPalette = (page: PalettePage = "commands") => useEditorUi.getState().open({ kind: "palette", page });
+export const openPalette = (page: PalettePage = "commands") =>
+  useEditorUi.getState().open({ kind: "palette", page });
 
 /** Open the file on the right of the editor, or close the split if it's open. */
 export function toggleSplit(activeFileId: string | null) {

@@ -38,7 +38,10 @@ export function attachRemoteCursors(editor: Editor, doc: Y.Doc, awareness: Aware
     if (!model || !owner) return collection.clear();
     const index = (relative: unknown) => {
       if (!relative) return null;
-      const absolute = Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(relative), doc);
+      const absolute = Y.createAbsolutePositionFromRelativePosition(
+        Y.createRelativePositionFromJSON(relative),
+        doc,
+      );
       return absolute && absolute.type === owner.ytext ? absolute.index : null;
     };
     const colors = new Map<number, string>();

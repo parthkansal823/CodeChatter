@@ -9,6 +9,7 @@ const env = (overrides: Partial<AiEnv> = {}): AiEnv => ({
   ANTHROPIC_API_KEY: "",
   OPENAI_API_KEY: "",
   OPENAI_BASE_URL: "",
+  OLLAMA_URL: "",
   AI_VISION: "",
   AI_MAX_TOKENS: undefined,
   AI_RATE_LIMIT: 30,
@@ -17,6 +18,20 @@ const env = (overrides: Partial<AiEnv> = {}): AiEnv => ({
 });
 
 describe("resolveAiSetup", () => {
+  it("runs Ollama locally with no key, text only, through its OpenAI-compatible API", () => {
+    const setup = resolveAiSetup(env({ AI_PROVIDER: "ollama", AI_MODEL: "qwen3:4b" }));
+    expect(setup.problem).toBeNull();
+    expect(setup.settings).toMatchObject({ provider: "ollama", model: "qwen3:4b", baseURL: "http://localhost:11434/v1", vision: false });
+    expect(createProvider(setup.settings)).toBeInstanceOf(OpenAiCompatibleProvider);
+  });
+
+  it("takes OLLAMA_URL with or without /v1, and asks for a model", () => {
+    const docker = resolveAiSetup(env({ AI_PROVIDER: "ollama", AI_MODEL: "llama3.2", OLLAMA_URL: "http://host.docker.internal:11434/v1/", AI_VISION: "true" }));
+    expect(docker.settings).toMatchObject({ baseURL: "http://host.docker.internal:11434/v1", vision: true });
+    expect(resolveAiSetup(env({ AI_PROVIDER: "ollama" })).problem).toMatch(/ollama pull/);
+    expect(resolveAiSetup(env({ AI_PROVIDER: "ollama", AI_MODEL: "x", OLLAMA_URL: "ftp://nope" })).problem).toMatch(/OLLAMA_URL/);
+  });
+
   it("is off by default, with a reason", () => {
     const setup = resolveAiSetup(env());
     expect(setup.settings).toBeNull();
@@ -65,9 +80,9 @@ describe("resolveAiSetup", () => {
   });
 
   it("reports an unknown provider", () => {
-    const setup = resolveAiSetup(env({ AI_PROVIDER: "ollama" }));
+    const setup = resolveAiSetup(env({ AI_PROVIDER: "mistral" }));
     expect(setup.settings).toBeNull();
-    expect(setup.problem).toMatch(/anthropic, openai or none/);
+    expect(setup.problem).toMatch(/ollama, anthropic, openai or none/);
   });
 
   it("lets vision be turned off for text-only models", () => {

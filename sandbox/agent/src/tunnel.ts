@@ -3,6 +3,8 @@ import { connect, type Socket } from "node:net";
 
 import type { AgentEvent, TunnelOp } from "@codechatter/contracts";
 
+import { RELAY_PORT } from "./relay.js";
+
 /**
  * TCP connections to servers inside the sandbox, carried over the agent's
  * stdio (spike S2: works with the container's network switched off). The
@@ -46,7 +48,8 @@ export async function listeningPorts(): Promise<number[]> {
       const fields = line.trim().split(/\s+/);
       if (fields[3] !== "0A" || !fields[1]) continue;
       const port = Number.parseInt(fields[1].split(":").at(-1) ?? "", 16);
-      if (port > 0) ports.add(port);
+      // The package-install relay is the agent's own, not a server to preview.
+      if (port > 0 && port !== RELAY_PORT) ports.add(port);
     }
   }
   return [...ports].sort((a, b) => a - b);

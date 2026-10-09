@@ -7,7 +7,7 @@ import type { Redis } from "ioredis";
 import type { Env } from "../config/env.js";
 import { DB, ENV, VALKEY } from "../infra/tokens.js";
 import { MessagesService } from "../messages/messages.service.js";
-import { aiStatus, resolveAiSetup, type AiSetup } from "./ai.config.js";
+import { aiStatus, ollamaUrl, resolveAiSetup, type AiSetup } from "./ai.config.js";
 import { createProvider, type AiProvider } from "./providers.js";
 import { RateLimiter, type RateDecision } from "./rate-limit.js";
 import type { ActivityRow, ChatLine } from "./summary.js";
@@ -31,11 +31,37 @@ export class AiService {
   ) {
     this.setup = resolveAiSetup(env);
     this.provider = createProvider(this.setup.settings);
-    this.contextChars = env.AI_CONTEXT_CHARS;
+    // Ollama's default context window is small; a longer prompt loses its start (the instructions) silently.
+    this.contextChars = env.AI_CONTEXT_CHARS ?? (this.setup.provider === "ollama" ? 8_000 : 48_000);
     this.limiter = new RateLimiter(redis, { limit: env.AI_RATE_LIMIT, windowSeconds: env.AI_RATE_WINDOW_SECONDS });
     this.usageTracker = new UsageTracker(redis);
     if (this.provider) this.logger.log(`AI copilot: ${this.setup.provider} (${this.setup.model})`);
     else this.logger.log(`AI copilot off: ${this.setup.problem}`);
+  }
+
+  private local: { at: number; value: AiStatus["ollama"] } | null = null;
+
+  /**
+   * Ollama on this server's machine, if it answers within a moment: the setup
+   * panel offers its models, and with AI_PROVIDER=ollama it confirms the link.
+   * Checked at most every 30 seconds.
+   */
+  async localOllama(): Promise<AiStatus["ollama"]> {
+    if (this.setup.provider !== "none" && this.setup.provider !== "ollama") return null;
+    if (this.local && Date.now() - this.local.at < 30_000) return this.local.value;
+    const url = ollamaUrl(this.env);
+    let value: AiStatus["ollama"] = null;
+    if (url) {
+      try {
+        const response = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(600) });
+        const body = (await response.json()) as { models?: Array<{ name?: unknown }> };
+        if (response.ok) value = { url, models: (body.models ?? []).map((m) => String(m.name ?? "")).filter(Boolean).slice(0, 50) };
+      } catch {
+        // Not installed or not running: nothing to offer.
+      }
+    }
+    this.local = { at: Date.now(), value };
+    return value;
   }
 
   status(): AiStatus {

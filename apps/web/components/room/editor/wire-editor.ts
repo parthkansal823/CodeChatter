@@ -17,7 +17,7 @@ import {
 } from "./active-editor";
 import { liveEditors, modelOwner } from "./file-models";
 import { attachRemoteCursors } from "./remote-cursors";
-import { useEditorUi } from "./ui-store";
+import { useEditorUi, toggleMarkdownPreview } from "./ui-store";
 
 type Editor = monaco.editor.IStandaloneCodeEditor;
 
@@ -34,14 +34,16 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
   const unregister = registerPane(role, editor);
   const cursors = attachRemoteCursors(editor, doc, awareness);
 
-  const announceFile = (source: Editor | null) => provider.setAwarenessField("activeFileId", modelOwner(source?.getModel() ?? null)?.fileId ?? null);
+  const announceFile = (source: Editor | null) =>
+    provider.setAwarenessField("activeFileId", modelOwner(source?.getModel() ?? null)?.fileId ?? null);
   const publishSelection = () => {
     if (!isActiveEditor(editor)) return;
     const model = editor.getModel();
     const owner = modelOwner(model);
     const selection = editor.getSelection();
     if (!model || !owner || !selection) return;
-    const at = (line: number, column: number) => Y.createRelativePositionFromTypeIndex(owner.ytext, model.getOffsetAt({ lineNumber: line, column }));
+    const at = (line: number, column: number) =>
+      Y.createRelativePositionFromTypeIndex(owner.ytext, model.getOffsetAt({ lineNumber: line, column }));
     awareness.setLocalStateField("selection", {
       anchor: at(selection.selectionStartLineNumber, selection.selectionStartColumn),
       head: at(selection.positionLineNumber, selection.positionColumn),
@@ -69,6 +71,20 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
     editor.onDidChangeModelOptions(refreshInfo),
     editor.onDidChangeModelLanguage(refreshInfo),
   ];
+
+  // Markdown preview beside the code, or on its own, as in VS Code (Monaco owns Ctrl+K chords in here).
+  editor.addAction({
+    id: "cc.markdownSide",
+    label: "Open Markdown preview to the side",
+    keybindings: [monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyCode.KeyV)],
+    run: () => toggleMarkdownPreview("side"),
+  });
+  editor.addAction({
+    id: "cc.markdownFull",
+    label: "Open Markdown preview",
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyV],
+    run: () => toggleMarkdownPreview("full"),
+  });
 
   editor.addAction({
     id: "cc.zen",

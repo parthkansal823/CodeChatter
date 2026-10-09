@@ -1,0 +1,5 @@
+# Files that run inside the Linux sandbox keep LF line endings on every checkout.
+# With core.autocrlf on Windows they would otherwise turn CRLF, and scripts like
+# sandbox/image/k8s or bashrc would fail in the container ("bad interpreter").
+sandbox/** text eol=lf
+*.sh text eol=lf

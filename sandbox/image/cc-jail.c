@@ -65,6 +65,8 @@ int main(int argc, char **argv) {
     const char *toolchain[] = {"/usr", "/bin", "/sbin", "/lib", "/lib64"};
     for (size_t i = 0; i < sizeof toolchain / sizeof *toolchain; i++) allow(ruleset, toolchain[i], READ | RUN, handled);
     allow(ruleset, "/etc", READ, handled);
+    // Debian keeps Haskell's package database here (the full image).
+    allow(ruleset, "/var/lib/ghc", READ, handled);
     allow(ruleset, "/proc", READ, handled);
     allow(ruleset, "/sys", READ, handled);
     // Terminals open /dev/ptmx and /dev/pts/*; programs write to /dev/null.

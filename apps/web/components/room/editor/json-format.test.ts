@@ -5,7 +5,10 @@ import { formatJson } from "./json-format";
 
 describe("formatJson", () => {
   it("re-indents compact JSON", () => {
-    assert.equal(formatJson('{"a":1,"b":[1,2,{"c":null}],"d":{}}', "  "), '{\n  "a": 1,\n  "b": [\n    1,\n    2,\n    {\n      "c": null\n    }\n  ],\n  "d": {}\n}');
+    assert.equal(
+      formatJson('{"a":1,"b":[1,2,{"c":null}],"d":{}}', "  "),
+      '{\n  "a": 1,\n  "b": [\n    1,\n    2,\n    {\n      "c": null\n    }\n  ],\n  "d": {}\n}',
+    );
   });
 
   it("uses tabs when asked and keeps a trailing newline", () => {
@@ -15,7 +18,8 @@ describe("formatJson", () => {
   it("copies values exactly as written", () => {
     const text = '{"n":1.0,"big":12345678901234567890,"s":"a\\"b, }{ :","e":1e3}';
     const out = formatJson(text, "  ")!;
-    for (const piece of ["1.0", "12345678901234567890", '"a\\"b, }{ :"', "1e3"]) assert.ok(out.includes(piece), piece);
+    for (const piece of ["1.0", "12345678901234567890", '"a\\"b, }{ :"', "1e3"])
+      assert.ok(out.includes(piece), piece);
     assert.deepEqual(JSON.parse(out), JSON.parse(text));
   });
 

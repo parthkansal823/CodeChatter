@@ -43,8 +43,8 @@ export class AiController {
 
   /** Whether AI is set up, for the panel to show the chat or the setup help. Never includes keys. */
   @Get("ai/status")
-  status(): AiStatus {
-    return this.ai.status();
+  async status(): Promise<AiStatus> {
+    return { ...this.ai.status(), ollama: await this.ai.localOllama() };
   }
 
   /** Your own request and token counts, and where you stand against the rate limit. */

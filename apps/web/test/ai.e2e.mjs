@@ -23,7 +23,7 @@ await a.locator(".monaco-editor .view-lines").first().click();
 await a.keyboard.type('print("before")');
 
 // An answer streams in.
-await a.getByRole("tab", { name: "AI", exact: true }).click();
+await a.getByRole("button", { name: "AI", exact: true }).click(); // the title bar toggle opens the side panel on AI
 const input = a.getByRole("textbox", { name: "Message to the AI" });
 const conversation = a.getByLabel("AI conversation");
 const ready = await ok(input.waitFor({ timeout: 20_000 }));

@@ -24,7 +24,11 @@ export async function openTerminal(ws: WebSocket, session: RoomSession, options:
   try {
     await session.ready();
     if (closed) return;
-    handle = await session.sandbox.exec([JAIL, "sh", "-c", 'umask 002; exec tmux -u new-session -A -s "$1"', "cc-term", options.name], {
+    // Plain (not login) bash, in the first window and any opened later: a login
+    // shell's /etc/profile would reset PATH and drop ~/.local/bin and friends,
+    // where pip, npm -g, cargo and go install programs.
+    const tmux = 'umask 002; exec tmux -u new-session -A -s "$1" bash \\; set-option -g default-command bash';
+    handle = await session.sandbox.exec([JAIL, "sh", "-c", tmux, "cc-term", options.name], {
       tty: true,
       cols: options.cols,
       rows: options.rows,

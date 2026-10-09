@@ -44,11 +44,14 @@ type State =
   | { kind: "marquee"; start: Point; base: readonly string[]; scope: string | null }
   | { kind: "create"; type: ShapeType; start: Point; id: string | null; parentId: string | null; targets: Rect[] }
   | { kind: "line"; type: "line" | "arrow"; start: Point; id: string | null; startId: string | null; parentId: string | null }
-  | { kind: "pen"; points: number[]; parentId: string | null };
+  | { kind: "pen"; points: number[]; parentId: string | null }
+  | { kind: "erase"; last: Point; hits: Set<string> };
 
 const DRAG_THRESHOLD = 3;
 const SNAP_PX = 6;
 const CREATE_TOOLS = new Set<ToolId>(["frame", "rect", "ellipse", "text", "sticky"]);
+/** How often the eraser looks under a moving pointer, in screen pixels, so fast strokes don't skip thin lines. */
+const ERASER_STEP = 4;
 
 /**
  * Pointer gestures on the canvas as a small state machine: pan, click and
@@ -63,6 +66,13 @@ export class Interaction {
 
   constructor(editor: Editor) {
     this.editor = editor;
+  }
+
+  /** Shapes drawn at a screen point (the canvas looks them up in the page). The eraser needs it mid-drag, when events only name the canvas. */
+  private probe: ((screen: Point) => string[]) | null = null;
+
+  setProbe(probe: ((screen: Point) => string[]) | null) {
+    this.probe = probe;
   }
 
   get busy() {
@@ -150,6 +160,9 @@ export class Interaction {
     } else if (tool === "pen") {
       this.state = { kind: "pen", points: [info.world.x, info.world.y, info.pressure], parentId };
       this.showDraft();
+    } else if (tool === "eraser") {
+      this.state = { kind: "erase", last: info.screen, hits: new Set() };
+      this.eraseAlong(info.screen, info.screen);
     }
   }
 
@@ -196,6 +209,10 @@ export class Interaction {
     switch (state.kind) {
       case "pan":
         editor.panBy(info.screen.x - state.last.x, info.screen.y - state.last.y);
+        state.last = info.screen;
+        return;
+      case "erase":
+        this.eraseAlong(state.last, info.screen);
         state.last = info.screen;
         return;
       case "press": {
@@ -429,6 +446,12 @@ export class Interaction {
       case "pen":
         this.finishPen(state);
         return;
+      case "erase":
+        // Everything touched goes in one change, so one undo brings it all back.
+        editor.erasing.set(new Set());
+        editor.deleteShapes([...state.hits]);
+        editor.endGesture();
+        return;
       default:
         return;
     }
@@ -460,6 +483,32 @@ export class Interaction {
     editor.select([id]);
   }
 
+  /** Marks what the eraser passes over between two pointer positions. Frames hold other shapes and locked shapes stay put, so it leaves both. */
+  private eraseAlong(from: Point, to: Point) {
+    if (this.state.kind !== "erase" || !this.probe) return;
+    const { hits } = this.state;
+    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / ERASER_STEP));
+    let changed = false;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      for (const id of this.probe({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) {
+        if (hits.has(id)) continue;
+        const shape = this.editor.get(id);
+        if (!shape || shape.type === "frame" || this.lockedAt(id)) continue;
+        hits.add(id);
+        changed = true;
+      }
+    }
+    if (changed) this.editor.erasing.set(new Set(hits));
+  }
+
+  private lockedAt(id: string): boolean {
+    for (let shape = this.editor.get(id); shape; shape = shape.parentId ? this.editor.get(shape.parentId) : undefined) {
+      if (shape.locked) return true;
+    }
+    return false;
+  }
+
   private finishPen(state: Extract<State, { kind: "pen" }>) {
     const editor = this.editor;
     editor.draft.set(null);
@@ -482,8 +531,9 @@ export class Interaction {
     editor.marquee.set(null);
     editor.draft.set(null);
     editor.target.set(null);
+    editor.erasing.set(new Set());
     if (state.kind === "marquee") editor.select(state.base);
-    if (["move", "resize", "endpoint", "create", "line"].includes(state.kind)) {
+    if (["move", "resize", "endpoint", "create", "line", "erase"].includes(state.kind)) {
       editor.endGesture();
       if (this.wrote) editor.undo();
     }

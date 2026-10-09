@@ -105,6 +105,13 @@ export function CodeEditor({ file, role }: Props) {
     };
   }, [ready, id, path, name, doc, role]);
 
+  // "Change language mode" applies to the open file at once, in every editor showing it.
+  const override = useEditorUi((state) => (id ? state.languageOverrides[id] : undefined));
+  useEffect(() => {
+    const model = editorRef.current?.getModel();
+    if (ready && model && override && model.getLanguageId() !== override) monaco.editor.setModelLanguage(model, override);
+  }, [override, ready, id]);
+
   return (
     <div className="relative h-full min-h-0">
       <div ref={host} className="absolute inset-0" />

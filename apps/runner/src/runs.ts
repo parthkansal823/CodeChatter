@@ -1,4 +1,4 @@
-import type { RunExit, RunExitReason, RunInfo, RunnerEvent, RunSnapshot } from "@codechatter/contracts";
+import { runnableLabels, type RunExit, type RunExitReason, type RunInfo, type RunnerEvent, type RunSnapshot } from "@codechatter/contracts";
 import { randomUUID } from "node:crypto";
 import type { Duplex } from "node:stream";
 
@@ -54,7 +54,7 @@ export class RunManager {
     emit: (event: RunnerEvent) => void,
   ): Promise<RunExit> {
     const plan = planFor(request.path);
-    if (!plan) throw new RunError(`CodeChatter can't run ${request.path} yet. Supported: Python, JavaScript, TypeScript, C, C++, Java, Bash.`);
+    if (!plan) throw new RunError(`CodeChatter can't run ${request.path} yet. Supported: ${runnableLabels.join(", ")}.`);
     if (this.active) await this.stop("stopped");
 
     const { fileExists } = await prepare();

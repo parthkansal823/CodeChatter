@@ -2,11 +2,13 @@ import type Docker from "dockerode";
 
 import type { SandboxStatus } from "@codechatter/contracts";
 
+import { databaseEnv, databasePassword, Databases } from "./databases.js";
 import { DocSync } from "./doc-sync.js";
+import { Egress, LABEL_UNTIL } from "./egress.js";
 import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { RunManager } from "./runs.js";
-import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROOM, Sandbox } from "./sandbox.js";
+import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, Sandbox } from "./sandbox.js";
 import { TunnelHub } from "./tunnel.js";
 
 /**
@@ -30,8 +32,9 @@ export class RoomSession {
     docker: Docker,
     readonly roomId: string,
     private readonly env: Env,
+    private readonly databases: Databases,
   ) {
-    this.sandbox = new Sandbox(docker, roomId, env);
+    this.sandbox = new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)));
     this.sync = new DocSync(roomId, { collabUrl: env.COLLAB_INTERNAL_URL, secret: env.SERVICE_SECRET });
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
     this.tunnels = new TunnelHub(() => this.sandbox.agent);
@@ -63,14 +66,18 @@ export class RoomSession {
     this.readying ??= (async () => {
       await this.sync.synced();
       await this.sandbox.ensure();
-      // A new agent (first start or after a reset) gets the full file set.
-      if (!this.sync.isAttachedTo(this.sandbox.agent)) await this.sync.attach(this.sandbox.agent!);
+      // A new agent (first start or after a reset) gets the full file set,
+      // and databases that slept with the sandbox wake up.
+      if (!this.sync.isAttachedTo(this.sandbox.agent)) {
+        await this.sync.attach(this.sandbox.agent!);
+        void this.databases.resume(this.roomId);
+      }
     })().finally(() => (this.readying = null));
     return this.readying;
   }
 
   /** Ports, CPU, memory and processes for the Ports and resources panel. */
-  async status(): Promise<SandboxStatus> {
+  async status(): Promise<Omit<SandboxStatus, "installs">> {
     const stats = await this.sandbox.stats();
     if (!stats) return { running: false, ports: [], cpuPercent: null, memory: null, processes: null };
     // CPU% needs two samples; one-shot stats have no "previous", so keep our own.
@@ -106,12 +113,15 @@ export class RoomSession {
 
   async close(): Promise<void> {
     await this.runs.stop("stopped").catch(() => {});
+    await this.databases.pause(this.roomId).catch(() => {});
     await this.sandbox.stop();
     this.sync.destroy();
   }
 }
 
 export class RoomRegistry {
+  readonly egress: Egress;
+  readonly databases: Databases;
   private readonly sessions = new Map<string, RoomSession>();
   private readonly sweeper: NodeJS.Timeout;
 
@@ -119,13 +129,15 @@ export class RoomRegistry {
     private readonly docker: Docker,
     private readonly env: Env,
   ) {
+    this.egress = new Egress(docker, env);
+    this.databases = new Databases(docker, env);
     this.sweeper = setInterval(() => void this.sweep(), 60_000);
   }
 
   get(roomId: string): RoomSession {
     let session = this.sessions.get(roomId);
     if (!session) {
-      session = new RoomSession(this.docker, roomId, this.env);
+      session = new RoomSession(this.docker, roomId, this.env, this.databases);
       this.sessions.set(roomId, session);
     }
     return session;
@@ -145,8 +157,10 @@ export class RoomRegistry {
 
   /**
    * Every minute: close idle rooms, stop containers no session owns (left by
-   * an earlier runner process), and remove containers stopped for over a day.
-   * Volumes (the files) are kept.
+   * an earlier runner process), remove containers stopped for over a day and
+   * egress proxies whose time is up, put to sleep the databases of rooms with
+   * no session, then remove the networks of rooms left with no container.
+   * Volumes (files, home folders, database data) are kept.
    */
   private async sweep(): Promise<void> {
     for (const [roomId, session] of this.sessions) {
@@ -155,19 +169,42 @@ export class RoomRegistry {
       log.info(`room ${roomId}: idle, stopping its sandbox`);
       await session.close().catch((error) => log.error(`closing ${roomId}`, error));
     }
-    const containers = await this.docker
-      .listContainers({ all: true, filters: { label: [`${LABEL_MANAGED}=1`, `${LABEL_NAMESPACE}=${this.env.SANDBOX_NAMESPACE}`] } })
-      .catch(() => []);
+    const ours = { label: [`${LABEL_MANAGED}=1`, `${LABEL_NAMESPACE}=${this.env.SANDBOX_NAMESPACE}`] };
+    const containers = await this.docker.listContainers({ all: true, filters: ours }).catch(() => []);
     const dayAgo = Date.now() / 1000 - 24 * 3600;
+    const withContainer = new Set<string>();
     for (const info of containers) {
       const roomId = info.Labels[LABEL_ROOM] ?? "";
       const container = this.docker.getContainer(info.Id);
-      if (info.State === "running" && !this.sessions.has(roomId) && info.Created < Date.now() / 1000 - this.env.SANDBOX_IDLE_MINUTES * 60) {
+      if (info.Labels[LABEL_ROLE] === "egress") {
+        // Installs end on time: the proxy exits by itself, and goes here if it somehow hasn't.
+        if (info.State !== "running" || !(Number(info.Labels[LABEL_UNTIL]) > Date.now())) {
+          await container.remove({ force: true }).catch(() => {});
+          continue;
+        }
+      } else if (info.Labels[LABEL_ROLE] === "database") {
+        // A room's databases sleep while it has no session (stopped, data kept) and wake with its sandbox.
+        if (info.State === "running" && !this.sessions.has(roomId)) await container.stop({ t: 15 }).catch(() => {});
+      } else if (info.State === "running" && !this.sessions.has(roomId) && info.Created < Date.now() / 1000 - this.env.SANDBOX_IDLE_MINUTES * 60) {
         log.info(`stopping unclaimed sandbox ${info.Names[0] ?? info.Id}`);
         await container.stop({ t: 3 }).catch(() => {});
       } else if (info.State === "exited" && !this.sessions.has(roomId) && info.Created < dayAgo) {
         await container.remove().catch(() => {});
+        continue;
       }
+      withContainer.add(roomId);
+    }
+    // The next start makes a room's network again.
+    const networks = await this.docker.listNetworks({ filters: ours }).catch(() => []);
+    for (const network of networks) {
+      // Room networks only: the proxies' shared way out has no room.
+      const roomId = network.Labels?.[LABEL_ROOM];
+      if (!roomId || this.sessions.has(roomId) || withContainer.has(roomId)) continue;
+      await this.docker
+        .getNetwork(network.Id)
+        .remove()
+        .then(() => log.info(`removed the unused network ${network.Name}`))
+        .catch(() => {});
     }
   }
 }

@@ -98,7 +98,8 @@ services:
 
   # Builds the sandbox image (tagged for the runner), then exits.
   sandbox-image:
-    build: { context: ../sandbox, dockerfile: image/Dockerfile }
+    # SANDBOX_TARGET=full adds every language (several GB); base is Python, JS/TS, C/C++, Java, Bash.
+    build: { context: ../sandbox, dockerfile: image/Dockerfile, target: "${SANDBOX_TARGET:-base}" }
     image: codechatter-sandbox:latest
     entrypoint: ["true"]
     restart: "no"

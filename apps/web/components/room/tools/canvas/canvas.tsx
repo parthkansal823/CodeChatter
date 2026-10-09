@@ -12,6 +12,15 @@ import { TextEditor } from "./text-editor";
 
 type Touch = { x: number; y: number };
 
+/** Where the eraser looks around the pointer: its centre and four points 5px out. */
+const ERASER_RING = [
+  [0, 0],
+  [5, 0],
+  [-5, 0],
+  [0, 5],
+  [0, -5],
+] as const;
+
 function hitOf(target: EventTarget | null): Hit {
   const el = target instanceof Element ? target : null;
   const handle = el?.closest("[data-handle]")?.getAttribute("data-handle") as HandleId | null | undefined;
@@ -54,6 +63,25 @@ export function Canvas({ empty, label }: { empty?: ReactNode; label: string }) {
     measure();
     return () => observer.disconnect();
   }, [editor, session]);
+
+  // The eraser asks what lies under points the pointer passed between events, a few pixels around each.
+  useEffect(() => {
+    interaction.setProbe((screen) => {
+      const svg = svgRef.current;
+      if (!svg) return [];
+      const rect = svg.getBoundingClientRect();
+      const ids = new Set<string>();
+      for (const [dx, dy] of ERASER_RING) {
+        for (const el of document.elementsFromPoint(rect.left + screen.x + dx, rect.top + screen.y + dy)) {
+          if (!svg.contains(el)) continue;
+          const id = el.closest("[data-shape-id]")?.getAttribute("data-shape-id");
+          if (id) ids.add(id);
+        }
+      }
+      return [...ids];
+    });
+    return () => interaction.setProbe(null);
+  }, [interaction]);
 
   // React's wheel listener is passive; zooming must stop the page from scrolling.
   useEffect(() => {
@@ -141,14 +169,14 @@ export function Canvas({ empty, label }: { empty?: ReactNode; label: string }) {
     const hit = hitOf(e.target);
     const shape = hit.shapeId ? editor.get(hit.shapeId) : undefined;
     if (shape && hasText(shape.type)) return editor.startEditing(shape.id);
-    // On a whiteboard, double-clicking empty space drops a note there.
+    // On a whiteboard, double-clicking empty space starts typing there, in the chosen ink (notes have their own tool).
     if (!shape && editor.kind === "board") {
       const rect = svgRef.current!.getBoundingClientRect();
       const at = editor.screenToWorld({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       let id = "";
       editor.beginGesture();
       editor.write(() => {
-        id = editor.create("sticky", { x: at.x - 100, y: at.y - 100, fill: editor.style.get().note });
+        id = editor.create("text", { x: at.x, y: at.y, fill: editor.style.get().ink });
       });
       editor.selection.set([id]);
       editor.editingId.set(id);

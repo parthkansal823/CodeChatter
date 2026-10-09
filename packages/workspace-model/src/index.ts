@@ -16,16 +16,16 @@ export * from "./languages.js";
  *   room:ROOMID:design:<id>      one design canvas
  *   room:ROOMID:board:<id>       one whiteboard
  */
-export type RoomDocKind = "files" | "pages" | "api" | "designs" | "boards" | "page" | "design" | "board";
+export type RoomDocKind = "files" | "pages" | "api" | "designs" | "boards" | "diagrams" | "page" | "design" | "board" | "diagram";
 export type ParsedDocName = { roomId: string; kind: RoomDocKind; id?: string };
 
-const SINGLE = /^room:([A-Z0-9]{6}):(files|pages|api|designs|boards)$/;
-const PER_ITEM = /^room:([A-Z0-9]{6}):(page|design|board):([a-z0-9-]{8,64})$/;
+const SINGLE = /^room:([A-Z0-9]{6}):(files|pages|api|designs|boards|diagrams)$/;
+const PER_ITEM = /^room:([A-Z0-9]{6}):(page|design|board|diagram):([a-z0-9-]{8,64})$/;
 
 export const filesDocName = (roomId: string) => `room:${roomId}:files`;
 
-export function roomDocName(roomId: string, kind: "files" | "pages" | "api" | "designs" | "boards"): string;
-export function roomDocName(roomId: string, kind: "page" | "design" | "board", id: string): string;
+export function roomDocName(roomId: string, kind: "files" | "pages" | "api" | "designs" | "boards" | "diagrams"): string;
+export function roomDocName(roomId: string, kind: "page" | "design" | "board" | "diagram", id: string): string;
 export function roomDocName(roomId: string, kind: RoomDocKind, id?: string): string {
   return id ? `room:${roomId}:${kind}:${id}` : `room:${roomId}:${kind}`;
 }

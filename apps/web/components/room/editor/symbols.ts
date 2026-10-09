@@ -1,6 +1,9 @@
 "use client";
 
-import { getJavaScriptWorker, getTypeScriptWorker } from "@codingame/monaco-vscode-standalone-typescript-language-features";
+import {
+  getJavaScriptWorker,
+  getTypeScriptWorker,
+} from "@codingame/monaco-vscode-standalone-typescript-language-features";
 
 import type { monaco } from "@/components/room/monaco-setup";
 
@@ -26,7 +29,8 @@ const SKIPPED = new Set(["alias", "script", "module-less"]);
 function collect(items: NavigationTree[], depth: number, out: SymbolItem[]) {
   for (const item of items) {
     const span = item.spans[0];
-    if (span && !SKIPPED.has(item.kind)) out.push({ name: item.text, kind: item.kind, start: span.start, end: span.start + span.length, depth });
+    if (span && !SKIPPED.has(item.kind))
+      out.push({ name: item.text, kind: item.kind, start: span.start, end: span.start + span.length, depth });
     if (item.childItems) collect(item.childItems, depth + 1, out);
   }
 }

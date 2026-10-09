@@ -45,10 +45,13 @@ const Env = z.object({
   OPENAI_API_KEY: z.string().trim().optional().default(""),
   /** Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Groq, Gemini, a local Ollama… */
   OPENAI_BASE_URL: z.string().trim().optional().default(""),
+  /** Where Ollama listens when AI_PROVIDER=ollama (default http://localhost:11434; http://host.docker.internal:11434 from Docker). */
+  OLLAMA_URL: z.string().trim().optional().default(""),
   /** "true" / "false"; unset means Anthropic yes, OpenAI-compatible yes (turn off for text-only models). */
   AI_VISION: z.string().trim().toLowerCase().optional().default(""),
   AI_MAX_TOKENS: z.coerce.number().int().positive().optional().catch(undefined),
-  AI_CONTEXT_CHARS: z.coerce.number().int().min(4000).default(48_000).catch(48_000),
+  /** Characters of code and context sent with a question; unset means 48 000, or 8 000 for Ollama (small default context window). */
+  AI_CONTEXT_CHARS: z.coerce.number().int().min(4000).optional().catch(undefined),
   AI_RATE_LIMIT: z.coerce.number().int().positive().default(30).catch(30),
   AI_RATE_WINDOW_SECONDS: z.coerce.number().int().positive().default(600).catch(600),
 }).superRefine((env, ctx) => {

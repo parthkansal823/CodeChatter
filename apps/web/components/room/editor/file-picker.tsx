@@ -9,6 +9,7 @@ import { useRoom } from "@/components/room/room-context";
 import { CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 import { rankFiles } from "./fuzzy";
+import { openPalette } from "./ui-store";
 import { PaletteDialog } from "./palette-dialog";
 import { dirOf, useRoomFiles } from "./room-files";
 
@@ -55,14 +56,20 @@ export function FilePicker({
   const row = (entry: (typeof ranked)[number]) => (
     <CommandItem key={entry.file.id} value={entry.file.id} onSelect={() => pick(entry.file)}>
       <FileText />
-      <Highlighted text={entry.file.name} indices={entry.indices} offset={entry.file.path.length - entry.file.name.length} />
+      <Highlighted
+        text={entry.file.name}
+        indices={entry.indices}
+        offset={entry.file.path.length - entry.file.name.length}
+      />
       <span className="ml-auto truncate pl-3 text-xs text-muted-foreground">{dirOf(entry.file.path)}</span>
     </CommandItem>
   );
 
   // With nothing typed, the files you opened lately come first under their own heading.
   const showRecent = !deferred.trim();
-  const recentRows = showRecent ? ranked.filter((entry) => recent.includes(entry.file.id)).slice(0, RECENT_SHOWN) : [];
+  const recentRows = showRecent
+    ? ranked.filter((entry) => recent.includes(entry.file.id)).slice(0, RECENT_SHOWN)
+    : [];
   const shownAsRecent = new Set(recentRows.map((entry) => entry.file.id));
 
   return (
@@ -74,12 +81,21 @@ export function FilePicker({
       shouldFilter={false}
       loop
     >
-      <CommandInput value={query} onValueChange={setQuery} placeholder={`${title}, by name or path`} className="h-9 py-0" />
+      <CommandInput
+        value={query}
+        onValueChange={(value) => (value.startsWith(">") ? openPalette() : setQuery(value))}
+        placeholder={`${title}, by name or path`}
+        className="h-9 py-0"
+      />
       <CommandList className="max-h-80">
         <CommandEmpty>No file matches that.</CommandEmpty>
-        {recentRows.length > 0 && <CommandGroup heading="Recently opened">{recentRows.map(row)}</CommandGroup>}
+        {recentRows.length > 0 && (
+          <CommandGroup heading="Recently opened">{recentRows.map(row)}</CommandGroup>
+        )}
         {ranked.length > recentRows.length && (
-          <CommandGroup heading={showRecent ? "All files" : "Files"}>{ranked.filter((entry) => !shownAsRecent.has(entry.file.id)).map(row)}</CommandGroup>
+          <CommandGroup heading={showRecent ? "All files" : "Files"}>
+            {ranked.filter((entry) => !shownAsRecent.has(entry.file.id)).map(row)}
+          </CommandGroup>
         )}
       </CommandList>
     </PaletteDialog>

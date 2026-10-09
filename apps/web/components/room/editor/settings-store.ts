@@ -4,7 +4,13 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 
-import { clampFontSize, DEFAULT_SETTINGS, FONT_SIZE, sanitizeSettings, type EditorSettings } from "@/components/room/editor/settings";
+import {
+  clampFontSize,
+  DEFAULT_SETTINGS,
+  FONT_SIZE,
+  sanitizeSettings,
+  type EditorSettings,
+} from "@/components/room/editor/settings";
 
 type State = EditorSettings & {
   update: (patch: Partial<EditorSettings>) => void;
@@ -24,7 +30,8 @@ export const useEditorSettings = create<State>()(
     (set, get) => ({
       ...DEFAULT_SETTINGS,
       update: (patch) => set(sanitizeSettings({ ...pick(get()), ...patch })),
-      zoom: (delta) => set({ fontSize: delta === "reset" ? FONT_SIZE.default : clampFontSize(get().fontSize + delta) }),
+      zoom: (delta) =>
+        set({ fontSize: delta === "reset" ? FONT_SIZE.default : clampFontSize(get().fontSize + delta) }),
       reset: () => set(DEFAULT_SETTINGS),
     }),
     {

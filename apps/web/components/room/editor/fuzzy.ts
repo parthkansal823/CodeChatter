@@ -1,4 +1,7 @@
-export type FuzzyMatch = { score: number; /** Positions in the text of the matched characters. */ indices: number[] };
+export type FuzzyMatch = {
+  score: number;
+  /** Positions in the text of the matched characters. */ indices: number[];
+};
 
 // Adjacent characters outweigh word starts, so "main" prefers main.py to m_a_i_n.py.
 const CONSECUTIVE = 7;
@@ -90,7 +93,12 @@ function matchFile(query: string, file: FileEntry): { score: number; indices: nu
   const stem = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
   const named = inName && {
     // A name that starts with what you typed, or is exactly it, beats one that merely contains it.
-    score: inName.score + NAME_BONUS + (name.startsWith(typed) ? 20 : 0) + (stem === typed || name === typed ? 10 : 0) - name.length * 0.1,
+    score:
+      inName.score +
+      NAME_BONUS +
+      (name.startsWith(typed) ? 20 : 0) +
+      (stem === typed || name === typed ? 10 : 0) -
+      name.length * 0.1,
     indices: inName.indices.map((i) => i + offset),
   };
   if (named && (!inPath || named.score >= inPath.score)) return named;
@@ -101,7 +109,12 @@ function matchFile(query: string, file: FileEntry): { score: number; indices: nu
  * Files for Quick Open. With nothing typed: most recently opened first, then the rest by path.
  * With a query: best match first, recent files breaking ties.
  */
-export function rankFiles<T extends FileEntry>(files: T[], query: string, recent: string[] = [], limit = 100): RankedFile<T>[] {
+export function rankFiles<T extends FileEntry>(
+  files: T[],
+  query: string,
+  recent: string[] = [],
+  limit = 100,
+): RankedFile<T>[] {
   const rank = new Map(recent.map((id, index) => [id, index]));
   const recency = (file: T) => rank.get(file.id) ?? Infinity;
   const byPath = (a: T, b: T) => a.path.localeCompare(b.path, undefined, { numeric: true });

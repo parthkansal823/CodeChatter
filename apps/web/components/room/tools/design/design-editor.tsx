@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { Canvas } from "../canvas/canvas";
 import { CanvasHeader, EmptyCanvas, HistoryButtons, NameField, PeerAvatars, ShortcutHint, ToolButton, ZoomMenu } from "../canvas/chrome";
-import { ExportMenu } from "../canvas/export-menu";
+import { ExportDialog } from "../canvas/export-dialog";
 import { LayersPanel } from "../canvas/layers";
 import { renameItem, type ListItem } from "../canvas/list";
 import { useLiveDoc, type LiveDoc } from "../canvas/live-doc";
@@ -18,7 +18,7 @@ import { shortcutMap, ToolRow } from "../canvas/tool-row";
 import type { ToolId } from "../canvas/editor";
 import { useCanvasSession } from "../canvas/use-canvas";
 
-const TOOLS: ToolId[] = ["select", "frame", "rect", "ellipse", "line", "arrow", "text", "pen", "hand"];
+const TOOLS: ToolId[] = ["select", "frame", "rect", "ellipse", "line", "arrow", "text", "pen", "eraser", "hand"];
 const KEYS = shortcutMap(TOOLS);
 
 type Props = {
@@ -74,7 +74,7 @@ export function DesignEditor({ roomId, item, list, me, editable, onBack, onClose
             <ToolButton label={properties ? "Hide properties" : "Show properties"} active={properties} onClick={() => setProperties((v) => !v)}>
               <PanelRight />
             </ToolButton>
-            <ExportMenu name={item.name} />
+            <ExportDialog name={item.name} />
           </>
         }
       >

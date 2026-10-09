@@ -26,7 +26,10 @@ export function PaletteDialog({
 } & Omit<ComponentProps<typeof Command>, "children" | "title">) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false} className="top-[14%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl">
+      <DialogContent
+        showCloseButton={false}
+        className="top-[14%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

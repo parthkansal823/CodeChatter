@@ -1,0 +1,51 @@
+#!/bin/bash
+# The room's Kubernetes playground: a real Kubernetes API server (KWOK) whose
+# nodes and pods are simulated, running as ordinary processes in the sandbox.
+#
+#   k8s up [nodes]   start it (2 nodes unless you say); kubectl and helm then use it
+#   k8s down         stop it and forget its objects
+#   k8s status       whether it's running
+#
+# Deployments, Services, Jobs, RBAC and Helm installs behave as on a real
+# cluster; pods report Running, but no containers run (the sandbox has none).
+set -euo pipefail
+
+BIN=/usr/local/lib/k8s
+NAME=playground
+running() { kubectl --request-timeout=3s get --raw /readyz >/dev/null 2>&1; }
+
+case "${1:-help}" in
+  up)
+    if running; then
+      echo "The playground is already up."
+    else
+      echo "Starting the Kubernetes playground…"
+      kwokctl delete cluster --name "$NAME" >/dev/null 2>&1 || true
+      # In a session of its own: when the Run or terminal that started it ends, the
+      # hang-up it sends doesn't reach the cluster, which lives until `k8s down`.
+      if ! setsid --wait kwokctl --config "$BIN/kwok.yaml" create cluster --name "$NAME" --runtime binary --wait 90s \
+        --kube-apiserver-binary "$BIN/kube-apiserver" \
+        --kube-controller-manager-binary "$BIN/kube-controller-manager" \
+        --kube-scheduler-binary "$BIN/kube-scheduler" \
+        --etcd-binary "$BIN/etcd" \
+        --kwok-controller-binary "$BIN/kwok" </dev/null >/tmp/k8s-up.log 2>&1; then
+        tail -n 20 /tmp/k8s-up.log >&2
+        echo "Couldn't start it. If the sandbox is short of memory, ask the owner to raise SANDBOX_MEMORY_MB." >&2
+        exit 1
+      fi
+      kwokctl scale node --name "$NAME" --replicas "${2:-2}" >/dev/null 2>&1
+      echo "Up. Pods are simulated: they report Running, but no containers run."
+    fi
+    kubectl get nodes
+    ;;
+  down)
+    kwokctl delete cluster --name "$NAME" >/dev/null 2>&1 || true
+    echo "The playground is stopped."
+    ;;
+  status)
+    if running; then kubectl cluster-info | head -n 1; else echo "Not running. Start it with: k8s up"; fi
+    ;;
+  *)
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+esac

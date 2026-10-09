@@ -10,21 +10,57 @@ import { RoomCode } from "./rooms.js";
 
 export type RunnableLanguage = { language: string; label: string };
 
-// What the sandbox image can run, by file extension (commands: apps/runner/src/plans.ts).
+const lang = (language: string, label: string): RunnableLanguage => ({ language, label });
+
+// What the sandbox can run, by file extension (commands: apps/runner/src/plans.ts).
+// The base image has the first group; the full image (pnpm sandbox:build:full) has all.
 const RUNNABLE: Record<string, RunnableLanguage> = {
-  py: { language: "python", label: "Python" },
-  js: { language: "javascript", label: "Node.js" },
-  mjs: { language: "javascript", label: "Node.js" },
-  cjs: { language: "javascript", label: "Node.js" },
-  ts: { language: "typescript", label: "TypeScript" },
-  mts: { language: "typescript", label: "TypeScript" },
-  c: { language: "c", label: "C" },
-  cpp: { language: "cpp", label: "C++" },
-  cc: { language: "cpp", label: "C++" },
-  cxx: { language: "cpp", label: "C++" },
-  java: { language: "java", label: "Java" },
-  sh: { language: "shell", label: "Bash" },
+  py: lang("python", "Python"),
+  js: lang("javascript", "Node.js"),
+  mjs: lang("javascript", "Node.js"),
+  cjs: lang("javascript", "Node.js"),
+  ts: lang("typescript", "TypeScript"),
+  mts: lang("typescript", "TypeScript"),
+  c: lang("c", "C"),
+  cpp: lang("cpp", "C++"),
+  cc: lang("cpp", "C++"),
+  cxx: lang("cpp", "C++"),
+  java: lang("java", "Java"),
+  sh: lang("shell", "Bash"),
+
+  go: lang("go", "Go"),
+  rs: lang("rust", "Rust"),
+  rb: lang("ruby", "Ruby"),
+  php: lang("php", "PHP"),
+  pl: lang("perl", "Perl"),
+  lua: lang("lua", "Lua"),
+  r: lang("r", "R"),
+  kt: lang("kotlin", "Kotlin"),
+  cs: lang("csharp", "C#"),
+  hs: lang("haskell", "Haskell"),
+  ml: lang("ocaml", "OCaml"),
+  ex: lang("elixir", "Elixir"),
+  exs: lang("elixir", "Elixir"),
+  rkt: lang("racket", "Racket"),
+  clj: lang("clojure", "Clojure"),
+  groovy: lang("groovy", "Groovy"),
+  f90: lang("fortran", "Fortran"),
+  f95: lang("fortran", "Fortran"),
+  f03: lang("fortran", "Fortran"),
+  pas: lang("pascal", "Pascal"),
+  adb: lang("ada", "Ada"),
+  cob: lang("cobol", "COBOL"),
+  cbl: lang("cobol", "COBOL"),
+  d: lang("d", "D"),
+  cr: lang("crystal", "Crystal"),
+  // .pl is Perl's; Prolog files use .pro here.
+  pro: lang("prolog", "Prolog"),
+  sql: lang("sql", "SQL (SQLite)"),
+  asm: lang("asm", "Assembly (NASM)"),
 };
+
+/** Every language Run knows, by name ("Python", "Go", …), for messages. */
+export const runnableLabels: string[] = [...new Set(Object.values(RUNNABLE).map((l) => l.label))];
 
 export function runnableLanguage(path: string): RunnableLanguage | null {
   const name = path.slice(path.lastIndexOf("/") + 1);

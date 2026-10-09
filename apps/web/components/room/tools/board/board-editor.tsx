@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Canvas } from "../canvas/canvas";
 import { CanvasHeader, EmptyCanvas, HistoryButtons, NameField, PeerAvatars, ShortcutHint, ZoomMenu } from "../canvas/chrome";
 import type { ToolId } from "../canvas/editor";
-import { ExportMenu } from "../canvas/export-menu";
+import { ExportDialog } from "../canvas/export-dialog";
 import { renameItem, type ListItem } from "../canvas/list";
 import { useLiveDoc, type LiveDoc } from "../canvas/live-doc";
 import { CanvasShell } from "../canvas/shell";
@@ -16,7 +16,7 @@ import { shortcutMap, ToolRow } from "../canvas/tool-row";
 import { useCanvasSession } from "../canvas/use-canvas";
 import { BoardInspector } from "./board-inspector";
 
-const TOOLS: ToolId[] = ["select", "hand", "sticky", "pen", "text", "rect", "ellipse", "arrow", "line"];
+const TOOLS: ToolId[] = ["select", "hand", "sticky", "pen", "eraser", "text", "rect", "ellipse", "arrow", "line"];
 const KEYS = shortcutMap(TOOLS);
 
 type Props = {
@@ -64,7 +64,7 @@ export function BoardEditor({ roomId, item, list, me, editable, onBack, onClose 
             <PeerAvatars />
             <HistoryButtons />
             <ZoomMenu />
-            <ExportMenu name={item.name} />
+            <ExportDialog name={item.name} />
           </>
         }
       />

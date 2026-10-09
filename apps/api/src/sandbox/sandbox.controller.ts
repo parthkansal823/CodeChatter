@@ -1,8 +1,10 @@
 import type { AuthSession } from "@codechatter/auth";
-import { RoomCode, type SandboxStatus } from "@codechatter/contracts";
-import { BadRequestException, Body, Controller, Get, HttpCode, Inject, Param, Post, ServiceUnavailableException } from "@nestjs/common";
+import { INSTALLS_MINUTES, RoomCode, type SandboxStatus } from "@codechatter/contracts";
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Req, ServiceUnavailableException } from "@nestjs/common";
+import type { Request } from "express";
 import { z } from "zod";
 
+import { AuditService } from "../audit/audit.service.js";
 import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
 import type { Env } from "../config/env.js";
@@ -13,12 +15,13 @@ import { RunnerClient } from "../runner/runner.client.js";
 
 const PreviewInput = z.object({ port: z.number().int().min(1).max(65535) });
 
-/** The room's sandbox: live status (ports, CPU, memory), restart, and preview links. */
+/** The room's sandbox: live status (ports, CPU, memory), restart, package installs, and preview links. */
 @Controller("rooms/:roomId")
 export class SandboxController {
   constructor(
     private readonly rooms: RoomsService,
     private readonly runner: RunnerClient,
+    private readonly audit: AuditService,
     @Inject(ENV) private readonly env: Env,
     @Inject(PREVIEW_HOSTS) private readonly hosts: PreviewHosts,
   ) {}
@@ -27,8 +30,31 @@ export class SandboxController {
   async status(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string): Promise<SandboxStatus & { previews: boolean }> {
     const room = this.room(roomId);
     await this.rooms.require(room, session.user.id, "room.view");
-    const status = await this.runner.status(room, session.user).catch(() => ({ running: false, ports: [], cpuPercent: null, memory: null, processes: null }));
+    const status = await this.runner
+      .status(room, session.user)
+      .catch((): SandboxStatus => ({ running: false, ports: [], cpuPercent: null, memory: null, processes: null, installs: null }));
     return { ...status, previews: this.hosts.enabled };
+  }
+
+  /**
+   * Package installs (ADR 0007): the owner lets the sandbox reach package
+   * registries, and nothing else, for an hour. Recorded in the audit log.
+   */
+  @Put("sandbox/installs")
+  async allowInstalls(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Req() request: Request) {
+    const { room } = await this.rooms.require(this.room(roomId), session.user.id, "sandbox.network");
+    const installs = await this.runner.allowInstalls(room.id, session.user, INSTALLS_MINUTES);
+    await this.audit.record({ orgId: room.orgId, actorId: session.user.id, action: "sandbox.installs.allow", targetType: "room", targetId: room.id, data: installs }, request);
+    return installs;
+  }
+
+  @Delete("sandbox/installs")
+  @HttpCode(200)
+  async stopInstalls(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Req() request: Request) {
+    const { room } = await this.rooms.require(this.room(roomId), session.user.id, "sandbox.network");
+    await this.runner.stopInstalls(room.id, session.user);
+    await this.audit.record({ orgId: room.orgId, actorId: session.user.id, action: "sandbox.installs.stop", targetType: "room", targetId: room.id }, request);
+    return { ok: true };
   }
 
   /** Restarting ends every run and terminal in the room, so it needs terminal rights. */

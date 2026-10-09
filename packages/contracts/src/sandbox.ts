@@ -44,4 +44,26 @@ export type SandboxStatus = {
   cpuPercent: number | null;
   memory: { usedMb: number; limitMb: number } | null;
   processes: { current: number; limit: number } | null;
+  /** While the owner allows package installs: until when (ISO time), and who allowed them. */
+  installs: { until: string; by: string } | null;
 };
+
+/**
+ * What a room reaches while its owner allows package installs (ADR 0007): these
+ * hosts over HTTPS, through the room's egress proxy, and nothing else.
+ */
+export const PACKAGE_REGISTRIES = [
+  { name: "npm", hosts: ["registry.npmjs.org", "registry.yarnpkg.com", "repo.yarnpkg.com"] },
+  { name: "PyPI", hosts: ["pypi.org", "files.pythonhosted.org"] },
+  { name: "Go modules", hosts: ["proxy.golang.org", "sum.golang.org"] },
+  { name: "crates.io", hosts: ["index.crates.io", "static.crates.io", "crates.io"] },
+  { name: "RubyGems", hosts: ["rubygems.org", "index.rubygems.org"] },
+  { name: "Maven Central", hosts: ["repo.maven.apache.org", "repo1.maven.org", "repo.clojars.org"] },
+  { name: "Packagist", hosts: ["repo.packagist.org"] },
+  { name: "NuGet", hosts: ["api.nuget.org"] },
+  { name: "Hex", hosts: ["repo.hex.pm", "builds.hex.pm"] },
+  { name: "CRAN", hosts: ["cloud.r-project.org"] },
+] as const;
+
+/** How long one "allow installs" lasts; the proxy stops by itself after it. */
+export const INSTALLS_MINUTES = 60;

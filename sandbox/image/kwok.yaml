@@ -1,0 +1,14 @@
+# kwokctl settings for the sandbox's Kubernetes playground (sandbox/image/k8s).
+# The sandbox has no network, only loopback, and kube-apiserver won't start
+# without an address to advertise. Loopback is only allowed with the endpoint
+# reconciler off, which is fine here: nothing runs inside the cluster that
+# would need the `kubernetes` Service's address.
+apiVersion: config.kwok.x-k8s.io/v1alpha1
+kind: KwokctlConfiguration
+componentsPatches:
+  - name: kube-apiserver
+    extraArgs:
+      - key: advertise-address
+        value: 127.0.0.1
+      - key: endpoint-reconciler-type
+        value: none

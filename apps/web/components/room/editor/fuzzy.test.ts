@@ -30,7 +30,13 @@ describe("fuzzyMatch", () => {
 });
 
 describe("rankFiles", () => {
-  const files = [file("domain.py"), file("src/main.py"), file("main.py"), file("docs/readme.md"), file("a/b/mainframe.ts")];
+  const files = [
+    file("domain.py"),
+    file("src/main.py"),
+    file("main.py"),
+    file("docs/readme.md"),
+    file("a/b/mainframe.ts"),
+  ];
 
   it("lists recent files first when nothing is typed, then the rest by path", () => {
     const ranked = rankFiles(files, "", ["docs/readme.md", "main.py"]).map((r) => r.file.path);

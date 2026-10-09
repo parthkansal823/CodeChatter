@@ -51,9 +51,15 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
 
 - **Typecheck:** `pnpm --filter <pkg> typecheck`. The web one takes 1–2 minutes.
 - **Lint web files:** `pnpm --filter @codechatter/web exec eslint <files>`.
-- **Unit tests:** `pnpm --filter <pkg> test`.
+- **Unit tests:**
+  - `pnpm --filter <pkg> test`
+  - the canvas engine's `node:test` files (`apps/web/components/room/tools/canvas/*.test.ts`) need tsx, which the web package doesn't have yet: run `pnpm exec tsx --test <absolute paths>` from `apps/runner`
 - **End-to-end** (dev stack running):
-  - `node --env-file=../../.env test/runner.e2e.mjs` and `test/judge.e2e.mjs`, from `apps/runner`
+  - `node --env-file=../../.env test/runner.e2e.mjs`, `test/judge.e2e.mjs`, `test/network.e2e.mjs` (the room network's isolation) and `test/egress.e2e.mjs` (package installs: real downloads, takes a minute or two), from `apps/runner`
+  - `test/languages.e2e.mjs` (every language) and `test/kubernetes.e2e.mjs` (the playground), from `apps/runner`. Both need the full image: `pnpm sandbox:build:full` and `SANDBOX_IMAGE=codechatter-sandbox:full`.
   - browser tests in `apps/web/test/*.e2e.mjs` (Playwright-core + Edge against http://localhost:8080; helpers in `browser.mjs`), run from `apps/web` with `node test/<name>.e2e.mjs`
+- **AI tests:**
+  - `ai.e2e.mjs` needs the mock AI: run `node test/mock-ai.mjs` from `apps/api`, and point `.env` at it as its header shows
+  - `ai-ollama.e2e.mjs` uses the local Ollama, which `.env` normally points at
 - **Test accounts:** test1@codechatter.local (owner) and test2@codechatter.local (editor), password `codechatter123`.
 - **Rooms:** TEAM22 "Team playground" is for trying things by hand. Automated tests use E2ETST "Automated tests" only (`pnpm seed` creates both).

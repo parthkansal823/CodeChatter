@@ -25,7 +25,8 @@ export const modelOwner = (model: Model | null) => (model ? owners.get(model) : 
 export type FileRef = { id: string; path: string; name: string };
 export type ModelHandle = { model: Model; ytext: Y.Text; release: () => void };
 
-const uriFor = (path: string) => monaco.Uri.parse(`file:///workspace/${path.split("/").map(encodeURIComponent).join("/")}`);
+const uriFor = (path: string) =>
+  monaco.Uri.parse(`file:///workspace/${path.split("/").map(encodeURIComponent).join("/")}`);
 
 /**
  * One Monaco model per file path, shared by every editor that shows the file

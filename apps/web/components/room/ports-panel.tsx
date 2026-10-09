@@ -1,8 +1,8 @@
 "use client";
 
-import type { SandboxStatus } from "@codechatter/contracts";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { ExternalLink, Loader2, RotateCcw } from "lucide-react";
+import { PACKAGE_REGISTRIES, type SandboxStatus } from "@codechatter/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, ExternalLink, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { useRoom } from "@/components/room/room-context";
@@ -24,9 +24,9 @@ const KNOWN: Record<number, string> = {
 };
 
 /**
- * The room's sandbox at a glance: live CPU, memory and processes, the ports
- * servers listen on (each opens as a live preview on its own origin), and
- * Restart for a sandbox that's stuck.
+ * The room's sandbox at a glance: live CPU, memory and processes, package
+ * installs, the ports servers listen on (each opens as a live preview on its
+ * own origin), and Restart for a sandbox that's stuck.
  */
 export function PortsPanel({ visible }: { visible: boolean }) {
   const { room, can } = useRoom();
@@ -81,6 +81,8 @@ export function PortsPanel({ visible }: { visible: boolean }) {
         )}
       </div>
 
+      <Installs roomId={room.id} installs={data?.installs ?? null} canSwitch={can("sandbox.network")} />
+
       <h3 className="mt-5 mb-2 text-xs font-medium text-muted-foreground">Ports</h3>
       {!data?.running ? (
         <p className="text-muted-foreground">The sandbox starts when someone runs code or opens a terminal.</p>
@@ -103,9 +105,52 @@ export function PortsPanel({ visible }: { visible: boolean }) {
         </ul>
       )}
       {data && !data.previews && data.ports.length > 0 && (
-        <p className="mt-2 text-xs text-muted-foreground">Live previews are turned off on this server (PREVIEW_ORIGIN isn't set).</p>
+        <p className="mt-2 text-xs text-muted-foreground">Live previews are turned off on this server (PREVIEW_ORIGIN isn&apos;t set).</p>
       )}
     </div>
+  );
+}
+
+/**
+ * Package installs (ADR 0007): the sandbox has no internet, and the owner can
+ * open package registries, and nothing else, for an hour. Everyone sees when
+ * they're open and who opened them.
+ */
+function Installs({ roomId, installs, canSwitch }: { roomId: string; installs: SandboxStatus["installs"]; canSwitch: boolean }) {
+  const queryClient = useQueryClient();
+  const change = useMutation({
+    mutationFn: (allow: boolean) => api(`/api/rooms/${roomId}/sandbox/installs`, { method: allow ? "PUT" : "DELETE" }),
+    onSuccess: (_, allow) => {
+      toast.success(allow ? "Package installs allowed for an hour" : "Package installs turned off");
+      void queryClient.invalidateQueries({ queryKey: ["sandbox", roomId] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.detail : "Couldn't change package installs."),
+  });
+  const until = installs && new Date(installs.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <section aria-label="Package installs">
+      <h3 className="mt-5 mb-2 text-xs font-medium text-muted-foreground">Package installs</h3>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2">
+        <span aria-hidden className={cn("size-2 shrink-0 rounded-full", installs ? "bg-brand" : "bg-muted-foreground/40")} />
+        <div className="min-w-0 flex-1">
+          <p>
+            {installs
+              ? `On until ${until}${installs.by ? `, allowed by ${installs.by}` : ""}. Terminals and Run reach package registries, and nothing else.`
+              : "Off. The sandbox has no internet."}
+          </p>
+          <p className="text-xs text-muted-foreground">{PACKAGE_REGISTRIES.map((registry) => registry.name).join(", ")}</p>
+        </div>
+        {canSwitch ? (
+          <Button size="xs" variant="outline" disabled={change.isPending} onClick={() => change.mutate(!installs)}>
+            {change.isPending ? <Loader2 className="animate-spin" /> : !installs && <Download />}
+            {installs ? "Turn off" : "Allow for an hour"}
+          </Button>
+        ) : (
+          !installs && <span className="text-xs text-muted-foreground">The room&apos;s owner can turn them on.</span>
+        )}
+      </div>
+    </section>
   );
 }
 

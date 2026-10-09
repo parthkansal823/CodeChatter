@@ -1,5 +1,15 @@
 import { verifyServiceToken, type ServiceClaims } from "@codechatter/auth/service-token";
-import { JudgeInput, RoomCode, RunInput, RunStartInput, type JudgeEvent, type RunnerEvent } from "@codechatter/contracts";
+import {
+  DATABASE_KINDS,
+  INSTALLS_MINUTES,
+  JudgeInput,
+  RoomCode,
+  RunInput,
+  RunStartInput,
+  type JudgeEvent,
+  type RunnerEvent,
+  type SandboxStatus,
+} from "@codechatter/contracts";
 import { findByPath } from "@codechatter/workspace-model";
 import type Docker from "dockerode";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -27,8 +37,14 @@ import { openTerminal } from "./terminal.js";
  *   POST /rooms/:id/runs/input      { runId, data }
  *   GET  /rooms/:id/runs/current    RunSnapshot
  *   POST /rooms/:id/judge           run test cases against a file; streams NDJSON JudgeEvents
- *   GET  /rooms/:id/sandbox         SandboxStatus (ports, CPU, memory, processes)
+ *   GET  /rooms/:id/sandbox         SandboxStatus (ports, CPU, memory, processes, installs)
  *   POST /rooms/:id/sandbox/restart
+ *   PUT  /rooms/:id/sandbox/installs  { minutes } allow package installs (ADR 0007)
+ *   DELETE /rooms/:id/sandbox/installs
+ *   GET  /rooms/:id/databases       DatabaseStatus[] (with connections; the API filters them)
+ *   POST /rooms/:id/databases/:kind start one (returns at once; the list follows it)
+ *   POST /rooms/:id/databases/:kind/stop    keeps its data
+ *   DELETE /rooms/:id/databases/:kind       deletes its data
  *   ANY  /rooms/:id/preview/:port/* dev-server preview (HTTP and WebSocket)
  *   WS   /rooms/:id/terminal?session=&cols=&rows=
  */
@@ -63,7 +79,10 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       return proxyPreviewHttp(rooms.get(preview[1]!), port, `${preview[3] ?? "/"}${url.search}`, req, res);
     }
 
-    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|judge)$/.exec(url.pathname);
+    const database = /^\/rooms\/([A-Z0-9]{6})\/databases(?:\/([a-z]+)(\/stop)?)?$/.exec(url.pathname);
+    if (database) return handleDatabases(req, res, database[1]!, database[2], Boolean(database[3]));
+
+    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|judge)$/.exec(url.pathname);
     if (!match || !RoomCode.safeParse(match[1]).success) return json(res, 404, { error: "Not found." });
     const roomId = match[1]!;
     const claims = authorize(req, roomId);
@@ -97,7 +116,23 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     }
     if (route === "GET sandbox") {
       const session = rooms.peek(roomId);
-      return json(res, 200, session ? await session.status() : { running: false, ports: [], cpuPercent: null, memory: null, processes: null });
+      const status = session ? await session.status() : { running: false, ports: [], cpuPercent: null, memory: null, processes: null };
+      return json(res, 200, { ...status, installs: await rooms.egress.status(roomId) } satisfies SandboxStatus);
+    }
+    // The API has checked that the caller may switch the room's network (the owner).
+    if (route === "PUT sandbox/installs") {
+      const body = z.object({ minutes: z.number().positive().max(INSTALLS_MINUTES) }).safeParse(await readJson(req));
+      if (!body.success) return json(res, 400, { error: `minutes must be more than 0 and at most ${INSTALLS_MINUTES}.` });
+      try {
+        return json(res, 200, await rooms.egress.allow(rooms.get(roomId).sandbox, body.data.minutes, user.name));
+      } catch (error) {
+        if (error instanceof SandboxUnavailableError) return json(res, 503, { error: error.message });
+        throw error;
+      }
+    }
+    if (route === "DELETE sandbox/installs") {
+      await rooms.egress.stop(roomId);
+      return json(res, 200, { ok: true });
     }
     if (route === "POST sandbox/restart") {
       const session = rooms.get(roomId);
@@ -125,6 +160,26 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       return startRun(res, req, roomId, user, body.data);
     }
     return json(res, 405, { error: "Method not allowed." });
+  }
+
+  /** The room's databases (databases.ts). The API has checked who may see and change them. */
+  async function handleDatabases(req: IncomingMessage, res: ServerResponse, roomId: string, name: string | undefined, stop: boolean): Promise<void> {
+    if (!RoomCode.safeParse(roomId).success || !authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const kind = DATABASE_KINDS.find((k) => k === name);
+    if (name !== undefined && !kind) return json(res, 404, { error: "Not found." });
+    const route = `${req.method} ${kind ? (stop ? "stop" : "one") : "all"}`;
+    if (route === "GET all") return json(res, 200, await rooms.databases.list(roomId));
+    if (!kind) return json(res, 405, { error: "Method not allowed." });
+    if (route === "POST one") {
+      const session = rooms.get(roomId);
+      session.touch();
+      rooms.databases.start(session.sandbox, kind);
+      return json(res, 202, await rooms.databases.list(roomId));
+    }
+    if (route === "POST stop") await rooms.databases.stop(roomId, kind);
+    else if (route === "DELETE one") await rooms.databases.remove(roomId, kind);
+    else return json(res, 405, { error: "Method not allowed." });
+    return json(res, 200, await rooms.databases.list(roomId));
   }
 
   /** Streams the run as newline-delimited JSON until it exits. Closing the request stops the run. */

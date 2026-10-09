@@ -145,6 +145,7 @@ export function describeAiError(error: unknown, settings: AiSettings, withImage:
     case "permission":
       return `This API key isn't allowed to use the model "${settings.model}". Check the plan or choose another AI_MODEL.`;
     case "not-found":
+      if (settings.provider === "ollama") return `Ollama doesn't have the model "${settings.model}" yet. Pull it on the server: ollama pull ${settings.model}`;
       return settings.provider === "openai"
         ? `The AI provider${where} has no model called "${settings.model}". Check AI_MODEL and OPENAI_BASE_URL.`
         : `There's no model called "${settings.model}". Check AI_MODEL.`;
@@ -156,6 +157,7 @@ export function describeAiError(error: unknown, settings: AiSettings, withImage:
       return `The AI provider couldn't handle this request${detail ? `: ${detail}` : "."}${hint}`;
     }
     case "connection":
+      if (settings.provider === "ollama") return `Couldn't reach Ollama${where}. Start the Ollama app on the server (or run: ollama serve), then try again.`;
       return settings.baseURL
         ? `Couldn't reach the AI server${where}. If it's Ollama, check that it's running (ollama serve).`
         : "Couldn't reach the AI provider. Check the server's internet connection and try again.";

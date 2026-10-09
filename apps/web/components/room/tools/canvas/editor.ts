@@ -36,7 +36,7 @@ import { ShapeStore } from "./store";
 import { layoutText, STICKY_PADDING, type Measure } from "./text-layout";
 import { childrenIndex, descendantsOf, topLevelIds } from "./tree";
 
-export type ToolId = "select" | "hand" | "frame" | "rect" | "ellipse" | "line" | "arrow" | "text" | "pen" | "sticky";
+export type ToolId = "select" | "hand" | "frame" | "rect" | "ellipse" | "line" | "arrow" | "text" | "pen" | "sticky" | "eraser";
 
 /** screen = world × zoom + (x, y) */
 export type Camera = { x: number; y: number; zoom: number };
@@ -76,6 +76,8 @@ export class Editor {
   readonly guides = new Atom<Guide[]>([]);
   readonly marquee = new Atom<Rect | null>(null);
   readonly draft = new Atom<Draft | null>(null);
+  /** Shapes the eraser has touched this stroke; they fade, and go when the pointer lifts. */
+  readonly erasing = new Atom<ReadonlySet<string>>(new Set());
   /** The shape a connector being drawn would attach to. */
   readonly target = new Atom<string | null>(null);
   readonly readOnly = new Atom<boolean>(false);

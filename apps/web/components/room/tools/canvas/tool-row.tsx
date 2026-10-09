@@ -1,6 +1,6 @@
 "use client";
 
-import { Circle, Frame, Hand, ImagePlus, Minus, MousePointer2, MoveUpRight, Pencil, Square, StickyNote, Type, type LucideIcon } from "lucide-react";
+import { Circle, Eraser, Frame, Hand, ImagePlus, Minus, MousePointer2, MoveUpRight, Pencil, Square, StickyNote, Type, type LucideIcon } from "lucide-react";
 import { useRef } from "react";
 
 import { insertImage } from "./clipboard-io";
@@ -19,6 +19,7 @@ export const TOOLS: Record<ToolId, { label: string; key: string; icon: LucideIco
   text: { label: "Text", key: "T", icon: Type },
   pen: { label: "Pen", key: "P", icon: Pencil },
   sticky: { label: "Sticky note", key: "S", icon: StickyNote },
+  eraser: { label: "Eraser", key: "E", icon: Eraser },
 };
 
 /** Single-key shortcuts for a toolbar's tools, as the keyboard handler wants them. */

@@ -10,7 +10,15 @@ describe("sanitizeSettings", () => {
   });
 
   it("keeps valid saved values and drops invalid ones", () => {
-    const out = sanitizeSettings({ fontSize: 18, tabSize: 4, wordWrap: true, lineNumbers: "relative", cursorStyle: "wavy", minimap: "yes", extra: 1 });
+    const out = sanitizeSettings({
+      fontSize: 18,
+      tabSize: 4,
+      wordWrap: true,
+      lineNumbers: "relative",
+      cursorStyle: "wavy",
+      minimap: "yes",
+      extra: 1,
+    });
     assert.equal(out.fontSize, 18);
     assert.equal(out.tabSize, 4);
     assert.equal(out.wordWrap, true);
@@ -31,7 +39,14 @@ describe("sanitizeSettings", () => {
 
 describe("monacoOptions", () => {
   it("maps each setting onto the matching Monaco option", () => {
-    const o = monacoOptions({ ...DEFAULT_SETTINGS, fontSize: 20, wordWrap: true, minimap: false, bracketGuides: true, lineNumbers: "off" });
+    const o = monacoOptions({
+      ...DEFAULT_SETTINGS,
+      fontSize: 20,
+      wordWrap: true,
+      minimap: false,
+      bracketGuides: true,
+      lineNumbers: "off",
+    });
     assert.equal(o.fontSize, 20);
     assert.equal(o.lineHeight, 32);
     assert.equal(o.wordWrap, "on");

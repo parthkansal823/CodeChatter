@@ -5,15 +5,40 @@ import type { Duplex } from "node:stream";
 import { AgentChannel } from "./agent-channel.js";
 import type { Env } from "./env.js";
 import { log } from "./log.js";
+import { freeSubnets } from "./subnets.js";
 
 export const LABEL_ROOM = "codechatter.room";
 export const LABEL_MANAGED = "codechatter.managed";
 export const LABEL_NAMESPACE = "codechatter.namespace";
+/** What a container is to its room, when it isn't the sandbox: "egress" or "database". */
+export const LABEL_ROLE = "codechatter.role";
+/** Bumped when a container's shape changes (mounts, limits), so older ones are recreated. */
+const LABEL_CONFIG = "codechatter.config";
+const CONTAINER_CONFIG = "2";
 
-/** The only environment user code sees (spike S2: no server secrets, no image ENV). */
-const USER_ENV = ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/home/ccuser", "LANG=C.UTF-8", "TERM=xterm-256color"];
+/** The agent's relay to the room's egress proxy (sandbox/agent/src/relay.ts). */
+const PROXY = "http://127.0.0.1:3128";
+/**
+ * The only environment user code sees (spike S2: no server secrets, no image
+ * ENV). Package managers go through the agent's relay (ADR 0007) and install
+ * into the room's home volume, so `pip install` and `npm install -g` work
+ * without root, and their caches make repeat installs fast.
+ */
+const USER_ENV = [
+  "PATH=/usr/local/bin:/usr/bin:/bin:/home/ccuser/.local/bin:/home/ccuser/.cargo/bin:/home/ccuser/go/bin",
+  "HOME=/home/ccuser",
+  "LANG=C.UTF-8",
+  "TERM=xterm-256color",
+  ...["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"].map((name) => `${name}=${PROXY}`),
+  ...["NO_PROXY", "no_proxy"].map((name) => `${name}=localhost,127.0.0.1,::1`),
+  // Debian marks its Python as managed by apt; with a read-only root, pip installs for the user.
+  "PIP_BREAK_SYSTEM_PACKAGES=1",
+  "npm_config_prefix=/home/ccuser/.local",
+];
 const USER = "10001";
 const AGENT_USER = "10002";
+/** Each room network is a /26 of SANDBOX_SUBNET: the sandbox, the room's services and room to spare. */
+const ROOM_SUBNET_BITS = 26;
 
 export class SandboxUnavailableError extends Error {}
 
@@ -27,13 +52,15 @@ export type ContainerStats = {
 };
 
 /**
- * One room's container (ADR 0003): created on first use, network off,
- * read-only root, no capabilities, PID/memory/CPU limits, and a named volume
- * for /workspace that outlives the container.
+ * One room's container (ADR 0003): created on first use, on the room's own
+ * network (ADR 0007), read-only root, no capabilities, PID/memory/CPU limits,
+ * and named volumes for /workspace and the home folder that outlive it.
  */
 export class Sandbox {
   readonly name: string;
   readonly volume: string;
+  readonly home: string;
+  readonly network: string;
   agent: AgentChannel | null = null;
   /** Called for each change the agent reports from inside the sandbox. */
   onAgentEvent: (event: AgentEvent) => void = () => {};
@@ -46,10 +73,14 @@ export class Sandbox {
     private readonly docker: Docker,
     readonly roomId: string,
     private readonly env: Env,
+    /** The room's own settings for every terminal and Run: its database connections (databases.ts). */
+    private readonly roomEnv: string[] = [],
   ) {
     const id = roomId.toLowerCase();
     this.name = `cc-${env.SANDBOX_NAMESPACE}-room-${id}`;
     this.volume = `cc-${env.SANDBOX_NAMESPACE}-ws-${id}`;
+    this.home = `cc-${env.SANDBOX_NAMESPACE}-home-${id}`;
+    this.network = `cc-${env.SANDBOX_NAMESPACE}-net-${id}`;
   }
 
   /** Start (or reconnect to) the container and its agent. Safe to call concurrently. */
@@ -68,7 +99,7 @@ export class Sandbox {
       Cmd: cmd,
       User: USER,
       WorkingDir: "/workspace",
-      Env: [...USER_ENV, ...(options.env ?? [])],
+      Env: [...USER_ENV, ...this.roomEnv, ...(options.env ?? [])],
       AttachStdin: stdin,
       AttachStdout: true,
       AttachStderr: true,
@@ -135,14 +166,20 @@ export class Sandbox {
         throw new SandboxUnavailableError(`The sandbox image ${this.env.SANDBOX_IMAGE} is missing. Build it with: pnpm sandbox:build`);
       });
 
+    const networkId = await this.ensureNetwork();
     let container = this.docker.getContainer(this.name);
-    let info = await container.inspect().catch((error: { statusCode?: number }) => {
-      if (error.statusCode === 404) return null;
-      throw error;
-    });
-    // A rebuilt image (pnpm sandbox:build) replaces old containers; files live on the volume.
-    if (info && info.Image !== image.Id) {
-      log.info(`${this.name}: sandbox image changed, recreating the container`);
+    let info = await container.inspect().catch(missingAsNull);
+    // A rebuilt image (pnpm sandbox:build), a new room network or a new
+    // container shape replaces old containers (a stopped one would still point
+    // at the network it was made with, and fail to start); files live on the
+    // volumes.
+    if (
+      info &&
+      (info.Image !== image.Id ||
+        info.NetworkSettings.Networks[this.network]?.NetworkID !== networkId ||
+        info.Config.Labels?.[LABEL_CONFIG] !== CONTAINER_CONFIG)
+    ) {
+      log.info(`${this.name}: sandbox image, network or shape changed, recreating the container`);
       await container.remove({ force: true }).catch(() => {});
       info = null;
     }
@@ -183,6 +220,42 @@ export class Sandbox {
     log.info(`${this.name}: sandbox ${running ? "reconnected" : "started"}`);
   }
 
+  /**
+   * The room's own network (ADR 0007): internal, with no address on the host
+   * (gateway mode "isolated"). The sandbox and the room's services reach each
+   * other by name; the host, other rooms and the internet are out of reach
+   * (test/network.e2e.mjs). Docker's default address pools hold only about 30
+   * networks, so each room takes a block of SANDBOX_SUBNET instead.
+   */
+  async ensureNetwork(): Promise<string> {
+    const existing = await this.docker.getNetwork(this.network).inspect().catch(missingAsNull);
+    if (existing) return existing.Id as string;
+    const taken = (await this.docker.listNetworks()).flatMap((n) => (n.IPAM?.Config ?? []).map((c) => c.Subnet ?? ""));
+    for (const subnet of freeSubnets(this.env.SANDBOX_SUBNET, ROOM_SUBNET_BITS, taken)) {
+      try {
+        const network = await this.docker.createNetwork({
+          Name: this.network,
+          Driver: "bridge",
+          Internal: true,
+          IPAM: { Driver: "default", Config: [{ Subnet: subnet }] },
+          Options: { "com.docker.network.bridge.gateway_mode_ipv4": "isolated" },
+          Labels: { [LABEL_MANAGED]: "1", [LABEL_NAMESPACE]: this.env.SANDBOX_NAMESPACE, [LABEL_ROOM]: this.roomId },
+        });
+        log.info(`${this.network}: created on ${subnet}`);
+        return network.id;
+      } catch (error) {
+        // Made meanwhile by another caller (installs allowed while the sandbox starts).
+        if ((error as { statusCode?: number }).statusCode === 409) {
+          const made = await this.docker.getNetwork(this.network).inspect().catch(missingAsNull);
+          if (made) return made.Id as string;
+        }
+        // Another network took this block since the list (Docker refuses overlaps): try the next.
+        if (!/overlap/i.test((error as Error).message)) throw error;
+      }
+    }
+    throw new SandboxUnavailableError(`No room left in SANDBOX_SUBNET (${this.env.SANDBOX_SUBNET}) for another room network.`);
+  }
+
   private create(): Promise<Docker.Container> {
     const mb = this.env.SANDBOX_MEMORY_MB * 1024 * 1024;
     return this.docker.createContainer({
@@ -197,15 +270,17 @@ export class Sandbox {
       AttachStdout: true,
       AttachStderr: true,
       Tty: false,
-      Labels: { [LABEL_MANAGED]: "1", [LABEL_NAMESPACE]: this.env.SANDBOX_NAMESPACE, [LABEL_ROOM]: this.roomId },
+      Labels: {
+        [LABEL_MANAGED]: "1",
+        [LABEL_NAMESPACE]: this.env.SANDBOX_NAMESPACE,
+        [LABEL_ROOM]: this.roomId,
+        [LABEL_CONFIG]: CONTAINER_CONFIG,
+      },
       HostConfig: {
-        NetworkMode: "none",
+        NetworkMode: this.network,
         ReadonlyRootfs: true,
         // exec: compiled C/C++ programs run from /tmp.
-        Tmpfs: {
-          "/tmp": "rw,exec,nosuid,nodev,size=256m,mode=1777",
-          "/home/ccuser": "rw,nosuid,nodev,size=64m,uid=10001,gid=10000,mode=0700",
-        },
+        Tmpfs: { "/tmp": "rw,exec,nosuid,nodev,size=256m,mode=1777" },
         CapDrop: ["ALL"],
         SecurityOpt: ["no-new-privileges"],
         PidsLimit: this.env.SANDBOX_PIDS,
@@ -214,10 +289,20 @@ export class Sandbox {
         NanoCpus: Math.round(this.env.SANDBOX_CPUS * 1e9),
         Init: true,
         IpcMode: "private",
-        Mounts: [{ Type: "volume", Source: this.volume, Target: "/workspace" }],
+        // A new home volume starts as the image's /home/ccuser: owned by ccuser, mode 700.
+        Mounts: [
+          { Type: "volume", Source: this.volume, Target: "/workspace" },
+          { Type: "volume", Source: this.home, Target: "/home/ccuser" },
+        ],
       },
     });
   }
+}
+
+/** For Docker inspects: null when the object doesn't exist. */
+function missingAsNull(error: { statusCode?: number }): null {
+  if (error.statusCode === 404) return null;
+  throw error;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {

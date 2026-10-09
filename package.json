@@ -19,7 +19,8 @@
     "db:generate": "pnpm --filter @codechatter/db generate",
     "db:migrate": "pnpm --filter @codechatter/db build && pnpm --filter @codechatter/db migrate",
     "seed": "pnpm --filter @codechatter/api build && pnpm --filter @codechatter/api seed:dev",
-    "sandbox:build": "docker build -t codechatter-sandbox:dev -f sandbox/image/Dockerfile sandbox"
+    "sandbox:build": "docker build --target base -t codechatter-sandbox:dev -f sandbox/image/Dockerfile sandbox",
+    "sandbox:build:full": "docker build --target full -t codechatter-sandbox:full -f sandbox/image/Dockerfile sandbox"
   },
   "devDependencies": {
     "prettier": "3.9.9",

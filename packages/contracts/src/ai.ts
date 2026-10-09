@@ -90,7 +90,7 @@ export const AiChatInput = z.object({
 });
 export type AiChatInput = z.infer<typeof AiChatInput>;
 
-export type AiProviderName = "anthropic" | "openai" | "none";
+export type AiProviderName = "anthropic" | "openai" | "ollama" | "none";
 
 /** GET /api/ai/status: enough for the UI to show the chat or the setup help. */
 export type AiStatus = {
@@ -102,6 +102,8 @@ export type AiStatus = {
   /** Why AI isn't usable yet, in plain words (never contains a secret). */
   problem: string | null;
   limit: { requests: number; windowSeconds: number };
+  /** Ollama on the server's machine, when it answers: the models pulled there (the setup panel lists them). */
+  ollama: { url: string; models: string[] } | null;
 };
 
 /** Tokens one answer used. `estimated` when the provider didn't report them (counted from characters). */
