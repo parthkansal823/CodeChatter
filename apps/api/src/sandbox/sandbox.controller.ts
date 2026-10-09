@@ -1,5 +1,5 @@
 import type { AuthSession } from "@codechatter/auth";
-import { INSTALLS_MINUTES, RoomCode, type SandboxStatus } from "@codechatter/contracts";
+import { INSTALLS_MINUTES, RoomCode, type DevServerStatus, type SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Req, ServiceUnavailableException } from "@nestjs/common";
 import type { Request } from "express";
 import { z } from "zod";
@@ -55,6 +55,36 @@ export class SandboxController {
     await this.runner.stopInstalls(room.id, session.user);
     await this.audit.record({ orgId: room.orgId, actorId: session.user.id, action: "sandbox.installs.stop", targetType: "room", targetId: room.id }, request);
     return { ok: true };
+  }
+
+  /** The dev server from .codechatter/room.json (apps/runner/src/dev-server.ts): its settings and whether it runs. */
+  @Get("dev")
+  async devStatus(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string): Promise<DevServerStatus> {
+    const { room } = await this.rooms.require(this.room(roomId), session.user.id, "room.view");
+    return this.runner.dev(room.id, session.user, "GET");
+  }
+
+  /**
+   * Start (or restart) it, in a terminal everyone in the room can watch. It
+   * runs commands from a file anyone with edit rights can change, so it needs
+   * terminal rights, like a terminal.
+   */
+  @Post("dev")
+  @HttpCode(200)
+  async startDev(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Req() request: Request): Promise<DevServerStatus> {
+    const { room } = await this.rooms.require(this.room(roomId), session.user.id, "terminal.open");
+    const status = await this.runner.dev(room.id, session.user, "POST");
+    await this.audit.record({ orgId: room.orgId, actorId: session.user.id, action: "dev.start", targetType: "room", targetId: room.id }, request);
+    return status;
+  }
+
+  @Delete("dev")
+  @HttpCode(200)
+  async stopDev(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Req() request: Request): Promise<DevServerStatus> {
+    const { room } = await this.rooms.require(this.room(roomId), session.user.id, "terminal.open");
+    const status = await this.runner.dev(room.id, session.user, "DELETE");
+    await this.audit.record({ orgId: room.orgId, actorId: session.user.id, action: "dev.stop", targetType: "room", targetId: room.id }, request);
+    return status;
   }
 
   /** Restarting ends every run and terminal in the room, so it needs terminal rights. */

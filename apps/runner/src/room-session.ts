@@ -8,7 +8,8 @@ import { Egress, LABEL_UNTIL } from "./egress.js";
 import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { RunManager } from "./runs.js";
-import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, Sandbox } from "./sandbox.js";
+import { KubeSandbox, roomNamespace, type Kube } from "./kube-sandbox.js";
+import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, Sandbox, type RoomSandbox } from "./sandbox.js";
 import { TunnelHub } from "./tunnel.js";
 
 /**
@@ -17,7 +18,7 @@ import { TunnelHub } from "./tunnel.js";
  * closed after SANDBOX_IDLE_MINUTES with no run and no terminal.
  */
 export class RoomSession {
-  readonly sandbox: Sandbox;
+  readonly sandbox: RoomSandbox;
   readonly sync: DocSync;
   readonly runs: RunManager;
   readonly tunnels: TunnelHub;
@@ -33,8 +34,10 @@ export class RoomSession {
     readonly roomId: string,
     private readonly env: Env,
     private readonly databases: Databases,
+    kube: Kube | null,
   ) {
-    this.sandbox = new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)));
+    const roomEnv = databaseEnv(databasePassword(env.SERVICE_SECRET, roomId));
+    this.sandbox = kube ? new KubeSandbox(kube, roomId, env, roomEnv) : new Sandbox(docker, roomId, env, roomEnv);
     this.sync = new DocSync(roomId, { collabUrl: env.COLLAB_INTERNAL_URL, secret: env.SERVICE_SECRET });
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
     this.tunnels = new TunnelHub(() => this.sandbox.agent);
@@ -128,6 +131,8 @@ export class RoomRegistry {
   constructor(
     private readonly docker: Docker,
     private readonly env: Env,
+    /** Set when rooms run on Kubernetes (RUNNER_DRIVER=kubernetes). */
+    private readonly kube: Kube | null = null,
   ) {
     this.egress = new Egress(docker, env);
     this.databases = new Databases(docker, env);
@@ -137,7 +142,7 @@ export class RoomRegistry {
   get(roomId: string): RoomSession {
     let session = this.sessions.get(roomId);
     if (!session) {
-      session = new RoomSession(this.docker, roomId, this.env, this.databases);
+      session = new RoomSession(this.docker, roomId, this.env, this.databases, this.kube);
       this.sessions.set(roomId, session);
     }
     return session;
@@ -145,6 +150,67 @@ export class RoomRegistry {
 
   peek(roomId: string): RoomSession | undefined {
     return this.sessions.get(roomId);
+  }
+
+  /**
+   * Everything Docker holds for a deleted room, gone: its containers (sandbox,
+   * databases, package proxy), volumes and network. Its files live on in the
+   * room's document, so the workspace volume is only the sandbox's copy.
+   */
+  async destroy(roomId: string): Promise<void> {
+    const session = this.sessions.get(roomId);
+    this.sessions.delete(roomId);
+    if (session) {
+      await session.runs.stop("stopped").catch(() => {});
+      session.sync.destroy();
+    }
+    const ns = this.env.SANDBOX_NAMESPACE;
+    // On Kubernetes, everything the room had is in its namespace.
+    if (this.kube) {
+      await this.kube.core.deleteNamespace({ name: roomNamespace(ns, roomId) }).catch(() => {});
+    }
+    const filters = { label: [`${LABEL_ROOM}=${roomId}`, `${LABEL_NAMESPACE}=${ns}`] };
+    for (const info of await this.docker.listContainers({ all: true, filters }).catch(() => [])) {
+      await this.docker.getContainer(info.Id).remove({ force: true }).catch(() => {});
+    }
+    // Database volumes carry labels; the workspace and home volumes are made by name.
+    const labelled = ((await this.docker.listVolumes({ filters }).catch(() => null))?.Volumes ?? []).map((volume) => volume.Name);
+    const id = roomId.toLowerCase();
+    for (const name of new Set([...labelled, `cc-${ns}-ws-${id}`, `cc-${ns}-home-${id}`])) {
+      await this.docker.getVolume(name).remove().catch(() => {});
+    }
+    for (const network of await this.docker.listNetworks({ filters }).catch(() => [])) {
+      await this.docker.getNetwork(network.Id).remove().catch(() => {});
+    }
+    log.info(`room ${roomId}: deleted, and its containers, volumes and network with it`);
+  }
+
+  /**
+   * Remove what's left of rooms that no longer exist: everything in this
+   * namespace for a room not in `rooms` (the API sends the rooms it has). A
+   * room with a live session is never touched, nor is anything when the list
+   * is empty, which is more likely a mistake than an empty server.
+   */
+  async prune(rooms: string[]): Promise<string[]> {
+    if (rooms.length === 0) return [];
+    const keep = new Set(rooms);
+    const ns = this.env.SANDBOX_NAMESPACE;
+    const ours = { label: [`${LABEL_MANAGED}=1`, `${LABEL_NAMESPACE}=${ns}`] };
+    const found = new Set<string>();
+    for (const info of await this.docker.listContainers({ all: true, filters: ours })) found.add(info.Labels[LABEL_ROOM] ?? "");
+    for (const network of await this.docker.listNetworks({ filters: ours })) found.add(network.Labels?.[LABEL_ROOM] ?? "");
+    if (this.kube) {
+      const namespaces = await this.kube.core.listNamespace({ labelSelector: `${LABEL_MANAGED}=1,${LABEL_NAMESPACE}=${ns}` });
+      for (const namespace of namespaces.items) found.add(namespace.metadata?.labels?.[LABEL_ROOM] ?? "");
+    }
+    const byName = new RegExp(`^cc-${ns}-(?:ws|home|db-[a-z]+)-([a-z0-9]{6})$`);
+    for (const volume of (await this.docker.listVolumes()).Volumes ?? []) {
+      const match = byName.exec(volume.Name);
+      if (match) found.add(match[1]!.toUpperCase());
+    }
+    const gone = [...found].filter((roomId) => /^[A-Z0-9]{6}$/.test(roomId) && !keep.has(roomId) && !this.sessions.has(roomId));
+    for (const roomId of gone) await this.destroy(roomId);
+    return gone;
   }
 
   async shutdown(): Promise<void> {
@@ -173,6 +239,9 @@ export class RoomRegistry {
     const containers = await this.docker.listContainers({ all: true, filters: ours }).catch(() => []);
     const dayAgo = Date.now() / 1000 - 24 * 3600;
     const withContainer = new Set<string>();
+    // Rooms whose sandbox runs (those have no role label): their databases stay up, even
+    // while a restarted runner has no session for them yet.
+    const sandboxUp = new Set(containers.filter((info) => !info.Labels[LABEL_ROLE] && info.State === "running").map((info) => info.Labels[LABEL_ROOM]));
     for (const info of containers) {
       const roomId = info.Labels[LABEL_ROOM] ?? "";
       const container = this.docker.getContainer(info.Id);
@@ -183,8 +252,8 @@ export class RoomRegistry {
           continue;
         }
       } else if (info.Labels[LABEL_ROLE] === "database") {
-        // A room's databases sleep while it has no session (stopped, data kept) and wake with its sandbox.
-        if (info.State === "running" && !this.sessions.has(roomId)) await container.stop({ t: 15 }).catch(() => {});
+        // A room's databases sleep with its sandbox (stopped, data kept) and wake with it.
+        if (info.State === "running" && !this.sessions.has(roomId) && !sandboxUp.has(roomId)) await container.stop({ t: 15 }).catch(() => {});
       } else if (info.State === "running" && !this.sessions.has(roomId) && info.Created < Date.now() / 1000 - this.env.SANDBOX_IDLE_MINUTES * 60) {
         log.info(`stopping unclaimed sandbox ${info.Names[0] ?? info.Id}`);
         await container.stop({ t: 3 }).catch(() => {});
@@ -193,6 +262,17 @@ export class RoomRegistry {
         continue;
       }
       withContainer.add(roomId);
+    }
+    // On Kubernetes: sandbox pods no session owns (left by an earlier runner) stop after the idle time.
+    if (this.kube) {
+      const pods = await this.kube.core.listPodForAllNamespaces({ labelSelector: `${LABEL_MANAGED}=1,${LABEL_NAMESPACE}=${this.env.SANDBOX_NAMESPACE},${LABEL_ROLE}=sandbox` }).catch(() => null);
+      for (const pod of pods?.items ?? []) {
+        const roomId = pod.metadata?.labels?.[LABEL_ROOM] ?? "";
+        const started = pod.metadata?.creationTimestamp ? new Date(pod.metadata.creationTimestamp).getTime() : Date.now();
+        if (this.sessions.has(roomId) || Date.now() - started < this.env.SANDBOX_IDLE_MINUTES * 60_000) continue;
+        log.info(`stopping unclaimed sandbox pod in ${pod.metadata?.namespace}`);
+        await this.kube.core.deleteNamespacedPod({ name: pod.metadata!.name!, namespace: pod.metadata!.namespace!, gracePeriodSeconds: 0 }).catch(() => {});
+      }
     }
     // The next start makes a room's network again.
     const networks = await this.docker.listNetworks({ filters: ours }).catch(() => []);

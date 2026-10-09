@@ -72,6 +72,15 @@ export function FilePicker({
     : [];
   const shownAsRecent = new Set(recentRows.map((entry) => entry.file.id));
 
+  // The highlighted file is ours, not cmdk's. cmdk highlights its first item as
+  // the search changes, but this list follows a deferred copy of the search, so
+  // that item can be one about to disappear, and Enter then picks nothing (seen
+  // in rooms with a few hundred files). It's the list's first file until you
+  // move the highlight for this search.
+  const first = (recentRows[0] ?? ranked.find((entry) => !shownAsRecent.has(entry.file.id)))?.file.id ?? "";
+  const [moved, setMoved] = useState<{ search: string; id: string } | null>(null);
+  const highlighted = moved?.search === deferred && ranked.some((entry) => entry.file.id === moved.id) ? moved.id : first;
+
   return (
     <PaletteDialog
       open={open}
@@ -80,6 +89,8 @@ export function FilePicker({
       description="Type part of a file name or path, then press Enter"
       shouldFilter={false}
       loop
+      value={highlighted}
+      onValueChange={(id) => setMoved({ search: deferred, id })}
     >
       <CommandInput
         value={query}

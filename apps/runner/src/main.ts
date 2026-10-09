@@ -1,6 +1,7 @@
 import Docker from "dockerode";
 
 import { loadEnv } from "./env.js";
+import { connectKube } from "./kube-sandbox.js";
 import { log } from "./log.js";
 import { RoomRegistry } from "./room-session.js";
 import { createRunnerServer } from "./server.js";
@@ -13,7 +14,10 @@ import { createRunnerServer } from "./server.js";
 const env = loadEnv();
 // DOCKER_HOST, or the platform default (/var/run/docker.sock, or the Windows named pipe).
 const docker = new Docker();
-const rooms = new RoomRegistry(docker, env);
+// RUNNER_DRIVER=kubernetes: rooms run on the cluster (a namespace each); Docker stays for the rest.
+const kube = env.RUNNER_DRIVER === "kubernetes" ? connectKube(env) : null;
+if (kube) log.info(`rooms run on Kubernetes (namespaces cc-${env.SANDBOX_NAMESPACE}-<room>)`);
+const rooms = new RoomRegistry(docker, env, kube);
 const server = createRunnerServer({ env, docker, rooms });
 
 const dockerOk = await docker.ping().then(

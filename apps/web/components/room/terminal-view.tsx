@@ -16,7 +16,8 @@ type Status = "connecting" | "ready" | "closed";
  * /ws/terminal (same origin, so the session cookie authenticates it). tmux
  * keeps the shell alive, so reconnecting brings back the same session.
  */
-export function TerminalView({ n }: { n: number }) {
+/** Your terminal `n`, or the room's shared dev server session (`shared="dev"`, everyone sees the same screen). */
+export function TerminalView({ n = 1, shared }: { n?: number; shared?: "dev" }) {
   const { room } = useRoom();
   const [status, setStatus] = useState<Status>("connecting");
   const [message, setMessage] = useState<string | null>(null);
@@ -33,7 +34,12 @@ export function TerminalView({ n }: { n: number }) {
       setStatus("connecting");
       setMessage(null);
       const { protocol, host } = window.location;
-      const params = new URLSearchParams({ room: room.id, n: String(n), cols: String(term.cols), rows: String(term.rows) });
+      const params = new URLSearchParams({
+        room: room.id,
+        ...(shared ? { shared } : { n: String(n) }),
+        cols: String(term.cols),
+        rows: String(term.rows),
+      });
       const ws = new WebSocket(`${protocol === "https:" ? "wss" : "ws"}://${host}/ws/terminal?${params}`);
       ws.binaryType = "arraybuffer";
       socket.current = ws;
@@ -84,7 +90,8 @@ export function TerminalView({ n }: { n: number }) {
             <div className="max-w-sm">
               <p className="text-sm font-medium">Terminal disconnected</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {message ?? "Your session is still running in the sandbox. Reconnect to pick up where you left off."}
+                {message ??
+                  "Your session is still running in the sandbox. Reconnect to pick up where you left off."}
               </p>
               <Button className="mt-3" size="sm" variant="outline" onClick={() => reconnect.current()}>
                 <RotateCw /> Reconnect

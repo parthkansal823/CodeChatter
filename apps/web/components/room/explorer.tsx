@@ -273,7 +273,12 @@ function InlineName({ initial, placeholder, onDone }: { initial: string; placeho
       }}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === "Enter") finish();
+        // preventDefault: the new file opens and takes the focus at once, and this
+        // Enter would otherwise carry on into it as a blank first line.
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish();
+        }
         if (e.key === "Escape") onDone(null);
       }}
       onBlur={finish}

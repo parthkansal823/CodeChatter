@@ -1,8 +1,21 @@
 "use client";
 
+import { ROOM_CONFIG_PATH } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
-import { ChevronDown, FlaskConical, Gauge, Loader2, Plus, Square, SquareTerminal, X } from "lucide-react";
+import {
+  ChevronDown,
+  FlaskConical,
+  Gauge,
+  Loader2,
+  Plus,
+  Rocket,
+  Square,
+  SquareTerminal,
+  X,
+} from "lucide-react";
 
+import { DevServerPanel } from "@/components/room/dev-server-panel";
+import { useRoomFiles } from "@/components/room/editor/room-files";
 import { PortsPanel } from "@/components/room/ports-panel";
 import { useRoom } from "@/components/room/room-context";
 import { useRun } from "@/components/room/run-context";
@@ -15,14 +28,22 @@ import { cn } from "@/lib/utils";
 
 export const MAX_TERMINALS = 4;
 
-export type PanelTab = "output" | "tests" | "ports" | `terminal-${number}`;
+export type PanelTab = "output" | "tests" | "ports" | "dev" | `terminal-${number}`;
 
 /**
  * The panel under the editor: the room's shared Run output plus your
  * terminals. Every tab stays mounted while the panel is open, so switching
  * tabs never drops a terminal connection or loses output.
  */
-export function BottomPanel({ tab, onTab, file, terminals, onAddTerminal, onCloseTerminal, onClose }: {
+export function BottomPanel({
+  tab,
+  onTab,
+  file,
+  terminals,
+  onAddTerminal,
+  onCloseTerminal,
+  onClose,
+}: {
   tab: PanelTab;
   /** The open file (the Tests tab shows its test cases). */
   file: TreeNode | null;
@@ -36,14 +57,25 @@ export function BottomPanel({ tab, onTab, file, terminals, onAddTerminal, onClos
   const { can } = useRoom();
   const run = useRun();
   const canTerminal = can("terminal.open");
+  // The Dev server tab is there when the room says how to run its app.
+  const hasDevServer = useRoomFiles().some((file) => file.path === ROOM_CONFIG_PATH);
 
   return (
-    <section aria-label="Output and terminals" className="flex h-full min-h-0 flex-col border-t bg-background">
+    <section
+      aria-label="Output and terminals"
+      className="flex h-full min-h-0 flex-col border-t bg-background"
+    >
       <div className="flex h-8 shrink-0 items-stretch gap-1 border-b bg-chrome pr-1 pl-2">
-        <div role="tablist" aria-label="Panel" className="flex min-w-0 items-stretch gap-3 overflow-x-auto overflow-y-hidden [scrollbar-width:none]">
+        <div
+          role="tablist"
+          aria-label="Panel"
+          className="flex min-w-0 items-stretch gap-3 overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
+        >
           <PanelTabButton selected={tab === "output"} onClick={() => onTab("output")}>
             Output
-            {run.running && <span aria-label="running" className="size-1.5 animate-pulse rounded-full bg-brand" />}
+            {run.running && (
+              <span aria-label="running" className="size-1.5 animate-pulse rounded-full bg-brand" />
+            )}
           </PanelTabButton>
           <PanelTabButton selected={tab === "tests"} onClick={() => onTab("tests")}>
             <FlaskConical className="size-3.5" /> Tests
@@ -51,15 +83,30 @@ export function BottomPanel({ tab, onTab, file, terminals, onAddTerminal, onClos
           <PanelTabButton selected={tab === "ports"} onClick={() => onTab("ports")}>
             <Gauge className="size-3.5" /> Ports
           </PanelTabButton>
+          {hasDevServer && (
+            <PanelTabButton selected={tab === "dev"} onClick={() => onTab("dev")}>
+              <Rocket className="size-3.5" /> Dev server
+            </PanelTabButton>
+          )}
           {terminals.map((n) => (
-            <PanelTabButton key={n} selected={tab === `terminal-${n}`} onClick={() => onTab(`terminal-${n}`)} onClose={() => onCloseTerminal(n)}>
+            <PanelTabButton
+              key={n}
+              selected={tab === `terminal-${n}`}
+              onClick={() => onTab(`terminal-${n}`)}
+              onClose={() => onCloseTerminal(n)}
+            >
               <SquareTerminal className="size-3.5" /> Terminal {n}
             </PanelTabButton>
           ))}
           {canTerminal && terminals.length < MAX_TERMINALS && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" onClick={onAddTerminal} aria-label="New terminal" className="flex items-center self-center rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+                <button
+                  type="button"
+                  onClick={onAddTerminal}
+                  aria-label="New terminal"
+                  className="flex items-center self-center rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
                   <Plus className="size-3.5" />
                 </button>
               </TooltipTrigger>
@@ -74,7 +121,9 @@ export function BottomPanel({ tab, onTab, file, terminals, onAddTerminal, onClos
               <Square className="fill-current" /> Stop
             </Button>
           )}
-          {run.starting && <Loader2 aria-label="Starting" className="size-3.5 animate-spin text-muted-foreground" />}
+          {run.starting && (
+            <Loader2 aria-label="Starting" className="size-3.5 animate-spin text-muted-foreground" />
+          )}
           <Button size="icon-xs" variant="ghost" aria-label="Hide panel" onClick={onClose}>
             <ChevronDown />
           </Button>
@@ -91,6 +140,11 @@ export function BottomPanel({ tab, onTab, file, terminals, onAddTerminal, onClos
         <div className={cn("absolute inset-0", tab !== "ports" && "hidden")}>
           <PortsPanel visible={tab === "ports"} />
         </div>
+        {hasDevServer && (
+          <div className={cn("absolute inset-0", tab !== "dev" && "hidden")}>
+            <DevServerPanel visible={tab === "dev"} />
+          </div>
+        )}
         {terminals.map((n) => (
           <div key={n} className={cn("absolute inset-0", tab !== `terminal-${n}` && "hidden")}>
             <TerminalView n={n} />
@@ -101,7 +155,17 @@ export function BottomPanel({ tab, onTab, file, terminals, onAddTerminal, onClos
   );
 }
 
-function PanelTabButton({ selected, onClick, onClose, children }: { selected: boolean; onClick: () => void; onClose?: () => void; children: React.ReactNode }) {
+function PanelTabButton({
+  selected,
+  onClick,
+  onClose,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  onClose?: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <div className="group relative flex items-center">
       <button
@@ -109,7 +173,10 @@ function PanelTabButton({ selected, onClick, onClose, children }: { selected: bo
         role="tab"
         aria-selected={selected}
         onClick={onClick}
-        className={cn("flex items-center gap-1.5 text-xs font-medium whitespace-nowrap", selected ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+        className={cn(
+          "flex items-center gap-1.5 text-xs font-medium whitespace-nowrap",
+          selected ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
       >
         {children}
       </button>

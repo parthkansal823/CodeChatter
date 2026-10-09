@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@codechatter/contracts";
 import type Docker from "dockerode";
-import type { Duplex } from "node:stream";
+import type { Duplex, Writable } from "node:stream";
 
 import { AgentChannel } from "./agent-channel.js";
 import type { Env } from "./env.js";
@@ -24,7 +24,7 @@ const PROXY = "http://127.0.0.1:3128";
  * into the room's home volume, so `pip install` and `npm install -g` work
  * without root, and their caches make repeat installs fast.
  */
-const USER_ENV = [
+export const USER_ENV = [
   "PATH=/usr/local/bin:/usr/bin:/bin:/home/ccuser/.local/bin:/home/ccuser/.cargo/bin:/home/ccuser/go/bin",
   "HOME=/home/ccuser",
   "LANG=C.UTF-8",
@@ -42,7 +42,43 @@ const ROOM_SUBNET_BITS = 26;
 
 export class SandboxUnavailableError extends Error {}
 
-export type ExecHandle = { exec: Docker.Exec; stream: Duplex };
+export type ExecOptions = { tty: boolean; cols?: number; rows?: number; env?: string[]; stdin?: boolean };
+
+/**
+ * What a room needs from its sandbox, whichever driver runs it: Docker (this
+ * file) or Kubernetes (kube-sandbox.ts).
+ */
+export interface RoomSandbox {
+  readonly roomId: string;
+  agent: AgentChannel | null;
+  /** Called for each change the agent reports from inside the sandbox. */
+  onAgentEvent: (event: AgentEvent) => void;
+  /** Called when the agent connection ends (stop, reset, crash). */
+  onAgentClosed: () => void;
+  /** Start (or reconnect to) it and its agent. Safe to call concurrently. */
+  ensure(): Promise<void>;
+  /** Run a process as the sandbox user, in /workspace, with the room's environment. */
+  exec(cmd: string[], options: ExecOptions): Promise<ExecHandle>;
+  /** Start it again from nothing but its volumes (out of processes, stuck). */
+  reset(): Promise<void>;
+  /** Stop it (idle). The volumes, and so the files, stay. */
+  stop(): Promise<void>;
+  stats(): Promise<ContainerStats | null>;
+  processes(): Promise<{ current: number; limit: number } | null>;
+}
+
+/**
+ * A process started in the sandbox, whichever driver runs it. With a TTY,
+ * `stream` is the terminal both ways; without one, write its input to
+ * `stream` and read its output with `demux`.
+ */
+export type ExecHandle = {
+  stream: Duplex;
+  demux(stdout: Writable, stderr: Writable): void;
+  resize(cols: number, rows: number): Promise<void>;
+  /** Its exit code once it has ended; null while it runs, or when that can't be told. */
+  exitCode(): Promise<number | null>;
+};
 
 /** The parts of Docker's container stats the runner reads. */
 export type ContainerStats = {
@@ -56,7 +92,7 @@ export type ContainerStats = {
  * network (ADR 0007), read-only root, no capabilities, PID/memory/CPU limits,
  * and named volumes for /workspace and the home folder that outlive it.
  */
-export class Sandbox {
+export class Sandbox implements RoomSandbox {
   readonly name: string;
   readonly volume: string;
   readonly home: string;
@@ -91,7 +127,7 @@ export class Sandbox {
   }
 
   /** Run a process as the sandbox user. TTY for terminals and runs, so programs behave interactively. */
-  async exec(cmd: string[], options: { tty: boolean; cols?: number; rows?: number; env?: string[]; stdin?: boolean }): Promise<ExecHandle> {
+  async exec(cmd: string[], options: ExecOptions): Promise<ExecHandle> {
     const stdin = options.stdin ?? true;
     await this.ensure();
     const size: [number, number] | undefined = options.tty ? [options.rows ?? 24, options.cols ?? 80] : undefined;
@@ -107,7 +143,18 @@ export class Sandbox {
       ...(size && { ConsoleSize: size }),
     });
     const stream = (await exec.start({ hijack: true, stdin, Tty: options.tty, ...(size && { ConsoleSize: size }) })) as Duplex;
-    return { exec, stream };
+    return {
+      stream,
+      // Without a TTY, Docker multiplexes stdout and stderr with 8-byte frame headers.
+      demux: (stdout, stderr) => this.docker.modem.demuxStream(stream, stdout, stderr),
+      resize: async (cols, rows) => {
+        await exec.resize({ h: rows, w: cols });
+      },
+      exitCode: async () => {
+        const info = await exec.inspect().catch(() => null);
+        return info && !info.Running ? (info.ExitCode ?? null) : null;
+      },
+    };
   }
 
   /**
@@ -124,11 +171,6 @@ export class Sandbox {
     await container.wait().catch(() => {});
     this.container = null;
     await this.ensure();
-  }
-
-  /** The Docker client's demultiplexer, for non-TTY exec output (stdout and stderr interleaved with frame headers). */
-  get modem(): Docker["modem"] {
-    return this.docker.modem;
   }
 
   /** Docker's stats for the container, or null if it isn't running. No exec needed. */
@@ -198,7 +240,7 @@ export class Sandbox {
     // A newline first puts any such bytes on a line of their own, which the
     // agent ignores. (An empty body instead leaves Node's request unflushed.)
     stream.write("\n");
-    const agent = new AgentChannel(stream, this.docker.modem, (event) => this.onAgentEvent(event));
+    const agent = new AgentChannel(stream, (stdout, stderr) => this.docker.modem.demuxStream(stream, stdout, stderr), (event) => this.onAgentEvent(event));
     try {
       if (running) {
         await agent.request({ op: "ping" }, 5000);

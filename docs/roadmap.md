@@ -62,6 +62,7 @@ Each phase ends with automated tests and a working demo.
 
 **Rooms:**
 - ✅ Dashboard: rooms table, new room from a template, and join by code or invite link.
+  - fixed: a long invite link stretched the "room is ready" dialog, pushing the copy button and Open room outside it. Dialogs can no longer be widened by their content, and the link now wraps whole (one click selects it). Browser test `apps/web/test/new-room.e2e.mjs` (4/4, desktop and phone widths)
 - ✅ Room IDE:
   - explorer, tabs, and Monaco with live cursors and presence
   - status bar and people panel
@@ -579,8 +580,8 @@ From the owner's asks, planned so each piece builds on the last. One piece at a 
 2. Editor at VS Code level (A).
 3. Every language (B).
 4. ✅ Room network: the foundation that C, D and the sandbox side of E need. Each room has a private network (10/10), and the owner can allow package installs for an hour (24/24).
-5. One-click databases (D).
-6. Framework templates (C).
+5. ✅ One-click databases (D): five databases, connections in every terminal and Run, a query console and table browser, backups, seeds and reset (33/33, browser 15/15).
+6. 🟡 Framework templates (C): room.json, the Dev server tab, and seven templates (React, Vue, Svelte, Express with PostgreSQL, FastAPI, Flask, Django). More templates and pre-warmed caches next.
 7. GitHub (E). Its import and push go through the GitHub API, so they can start earlier if you want.
 8. Kubernetes (F): the playground can come any time (it needs nothing else); real workloads come after the room network and databases; the Helm chart and Kubernetes runner come with production hardening.
 
@@ -590,6 +591,8 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
   - ✅ the **command palette**: F1 or Ctrl+Shift+P (Edge keeps Ctrl+Shift+P for InPrivate windows, so F1 is the sure one), with about 150 commands: the room's, the editor's, and Monaco's own editing actions
   - ✅ a **command centre** in the title bar: search files, or type `>` for commands
   - ✅ **Quick Open** (Ctrl+P, fuzzy), **go to line** (Ctrl+G, `line:column` works), **go to symbol** (Ctrl+Shift+O)
+    - fixed: in a room with a few hundred files, Enter in Quick Open or Compare could pick nothing (the highlight followed a list about to change)
+    - Ctrl+Enter belongs to a tool that marks itself `data-own-run-key`: API Studio sends without also running the open file, and the database console runs its query
   - ⬜ breadcrumbs and an Outline view
 - 🟡 **Editing:**
   - ✅ multi-cursor and column selection, folding, sticky scroll, bracket-pair colours and guides, minimap
@@ -605,7 +608,15 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
   - ⬜ grid splits, an image viewer, CSV as a table
 - ✅ **Change language mode** for a file, from the palette or the status bar.
 - ✅ **Follow someone:** their file opens for you as they move, with a banner and a Stop button (like Live Share).
-- ⬜ **Search:** across all files with regex, case and whole-word options, include and exclude globs, and replace-all.
+- ✅ **Search and replace across files** (Ctrl+Shift+F, Ctrl+Shift+H; the Search view shares the sidebar with Files):
+  - match case, whole word and regex (a bad one says why), include and exclude globs; results grouped by file, live as anyone edits, capped at 2,000 with a note
+  - a result opens its file with the match selected; arrow keys move through results
+  - replace (people who can edit): `$1`, `$<name>` in regex mode, a live preview, Replace all after a confirmation with the count, or one file at a time; one change everyone sees at once, small edits so others keep their cursors, and Undo for 10 seconds
+  - built by a parallel agent (Opus, at the owner's request) on the main session's matching and replacing logic; tests: `search.test.ts` (28) and `apps/web/test/search.e2e.mjs` (23/23), both checked by the main session
+- ✅ fixed: a new file named with Enter got a blank first line; new files typed in a Windows browser got 
+ line endings, which break shell scripts in the Linux sandbox (files are 
+ unless they already use 
+)
 - ⬜ **IntelliSense for every language:**
   - language servers run inside the room's sandbox (basedpyright, typescript-language-server, clangd, jdtls, gopls, rust-analyzer…), reached over a WebSocket through the API and runner (§5 of the plan)
   - gives completions, hover docs, signature help, go to definition and references, rename, quick fixes, and a Problems panel
@@ -674,23 +685,58 @@ A room has no internet by default; the owner can open package registries, and no
   - the proxy's rules: `sandbox/agent/src/egress-policy.test.ts` (9 tests; the agent package passes 13/13)
   - with the proxy settings, the home volume and plain-bash terminals in place, the network (10/10), runner (22/22), judge, Kubernetes (4/4) and languages (26/26) suites still pass
 
-### D. One-click databases
-- ⬜ **A Databases panel:** pick PostgreSQL, MySQL, MariaDB, MongoDB, Redis (Valkey) or SQLite.
-  - one click starts it for the room, with data on the room's volume and its own memory limit
-  - it stops when the sandbox idles
-- ⬜ **Connecting from your code:**
-  - the connection string is shown in the panel and set as environment variables in Run and terminals (`DATABASE_URL`, `REDIS_URL`, …)
-  - your code reaches the database by name (`postgres:5432`) on the room network
-- ⬜ **Query console and table browser** in the panel. Queries run through the runner; the browser never connects to the database directly.
-- ⬜ **Seed, dump and restore**, reset, delete. Viewers can read; editors can change.
-- ⬜ Later: DuckDB, ClickHouse, OpenSearch, Neo4j.
+### Docker housekeeping ✅ (2026-10-09)
+The owner noticed Docker piling up: deleting a room never deleted its Docker pieces, and every image rebuild left the old one behind.
+- ✅ deleting a room deletes its sandbox, databases, package proxy, volumes and network at once (the files live on in the room's document)
+- ✅ the API's janitor (`apps/api/src/rooms/room-janitor.ts`) sends the runner the rooms that exist, soon after it starts and every six hours; the runner removes what's left of any others (`POST /maintenance/prune`; never a room in use, never on an empty list)
+- ✅ sandbox images are labelled; `pnpm sandbox:build` and `:full` then run `pnpm docker:tidy`, which removes the copies they replace and keeps the build cache to 10 GB
+- ✅ cleared once by hand: 23 leftover containers, 17 volumes and 5 networks of deleted rooms, old local production images, and 20 GB of build cache
 
-### C. Frameworks
-- ⬜ **Templates that start a dev server in one click**, with the preview on its own origin (it exists already):
-  - frontend: React (Vite), Next.js, Vue, Nuxt, Svelte/SvelteKit, Angular, Astro, Solid
-  - backend: Express, NestJS, Fastify, Hono, Django, Flask, FastAPI, Spring Boot, Laravel, Rails, Gin, Axum, ASP.NET Core
-- ⬜ **`.codechatter/room.json`** says how to install, run and preview (command, port, database to start). Templates and imported projects both use it.
-- ⬜ **Dependencies:** "Install dependencies" through the package proxy, plus pre-warmed caches for the templates, so a new React or Django room starts in seconds.
+### D. One-click databases ✅
+Decision and design: ADR 0008.
+- ✅ **The Databases tool** (in Apps): PostgreSQL 18, MySQL 8.4, MariaDB 11.8, MongoDB 8.0 and Redis (Valkey 9).
+  - one click starts it for the room; the first start downloads its image, and the panel says so
+  - each runs in its own container on the room's network, with its data on a volume of its own
+  - hardened like the sandbox: the database's own user from the start (never root), no capabilities, a read-only root, memory and process limits, no published ports
+  - Stop keeps the data and Delete removes it; databases sleep when the room idles and wake with its sandbox
+  - starting, stopping and deleting need terminal rights, and each is in the audit log
+- ✅ **Connecting from your code:**
+  - every terminal and Run already has `DATABASE_URL`, `POSTGRES_URL`, `MYSQL_URL`, `MARIADB_URL`, `MONGODB_URL` and `REDIS_URL`; code reaches each by name (`postgres:5432`)
+  - `psql`, `mysql`, `mariadb` and `redis-cli` are in the sandbox and connect with no arguments
+  - the panel shows the address, user, database, URL (password hidden, with copy buttons) and the command for a terminal; only people who can run code see the connection
+- ✅ **Query console and table browser** (Open on a running database):
+  - SQL for the three SQL databases (several statements, each result or status in order), one mongosh expression for MongoDB, one command per line for Redis; Ctrl+Enter runs it
+  - results are real tables (NULL shown as NULL), up to 500 rows; errors in the database's own words
+  - the table browser lists tables, views, collections or keys, and shows the first 100 rows (or a key's value by its type); clicking a table puts its query in the console to edit
+  - queries run inside the database's container through its own client; the browser never connects to it. Anyone in the room can browse; writing queries needs terminal rights
+- ✅ **Tests:**
+  - `apps/web/test/databases.e2e.mjs` (15/15): two people; start, connection and copy, stop, delete; the console runs SQL; a table preview; a backup downloads; an upload loads; reset empties it; the editor sees the same tables
+  - `apps/runner/test/databases.e2e.mjs`: all five start in about 17 seconds; hardened and private; consoles, errors, table lists and previews for all five; seeding from a room file, a SQL backup, reset and restoring it; MongoDB's archive backup and restore; MySQL's dump; Redis's snapshot; MongoDB from the sandbox; data survives stop, sleep and wake; delete wipes it. 33/33, including `psql`, `mysql`, `mariadb` and `redis-cli` from the sandbox
+  - parsers for every client's output (`database-queries.test.ts`, 13 tests, from real captured output) and the connection settings (`databases.test.ts`)
+- ✅ **Backups, seeds and reset** (in the console's header):
+  - **Backup** downloads the database: SQL from `pg_dump`, `mysqldump` or `mariadb-dump` (loading it again replaces those tables), a `mongodump` archive, or Redis's RDB snapshot
+  - **Load a file**, from the room (a `seed.sql` everyone edited) or from your computer (up to 64 MB): SQL, a mongosh script or `mongodump` archive, or Redis commands, run through the database's own client. That's seeding and restoring alike
+  - **Reset** deletes the data and starts it again, empty
+  - backups need the right to run code; loading and resetting need terminal rights; each is in the audit log
+  - not yet: loading a Redis snapshot back (it says so)
+- ⬜ Later: SQLite in the panel (it needs no server: `sqlite3` is in the full image), DuckDB, ClickHouse, OpenSearch, Neo4j.
+
+### C. Frameworks 🟡
+- ✅ **`.codechatter/room.json`** says how to install, run and preview a room: `install` (run when the `installed` path is missing), `dev`, `port`, and the `databases` to start first. Templates and imported projects both use it; a broken one is explained, not run.
+- ✅ **The Dev server tab** (bottom panel, when the room has a room.json):
+  - **Start** installs if needed (through the package proxy), starts the room's databases, then runs the dev server in one terminal everyone in the room shares
+  - **Restart** and **Stop**; **Open preview** once its port listens (on its own origin)
+  - when the first start must install packages and installs are off, the owner gets one button, **Allow installs and start**; others are told to ask the owner
+  - starting and stopping need terminal rights and go in the audit log
+- 🟡 **Templates that start in one click:**
+  - ✅ frontend: React, Vue and Svelte, each on Vite with live reload in the preview
+  - ✅ backend: Express with the room's PostgreSQL (started with it), FastAPI, Flask and Django; the Node.js API template has a room.json too
+  - ⬜ frontend: Next.js, Nuxt, SvelteKit, Angular, Astro, Solid
+  - ⬜ backend: NestJS, Fastify, Hono, Spring Boot, Laravel, Rails, Gin, Axum, ASP.NET Core (the JVM, PHP, Ruby, Go, Rust and .NET ones need their build tools in the image)
+- ⬜ **Pre-warmed caches** for the templates, so a new React or Django room starts in seconds (today the first start downloads its packages, about a minute).
+- ✅ **Tests:**
+  - `apps/runner/test/dev.e2e.mjs` (8/8): reads room.json; installs first and skips it on restart; starts its databases; answers through the preview; explains a broken room.json; stops
+  - `apps/web/test/templates.e2e.mjs`: as a person would, for all seven: a room from the template, allow installs, Start, then the app works in the preview (the front ends' counters count). Real downloads, 15 to 60 seconds each; each room is deleted after. `TEMPLATES=react,flask` runs some
 
 ### F. Kubernetes
 
@@ -723,10 +769,14 @@ A real cluster normally needs privileged containers. Those can't be given to cod
 - ⬜ **Helm chart** (`infra/helm/codechatter`):
   - web, api, collab (several replicas, joined through Valkey), runner, worker
   - Postgres (CloudNativePG) and Valkey; Ingress with cert-manager and the wildcard preview host
-- ⬜ **Kubernetes runner driver:** each room's sandbox is a pod instead of a Docker container.
-  - gVisor RuntimeClass; non-root, read-only root, no capabilities, seccomp
-  - deny-all NetworkPolicy; a PersistentVolumeClaim per room
-  - the same agent, runs, terminals and preview tunnel, over the Kubernetes exec and attach API
+- 🟡 **Kubernetes runner driver** (the owner's priority, 2026-10-09): rooms run on Kubernetes when `RUNNER_DRIVER=kubernetes`; Docker stays the light default for development, and every test runs on both. Built and tested on Docker Desktop's Kubernetes, with the official client (`@kubernetes/client-node`, added).
+  - each room is a namespace (`cc-<namespace>-<room>`): deleting the room deletes the namespace, and with it everything the room had
+  - K1 ⬜ the sandbox as a pod: non-root, read-only root, no capabilities, seccomp; PersistentVolumeClaims for the workspace and home; the same agent, runs, terminals and preview tunnel over the Kubernetes exec and attach API (the runner gets one exec interface for both drivers first)
+  - K2 ⬜ the room network as NetworkPolicies: deny-all, the room's own pods only, and `network.e2e.mjs` passing on Kubernetes
+  - K3 ⬜ one-click databases as pods with Services named `postgres`, `mysql`…, and PersistentVolumeClaims
+  - K4 ⬜ the package proxy as a pod, the only one allowed out
+  - K5 ⬜ dev servers and templates, and every runner and browser suite on both drivers
+  - later: gVisor RuntimeClass where the cluster has it; per-pod process limits (Kubernetes sets those per node)
 - ⬜ **Scale and run:**
   - autoscaling (HPA, and KEDA for job queues), Prometheus and OpenTelemetry
   - GitHub Actions building images to GHCR, Argo CD deploying them

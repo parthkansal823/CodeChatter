@@ -75,7 +75,7 @@ function FormStep({ onCreated }: { onCreated: (room: CreatedRoom) => void }) {
 
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Template</legend>
-          <div role="radiogroup" className="overflow-hidden rounded-md border">
+          <div role="radiogroup" className="max-h-72 overflow-y-auto rounded-md border">
             {TEMPLATES.map((template) => {
               const selected = template.id === templateId;
               return (
@@ -173,8 +173,9 @@ function CreatedStep({ room }: { room: CreatedRoom }) {
           Send this link to anyone you want in the room. They join as editors. You can change roles later.
         </DialogDescription>
       </DialogHeader>
+      {/* The whole link, wrapped: it's shown once, so it can be read and (one click) selected. */}
       <div className="mt-6 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-md border bg-panel px-3 py-2 text-xs">{link}</code>
+        <code className="min-w-0 flex-1 rounded-md border bg-panel px-3 py-2 text-xs break-all select-all">{link}</code>
         <Button variant="outline" size="icon" onClick={copy} aria-label="Copy invite link">
           {copied ? <Check /> : <Copy />}
         </Button>

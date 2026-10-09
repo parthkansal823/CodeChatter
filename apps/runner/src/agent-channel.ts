@@ -1,6 +1,5 @@
 import type { AgentEvent, AgentOp, TunnelOp } from "@codechatter/contracts";
-import type Docker from "dockerode";
-import { PassThrough, type Duplex } from "node:stream";
+import { PassThrough, type Duplex, type Writable } from "node:stream";
 
 import { log } from "./log.js";
 
@@ -23,13 +22,13 @@ export class AgentChannel {
 
   constructor(
     private readonly stream: Duplex,
-    modem: Docker["modem"],
+    /** Splits what the agent prints into standard output and error (Docker multiplexes them on one stream). */
+    demux: (stdout: Writable, stderr: Writable) => void,
     private readonly onEvent: (event: AgentEvent) => void,
   ) {
-    // A non-TTY attach multiplexes stdout and stderr with 8-byte frame headers.
     const stdout = new PassThrough();
     const stderr = new PassThrough();
-    modem.demuxStream(stream, stdout, stderr);
+    demux(stdout, stderr);
     stdout.setEncoding("utf8");
     stdout.on("data", (chunk: string) => this.onData(chunk));
     stderr.on("data", (chunk: Buffer) => log.warn(`agent stderr: ${chunk.toString().trim()}`));

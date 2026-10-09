@@ -1,8 +1,15 @@
 "use client";
 
-import { DATABASE_KINDS, DATABASES, type DatabaseConnection, type DatabaseKind, type DatabaseStatus } from "@codechatter/contracts";
+import {
+  DATABASE_KINDS,
+  DATABASES,
+  type DatabaseConnection,
+  type DatabaseKind,
+  type DatabaseStatus,
+} from "@codechatter/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Database, Loader2, Play, Square, Trash2, X } from "lucide-react";
+import { Copy, Database, Loader2, Play, Square, Table2, Trash2, X } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { useRoom } from "@/components/room/room-context";
@@ -12,7 +19,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+import { DatabaseConsole } from "./database-console";
+
 type Change = "start" | "stop" | "delete";
+
+/** Which database each room had open, so closing and reopening the tool returns to it. */
+const lastOpened = new Map<string, DatabaseKind>();
 
 const STATE: Record<DatabaseStatus["state"], { label: string; dot: string }> = {
   off: { label: "Off", dot: "bg-muted-foreground/40" },
@@ -40,13 +52,22 @@ export default function DatabasesTool({ close }: RoomToolProps) {
   });
   const change = useMutation({
     mutationFn: ({ kind, to }: { kind: DatabaseKind; to: Change }) =>
-      api<DatabaseStatus[]>(`/api/rooms/${room.id}/databases/${kind}${to === "stop" ? "/stop" : ""}`, { method: to === "delete" ? "DELETE" : "POST" }),
+      api<DatabaseStatus[]>(`/api/rooms/${room.id}/databases/${kind}${to === "stop" ? "/stop" : ""}`, {
+        method: to === "delete" ? "DELETE" : "POST",
+      }),
     onSuccess: (data) => queryClient.setQueryData(key, data),
     onError: (e) => toast.error(e instanceof ApiError ? e.detail : "Couldn't change the database."),
   });
   const manage = can("terminal.open");
   const byKind = new Map(list.data?.map((status) => [status.kind, status]));
+  const [openKind, setOpenKind] = useState<DatabaseKind | null>(() => lastOpened.get(room.id) ?? null);
+  const open = (kind: DatabaseKind | null) => {
+    if (kind) lastOpened.set(room.id, kind);
+    else lastOpened.delete(room.id);
+    setOpenKind(kind);
+  };
 
+  if (openKind) return <DatabaseConsole kind={openKind} onBack={() => open(null)} onClose={close} />;
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-chrome px-3">
@@ -59,8 +80,9 @@ export default function DatabasesTool({ close }: RoomToolProps) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl p-4">
           <p className="mb-3 text-sm text-muted-foreground">
-            Each database runs next to this room&apos;s sandbox, on its private network. Code in terminals and Run reaches it by name, with the
-            connection already in its environment; nothing outside the room can. Databases sleep when the room is idle and wake with it.
+            Each database runs next to this room&apos;s sandbox, on its private network. Code in terminals and
+            Run reaches it by name, with the connection already in its environment; nothing outside the room
+            can. Databases sleep when the room is idle and wake with it.
           </p>
           {list.isPending ? (
             <div className="grid gap-2" aria-label="Loading databases">
@@ -69,7 +91,9 @@ export default function DatabasesTool({ close }: RoomToolProps) {
               <Skeleton className="h-10 w-2/3" />
             </div>
           ) : list.isError ? (
-            <p className="text-sm text-destructive">{list.error instanceof ApiError ? list.error.detail : "Couldn't load the databases."}</p>
+            <p className="text-sm text-destructive">
+              {list.error instanceof ApiError ? list.error.detail : "Couldn't load the databases."}
+            </p>
           ) : (
             <ul className="divide-y rounded-md border text-sm">
               {DATABASE_KINDS.map((kind) => (
@@ -79,18 +103,35 @@ export default function DatabasesTool({ close }: RoomToolProps) {
                   manage={manage}
                   busy={change.isPending && change.variables?.kind === kind}
                   onChange={(to) => change.mutate({ kind, to })}
+                  onOpen={() => open(kind)}
                 />
               ))}
             </ul>
           )}
-          {!can("code.run") && <p className="mt-3 text-xs text-muted-foreground">People who can run code in this room see how to connect.</p>}
+          {!can("code.run") && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              People who can run code in this room see how to connect.
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function DatabaseRow({ status, manage, busy, onChange }: { status: DatabaseStatus; manage: boolean; busy: boolean; onChange: (to: Change) => void }) {
+function DatabaseRow({
+  status,
+  manage,
+  busy,
+  onChange,
+  onOpen,
+}: {
+  status: DatabaseStatus;
+  manage: boolean;
+  busy: boolean;
+  onChange: (to: Change) => void;
+  onOpen: () => void;
+}) {
   const info = DATABASES[status.kind];
   const state = STATE[status.state];
   const live = status.state === "running" || status.state === "starting";
@@ -103,29 +144,42 @@ function DatabaseRow({ status, manage, busy, onChange }: { status: DatabaseStatu
           {state.label}
           {status.state === "starting" && status.detail ? `: ${status.detail}` : ""}
         </span>
-        {manage && (
-          <div className="ml-auto flex items-center gap-1">
-            <Button size="xs" variant="outline" disabled={busy} onClick={() => onChange(live ? "stop" : "start")}>
+        <div className="ml-auto flex items-center gap-1">
+          {status.state === "running" && (
+            <Button size="xs" variant="outline" onClick={onOpen}>
+              <Table2 /> Open
+            </Button>
+          )}
+          {manage && (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={busy}
+              onClick={() => onChange(live ? "stop" : "start")}
+            >
               {busy ? <Loader2 className="animate-spin" /> : live ? <Square /> : <Play />}
               {live ? "Stop" : "Start"}
             </Button>
-            {status.state !== "off" && (
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                aria-label={`Delete ${info.name} and its data`}
-                disabled={busy}
-                onClick={() => {
-                  if (window.confirm(`Delete ${info.name} and all its data? This can't be undone.`)) onChange("delete");
-                }}
-              >
-                <Trash2 />
-              </Button>
-            )}
-          </div>
-        )}
+          )}
+          {manage && status.state !== "off" && (
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label={`Delete ${info.name} and its data`}
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm(`Delete ${info.name} and all its data? This can't be undone.`))
+                  onChange("delete");
+              }}
+            >
+              <Trash2 />
+            </Button>
+          )}
+        </div>
       </div>
-      {status.state === "failed" && status.detail && <p className="mt-1 pl-5 text-xs text-destructive">{status.detail}</p>}
+      {status.state === "failed" && status.detail && (
+        <p className="mt-1 pl-5 text-xs text-destructive">{status.detail}</p>
+      )}
       {live && status.connection && <Connection connection={status.connection} terminal={info.terminal} />}
     </li>
   );

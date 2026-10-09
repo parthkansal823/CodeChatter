@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * One-click databases (roadmap §14 D). Each runs in a container of its own on
  * the room's private network (ADR 0007), where code in the sandbox reaches it
@@ -41,3 +43,29 @@ export type DatabaseStatus = {
   /** Only for people who can run code in the room. */
   connection?: DatabaseConnection;
 };
+
+/**
+ * One result from the query console (runner: database-queries.ts). Rows for
+ * SQL results, Redis replies and MongoDB documents; a message for a statement's
+ * status ("INSERT 0 1"); a value for any other MongoDB answer, as JSON.
+ */
+export type QueryResultSet =
+  | { type: "rows"; columns: string[]; rows: (string | null)[][]; truncated?: boolean }
+  | { type: "message"; text: string }
+  | { type: "value"; text: string };
+
+export type QueryResult = {
+  results: QueryResultSet[];
+  /** What went wrong, after any results that came before it. */
+  error: string | null;
+  ms: number;
+  /** For a table preview: the query that made it, to edit in the console. */
+  query?: string;
+};
+
+/** A table, view, collection or key, for the table browser. */
+export type DatabaseTable = { name: string; schema?: string; detail?: string };
+
+/** SQL for the SQL databases, one mongosh expression for MongoDB, one command per line for Redis. */
+export const QueryInput = z.object({ query: z.string().trim().min(1, "Write a query first.").max(100_000) });
+export const TablePreviewInput = z.object({ name: z.string().min(1).max(512), schema: z.string().max(512).optional() });

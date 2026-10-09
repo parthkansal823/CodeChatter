@@ -27,6 +27,10 @@ const call = async (method, path) => {
   const res = await fetch(`${RUNNER}/rooms/${ROOM}/${path}`, { method, headers: { authorization: token(), "content-type": "application/json" } });
   return { status: res.status, body: await res.json().catch(() => null) };
 };
+const post = async (path, body) => {
+  const res = await fetch(`${RUNNER}/rooms/${ROOM}/${path}`, { method: "POST", headers: { authorization: token(), "content-type": "application/json" }, body: JSON.stringify(body) });
+  return { status: res.status, body: await res.json().catch(() => null) };
+};
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = new Docker();
 const container = (kind) => docker.getContainer(`cc-${NAMESPACE}-${kind}-${ROOM.toLowerCase()}`);
@@ -135,6 +139,78 @@ try {
     if (nets.length !== 1 || nets[0] !== network || !info.NetworkSettings.Networks[network]?.Aliases?.includes(kind)) problems.push(`${kind} networks ${nets.join("+")}`);
   }
   record("databasesAreHardenedAndPrivate", problems.length === 0, problems.join("; "));
+
+  // The console: each database's own client, inside its container, read into results.
+  const ask = async (kind, query) => (await post(`databases/${kind}/query`, { query })).body ?? {};
+  const rowsOf = (result) => result.results?.filter((set) => set.type === "rows").map((set) => set.rows) ?? [];
+  const sql = "create table people(id int, name text); insert into people values (1, 'Ada'), (2, null); select id, name from people order by id";
+  for (const kind of ["postgres", "mysql", "mariadb"]) {
+    const result = await ask(kind, sql);
+    const rows = rowsOf(result).at(-1);
+    const statuses = result.results?.filter((set) => set.type === "message").map((set) => set.text) ?? [];
+    record(`${kind}Console`, !result.error && JSON.stringify(rows) === JSON.stringify([["1", "Ada"], ["2", null]]) && statuses.length >= 2, `${result.error ?? ""} ${statuses.join(" | ")} ${JSON.stringify(rows)}`);
+  }
+  await ask("mongo", 'db.people.insertMany([{ name: "Linus" }, { name: "Ada", tags: ["math"] }])');
+  const docs = await ask("mongo", "db.people.find({}, { _id: 0 }).sort({ name: 1 })");
+  record("mongoConsole", !docs.error && JSON.stringify(rowsOf(docs)[0]) === JSON.stringify([["Ada", '["math"]'], ["Linus", null]]), docs.error ?? JSON.stringify(docs.results));
+  const replies = await ask("redis", 'SET greeting "hello there"\nGET greeting\nHSET h a 1 b 2\nNOPE');
+  record(
+    "redisConsole",
+    JSON.stringify(rowsOf(replies)[0]?.map((row) => row[1])) === JSON.stringify(["OK", "hello there", "2", "(error) ERR unknown command 'NOPE', with args beginning with: "]),
+    JSON.stringify(rowsOf(replies)[0]),
+  );
+  const broken = await ask("postgres", "selec 1");
+  record("consoleShowsErrors", /syntax error/.test(broken.error ?? ""), broken.error);
+
+  // The table browser: what each holds, and a first look.
+  const listed = {};
+  for (const kind of KINDS) listed[kind] = ((await call("GET", `databases/${kind}/tables`)).body ?? []).map((t) => t.name);
+  record("tablesAreListed", ["postgres", "mysql", "mariadb", "mongo"].every((kind) => listed[kind].includes("people")) && listed.redis.includes("greeting") && listed.redis.includes("h"), JSON.stringify(listed));
+  const preview = await post("databases/postgres/preview", { name: "people" });
+  const hash = await post("databases/redis/preview", { name: "h" });
+  record(
+    "previewShowsRows",
+    JSON.stringify(rowsOf(preview.body)[0]) === JSON.stringify([["1", "Ada"], ["2", null]]) && JSON.stringify(rowsOf(hash.body)[0]) === JSON.stringify([["a", "1"], ["b", "2"]]),
+    `${JSON.stringify(rowsOf(preview.body))} ${JSON.stringify(rowsOf(hash.body))}`,
+  );
+
+  // Seed from a file in the room, back up, reset, and restore the backup.
+  const raw = async (method, path, body) => {
+    const res = await fetch(`${RUNNER}/rooms/${ROOM}/${path}`, { method, headers: { authorization: token() }, ...(body && { body }) });
+    return { status: res.status, type: res.headers.get("content-type") ?? "", disposition: res.headers.get("content-disposition") ?? "", bytes: Buffer.from(await res.arrayBuffer()) };
+  };
+  const total = async () => rowsOf(await ask("postgres", "select coalesce(sum(n), 0) from seeded"))[0]?.[0]?.[0];
+  createFileAtPath(doc, `${dir}/seed.sql`, "create table seeded(n int);\ninsert into seeded values (7), (8);\n", null);
+  await sleep(1000); // the runner's copy of the room catches up
+  const seeded = (await post(`databases/postgres/load?path=${encodeURIComponent(`${dir}/seed.sql`)}`, {})).body ?? {};
+  record("seedsFromARoomFile", !seeded.error && (await total()) === "15", `${seeded.error ?? JSON.stringify(seeded.results?.at(-1))}`);
+  const backup = await raw("GET", "databases/postgres/dump");
+  const sqlText = backup.bytes.toString();
+  record(
+    "backsUpAsSql",
+    backup.status === 200 && backup.type === "application/sql" && /filename="e2etst-postgres-\d{4}-\d\d-\d\d\.sql"/.test(backup.disposition) && sqlText.includes("DROP TABLE IF EXISTS public.seeded") && /COPY public\.seeded/.test(sqlText),
+    `${backup.status} ${backup.type} ${backup.disposition} ${backup.bytes.length} bytes`,
+  );
+  await call("POST", "databases/postgres/reset");
+  await waitFor(["postgres"], "running");
+  const emptied = rowsOf(await ask("postgres", "select to_regclass('seeded') is null"))[0]?.[0]?.[0];
+  const restored = await raw("POST", "databases/postgres/load", backup.bytes);
+  record("resetThenRestore", emptied === "t" && restored.status === 200 && (await total()) === "15", `emptied ${emptied}, restore ${restored.status} ${restored.bytes.toString().slice(0, 120)}`);
+
+  // MongoDB backs up as a mongodump archive, and restores it.
+  const mongoBackup = await raw("GET", "databases/mongo/dump");
+  record("mongoBacksUpAsAnArchive", mongoBackup.status === 200 && mongoBackup.bytes[0] === 0x1f && mongoBackup.bytes[1] === 0x8b, `${mongoBackup.status} ${mongoBackup.bytes.length} bytes`);
+  await ask("mongo", "db.people.deleteMany({})");
+  const mongoRestore = JSON.parse((await raw("POST", "databases/mongo/load", mongoBackup.bytes)).bytes.toString());
+  const counted = (await ask("mongo", "db.people.countDocuments()")).results?.[0]?.text;
+  record("mongoRestoresTheArchive", !mongoRestore.error && counted === "2", `${mongoRestore.error ?? ""} count ${counted}`);
+
+  // MySQL's dump replaces its tables when loaded; Redis gives its snapshot, which can't be loaded back yet.
+  const mysqlBackup = (await raw("GET", "databases/mysql/dump")).bytes.toString();
+  record("mysqlBacksUpAsSql", mysqlBackup.includes("DROP TABLE IF EXISTS `people`") && mysqlBackup.includes("INSERT INTO `people`"), mysqlBackup.slice(0, 80));
+  const snapshot = await raw("GET", "databases/redis/dump");
+  const reload = JSON.parse((await raw("POST", "databases/redis/load", snapshot.bytes)).bytes.toString());
+  record("redisSnapshotDownloadsButDoesntLoad", snapshot.bytes.subarray(0, 5).toString() === "REDIS" && /isn't supported yet/.test(reload.error ?? ""), `${snapshot.bytes.length} bytes; ${reload.error}`);
 
   // Code in the sandbox reaches each by name, with the connection from its environment.
   createFileAtPath(doc, `${dir}/write.sh`, WRITE, null);

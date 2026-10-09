@@ -17,6 +17,7 @@ import {
 } from "./active-editor";
 import { liveEditors, modelOwner } from "./file-models";
 import { attachRemoteCursors } from "./remote-cursors";
+import { applyPendingReveal } from "./reveal";
 import { useEditorUi, toggleMarkdownPreview } from "./ui-store";
 
 type Editor = monaco.editor.IStandaloneCodeEditor;
@@ -63,6 +64,8 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
       if (isActiveEditor(editor)) announceFile(editor);
       publishSelection();
       refreshInfo();
+      // A search result opening this file: select the match once the file's saved place is restored.
+      if (role === "primary") queueMicrotask(() => applyPendingReveal(editor));
     }),
     editor.onDidChangeCursorSelection(() => {
       publishSelection();

@@ -30,6 +30,17 @@ const Env = z.object({
     .string()
     .regex(/^(\d{1,3}\.){3}\d{1,3}\/(8|9|1\d|2[0-6])$/, "SANDBOX_SUBNET must be an IPv4 range of /26 or larger, like 10.213.0.0/16")
     .default("10.213.0.0/16"),
+  /**
+   * Where rooms run: "docker" (one container per room, the light default for
+   * development) or "kubernetes" (a namespace per room; kube-sandbox.ts), using
+   * KUBE_CONTEXT, or the kubeconfig's current context, or the cluster the
+   * runner runs in.
+   */
+  RUNNER_DRIVER: z.enum(["docker", "kubernetes"]).default("docker"),
+  KUBE_CONTEXT: z.string().optional(),
+  /** Kubernetes: the size of each room's workspace and home volumes, and their storage class (the cluster's default if unset). */
+  SANDBOX_STORAGE_GB: z.coerce.number().int().min(1).default(5),
+  SANDBOX_STORAGE_CLASS: z.string().optional(),
   /** Stop a room's container after this long with no run and no open terminal. */
   SANDBOX_IDLE_MINUTES: z.coerce.number().positive().default(15),
   RUN_TIMEOUT_MINUTES: z.coerce.number().positive().default(30),

@@ -68,52 +68,46 @@ ENTRYPOINT ["node", "/opt/ccagent/agent.mjs"]
 FROM core AS base
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
+# Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
+LABEL codechatter.sandbox=1
 USER 10002
 
-# The full image: every language the run plans know (apps/runner/src/plans.ts).
-#   pnpm sandbox:build:full     (dev: tags codechatter-sandbox:full; point SANDBOX_IMAGE at it)
-# Most toolchains come from Debian; downloads are cached between builds. Kotlin's
-# Debian package is years old, so the official compiler is used instead. Toolchains
-# live under /usr, where the jail lets programs run.
-FROM core AS full
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean \
- && apt-get update \
- && apt-get install -y --no-install-recommends \
-      golang-go rustc cargo ruby php-cli perl lua5.4 r-base-core \
-      gfortran nasm fp-compiler fp-units-rtl gnucobol3 swi-prolog-nox sqlite3 \
-      ocaml-nox ghc elixir erlang-nox racket clojure \
-      mono-mcs mono-runtime gdc gnat groovy crystal \
-      curl unzip
+# Downloads for the full image, each in a stage of its own: changing the shared
+# layers (core) doesn't fetch them again, and they download while the
+# toolchains install. Every download retries when a connection drops.
+FROM debian:trixie-slim AS fetch
+RUN apt-get update  && apt-get install -y --no-install-recommends curl ca-certificates unzip  && rm -rf /var/lib/apt/lists/*
+
+# Kotlin's Debian package is years old, so the official compiler is used instead.
+FROM fetch AS kotlin
 ARG KOTLIN_VERSION=2.2.0
-RUN curl -fsSL -o /tmp/kotlin.zip "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" \
- && unzip -q /tmp/kotlin.zip -d /usr/local/lib \
- && rm /tmp/kotlin.zip \
- && ln -s ../lib/kotlinc/bin/kotlinc /usr/local/bin/kotlinc
+RUN curl -fsSL --retry 5 --retry-all-errors -o /tmp/kotlin.zip "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip"  && unzip -q /tmp/kotlin.zip -d /out  && rm /tmp/kotlin.zip
+
 # The Kubernetes playground (`k8s up`): kubectl and Helm, and KWOK, a real API
 # server with simulated nodes that runs unprivileged and offline. Kubernetes and
-# Helm downloads are checked against their published SHA-256 sums.
+# Helm downloads are checked against their published SHA-256 sums. Inside the
+# loop, `|| exit 1` is what stops the build on a bad checksum: in an && chain
+# the shell ignores set -e there, and only the last file's check would count.
+FROM fetch AS k8s
 ARG K8S_VERSION=v1.37.1
 ARG KWOK_VERSION=v0.8.0
 ARG ETCD_VERSION=v3.6.10
 ARG HELM_VERSION=v4.3.0
-RUN set -eu; B=/usr/local/lib/k8s; mkdir -p "$B"; cd "$B" \
- && for c in kube-apiserver kube-controller-manager kube-scheduler kubectl; do \
-      curl -fsSL -o "$c" "https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/$c"; \
-      echo "$(curl -fsSL "https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/$c.sha256")  $c" | sha256sum -c --quiet -; \
-    done \
- && curl -fsSL -o kwokctl "https://github.com/kubernetes-sigs/kwok/releases/download/${KWOK_VERSION}/kwokctl-linux-amd64" \
- && curl -fsSL -o kwok "https://github.com/kubernetes-sigs/kwok/releases/download/${KWOK_VERSION}/kwok-linux-amd64" \
- && curl -fsSL "https://github.com/etcd-io/etcd/releases/download/${ETCD_VERSION}/etcd-${ETCD_VERSION}-linux-amd64.tar.gz" | tar -xz -C /tmp \
- && mv "/tmp/etcd-${ETCD_VERSION}-linux-amd64/etcd" etcd && rm -rf "/tmp/etcd-${ETCD_VERSION}-linux-amd64" \
- && curl -fsSL -o /tmp/helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
- && echo "$(curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" | cut -d' ' -f1)  /tmp/helm.tgz" | sha256sum -c --quiet - \
- && tar -xzf /tmp/helm.tgz -C /tmp && mv /tmp/linux-amd64/helm helm && rm -rf /tmp/helm.tgz /tmp/linux-amd64 \
- && chmod 755 ./* \
- && ln -s ../lib/k8s/kubectl ../lib/k8s/helm ../lib/k8s/kwokctl /usr/local/bin/
+RUN set -eu; B=/out/k8s; mkdir -p "$B"; cd "$B"; get() { curl -fsSL --retry 5 --retry-all-errors "$@"; }  && for c in kube-apiserver kube-controller-manager kube-scheduler kubectl; do       get -o "$c" "https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/$c" || exit 1;       echo "$(get "https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/$c.sha256")  $c" | sha256sum -c --quiet - || exit 1;     done  && get -o kwokctl "https://github.com/kubernetes-sigs/kwok/releases/download/${KWOK_VERSION}/kwokctl-linux-amd64"  && get -o kwok "https://github.com/kubernetes-sigs/kwok/releases/download/${KWOK_VERSION}/kwok-linux-amd64"  && get "https://github.com/etcd-io/etcd/releases/download/${ETCD_VERSION}/etcd-${ETCD_VERSION}-linux-amd64.tar.gz" | tar -xz -C /tmp  && mv "/tmp/etcd-${ETCD_VERSION}-linux-amd64/etcd" etcd && rm -rf "/tmp/etcd-${ETCD_VERSION}-linux-amd64"  && get -o /tmp/helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"  && echo "$(get "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" | cut -d' ' -f1)  /tmp/helm.tgz" | sha256sum -c --quiet -  && tar -xzf /tmp/helm.tgz -C /tmp && mv /tmp/linux-amd64/helm helm && rm -rf /tmp/helm.tgz /tmp/linux-amd64  && chmod 755 ./*
+
+# The full image: every language the run plans know (apps/runner/src/plans.ts).
+#   pnpm sandbox:build:full     (dev: tags codechatter-sandbox:full; point SANDBOX_IMAGE at it)
+# Most toolchains come from Debian; apt downloads are cached between builds.
+# Toolchains live under /usr, where the jail lets programs run.
+FROM core AS full
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked     rm -f /etc/apt/apt.conf.d/docker-clean  && apt-get update  && apt-get install -y --no-install-recommends       golang-go rustc cargo ruby php-cli perl lua5.4 r-base-core       gfortran nasm fp-compiler fp-units-rtl gnucobol3 swi-prolog-nox sqlite3       ocaml-nox ghc elixir erlang-nox racket clojure       mono-mcs mono-runtime gdc gnat groovy crystal       curl unzip
+COPY --from=kotlin /out/kotlinc /usr/local/lib/kotlinc
+COPY --from=k8s /out/k8s /usr/local/lib/k8s
+RUN ln -s ../lib/kotlinc/bin/kotlinc /usr/local/bin/kotlinc  && ln -s ../lib/k8s/kubectl ../lib/k8s/helm ../lib/k8s/kwokctl /usr/local/bin/
 COPY --chmod=755 image/k8s /usr/local/bin/k8s
 COPY image/kwok.yaml /usr/local/lib/k8s/kwok.yaml
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
+# Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
+LABEL codechatter.sandbox=1
 USER 10002

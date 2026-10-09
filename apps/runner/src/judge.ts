@@ -2,7 +2,7 @@ import type { JudgeCase, JudgeEvent } from "@codechatter/contracts";
 import { PassThrough } from "node:stream";
 
 import { JAIL, judgeStepsFor } from "./plans.js";
-import type { Sandbox } from "./sandbox.js";
+import type { RoomSandbox } from "./sandbox.js";
 
 const MAX_OUTPUT = 64 * 1024;
 
@@ -29,14 +29,15 @@ export function normalizeOutput(text: string): string {
 type ExecResult = { stdout: string; stderr: string; exitCode: number | null; timeMs: number };
 
 /** One non-interactive exec: stdout and stderr captured separately (capped), exit code, wall time. */
-async function capture(sandbox: Sandbox, script: string, path: string, env: string[]): Promise<ExecResult> {
+async function capture(sandbox: RoomSandbox, script: string, path: string, env: string[]): Promise<ExecResult> {
   const started = Date.now();
   // No stdin at all: ending a hijacked stdin closes the whole connection, and the
   // input already travels in $CC_INPUT.
-  const { exec, stream } = await sandbox.exec([JAIL, "sh", "-c", `umask 002; ${script}`, "cc-judge", path], { tty: false, env, stdin: false });
+  const handle = await sandbox.exec([JAIL, "sh", "-c", `umask 002; ${script}`, "cc-judge", path], { tty: false, env, stdin: false });
+  const { stream } = handle;
   const stdout = new PassThrough();
   const stderr = new PassThrough();
-  sandbox.modem.demuxStream(stream, stdout, stderr);
+  handle.demux(stdout, stderr);
   const collect = (source: PassThrough) => {
     let text = "";
     source.on("data", (chunk: Buffer) => {
@@ -52,13 +53,13 @@ async function capture(sandbox: Sandbox, script: string, path: string, env: stri
     stream.on("error", () => resolve());
   });
   const timeMs = Date.now() - started;
-  // The stream can end a moment before Docker records the exit code.
-  let inspect = await exec.inspect().catch(() => null);
-  for (let i = 0; i < 20 && inspect?.Running; i++) {
+  // The stream can end a moment before the exit code is recorded.
+  let exitCode = await handle.exitCode().catch(() => null);
+  for (let i = 0; i < 20 && exitCode === null; i++) {
     await new Promise((r) => setTimeout(r, 50));
-    inspect = await exec.inspect().catch(() => null);
+    exitCode = await handle.exitCode().catch(() => null);
   }
-  return { stdout: out(), stderr: err(), exitCode: inspect && !inspect.Running ? inspect.ExitCode : null, timeMs };
+  return { stdout: out(), stderr: err(), exitCode, timeMs };
 }
 
 /**
@@ -66,7 +67,7 @@ async function capture(sandbox: Sandbox, script: string, path: string, env: stri
  * verdict as it finishes. Cases without an expected output just show what
  * the program printed ("custom input").
  */
-export async function* judge(sandbox: Sandbox, path: string, cases: JudgeCase[], timeLimitMs: number): AsyncGenerator<JudgeEvent> {
+export async function* judge(sandbox: RoomSandbox, path: string, cases: JudgeCase[], timeLimitMs: number): AsyncGenerator<JudgeEvent> {
   const plan = judgePlanFor(path);
   if (!plan) {
     yield { type: "error", message: `CodeChatter can't test ${path} yet.` };

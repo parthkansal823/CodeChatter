@@ -6,6 +6,7 @@ import type { Request } from "express";
 import { AuditService } from "../audit/audit.service.js";
 import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
+import { RunnerClient } from "../runner/runner.client.js";
 import { RoomsService } from "./rooms.service.js";
 
 @Controller("rooms")
@@ -13,6 +14,7 @@ export class RoomsController {
   constructor(
     private readonly rooms: RoomsService,
     private readonly audit: AuditService,
+    private readonly runner: RunnerClient,
   ) {}
 
   @Get()
@@ -53,6 +55,8 @@ export class RoomsController {
     @Req() request: Request,
   ) {
     const room = await this.rooms.remove(id, session.user.id);
+    // Its sandbox, databases, volumes and network go too. If the runner is away, the janitor (room-janitor.ts) catches up.
+    await this.runner.destroyRoom(id, session.user).catch(() => {});
     await this.audit.record(
       { orgId: room.orgId, actorId: session.user.id, action: "room.delete", targetType: "room", targetId: id, data: { name: room.name } },
       request,

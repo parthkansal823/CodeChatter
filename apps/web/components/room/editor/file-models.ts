@@ -52,6 +52,10 @@ export function acquireModel(doc: Y.Doc, file: FileRef, language?: string): Mode
     // No awareness here: remote carets and the local selection are handled per editor
     // (remote-cursors.ts), because one model can be open in two editors at once.
     const binding = new MonacoBinding(ytext, model, liveEditors);
+    // An empty model takes the OS's line ending (CRLF on Windows), so new lines typed
+    // there would reach the room, and its Linux sandbox, as \r\n. Files are \n unless
+    // they already use \r\n; with no \r\n in the text, this changes no characters.
+    if (model.getEOL() === "\r\n" && !ytext.toString().includes("\r\n")) model.setEOL(monaco.editor.EndOfLineSequence.LF);
     const created: Entry = {
       model,
       ytext,

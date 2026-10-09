@@ -2,7 +2,7 @@
 
 import type { RoomSummary } from "@codechatter/contracts";
 import { flatten, type TreeNode } from "@codechatter/workspace-model";
-import { BookOpen, Columns2, Eye, FileCode2, Globe2, MessageSquare, SquareTerminal, X } from "lucide-react";
+import { BookOpen, Columns2, Eye, FileCode2, Globe2, MessageSquare, Search, SquareTerminal, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { usePanelRef } from "react-resizable-panels";
@@ -23,6 +23,8 @@ import { PeoplePanel } from "@/components/room/people-panel";
 import { RoomProvider, useRoom } from "@/components/room/room-context";
 import { RunButton } from "@/components/room/run-button";
 import { canRunPath, RunProvider, useRun } from "@/components/room/run-context";
+import { startSearch } from "@/components/room/search/search-store";
+import { SearchView } from "@/components/room/search/search-view";
 import { StatusBar } from "@/components/room/status-bar";
 import { TabBar } from "@/components/room/tab-bar";
 import { TitleBar } from "@/components/room/title-bar";
@@ -56,7 +58,15 @@ function Workspace() {
   const peers = usePeers();
   const tabs = useRoomTabs(room.id);
   const { open, close, prune } = useTabs();
-  const [showFiles, setShowFiles] = useState(true);
+  // The left sidebar: the file list or Search, or neither. Clicking the open one's icon closes it.
+  const [sidebar, setSidebar] = useState<"files" | "search" | null>("files");
+  const showFiles = sidebar === "files";
+  /** Ctrl+Shift+F (seeded from the editor's selection), Ctrl+Shift+H, the palette and the activity bar. */
+  const openSearch = (options: { seed?: boolean; replace?: boolean } = {}) => {
+    useEditorUi.getState().setZen(false);
+    setSidebar("search");
+    startSearch(room.id, options);
+  };
   const [right, setRight] = useSidePanel(room.id);
   const [unread, setUnread] = useState(0);
   const onUnread = useCallback((n: number) => setUnread(n), []);
@@ -152,22 +162,29 @@ function Workspace() {
   };
 
   // Ctrl/Cmd+Enter runs the open file from anywhere (Monaco's own Ctrl+Enter
-  // is overridden); Ctrl+` opens a terminal. Keys typed into a terminal are its own.
-  const shortcuts = useRef({ runActive, openTerminal });
+  // is overridden); Ctrl+` opens a terminal. Keys typed into a terminal are its
+  // own, and so is Ctrl+Enter in a tool that marks itself data-own-run-key (API
+  // Studio sends, the database console runs its query).
+  // Ctrl+Shift+F opens Search (Ctrl+Shift+H with replace), as in VS Code.
+  const shortcuts = useRef({ runActive, openTerminal, openSearch });
   useEffect(() => {
-    shortcuts.current = { runActive, openTerminal };
+    shortcuts.current = { runActive, openTerminal, openSearch };
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-      const inTerminal = (event.target as HTMLElement | null)?.closest?.(".xterm");
-      if (event.key === "Enter" && !inTerminal) {
+      const ownKey = (event.target as HTMLElement | null)?.closest?.(".xterm, [data-own-run-key]");
+      if (event.key === "Enter" && !ownKey) {
         event.preventDefault();
         event.stopPropagation();
         shortcuts.current.runActive();
       } else if (event.key === "`") {
         event.preventDefault();
         shortcuts.current.openTerminal();
+      } else if (event.shiftKey && /^[fh]$/i.test(event.key) && !ownKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        shortcuts.current.openSearch({ seed: true, replace: event.key.toLowerCase() === "h" });
       }
     };
     window.addEventListener("keydown", onKey, { capture: true });
@@ -212,8 +229,19 @@ function Workspace() {
     {
       id: "files",
       label: showFiles ? "Hide the file list" : "Show the file list",
-      run: () => setShowFiles((v) => !v),
+      run: () => setSidebar(showFiles ? null : "files"),
     },
+    { id: "search", label: "Search in files", shortcut: "Ctrl Shift F", run: () => openSearch({ seed: true }) },
+    ...(can("files.edit")
+      ? [
+          {
+            id: "replace",
+            label: "Replace in files",
+            shortcut: "Ctrl Shift H",
+            run: () => openSearch({ seed: true, replace: true }),
+          },
+        ]
+      : []),
     { id: "chat", label: "Open chat", run: () => setRight("chat") },
     { id: "people", label: "See who's here", run: () => setRight("people") },
     ...sideTools.map((tool) => ({
@@ -249,8 +277,15 @@ function Workspace() {
             aria-label="Panels"
             className="flex w-activitybar shrink-0 flex-col items-center gap-1 border-r bg-chrome py-2"
           >
-            <ActivityButton label="Files" active={showFiles} onClick={() => setShowFiles((v) => !v)}>
+            <ActivityButton label="Files" active={showFiles} onClick={() => setSidebar(showFiles ? null : "files")}>
               <FileCode2 className="size-[18px]" />
+            </ActivityButton>
+            <ActivityButton
+              label="Search"
+              active={sidebar === "search"}
+              onClick={() => (sidebar === "search" ? setSidebar(null) : openSearch())}
+            >
+              <Search className="size-[18px]" />
             </ActivityButton>
             <span aria-hidden className="my-1 h-px w-6 bg-border" />
             <div role="group" aria-label="Apps" className="flex flex-col items-center gap-1">
@@ -284,13 +319,15 @@ function Workspace() {
         )}
 
         <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
-          {showFiles && !zen && (
+          {sidebar && !zen && (
             <>
               <ResizablePanel id="explorer" defaultSize={248} minSize={180} maxSize={480}>
-                {synced ? (
-                  <Explorer activeFileId={activeFile?.id ?? null} onOpen={openFile} />
-                ) : (
+                {!synced ? (
                   <PanelSkeleton />
+                ) : sidebar === "search" ? (
+                  <SearchView onOpen={openFile} />
+                ) : (
+                  <Explorer activeFileId={activeFile?.id ?? null} onOpen={openFile} />
                 )}
               </ResizablePanel>
               <ResizableHandle />

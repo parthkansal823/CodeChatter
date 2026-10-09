@@ -24,7 +24,7 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
 |---|---|
 | `apps/web` | Next.js 16 (Turbopack), React 19, Tailwind 4 tokens in `app/globals.css`, shadcn/ui in `components/ui` |
 | `apps/web/components/room` | Room IDE: editor (Monaco + y-monaco), explorer, Run/Output/Tests/Ports/terminal panel, preview |
-| `apps/web/components/room/tools` | Plug-in tools (`registry.ts`): ai, docs, api-studio, canvas/design/board |
+| `apps/web/components/room/tools` | Plug-in tools (`registry.ts`): ai, docs, api-studio, databases, canvas/design/board, diagrams |
 | `apps/api` | NestJS 12: REST + Better Auth + Socket.IO; proxies terminals and previews to the runner |
 | `apps/collab` | Hocuspocus (Yjs) with Postgres persistence; authorises `room:ID:<kind>` documents |
 | `apps/runner` | Sandbox manager (dockerode): container per room, file-sync agent, runs, judge, terminals, preview tunnel |
@@ -55,7 +55,7 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
   - `pnpm --filter <pkg> test`
   - the canvas engine's `node:test` files (`apps/web/components/room/tools/canvas/*.test.ts`) need tsx, which the web package doesn't have yet: run `pnpm exec tsx --test <absolute paths>` from `apps/runner`
 - **End-to-end** (dev stack running):
-  - `node --env-file=../../.env test/runner.e2e.mjs`, `test/judge.e2e.mjs`, `test/network.e2e.mjs` (the room network's isolation) and `test/egress.e2e.mjs` (package installs: real downloads, takes a minute or two), from `apps/runner`
+  - `node --env-file=../../.env test/runner.e2e.mjs`, `test/judge.e2e.mjs`, `test/network.e2e.mjs` (the room network's isolation), `test/egress.e2e.mjs` (package installs: real downloads, takes a minute or two), `test/databases.e2e.mjs` (all five databases) and `test/dev.e2e.mjs` (the dev server from room.json), from `apps/runner`
   - `test/languages.e2e.mjs` (every language) and `test/kubernetes.e2e.mjs` (the playground), from `apps/runner`. Both need the full image: `pnpm sandbox:build:full` and `SANDBOX_IMAGE=codechatter-sandbox:full`.
   - browser tests in `apps/web/test/*.e2e.mjs` (Playwright-core + Edge against http://localhost:8080; helpers in `browser.mjs`), run from `apps/web` with `node test/<name>.e2e.mjs`
 - **AI tests:**

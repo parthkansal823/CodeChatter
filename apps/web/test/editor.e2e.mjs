@@ -99,7 +99,8 @@ await command("Compare");
 await a.getByRole("dialog", { name: "Compare with" }).waitFor({ timeout: 5_000 });
 await a.keyboard.type("srv");
 await a.keyboard.press("Enter");
-const comparing = a.getByRole("region", { name: /^Comparing README\.md with / });
+// The open README may be in a folder (a template's), which the label then names.
+const comparing = a.getByRole("region", { name: /^Comparing (\S+\/)?README\.md with / });
 check("compareFiles", await ok(comparing.locator(".monaco-diff-editor").waitFor({ timeout: 10_000 })));
 await comparing.getByRole("button", { name: "Close the comparison" }).click();
 

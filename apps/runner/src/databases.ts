@@ -1,12 +1,40 @@
-import { DATABASE_KINDS, DATABASES, type DatabaseConnection, type DatabaseKind, type DatabaseStatus } from "@codechatter/contracts";
+import {
+  DATABASE_KINDS,
+  DATABASES,
+  type DatabaseConnection,
+  type DatabaseKind,
+  type DatabaseStatus,
+  type DatabaseTable,
+  type QueryResult,
+  type QueryResultSet,
+} from "@codechatter/contracts";
 import type Docker from "dockerode";
 import { createHmac } from "node:crypto";
+import { once } from "node:events";
+import { type Duplex, PassThrough, Writable } from "node:stream";
+
+import {
+  capped,
+  dumpCommand,
+  loadCommand,
+  MAX_ROWS,
+  parseQueryOutput,
+  previewQuery,
+  queryCommand,
+  redisPreview,
+  redisRows,
+  sniff,
+  tablesCommand,
+  tablesFrom,
+} from "./database-queries.js";
 
 import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, type Sandbox } from "./sandbox.js";
 
 const LABEL_KIND = "codechatter.database";
+/** Most of a client's output read; a longer answer is cut, and says so. */
+const MAX_OUTPUT = 4 * 1024 * 1024;
 
 type Spec = {
   image: string;
@@ -198,6 +226,124 @@ export class Databases {
     log.info(`room ${roomId}: deleted its ${kind} database`);
   }
 
+  /** A console query, run by the database's own client inside its container (database-queries.ts). */
+  async query(roomId: string, kind: DatabaseKind, query: string): Promise<QueryResult> {
+    const t0 = Date.now();
+    const { cmd, env } = queryCommand(kind, query, databasePassword(this.env.SERVICE_SECRET, roomId));
+    const out = await this.exec(roomId, kind, cmd, env);
+    if ("down" in out) return { results: [], error: out.down, ms: Date.now() - t0 };
+    const parsed = parseQueryOutput(kind, out.stdout, out.stderr, out.exitCode, query);
+    return { ...parsed, ...(out.cut && !parsed.error && { error: "The answer was too long to show all of it." }), ms: Date.now() - t0 };
+  }
+
+  /** Its tables, views, collections or keys, for the table browser. */
+  async tables(roomId: string, kind: DatabaseKind): Promise<DatabaseTable[]> {
+    if (kind === "redis") {
+      const out = await this.exec(roomId, kind, ["sh", "-c", `valkey-cli --no-auth-warning --scan --count 1000 | head -n ${MAX_ROWS}`]);
+      if ("down" in out) throw new Error(out.down);
+      return out.stdout.split("\n").filter(Boolean).sort().map((name) => ({ name, detail: "key" }));
+    }
+    const result = await this.query(roomId, kind, tablesCommand(kind));
+    if (result.error) throw new Error(result.error);
+    return tablesFrom(kind, result.results);
+  }
+
+  /** The first rows of a table or collection, or a Redis key's value. */
+  async preview(roomId: string, kind: DatabaseKind, table: { name: string; schema?: string }): Promise<QueryResult> {
+    if (kind !== "redis") {
+      const query = previewQuery(kind, table);
+      return { ...(await this.query(roomId, kind, query)), query };
+    }
+    const t0 = Date.now();
+    const typed = await this.exec(roomId, kind, ["valkey-cli", "--no-auth-warning", "TYPE", table.name]);
+    if ("down" in typed) return { results: [], error: typed.down, ms: Date.now() - t0 };
+    const type = typed.stdout.trim();
+    const how = redisPreview(type);
+    if (!how) {
+      const text = type === "none" ? "This key doesn't exist any more." : `A ${type} key: look at it with a command in the console.`;
+      return { results: [{ type: "message", text }], error: null, ms: Date.now() - t0 };
+    }
+    const out = await this.exec(roomId, kind, ["valkey-cli", "--no-auth-warning", "--json", ...how.args.map((arg) => (arg === "{key}" ? table.name : arg))]);
+    if ("down" in out) return { results: [], error: out.down, ms: Date.now() - t0 };
+    return { results: [{ type: "message", text: `${type} ${table.name}` }, capped(how.columns, redisRows(out.stdout.trim(), how.pairs))], error: null, ms: Date.now() - t0 };
+  }
+
+  /**
+   * A backup, streamed as the client writes it: its file name and type, the
+   * dump, and (when it ends) how it went. "down" when the database isn't running.
+   */
+  async openDump(
+    roomId: string,
+    kind: DatabaseKind,
+  ): Promise<{ file: string; contentType: string; body: PassThrough; done: Promise<{ exitCode: number | null; stderr: string }> } | { down: string }> {
+    const { cmd, env, extension, contentType } = dumpCommand(kind, databasePassword(this.env.SERVICE_SECRET, roomId));
+    const started = await this.startExec(roomId, kind, ["timeout", "600", ...cmd], env, false);
+    if ("down" in started) return started;
+    const body = new PassThrough();
+    const stderr = new Collector(64 * 1024);
+    this.docker.modem.demuxStream(started.stream, body, stderr);
+    const done = ended(started.stream).then(async () => {
+      body.end();
+      const { ExitCode } = await started.exec.inspect();
+      return { exitCode: ExitCode ?? null, stderr: stderr.text().trim() };
+    });
+    const day = new Date().toISOString().slice(0, 10);
+    return { file: `${roomId.toLowerCase()}-${kind}-${day}.${extension}`, contentType, body, done };
+  }
+
+  /**
+   * Run a file through the database's client: a seed or a backup (SQL, a
+   * mongosh script or mongodump archive, Redis commands). `bytes` is exactly
+   * how much `input` holds; the client reads that much (loadCommand).
+   */
+  async load(roomId: string, kind: DatabaseKind, input: AsyncIterable<Buffer | string>, bytes: number): Promise<QueryResult> {
+    const t0 = Date.now();
+    const done = (error: string): QueryResult => ({ results: [], error, ms: Date.now() - t0 });
+    const chunks = input[Symbol.asyncIterator]();
+    const first = await chunks.next();
+    const head = first.done ? Buffer.alloc(0) : Buffer.from(first.value);
+    const { archive, rdb } = sniff(head);
+    if (rdb) return done("Loading a Redis snapshot (.rdb) isn't supported yet. Load a file of commands instead, one per line.");
+    if (archive && kind !== "mongo") return done("That's a compressed archive. Load a .sql file.");
+    const { cmd, env } = loadCommand(kind, databasePassword(this.env.SERVICE_SECRET, roomId), bytes, archive);
+    const started = await this.startExec(roomId, kind, ["timeout", "600", ...cmd], env, true);
+    if ("down" in started) return done(started.down);
+    const stdout = new Collector(64 * 1024);
+    const stderr = new Collector(64 * 1024);
+    this.docker.modem.demuxStream(started.stream, stdout, stderr);
+    const finished = ended(started.stream);
+    // Not ended afterwards: the client stops after `bytes`, and on some Docker
+    // setups ending our side would close the connection before its answer.
+    try {
+      started.stream.write(head);
+      for (let next = await chunks.next(); !next.done; next = await chunks.next()) {
+        if (started.stream.destroyed) break;
+        if (!started.stream.write(Buffer.from(next.value))) await once(started.stream, "drain");
+      }
+    } catch {
+      // The client stopped reading (an error part-way); its answer says why.
+    }
+    await finished;
+    started.stream.destroy();
+    const { ExitCode } = await started.exec.inspect();
+    const out = lastLines(stdout.text(), 40);
+    const notes = lastLines(stderr.text(), 20);
+    if (ExitCode !== 0) {
+      return { results: out ? [{ type: "value", text: out }] : [], error: ExitCode === 124 ? "Loading took longer than 10 minutes and was stopped." : notes || `It failed (exit code ${ExitCode}).`, ms: Date.now() - t0 };
+    }
+    const results: QueryResultSet[] = [];
+    if (out) results.push({ type: "value", text: out });
+    if (notes) results.push({ type: "message", text: notes });
+    results.push({ type: "message", text: `Loaded ${bytes.toLocaleString("en")} bytes.` });
+    return { results, error: null, ms: Date.now() - t0 };
+  }
+
+  /** Delete a database's data and start it again, empty. */
+  async reset(sandbox: Sandbox, kind: DatabaseKind): Promise<void> {
+    await this.remove(sandbox.roomId, kind);
+    this.start(sandbox, kind);
+  }
+
   /** The sandbox went idle: the room's databases sleep (stopped, data kept). */
   async pause(roomId: string): Promise<void> {
     for (const info of await this.containers(roomId, "running")) {
@@ -263,6 +409,41 @@ export class Databases {
     });
   }
 
+  /**
+   * Run a client inside the database's container, as its database user,
+   * stopped after 30 seconds (exit code 124). "down" when it isn't running.
+   */
+  private async exec(
+    roomId: string,
+    kind: DatabaseKind,
+    cmd: string[],
+    env: string[] = [],
+  ): Promise<{ stdout: string; stderr: string; exitCode: number | null; cut: boolean } | { down: string }> {
+    const started = await this.startExec(roomId, kind, ["timeout", "30", ...cmd], env, false);
+    if ("down" in started) return started;
+    const stdout = new Collector(MAX_OUTPUT);
+    const stderr = new Collector(64 * 1024);
+    this.docker.modem.demuxStream(started.stream, stdout, stderr);
+    await ended(started.stream);
+    const { ExitCode } = await started.exec.inspect();
+    return { stdout: stdout.text(), stderr: stderr.text(), exitCode: ExitCode ?? null, cut: stdout.cut };
+  }
+
+  /** Start a client inside the database's container, as its database user. "down" when it isn't running. */
+  private async startExec(roomId: string, kind: DatabaseKind, cmd: string[], env: string[], stdin: boolean): Promise<{ exec: Docker.Exec; stream: Duplex } | { down: string }> {
+    const container = this.docker.getContainer(this.name(roomId, kind));
+    let exec: Docker.Exec;
+    try {
+      exec = await container.exec({ Cmd: cmd, Env: env, AttachStdin: stdin, AttachStdout: true, AttachStderr: true });
+    } catch (error) {
+      const status = (error as { statusCode?: number }).statusCode;
+      if (status === 404 || status === 409) return { down: `${DATABASES[kind].name} isn't running. Start it first.` };
+      throw error;
+    }
+    const stream = (await exec.start({ hijack: true, stdin })) as Duplex;
+    return { exec, stream };
+  }
+
   private connection(kind: DatabaseKind, password: string): DatabaseConnection {
     const spec = SPECS[kind];
     return {
@@ -292,4 +473,45 @@ export class Databases {
   private volume(roomId: string, kind: DatabaseKind): string {
     return `cc-${this.env.SANDBOX_NAMESPACE}-db-${kind}-${roomId.toLowerCase()}`;
   }
+}
+
+/** Keeps up to `limit` bytes of a stream and drops the rest, noting that it did. */
+class Collector extends Writable {
+  private readonly chunks: Buffer[] = [];
+  private size = 0;
+  cut = false;
+
+  constructor(private readonly limit: number) {
+    super();
+  }
+
+  override _write(chunk: Buffer, _encoding: BufferEncoding, done: () => void): void {
+    const room = this.limit - this.size;
+    if (chunk.length > room) this.cut = true;
+    if (room > 0) {
+      const kept = chunk.subarray(0, room);
+      this.chunks.push(kept);
+      this.size += kept.length;
+    }
+    done();
+  }
+
+  text(): string {
+    return Buffer.concat(this.chunks).toString("utf8");
+  }
+}
+
+/** Resolves once a hijacked exec stream is over, however it ends. */
+function ended(stream: Duplex): Promise<void> {
+  return new Promise((resolve) => {
+    stream.on("end", resolve);
+    stream.on("close", resolve);
+    stream.on("error", () => resolve());
+  });
+}
+
+/** The last lines of a client's output, for a summary. */
+function lastLines(text: string, count: number): string {
+  const lines = text.trim().split("\n");
+  return (lines.length > count ? ["…", ...lines.slice(-count)] : lines).join("\n").trim();
 }

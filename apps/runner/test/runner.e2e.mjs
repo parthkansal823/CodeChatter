@@ -105,6 +105,8 @@ try {
     [
       "import os, socket",
       "print('ENV', ','.join(sorted(os.environ)))",
+      "from urllib.parse import urlparse",
+      "print('DBHOST', urlparse(os.environ.get('DATABASE_URL', '')).hostname)",
       "print('UID', os.getuid())",
       "try:",
       "    socket.create_connection(('1.1.1.1', 53), timeout=2); print('NET open')",
@@ -118,9 +120,15 @@ try {
   );
   const probe = await run(`${dir}/probe.py`);
   const envLine = /ENV (.*)/.exec(probe.output)?.[1] ?? "";
-  record("noSecretsInSandboxEnv", envLine && !/SECRET|DATABASE|VALKEY|SMTP|TOKEN|PASS/.test(envLine), envLine.trim());
+  // The room's own database settings are there on purpose (one-click databases); nothing of the server's is.
+  const ROOM_DB_ENV = new Set(["DATABASE_URL", "POSTGRES_URL", "MYSQL_URL", "MARIADB_URL", "MONGODB_URL", "REDIS_URL", "PGHOST", "PGUSER", "PGDATABASE", "PGPASSWORD", "MYSQL_PWD"]);
+  const leaked = envLine.trim().split(",").filter((name) => !ROOM_DB_ENV.has(name) && /SECRET|DATABASE|VALKEY|SMTP|TOKEN|PASS/.test(name));
+  const dbHost = /DBHOST (\S+)/.exec(probe.output)?.[1];
+  record("noSecretsInSandboxEnv", envLine && leaked.length === 0 && dbHost === "postgres", `leaked: ${leaked.join(",") || "none"}; DATABASE_URL host: ${dbHost}`);
   record("noNetworkInSandbox", probe.output.includes("NET blocked"));
-  record("userCodeIsNotRootAndRootfsReadonly", probe.output.includes("UID 10001") && probe.output.includes("ROOT readonly"));
+  // Docker runs user code as 10001; Kubernetes as the room's own user (100000 and up).
+  const uid = Number(/UID (\d+)/.exec(probe.output)?.[1] ?? 0);
+  record("userCodeIsNotRootAndRootfsReadonly", (uid === 10001 || uid >= 100_000) && probe.output.includes("ROOT readonly"), `uid ${uid}`);
 
   // 5. Typed input reaches the program (only from the person who started it).
   put("ask.py", 'name = input("Your name? ")\nprint("Hi", name)\n');
@@ -210,6 +218,17 @@ try {
   const bomb = await run(`${dir}/bomb.sh`, { timeoutMs: 90000 });
   const after = await run(`${dir}/hello.py`, { timeoutMs: 90000 });
   record("recoversFromForkBomb", after.output.includes("hello from the sandbox 42"), `bomb exit ${JSON.stringify(bomb.exit)}; after: ${after.error ?? after.output}`);
+
+  // 11b. Running out of memory: Docker kills the program; Kubernetes (1.32+) the whole
+  // container, agent and terminals too. Either way the next run works.
+  put("hog.py", "chunks = []\nfor _ in range(64):\n    chunks.append(b'x' * (64 * 1024 * 1024))\nprint('survived')\n");
+  const hog = await run(`${dir}/hog.py`, { timeoutMs: 120000 });
+  const afterHog = await run(`${dir}/hello.py`, { timeoutMs: 180000 });
+  record(
+    "recoversFromOutOfMemory",
+    !hog.output.includes("survived") && afterHog.output.includes("hello from the sandbox 42"),
+    `hog exit ${JSON.stringify(hog.exit ?? hog.error)}; after: ${afterHog.error ?? afterHog.output}`,
+  );
 
   // 12. Unsupported files get a clear message.
   put("notes.md", "# hi\n");

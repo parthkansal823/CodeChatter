@@ -57,8 +57,8 @@ function Studio() {
   const request = useRequest(doc, selectedId);
   const root = useRef<HTMLDivElement>(null);
 
-  // Ctrl+Enter sends the open request. The room's own Run shortcut listens on
-  // window too, so this one listens there as well, and only for keys typed in this tool.
+  // Ctrl+Enter sends the open request, for keys typed in this tool. The root is
+  // marked data-own-run-key, so the room's Run shortcut leaves those keys alone.
   const sendOpen = useRef(() => {});
   useEffect(() => {
     sendOpen.current = () => {
@@ -77,7 +77,7 @@ function Studio() {
   }, []);
 
   return (
-    <div ref={root} className="flex h-full min-h-0 flex-col bg-background">
+    <div ref={root} data-own-run-key className="flex h-full min-h-0 flex-col bg-background">
       <Header close={close} full />
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel id="api-sidebar" defaultSize={236} minSize={180} maxSize={420}>

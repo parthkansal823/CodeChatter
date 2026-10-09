@@ -4,7 +4,7 @@ import type { Duplex } from "node:stream";
 
 import { log } from "./log.js";
 import { commandFor, planFor } from "./plans.js";
-import type { ExecHandle, Sandbox } from "./sandbox.js";
+import type { ExecHandle, RoomSandbox } from "./sandbox.js";
 
 const OUTPUT_LIMIT = 2 * 1024 * 1024; // per run; then the run is stopped
 const SNAPSHOT_BYTES = 64 * 1024; // kept for people who open the room mid-run
@@ -31,7 +31,7 @@ export class RunManager {
   private last: { info: RunInfo; output: string; exit: RunExit | null } | null = null;
 
   constructor(
-    private readonly sandbox: Sandbox,
+    private readonly sandbox: RoomSandbox,
     private readonly timeoutMs: number,
   ) {}
 
@@ -151,8 +151,7 @@ export class RunManager {
       pending += decoder.decode();
       flush();
       clearTimeout(active.timeout);
-      const inspect = await active.handle.exec.inspect().catch(() => null);
-      const code = inspect && !inspect.Running ? inspect.ExitCode : null;
+      const code = await active.handle.exitCode().catch(() => null);
       const output = this.last?.info.id === active.info.id ? this.last.output : "";
       const exhausted = code !== null && code >= 126 && /Resource temporarily unavailable|unable to start container process/i.test(output);
       const exit: RunExit = {

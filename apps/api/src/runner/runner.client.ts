@@ -1,6 +1,6 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, JudgeInput, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
-import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import type { DatabaseKind, DatabaseStatus, DevServerStatus, JudgeInput, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
 import { ENV } from "../infra/tokens.js";
@@ -102,12 +102,71 @@ export class RunnerClient {
     return (await response.json()) as DatabaseStatus[];
   }
 
-  /** Start, stop or delete one of the room's databases; answers with all of them. */
-  async changeDatabase(roomId: string, user: RunnerUser, kind: DatabaseKind, change: "start" | "stop" | "delete"): Promise<DatabaseStatus[]> {
-    const path = `/rooms/${roomId}/databases/${kind}${change === "stop" ? "/stop" : ""}`;
+  /** Start, stop, reset or delete one of the room's databases; answers with all of them. */
+  async changeDatabase(roomId: string, user: RunnerUser, kind: DatabaseKind, change: "start" | "stop" | "reset" | "delete"): Promise<DatabaseStatus[]> {
+    const path = `/rooms/${roomId}/databases/${kind}${change === "stop" || change === "reset" ? `/${change}` : ""}`;
     const response = await this.call(path, { method: change === "delete" ? "DELETE" : "POST", headers: this.headers(roomId, user), ...(change !== "delete" && { body: "{}" }) });
     if (!response.ok) throw new RunnerUnavailableError();
     return (await response.json()) as DatabaseStatus[];
+  }
+
+  /**
+   * The query console and table browser for one database. A database that
+   * isn't running, or a request it can't take, comes back as the runner's own
+   * words.
+   */
+  async databaseTool<T>(roomId: string, user: RunnerUser, kind: DatabaseKind, action: "query" | "tables" | "preview", body?: unknown): Promise<T> {
+    const response = await this.call(`/rooms/${roomId}/databases/${kind}/${action}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: this.headers(roomId, user),
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+    if (response.status === 400 || response.status === 409) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw response.status === 400 ? new BadRequestException(message) : new ConflictException(message);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as T;
+  }
+
+  /**
+   * Backups out and files in, streamed: the runner's own response, or what
+   * went wrong in its words.
+   */
+  async databaseStream(roomId: string, user: RunnerUser, kind: DatabaseKind, action: string, init: RequestInit & { duplex?: "half" }): Promise<Response> {
+    const response = await this.call(`/rooms/${roomId}/databases/${kind}/${action}`, { ...init, headers: { ...this.headers(roomId, user), ...(init.headers as Record<string, string>) } });
+    if ([400, 404, 409, 411, 413].includes(response.status)) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw new HttpException(message ?? "The database couldn't do that.", response.status);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response;
+  }
+
+  /** The dev server from .codechatter/room.json: its status (GET), (re)start it (POST) or stop it (DELETE). */
+  async dev(roomId: string, user: RunnerUser, method: "GET" | "POST" | "DELETE"): Promise<DevServerStatus> {
+    const response = await this.call(`/rooms/${roomId}/dev`, { method, headers: this.headers(roomId, user), ...(method === "POST" && { body: "{}" }) });
+    if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error);
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as DevServerStatus;
+  }
+
+  /** The room was deleted: the runner removes its containers, volumes and network. */
+  async destroyRoom(roomId: string, user: RunnerUser): Promise<void> {
+    const response = await this.call(`/rooms/${roomId}`, { method: "DELETE", headers: this.headers(roomId, user) });
+    if (!response.ok) throw new RunnerUnavailableError();
+  }
+
+  /** Housekeeping: the rooms that exist, so the runner removes what's left of any others. Answers with the rooms it cleared. */
+  async prune(rooms: string[]): Promise<string[]> {
+    const token = signServiceToken(this.env.SERVICE_SECRET, { aud: "runner", sub: "maintenance" });
+    const response = await this.call("/maintenance/prune", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ rooms }),
+    });
+    if (!response.ok) throw new RunnerUnavailableError();
+    return ((await response.json()) as { removed: string[] }).removed;
   }
 
   async stopInstalls(roomId: string, user: RunnerUser): Promise<void> {

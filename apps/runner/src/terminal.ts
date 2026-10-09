@@ -45,7 +45,7 @@ export async function openTerminal(ws: WebSocket, session: RoomSession, options:
     return;
   }
 
-  const { exec, stream } = handle;
+  const { stream } = handle;
   send(ws, { t: "status", state: "ready" });
   stream.on("data", (chunk: Buffer) => {
     session.touch();
@@ -71,7 +71,7 @@ export async function openTerminal(ws: WebSocket, session: RoomSession, options:
     else if (message.t === "resize") {
       const cols = clamp(message.cols, 10, 500);
       const rows = clamp(message.rows, 4, 200);
-      exec.resize({ h: rows, w: cols }).catch((error: unknown) => log.warn(`terminal resize: ${String(error)}`));
+      handle.resize(cols, rows).catch((error: unknown) => log.warn(`terminal resize: ${String(error)}`));
     }
   });
   ws.on("close", () => {

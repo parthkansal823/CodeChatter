@@ -3,26 +3,31 @@ import {
   DATABASE_KINDS,
   INSTALLS_MINUTES,
   JudgeInput,
+  QueryInput,
   RoomCode,
   RunInput,
   RunStartInput,
+  TablePreviewInput,
   type JudgeEvent,
   type RunnerEvent,
   type SandboxStatus,
 } from "@codechatter/contracts";
-import { findByPath } from "@codechatter/workspace-model";
+import { findByPath, textOf } from "@codechatter/workspace-model";
 import type Docker from "dockerode";
+import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
 
+import { devStatus, startDev, stopDev } from "./dev-server.js";
 import type { Env } from "./env.js";
 import { judge } from "./judge.js";
-import { log } from "./log.js";
+import { log, messageOf } from "./log.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
 import type { RoomRegistry } from "./room-session.js";
 import { RunError } from "./runs.js";
-import { SandboxUnavailableError } from "./sandbox.js";
+import { Sandbox, SandboxUnavailableError } from "./sandbox.js";
 import { openTerminal } from "./terminal.js";
 
 /**
@@ -32,6 +37,8 @@ import { openTerminal } from "./terminal.js";
  * person's room permissions.
  *
  *   GET  /healthz
+ *   DELETE /rooms/:id               the room was deleted: its containers, volumes and network go
+ *   POST /maintenance/prune         { rooms } the rooms that exist (a "maintenance" token); the rest are removed
  *   POST /rooms/:id/runs            start; streams NDJSON RunnerEvents
  *   POST /rooms/:id/runs/stop
  *   POST /rooms/:id/runs/input      { runId, data }
@@ -41,13 +48,29 @@ import { openTerminal } from "./terminal.js";
  *   POST /rooms/:id/sandbox/restart
  *   PUT  /rooms/:id/sandbox/installs  { minutes } allow package installs (ADR 0007)
  *   DELETE /rooms/:id/sandbox/installs
+ *   GET|POST|DELETE /rooms/:id/dev  the dev server from .codechatter/room.json: status, (re)start, stop
  *   GET  /rooms/:id/databases       DatabaseStatus[] (with connections; the API filters them)
  *   POST /rooms/:id/databases/:kind start one (returns at once; the list follows it)
  *   POST /rooms/:id/databases/:kind/stop    keeps its data
  *   DELETE /rooms/:id/databases/:kind       deletes its data
+ *   POST /rooms/:id/databases/:kind/query   { query } QueryResult (the console)
+ *   GET  /rooms/:id/databases/:kind/tables  DatabaseTable[] (the table browser)
+ *   POST /rooms/:id/databases/:kind/preview { name, schema? } QueryResult
+ *   GET  /rooms/:id/databases/:kind/dump    a backup, streamed
+ *   POST /rooms/:id/databases/:kind/load    a file (the body, or ?path= one of the room's) run through its client
+ *   POST /rooms/:id/databases/:kind/reset   delete its data and start it again
  *   ANY  /rooms/:id/preview/:port/* dev-server preview (HTTP and WebSocket)
  *   WS   /rooms/:id/terminal?session=&cols=&rows=
  */
+/** Run beside a Docker sandbox for now; on Kubernetes they come next (roadmap §14 F, K3 and K4). */
+const KUBE_LATER = {
+  databases: "Databases aren't on Kubernetes yet; they come next. Run the room on Docker to use them.",
+  installs: "Package installs aren't on Kubernetes yet; they come next. Run the room on Docker to use them.",
+};
+
+/** Biggest file a database loads in one go. */
+const MAX_LOAD_BYTES = 64 * 1024 * 1024;
+
 export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: RoomRegistry }) {
   const { env, rooms } = deps;
 
@@ -67,6 +90,21 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://runner");
+    // Housekeeping from the API: the rooms that exist, so what's left of the others can go.
+    if (req.method === "POST" && url.pathname === "/maintenance/prune") {
+      const claims = verifyServiceToken(env.SERVICE_SECRET, (req.headers.authorization ?? "").replace(/^Bearer /, ""), "runner");
+      if (claims?.sub !== "maintenance") return json(res, 401, { error: "Not allowed." });
+      const body = z.object({ rooms: z.array(RoomCode) }).safeParse(await readJson(req, 16 * 1024 * 1024));
+      if (!body.success) return json(res, 400, { error: "Send the rooms that exist." });
+      return json(res, 200, { removed: await rooms.prune(body.data.rooms) });
+    }
+    // A room was deleted: its containers, volumes and network go too.
+    const deleted = /^\/rooms\/([A-Z0-9]{6})$/.exec(url.pathname);
+    if (deleted && req.method === "DELETE") {
+      if (!authorize(req, deleted[1]!)) return json(res, 401, { error: "Not allowed." });
+      await rooms.destroy(deleted[1]!);
+      return json(res, 200, { ok: true });
+    }
     if (req.method === "GET" && url.pathname === "/healthz") {
       const docker = await deps.docker.ping().then(() => true, () => false);
       return json(res, docker ? 200 : 503, { status: docker ? "ok" : "docker unavailable" });
@@ -79,10 +117,10 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       return proxyPreviewHttp(rooms.get(preview[1]!), port, `${preview[3] ?? "/"}${url.search}`, req, res);
     }
 
-    const database = /^\/rooms\/([A-Z0-9]{6})\/databases(?:\/([a-z]+)(\/stop)?)?$/.exec(url.pathname);
-    if (database) return handleDatabases(req, res, database[1]!, database[2], Boolean(database[3]));
+    const database = /^\/rooms\/([A-Z0-9]{6})\/databases(?:\/([a-z]+)(?:\/(stop|query|tables|preview|dump|load|reset))?)?$/.exec(url.pathname);
+    if (database) return handleDatabases(req, res, url, database[1]!, database[2], database[3]);
 
-    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|judge)$/.exec(url.pathname);
+    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|judge|dev)$/.exec(url.pathname);
     if (!match || !RoomCode.safeParse(match[1]).success) return json(res, 404, { error: "Not found." });
     const roomId = match[1]!;
     const claims = authorize(req, roomId);
@@ -124,11 +162,26 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       const body = z.object({ minutes: z.number().positive().max(INSTALLS_MINUTES) }).safeParse(await readJson(req));
       if (!body.success) return json(res, 400, { error: `minutes must be more than 0 and at most ${INSTALLS_MINUTES}.` });
       try {
-        return json(res, 200, await rooms.egress.allow(rooms.get(roomId).sandbox, body.data.minutes, user.name));
+        const sandbox = rooms.get(roomId).sandbox;
+        if (!(sandbox instanceof Sandbox)) return json(res, 501, { error: KUBE_LATER.installs });
+        return json(res, 200, await rooms.egress.allow(sandbox, body.data.minutes, user.name));
       } catch (error) {
         if (error instanceof SandboxUnavailableError) return json(res, 503, { error: error.message });
         throw error;
       }
+    }
+    // The dev server from room.json (dev-server.ts). The API has checked who may start and stop it.
+    if (route === "GET dev") return json(res, 200, await devStatus(rooms.get(roomId)));
+    if (route === "POST dev") {
+      const session = rooms.get(roomId);
+      session.touch();
+      const failed = await startDev(session, rooms.databases);
+      return failed ? json(res, 409, failed) : json(res, 200, await devStatus(session));
+    }
+    if (route === "DELETE dev") {
+      const session = rooms.get(roomId);
+      await stopDev(session);
+      return json(res, 200, await devStatus(session));
     }
     if (route === "DELETE sandbox/installs") {
       await rooms.egress.stop(roomId);
@@ -163,17 +216,74 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
   }
 
   /** The room's databases (databases.ts). The API has checked who may see and change them. */
-  async function handleDatabases(req: IncomingMessage, res: ServerResponse, roomId: string, name: string | undefined, stop: boolean): Promise<void> {
+  async function handleDatabases(req: IncomingMessage, res: ServerResponse, url: URL, roomId: string, name: string | undefined, action: string | undefined): Promise<void> {
     if (!RoomCode.safeParse(roomId).success || !authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
     const kind = DATABASE_KINDS.find((k) => k === name);
     if (name !== undefined && !kind) return json(res, 404, { error: "Not found." });
-    const route = `${req.method} ${kind ? (stop ? "stop" : "one") : "all"}`;
+    const route = `${req.method} ${kind ? (action ?? "one") : "all"}`;
     if (route === "GET all") return json(res, 200, await rooms.databases.list(roomId));
     if (!kind) return json(res, 405, { error: "Method not allowed." });
     if (route === "POST one") {
       const session = rooms.get(roomId);
       session.touch();
+      if (!(session.sandbox instanceof Sandbox)) return json(res, 501, { error: KUBE_LATER.databases });
       rooms.databases.start(session.sandbox, kind);
+      return json(res, 202, await rooms.databases.list(roomId));
+    }
+    // The console and the table browser: rooms.peek, so looking doesn't keep a room awake.
+    if (route === "POST query") {
+      const body = QueryInput.safeParse(await readJson(req));
+      if (!body.success) return json(res, 400, { error: body.error.issues[0]?.message ?? "Invalid query." });
+      rooms.peek(roomId)?.touch();
+      return json(res, 200, await rooms.databases.query(roomId, kind, body.data.query));
+    }
+    if (route === "GET tables") {
+      try {
+        return json(res, 200, await rooms.databases.tables(roomId, kind));
+      } catch (error) {
+        return json(res, 409, { error: error instanceof Error ? error.message : "Couldn't list its tables." });
+      }
+    }
+    if (route === "POST preview") {
+      const body = TablePreviewInput.safeParse(await readJson(req));
+      if (!body.success) return json(res, 400, { error: "Invalid table." });
+      return json(res, 200, await rooms.databases.preview(roomId, kind, body.data));
+    }
+    // Backups, seeds and resets.
+    if (route === "GET dump") {
+      const dump = await rooms.databases.openDump(roomId, kind);
+      if ("down" in dump) return json(res, 409, { error: dump.down });
+      res.writeHead(200, { "content-type": dump.contentType, "content-disposition": `attachment; filename="${dump.file}"`, "cache-control": "no-store" });
+      dump.body.pipe(res, { end: false });
+      const { exitCode, stderr } = await dump.done;
+      if (!dump.body.readableEnded) await once(dump.body, "end");
+      // The headers are long gone, so a SQL dump that stopped early says so in a comment.
+      if (exitCode !== 0 && dump.contentType === "application/sql") res.write(`\n-- CodeChatter: the dump stopped early: ${stderr.replace(/\s+/g, " ")}\n`);
+      res.end();
+      return;
+    }
+    if (route === "POST load") {
+      const path = url.searchParams.get("path");
+      if (path) {
+        // A file from the room, as everyone sees it now.
+        const session = rooms.get(roomId);
+        await session.sync.synced();
+        const node = findByPath(session.sync.doc, path);
+        const text = node?.kind === "file" ? textOf(session.sync.doc, node.id)?.toString() : undefined;
+        if (text === undefined) return json(res, 404, { error: `${path} isn't a file in this room.` });
+        const bytes = Buffer.from(text);
+        return json(res, 200, await rooms.databases.load(roomId, kind, Readable.from([bytes]), bytes.length));
+      }
+      const length = Number(url.searchParams.get("bytes") ?? req.headers["content-length"]);
+      if (!Number.isInteger(length) || length <= 0) return json(res, 411, { error: "Send the file with its length." });
+      if (length > MAX_LOAD_BYTES) return json(res, 413, { error: `Files up to ${MAX_LOAD_BYTES / 1024 / 1024} MB can be loaded.` });
+      return json(res, 200, await rooms.databases.load(roomId, kind, req, length));
+    }
+    if (route === "POST reset") {
+      const session = rooms.get(roomId);
+      session.touch();
+      if (!(session.sandbox instanceof Sandbox)) return json(res, 501, { error: KUBE_LATER.databases });
+      await rooms.databases.reset(session.sandbox, kind);
       return json(res, 202, await rooms.databases.list(roomId));
     }
     if (route === "POST stop") await rooms.databases.stop(roomId, kind);
@@ -220,7 +330,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       const message =
         error instanceof RunError || error instanceof SandboxUnavailableError
           ? error.message
-          : `The sandbox could not run this: ${error instanceof Error ? error.message : String(error)}`;
+          : `The sandbox could not run this: ${messageOf(error)}`;
       if (!(error instanceof RunError)) log.error(`run in ${roomId}`, error);
       emit({ type: "error", message });
     }
