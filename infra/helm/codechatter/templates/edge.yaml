@@ -1,0 +1,115 @@
+{{- define "cc.caddyfile" -}}
+{
+	admin off
+	auto_https off
+}
+:8080 {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	# Dev-server previews, each on its own origin (p3000-<room>.preview.<host>).
+	@preview header_regexp Host ^p[0-9]+-[a-z0-9]{6}\.preview\.
+	handle @preview {
+		reverse_proxy {{ include "cc.host" (dict "root" . "name" "api") }}:4000
+	}
+	# NestJS: REST, Better Auth, Socket.IO, terminals
+	handle /api/* {
+		reverse_proxy {{ include "cc.host" (dict "root" . "name" "api") }}:4000
+	}
+	handle /socket.io/* {
+		reverse_proxy {{ include "cc.host" (dict "root" . "name" "api") }}:4000
+	}
+	handle /ws/* {
+		reverse_proxy {{ include "cc.host" (dict "root" . "name" "api") }}:4000
+	}
+	# Hocuspocus (path prefix stripped)
+	handle_path /collab* {
+		reverse_proxy {{ .Release.Name }}-collab:4100
+	}
+{{- if .Values.mail.mailpit }}
+	# The demo's caught emails
+	handle /mail* {
+		reverse_proxy {{ .Release.Name }}-mailpit:8025
+	}
+{{- end }}
+	# Next.js
+	handle {
+		reverse_proxy {{ .Release.Name }}-web:3000
+	}
+}
+{{- end }}
+# The one way in: every route on one origin, as infra/caddy does for Docker.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-edge
+  labels: {{- include "cc.componentLabels" (dict "root" . "component" "edge") | nindent 4 }}
+data:
+  Caddyfile: |
+    {{- include "cc.caddyfile" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-edge
+  labels: {{- include "cc.componentLabels" (dict "root" . "component" "edge") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cc.selector" (dict "root" . "component" "edge") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" (dict "root" . "component" "edge") | nindent 8 }}
+      annotations:
+        checksum/caddyfile: {{ include "cc.caddyfile" . | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {{- include "cc.podSecurity" (dict) | nindent 8 }}
+      # The image's caddy carries a file capability (for ports below 1024), and with no
+      # capabilities at all a binary like that won't start. A copy carries none; port 8080 needs none.
+      initContainers:
+        - name: copy-caddy
+          image: {{ .Values.edge.image }}
+          command: [cp, /usr/bin/caddy, /edge-bin/caddy]
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: bin, mountPath: /edge-bin }
+      containers:
+        - name: caddy
+          image: {{ .Values.edge.image }}
+          command: [/edge-bin/caddy, run, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            # Caddy keeps its state under these; the root file system is read-only.
+            - { name: XDG_DATA_HOME, value: /state/data }
+            - { name: XDG_CONFIG_HOME, value: /state/config }
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          resources: { requests: { cpu: 10m, memory: 32Mi }, limits: { memory: 128Mi } }
+          readinessProbe:
+            tcpSocket: { port: 8080 }
+            periodSeconds: 10
+          volumeMounts:
+            - { name: caddyfile, mountPath: /etc/caddy }
+            - { name: state, mountPath: /state }
+            - { name: bin, mountPath: /edge-bin }
+      volumes:
+        - name: bin
+          emptyDir: {}
+        - name: caddyfile
+          configMap: { name: {{ .Release.Name }}-edge }
+        - name: state
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-edge
+  labels: {{- include "cc.componentLabels" (dict "root" . "component" "edge") | nindent 4 }}
+spec:
+  type: {{ .Values.edge.service.type }}
+  selector: {{- include "cc.selector" (dict "root" . "component" "edge") | nindent 4 }}
+  ports:
+    - { name: http, port: {{ .Values.edge.service.port }}, targetPort: http }

@@ -60,6 +60,7 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
   - `test/languages.e2e.mjs` (every language) and `test/kubernetes.e2e.mjs` (the playground), from `apps/runner`. Both need the full image: `pnpm sandbox:build:full` and `SANDBOX_IMAGE=codechatter-sandbox:full`.
   - the same runner tests on the Kubernetes driver (Docker Desktop's cluster): a second runner, `RUNNER_PORT=4202 RUNNER_DRIVER=kubernetes SANDBOX_NAMESPACE=kube pnpm exec tsx watch --env-file-if-exists=../../.env src/main.ts` from `apps/runner`, and `RUNNER_URL=http://127.0.0.1:4202` for the tests
   - browser tests in `apps/web/test/*.e2e.mjs` (Playwright-core + Edge against http://localhost:8080; helpers in `browser.mjs`), run from `apps/web` with `node test/<name>.e2e.mjs`
+  - the same browser tests against the Kubernetes demo (the Helm chart, `infra/helm/codechatter/README.md`, at http://localhost:8090): `APP_URL=http://localhost:8090 node test/<name>.e2e.mjs`
 - **AI tests:**
   - `ai.e2e.mjs` needs the mock AI: run `node test/mock-ai.mjs` from `apps/api`, and point `.env` at it as its header shows
   - `ai-ollama.e2e.mjs` uses the local Ollama, which `.env` normally points at

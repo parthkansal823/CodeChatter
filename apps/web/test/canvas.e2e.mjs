@@ -11,7 +11,8 @@ const { browser, errors, signIn } = await launch();
 const a = (await signIn("test1@codechatter.local")).page;
 const b = (await signIn("test2@codechatter.local")).page;
 
-const canvasBox = async (page) => (await page.locator("[data-canvas]").first().boundingBox());
+// The visible canvas: room tools stay mounted when you switch away, so the board's can still be in the page.
+const canvasBox = async (page) => (await page.locator("[data-canvas]:visible").first().boundingBox());
 async function drag(page, from, to) {
   const box = await canvasBox(page);
   await page.mouse.move(box.x + from[0], box.y + from[1]);
@@ -21,7 +22,7 @@ async function drag(page, from, to) {
 }
 async function createNamed(page, noun, name) {
   await page.getByRole("button", { name: `New ${noun}` }).first().click();
-  await page.locator("[data-canvas]").first().waitFor({ timeout: 20_000 });
+  await page.locator("[data-canvas]:visible").first().waitFor({ timeout: 20_000 });
   await page.getByRole("button", { name: `Rename ${noun}` }).click();
   const field = page.getByRole("textbox", { name: `${noun} name` });
   await field.fill(name);
@@ -97,8 +98,8 @@ check("exportsPng", png.bytes.subarray(1, 4).toString() === "PNG" && png.name.en
 // A design's PDF gives each top-level frame its own page.
 await a.getByRole("button", { name: "Design", exact: true }).click();
 // The tool reopens the last design itself; only from the list does the name need a click (in the header it renames).
-if (!(await a.locator("[data-canvas]").first().isVisible().catch(() => false))) await a.getByText(`Logo ${stamp}`, { exact: true }).first().click();
-await a.locator("[data-canvas]").first().waitFor({ timeout: 20_000 });
+if (!(await a.locator("[data-canvas]:visible").first().isVisible().catch(() => false))) await a.getByText(`Logo ${stamp}`, { exact: true }).first().click();
+await a.locator("[data-canvas]:visible").first().waitFor({ timeout: 20_000 });
 await a.getByRole("button", { name: /^Frame/ }).first().click();
 await drag(a, [30, 320], [200, 440]); // the design canvas sits between the Layers and properties panels
 await a.keyboard.press("Escape");

@@ -22,7 +22,8 @@
     "sandbox:build": "docker build --target base -t codechatter-sandbox:dev -f sandbox/image/Dockerfile sandbox && pnpm docker:tidy",
     "sandbox:build:full": "docker build --target full -t codechatter-sandbox:full -f sandbox/image/Dockerfile sandbox && pnpm docker:tidy",
     "docker:tidy": "docker image prune -f --filter label=codechatter.sandbox=1 && docker builder prune -f --keep-storage 10gb",
-    "map": "node scripts/code-map.mjs"
+    "map": "node scripts/code-map.mjs",
+    "k8s:images": "docker build -f infra/docker/app.Dockerfile --target migrate -t codechatter-migrate . && docker build -f infra/docker/app.Dockerfile --target api -t codechatter-api . && docker build -f infra/docker/app.Dockerfile --target collab -t codechatter-collab . && docker build -f infra/docker/app.Dockerfile --target runner -t codechatter-runner . && docker build -f infra/docker/app.Dockerfile --target web -t codechatter-web . && pnpm docker:tidy"
   },
   "devDependencies": {
     "prettier": "3.9.9",

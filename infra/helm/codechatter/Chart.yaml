@@ -1,0 +1,7 @@
+apiVersion: v2
+name: codechatter
+description: CodeChatter, a real-time collaborative IDE, on Kubernetes. Its rooms run on the same cluster, a namespace each.
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+keywords: [ide, collaboration, yjs, sandbox]

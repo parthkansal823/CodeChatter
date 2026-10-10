@@ -1,0 +1,104 @@
+# CodeChatter on Kubernetes. These defaults run the whole app as a demo on Docker
+# Desktop's built-in Kubernetes (or kind): build the images, install, and open
+# http://localhost:8090 (README.md). Notes marked "Production" say what to change
+# for a real deployment.
+
+# Where people open it: the browser's origin. Sign-in checks it.
+# Production: your https:// address, with TLS in front of the edge.
+url: http://localhost:8090
+# Each dev server's preview gets its own origin under this one (p3000-<room>.preview...).
+# Empty: "preview." in front of the host above.
+# Production: a separate domain, so a preview can't share cookies with the app.
+previewOrigin: ""
+
+images:
+  # The app images (infra/docker/app.Dockerfile): codechatter-web, -api, -collab, -runner, -migrate.
+  # Empty registry: images built on this machine (README.md). Production: your registry, a pinned
+  # tag, and pullPolicy IfNotPresent.
+  registry: ""
+  tag: latest
+  # Always, as Kubernetes does for "latest": a rebuilt image reaches the next pod that starts.
+  pullPolicy: Always
+
+# The one way in: Caddy with the same routes as infra/caddy (app, API, collab, previews, mail).
+edge:
+  image: caddy:2.11-alpine
+  service:
+    # Docker Desktop serves a LoadBalancer on localhost. Production: ClusterIP behind your Ingress.
+    type: LoadBalancer
+    port: 8090
+
+web:
+  replicas: 1
+  resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
+
+api:
+  replicas: 1
+  resources: { requests: { cpu: 50m, memory: 192Mi }, limits: { memory: 768Mi } }
+
+collab:
+  replicas: 1
+  resources: { requests: { cpu: 25m, memory: 128Mi }, limits: { memory: 512Mi } }
+
+# Rooms' sandboxes, databases and package proxies, in namespaces cc-<namespace>-<room>.
+runner:
+  namespace: demo
+  resources: { requests: { cpu: 25m, memory: 128Mi }, limits: { memory: 512Mi } }
+  sandbox:
+    # pnpm sandbox:build (codechatter-sandbox:dev), or :full with every language.
+    image: codechatter-sandbox:dev
+    # Always: a rebuilt image reaches the next room that starts. Production: a pinned tag and IfNotPresent.
+    pull: Always
+    memoryMb: 768
+    cpus: 1
+    pids: 256
+    idleMinutes: 15
+    storageGb: 5
+    databaseStorageGb: 2
+    # Empty: the cluster's default storage class.
+    storageClass: ""
+
+postgres:
+  # Production: a managed database or CloudNativePG, given as externalUrl (postgres://…).
+  enabled: true
+  externalUrl: ""
+  image: postgres:18-alpine
+  storage: 5Gi
+  resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
+
+valkey:
+  enabled: true
+  externalUrl: ""
+  image: valkey/valkey:9-alpine
+  storage: 1Gi
+  resources: { requests: { cpu: 25m, memory: 32Mi }, limits: { memory: 256Mi } }
+
+mail:
+  from: "CodeChatter <noreply@codechatter.local>"
+  # Demo: Mailpit catches every email (sign-up, password resets); read them at <url>/mail/.
+  # Production: false, and your SMTP server below.
+  mailpit: true
+  mailpitImage: axllent/mailpit:latest
+  smtp: { host: "", port: 465, user: "", password: "" }
+
+# Demo only: the test accounts and rooms of `pnpm seed`, so you can sign in at once as
+# test1@codechatter.local or test2@codechatter.local (password codechatter123).
+# Production: false.
+seed: true
+
+ai:
+  # none, ollama, anthropic, gemini or openai: apps/api/src/ai (and .env.example).
+  provider: none
+  # More of its settings for the API, e.g. { AI_MODEL: hermes3, OLLAMA_URL: "http://…:11434" }.
+  env: {}
+  # Its secrets (API keys), kept in the app's Secret, e.g. { ANTHROPIC_API_KEY: "…" }.
+  secretEnv: {}
+
+# Generated on install and kept on upgrades when empty.
+secrets:
+  betterAuth: ""
+  service: ""
+  postgresPassword: ""
+
+# For the Postgres and Valkey claims. Empty: the cluster's default.
+storageClass: ""

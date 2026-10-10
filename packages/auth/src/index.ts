@@ -62,12 +62,24 @@ export async function ensurePersonalOrg(db: Db, user: { id: string; name: string
   return orgId;
 }
 
+/** http://localhost, 127.0.0.1 or [::1]: a secure context to browsers, so Secure cookies work over plain http. */
+export function isLoopback(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function createAuth(options: CreateAuthOptions) {
   const { db, redis, mail, appUrl, secret, production, oauth, origins } = options;
   // Production cookies are Secure; over plain http the browser drops them and
-  // every sign-in "succeeds" without a session. Refuse to boot instead.
-  if (production && !appUrl.startsWith("https://")) {
-    throw new Error(`APP_URL must start with https:// in production (got ${appUrl}).`);
+  // every sign-in "succeeds" without a session. Refuse to boot instead, unless
+  // it's this machine: browsers treat http://localhost as secure and keep the
+  // cookies (a local demo, such as the Helm chart's on Docker Desktop).
+  if (production && !appUrl.startsWith("https://") && !isLoopback(appUrl)) {
+    throw new Error(`APP_URL must start with https:// in production, or be a localhost address (got ${appUrl}).`);
   }
   const shaping = schemaShapingOptions({
     sendInvitationEmail: async (data) =>

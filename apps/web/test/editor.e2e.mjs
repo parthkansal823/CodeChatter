@@ -94,10 +94,19 @@ await a.keyboard.type("Python");
 await a.keyboard.press("Enter");
 check("changeLanguage", await ok(a.getByText("Python", { exact: true }).last().waitFor({ timeout: 5_000 })));
 
+// A file of the test's own, to compare with and to follow into: a fresh room has only its README.
+const extra = `srv_${Date.now().toString(36)}.js`;
+const extraTab = new RegExp(extra.replace(".", "\\."));
+await a.getByRole("button", { name: "New file" }).click();
+await a.getByPlaceholder("name.ext").fill(extra);
+await a.getByPlaceholder("name.ext").press("Enter");
+await a.getByRole("tab", { name: extraTab }).waitFor({ timeout: 15_000 });
+await a.getByRole("tab", { name: /README\.md/ }).click();
+
 // Compare with another file: a diff editor of the two live files.
 await command("Compare");
 await a.getByRole("dialog", { name: "Compare with" }).waitFor({ timeout: 5_000 });
-await a.keyboard.type("srv");
+await a.keyboard.type(extra);
 await a.keyboard.press("Enter");
 // The open README may be in a folder (a template's), which the label then names.
 const comparing = a.getByRole("region", { name: /^Comparing (\S+\/)?README\.md with / });
@@ -110,10 +119,17 @@ const people = a.getByRole("dialog", { name: "Follow someone" });
 await people.waitFor({ timeout: 5_000 });
 await people.getByRole("option", { name: "test2" }).click();
 check("followBanner", await ok(a.getByText(/Following test2/).waitFor({ timeout: 5_000 })));
-const theirFile = b.getByRole("tree", { name: "Files" }).getByText(/^srv_/).first();
-const name = ((await theirFile.textContent()) ?? "").trim();
+// test1 closes its tab of the file first, so the one that opens is test2's doing.
+await a.getByRole("tab", { name: extraTab }).getByRole("button", { name: /Close/ }).click().catch(() => {});
+const theirFile = b.getByRole("tree", { name: "Files" }).getByText(extra, { exact: true });
 await theirFile.click();
-check("followOpensTheirFile", await ok(a.getByRole("tab", { name: new RegExp(name.replace(".", "\\.")) }).waitFor({ timeout: 10_000 })), name);
+check("followOpensTheirFile", await ok(a.getByRole("tab", { name: extraTab }).waitFor({ timeout: 10_000 })), extra);
+
+// Leave the room as it was.
+const extraRow = b.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: new RegExp(`^${extra.replace(".", "\\.")}`) });
+await extraRow.focus();
+await extraRow.press("Delete");
+check("testFileDeleted", await ok(extraRow.waitFor({ state: "detached", timeout: 10_000 })), extra);
 
 await a.screenshot({ path: process.env.SHOT ?? `${process.env.TEMP ?? "/tmp"}/editor.png` });
 await browser.close();

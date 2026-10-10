@@ -1,0 +1,149 @@
+{{- $component := dict "root" . "component" "runner" -}}
+{{- $name := printf "%s-runner" .Release.Name -}}
+{{- $rooms := printf "cc-%s-" .Values.runner.namespace -}}
+# The runner (apps/runner) with RUNNER_DRIVER=kubernetes: each room is a namespace on this
+# cluster (cc-<namespace>-<room>) with its sandbox pod, databases and package proxy.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+---
+# What the runner does to rooms' namespaces (kube-sandbox.ts, kube-databases.ts, kube-egress.ts).
+# Kubernetes can't scope this to a name prefix; the admission policy below does.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, create, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, create, delete]
+  - apiGroups: [""]
+    resources: [pods/exec, pods/attach]
+    verbs: [get, create]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, list, create, update]
+  # Written (the room's database password), never read: no reading the cluster's Secrets.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, update]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, create, delete]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    verbs: [get, list, create, delete]
+  - apiGroups: [apps]
+    resources: [statefulsets/scale]
+    verbs: [get, update]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, create, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ $name }} }
+subjects:
+  - { kind: ServiceAccount, name: {{ $name }}, namespace: {{ .Release.Namespace }} }
+---
+# The runner may change only its rooms' namespaces and what's in them, whatever its role allows:
+# no other namespace, the app's own included.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $name }}-rooms-only
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["", apps, networking.k8s.io]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE, CONNECT]
+        resources: [namespaces, pods, pods/exec, pods/attach, services, secrets, persistentvolumeclaims, statefulsets, statefulsets/scale, networkpolicies]
+  matchConditions:
+    - name: the-runner
+      expression: request.userInfo.username == "system:serviceaccount:{{ .Release.Namespace }}:{{ $name }}"
+  validations:
+    - expression: 'request.resource.resource == "namespaces" ? request.name.startsWith("{{ $rooms }}") : request.namespace.startsWith("{{ $rooms }}")'
+      message: The runner changes only its rooms' namespaces ({{ $rooms }}*).
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $name }}-rooms-only
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  policyName: {{ $name }}-rooms-only
+  validationActions: [Deny]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  # One: it holds each room's live session (its run, terminals and file sync).
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "cc.selector" $component | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" $component | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      enableServiceLinks: false
+      # Its image runs as root for Docker's socket; here it needs none.
+      securityContext: {{- include "cc.podSecurity" (dict) | nindent 8 }}
+      containers:
+        - name: runner
+          image: {{ include "cc.image" (dict "root" . "name" "runner") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          ports: [{ name: http, containerPort: 4200 }]
+          env:
+            - { name: NODE_ENV, value: production }
+            - name: SERVICE_SECRET
+              valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" . }}, key: SERVICE_SECRET } }
+            - { name: COLLAB_INTERNAL_URL, value: "ws://{{ .Release.Name }}-collab:4100" }
+            - { name: RUNNER_DRIVER, value: kubernetes }
+            - { name: SANDBOX_NAMESPACE, value: {{ .Values.runner.namespace | quote }} }
+            - { name: SANDBOX_IMAGE, value: {{ .Values.runner.sandbox.image | quote }} }
+            - { name: SANDBOX_IMAGE_PULL, value: {{ .Values.runner.sandbox.pull | quote }} }
+            - { name: SANDBOX_MEMORY_MB, value: {{ .Values.runner.sandbox.memoryMb | quote }} }
+            - { name: SANDBOX_CPUS, value: {{ .Values.runner.sandbox.cpus | quote }} }
+            - { name: SANDBOX_PIDS, value: {{ .Values.runner.sandbox.pids | quote }} }
+            - { name: SANDBOX_IDLE_MINUTES, value: {{ .Values.runner.sandbox.idleMinutes | quote }} }
+            - { name: SANDBOX_STORAGE_GB, value: {{ .Values.runner.sandbox.storageGb | quote }} }
+            - { name: DATABASE_STORAGE_GB, value: {{ .Values.runner.sandbox.databaseStorageGb | quote }} }
+            {{- with .Values.runner.sandbox.storageClass }}
+            - { name: SANDBOX_STORAGE_CLASS, value: {{ . | quote }} }
+            {{- end }}
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          resources: {{- toYaml .Values.runner.resources | nindent 12 }}
+          {{- include "cc.probes" (dict "path" "/healthz" "port" "http") | nindent 10 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# Reached by the API only, never by browsers.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - { name: http, port: 4200, targetPort: http }

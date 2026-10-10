@@ -1,0 +1,160 @@
+{{- /* The app's own Postgres and Valkey, and the demo's mail catcher. */ -}}
+{{- if .Values.postgres.enabled }}
+{{- $component := dict "root" . "component" "postgres" }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cc.selector" $component | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" $component | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {{- include "cc.podSecurity" (dict "uid" 70 "gid" 70) | nindent 8 }}
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports: [{ name: postgres, containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_USER, value: codechatter }
+            - { name: POSTGRES_DB, value: codechatter }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" . }}, key: POSTGRES_PASSWORD } }
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          resources: {{- toYaml .Values.postgres.resources | nindent 12 }}
+          readinessProbe:
+            exec: { command: [pg_isready, -h, 127.0.0.1, -U, codechatter] }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql }
+            - { name: run, mountPath: /var/run/postgresql }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: run, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: {{ .Values.postgres.storage }} } }
+        {{- with .Values.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres }
+{{- end }}
+{{- if .Values.valkey.enabled }}
+{{- $component := dict "root" . "component" "valkey" }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-valkey
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-valkey
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cc.selector" $component | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" $component | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {{- include "cc.podSecurity" (dict "uid" 999 "gid" 1000) | nindent 8 }}
+      containers:
+        - name: valkey
+          image: {{ .Values.valkey.image }}
+          # Append-only file: rate limits and presence survive a restart.
+          args: [valkey-server, --appendonly, "yes"]
+          ports: [{ name: valkey, containerPort: 6379 }]
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          resources: {{- toYaml .Values.valkey.resources | nindent 12 }}
+          readinessProbe:
+            exec: { command: [valkey-cli, ping] }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /data }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: {{ .Values.valkey.storage }} } }
+        {{- with .Values.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-valkey
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - { name: valkey, port: 6379, targetPort: valkey }
+{{- end }}
+{{- if .Values.mail.mailpit }}
+{{- $component := dict "root" . "component" "mailpit" }}
+---
+# Catches the demo's emails: read them at <url>/mail/.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mailpit
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cc.selector" $component | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" $component | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {{- include "cc.podSecurity" (dict) | nindent 8 }}
+      containers:
+        - name: mailpit
+          image: {{ .Values.mail.mailpitImage }}
+          env:
+            - { name: MP_WEBROOT, value: /mail/ }
+            - { name: MP_DATABASE, value: /data/mailpit.db }
+          ports:
+            - { name: smtp, containerPort: 1025 }
+            - { name: http, containerPort: 8025 }
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          resources: { requests: { cpu: 10m, memory: 16Mi }, limits: { memory: 128Mi } }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - { name: data, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mailpit
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - { name: smtp, port: 1025, targetPort: smtp }
+    - { name: http, port: 8025, targetPort: http }
+{{- end }}

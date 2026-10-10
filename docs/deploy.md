@@ -83,9 +83,12 @@ Copy backups off the server, for example with a nightly cron job to object stora
 
 **Before the first deploy, rotate every secret that v1 used** (`server/.env`): the OAuth client secrets, the Gmail App Password, and the database credentials. Then put the new values in `infra/.env.production` only.
 
+## On Kubernetes
+
+The Helm chart [`infra/helm/codechatter`](../infra/helm/codechatter/README.md) runs the same app on a cluster, with one difference: each room's sandbox, databases and package proxy run on that cluster too, a namespace per room (`RUNNER_DRIVER=kubernetes`). Its defaults are a demo on Docker Desktop's built-in Kubernetes: `pnpm k8s:images`, `pnpm sandbox:build`, `helm install`, then http://localhost:8090. Its README lists what to change for production.
+
 ## Not in production yet
 
-- **Run and terminal sandboxes** (Phase 2). They add a `runner` service with Docker access and the sandbox image.
 - **File uploads and object storage** (Phase 3). They will use any S3-compatible bucket.
 - **Several collab instances behind the load balancer.** The Valkey extension already supports this; one instance is plenty to start.
 - **Prebuilt images from CI** (GitHub Actions to GHCR), so the server pulls images instead of building them.

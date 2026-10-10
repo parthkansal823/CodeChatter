@@ -1,0 +1,70 @@
+{{- /* The three app servers: web (Next.js), api (NestJS) and collab (Hocuspocus). */ -}}
+{{- $apps := list
+  (dict "name" "web" "port" 3000 "health" "/healthz" "values" .Values.web)
+  (dict "name" "api" "port" 4000 "health" "/api/healthz" "values" .Values.api)
+  (dict "name" "collab" "port" 4100 "health" "/" "values" .Values.collab) -}}
+{{- range $app := $apps }}
+{{- $component := dict "root" $ "component" $app.name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-{{ $app.name }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  replicas: {{ $app.values.replicas }}
+  selector:
+    matchLabels: {{- include "cc.selector" $component | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" $component | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {{- include "cc.podSecurity" (dict) | nindent 8 }}
+      {{- if ne $app.name "web" }}
+      # Migrations first: idempotent, and retried until Postgres answers.
+      initContainers: {{- include "cc.migrate" $ | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $app.name }}
+          image: {{ include "cc.image" (dict "root" $ "name" $app.name) }}
+          imagePullPolicy: {{ $.Values.images.pullPolicy }}
+          ports: [{ name: http, containerPort: {{ $app.port }} }]
+          env:
+            {{- if eq $app.name "web" }}
+            - name: API_INTERNAL_URL
+              value: http://{{ $.Release.Name }}-api:4000
+            {{- else }}
+            {{- include "cc.serverEnv" $ | nindent 12 }}
+            {{- end }}
+            {{- if eq $app.name "api" }}
+            {{- include "cc.apiEnv" $ | nindent 12 }}
+            {{- end }}
+          securityContext: {{- include "cc.containerSecurity" $ | nindent 12 }}
+          resources: {{- toYaml $app.values.resources | nindent 12 }}
+          {{- include "cc.probes" (dict "path" $app.health "port" "http") | nindent 10 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            {{- if eq $app.name "web" }}
+            # Next.js caches rendered pages and images here.
+            - { name: cache, mountPath: /app/apps/web/.next/cache }
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if eq $app.name "web" }}
+        - name: cache
+          emptyDir: {}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ $app.name }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - { name: http, port: {{ $app.port }}, targetPort: http }
+{{- end }}

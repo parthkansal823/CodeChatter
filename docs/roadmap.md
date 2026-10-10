@@ -766,10 +766,42 @@ A real cluster normally needs privileged containers. Those can't be given to cod
   - images built from the room's Dockerfile (rootless BuildKit) into a per-room registry, then deployed and opened in the preview
 
 **Track 2: CodeChatter on Kubernetes**
-- ⬜ **Helm chart** (`infra/helm/codechatter`):
-  - web, api, collab (several replicas, joined through Valkey), runner, worker
-  - Postgres (CloudNativePG) and Valkey; Ingress with cert-manager and the wildcard preview host
-- 🟡 **Kubernetes runner driver** (the owner's priority, 2026-10-09): rooms run on Kubernetes when `RUNNER_DRIVER=kubernetes`; Docker stays the light default for development, and every test runs on both. Built and tested on Docker Desktop's Kubernetes, with the official client (`@kubernetes/client-node`, added).
+- 🟡 **Helm chart** (`infra/helm/codechatter`, [README](../infra/helm/codechatter/README.md)), 2026-10-10:
+  - ✅ **What runs:**
+    - an edge (Caddy, the routes of `infra/caddy`, on a LoadBalancer)
+    - web, api and collab, with migrations as an init step
+    - the runner with `RUNNER_DRIVER=kubernetes`, so rooms are namespaces on the same cluster
+    - Postgres, Valkey, Mailpit, and a demo seed Job
+    - secrets generated on install and kept on upgrades
+  - ✅ **Locked down:**
+    - every pod non-root, with a read-only root, no capabilities and seccomp
+    - the runner's ClusterRole is only what it does to rooms: it can write Secrets but not read any
+    - a ValidatingAdmissionPolicy lets the runner change only `cc-<namespace>-*` namespaces
+  - ✅ **Images:** `pnpm k8s:images` builds the app images. Pods pull `latest` again on each start, so rebuilds reach them.
+  - **Two fixes it needed:**
+    - the auth package now allows a localhost `APP_URL` over plain http in production, since browsers keep Secure cookies there (`isLoopback`, tested)
+    - the edge runs a copy of Caddy's binary, because the image's file capability won't start without capabilities
+  - **Tested:** installed on Docker Desktop's Kubernetes at http://localhost:8090. Browser suites against it:
+
+    | Suite | Result |
+    |---|---|
+    | editor | 16 |
+    | databases | 15 |
+    | installs | 7 |
+    | new room | 4 |
+    | room people | 5 |
+    | search | 23 |
+    | docs | 8 |
+    | API studio | 7 |
+    | diagrams | 7 |
+    | canvas | 11/12; the 12th fails on Docker too, in its own drag step |
+    | templates (all seven) | 8 |
+  - ⬜ **Later:**
+    - several replicas (collab joined through Valkey)
+    - an Ingress with cert-manager and the wildcard preview host
+    - CloudNativePG
+    - NetworkPolicies for the app's own namespace
+- ✅ **Kubernetes runner driver** (the owner's priority, 2026-10-09; done 2026-10-10): rooms run on Kubernetes when `RUNNER_DRIVER=kubernetes`; Docker stays the light default for development, and every test runs on both. Built and tested on Docker Desktop's Kubernetes, with the official client (`@kubernetes/client-node`, added).
   - each room is a namespace (`cc-<namespace>-<room>`): deleting the room deletes the namespace, and with it everything the room had
   - K1 ✅ the sandbox as a pod (`kube-sandbox.ts`): non-root, read-only root, no capabilities, seccomp; PersistentVolumeClaims for the workspace and home; the same agent, runs, terminals and preview tunnel over the Kubernetes exec and attach API, behind one exec interface for both drivers (`RoomSandbox`, `ExecHandle`)
     - each room runs as its own user (100000 and up); every exec gets exactly the room's environment (`env -i`) and the room's process limit (`prlimit --nproc`, the agent's processes included, like Docker's PID limit)
@@ -779,16 +811,16 @@ A real cluster normally needs privileged containers. Those can't be given to cod
   - K2 ✅ the room network as a NetworkPolicy (`room`, made with the namespace before any pod): the room's own pods only, in and out; the sandbox pod has no DNS server, so lookups fail at once (ADR 0007, "On Kubernetes"). `network.e2e.mjs` asks the runner its driver: 11/11 on Kubernetes, 10/10 on Docker; runner 23/23 on Kubernetes
   - K3 ✅ one-click databases as StatefulSets (`kube-databases.ts`): a claim each for the data, and a Service each named after its kind (`postgres`, `mysql`…) that the sandbox finds through `/etc/hosts`; sleeping with the room scales them to 0. `Databases` is driver-neutral now (status, console, tables, backups, loads), over a small driver for each (`docker-databases.ts`). The room's password is in a Secret, in no pod spec or exec request (Mongo's clients take theirs from the environment now, on both drivers). `databases.e2e.mjs` asks the runner its driver: 33/33 on both; runner, dev server (8/8 with its databases), network and judge pass on both
   - K4 ✅ the package proxy as a pod (`kube-egress.ts`), the only one allowed out: its own NetworkPolicy lets it reach the cluster's DNS and public HTTPS, nothing else; the sandbox finds it as `egress` in its `/etc/hosts`; it exits on time, with a pod deadline behind that. Both drivers share a `PackageProxy` interface. The sandbox's relay now gives up on the proxy after 2 seconds, so "no internet" comes at once on Kubernetes too, where the room's policy drops the connection unanswered. Sandbox pods check for a newer image each start (`SANDBOX_IMAGE_PULL=Always`), so `pnpm sandbox:build` reaches the cluster. `egress.e2e.mjs` asks the runner its driver: 24/24 on Kubernetes (real npm, pip, Go, Cargo and RubyGems installs)
-  - K5 🟡 every suite on both drivers.
+  - K5 ✅ every suite on both drivers.
     - **Done:** every runner suite passes on Kubernetes (runner 23, judge, network 11, egress 24, databases 33, dev server 8, every language 26, the Kubernetes playground 4) and on Docker. Getting there fixed:
       - the open-files limit: pods get about a billion, Erlang's VM ran out of memory sizing tables by it, so execs now get Docker's 1,048,576
       - the judge waiting forever on a stream nobody read
-    - **Left:** the browser suites (templates and the rest) against a Kubernetes runner. That means the dev stack's runner on `RUNNER_DRIVER=kubernetes`, which is the owner's call, since the dev stack is shared.
+    - **Browser suites** against the Helm chart's deployment on Docker Desktop's Kubernetes (`APP_URL=http://localhost:8090`), with no change to the shared dev stack: templates 8/8 (all seven frameworks, with real installs through the proxy pod and Postgres as a StatefulSet), editor, databases, installs, new room, room people, search, docs, API studio and diagrams. Canvas is 11/12 on both drivers (the test's frame drag). The AI suites need an AI provider, which the demo leaves off.
   - later: gVisor RuntimeClass where the cluster has it; a pod-level PID limit (Kubernetes sets that per node, hence prlimit); the agent reporting the pod's memory and processes itself, instead of an exec before each run
 - ⬜ **Scale and run:**
   - autoscaling (HPA, and KEDA for job queues), Prometheus and OpenTelemetry
   - GitHub Actions building images to GHCR, Argo CD deploying them
-- ⬜ **Free demo:** the chart installs on Docker Desktop's built-in Kubernetes or `kind`.
+- ✅ **Free demo:** the chart installs on Docker Desktop's built-in Kubernetes. Steps are in the chart's README: build the images, `helm install`, open http://localhost:8090 and sign in as test1. Without Helm installed, the full sandbox image's Helm renders it for `kubectl apply`.
 
 ### E. GitHub
 - ✅ Sign in with GitHub (needs a GitHub OAuth app; see Housekeeping).

@@ -1,0 +1,55 @@
+{{- if .Values.seed }}
+{{- $component := dict "root" . "component" "seed" }}
+# Demo only: the test accounts and rooms of `pnpm seed` (apps/api/src/scripts/seed-dev.ts), once the
+# API is up (so the database has its tables). It refuses a production NODE_ENV, so it runs as development.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-seed
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" $component | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {{- include "cc.podSecurity" (dict) | nindent 8 }}
+      initContainers:
+        - name: wait-for-api
+          image: {{ include "cc.image" (dict "root" . "name" "api") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command:
+            - node
+            - -e
+            - |
+              const url = "http://{{ .Release.Name }}-api:4000/api/healthz";
+              const until = Date.now() + 10 * 60_000;
+              const wait = () => fetch(url).then((r) => r.ok, () => false).then((ok) => {
+                if (ok) return console.log("the API is up");
+                if (Date.now() > until) { console.error("the API didn't come up"); process.exit(1); }
+                setTimeout(wait, 3000);
+              });
+              wait();
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+      containers:
+        - name: seed
+          image: {{ include "cc.image" (dict "root" . "name" "api") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: [node, dist/scripts/seed-dev.js]
+          env:
+            - { name: NODE_ENV, value: development }
+            {{- include "cc.serverSettings" . | nindent 12 }}
+            {{- include "cc.apiEnv" . | nindent 12 }}
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+{{- end }}

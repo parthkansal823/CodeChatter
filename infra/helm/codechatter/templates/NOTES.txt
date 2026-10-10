@@ -1,0 +1,17 @@
+CodeChatter is starting in namespace {{ .Release.Namespace }}.
+
+  Open it:  {{ .Values.url }}
+{{- if .Values.seed }}
+  Sign in:  test1@codechatter.local or test2@codechatter.local, password codechatter123 (the demo seed)
+{{- end }}
+{{- if .Values.mail.mailpit }}
+  Emails:   {{ .Values.url }}/mail/
+{{- end }}
+
+Rooms run on this cluster, a namespace each (cc-{{ .Values.runner.namespace }}-<room>):
+
+  kubectl get namespaces -l codechatter.namespace={{ .Values.runner.namespace }}
+
+Watch it come up (the first start migrates the database):
+
+  kubectl get pods -n {{ .Release.Namespace }} -w
