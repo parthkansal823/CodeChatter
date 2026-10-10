@@ -8,6 +8,7 @@ import type { Env } from "../config/env.js";
 import { DB, ENV, VALKEY } from "../infra/tokens.js";
 import { MessagesService } from "../messages/messages.service.js";
 import { aiStatus, ollamaUrl, resolveAiSetup, type AiSetup } from "./ai.config.js";
+import { COMPLETION } from "./complete.js";
 import { createProvider, type AiProvider } from "./providers.js";
 import { RateLimiter, type RateDecision } from "./rate-limit.js";
 import type { ActivityRow, ChatLine } from "./summary.js";
@@ -21,6 +22,7 @@ export class AiService {
   readonly provider: AiProvider | null;
   readonly contextChars: number;
   private readonly limiter: RateLimiter;
+  private readonly completionLimiter: RateLimiter;
   private readonly usageTracker: UsageTracker;
 
   constructor(
@@ -34,6 +36,8 @@ export class AiService {
     // Ollama's default context window is small; a longer prompt loses its start (the instructions) silently.
     this.contextChars = env.AI_CONTEXT_CHARS ?? (this.setup.provider === "ollama" ? 8_000 : 48_000);
     this.limiter = new RateLimiter(redis, { limit: env.AI_RATE_LIMIT, windowSeconds: env.AI_RATE_WINDOW_SECONDS });
+    // Inline completions come many to a minute while someone types, so they count in a bucket of their own.
+    this.completionLimiter = new RateLimiter(redis, { limit: env.AI_COMPLETE_RATE_LIMIT, windowSeconds: COMPLETION.windowSeconds, prefix: "ai:complete" });
     this.usageTracker = new UsageTracker(redis);
     if (this.provider) this.logger.log(`AI copilot: ${this.setup.provider} (${this.setup.model})`);
     else this.logger.log(`AI copilot off: ${this.setup.problem}`);
@@ -70,6 +74,15 @@ export class AiService {
 
   hit(userId: string): Promise<RateDecision> {
     return this.limiter.hit(userId);
+  }
+
+  hitCompletion(userId: string): Promise<RateDecision> {
+    return this.completionLimiter.hit(userId);
+  }
+
+  /** Inline completions allowed per person per minute. */
+  get completionLimit(): number {
+    return this.env.AI_COMPLETE_RATE_LIMIT;
   }
 
   record(userId: string, tokens: AiTokenCount): Promise<void> {

@@ -3,13 +3,27 @@ import type Docker from "dockerode";
 
 import type { Env } from "./env.js";
 import { log } from "./log.js";
-import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, type Sandbox, SandboxUnavailableError } from "./sandbox.js";
+import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, roomNetwork, type RoomSandbox, SandboxUnavailableError } from "./sandbox.js";
 
 export const LABEL_UNTIL = "codechatter.until";
-const LABEL_BY = "codechatter.by";
-const HOSTS = PACKAGE_REGISTRIES.flatMap((registry) => registry.hosts).join(",");
+export const LABEL_BY = "codechatter.by";
+/** The registries the proxy lets through (sandbox/agent/src/egress.ts reads them from EGRESS_ALLOW). */
+export const EGRESS_HOSTS = PACKAGE_REGISTRIES.flatMap((registry) => registry.hosts).join(",");
 
 export type Installs = { until: string; by: string };
+
+/**
+ * A room's package proxy, wherever it runs: a container on Docker (Egress,
+ * below), or a pod on Kubernetes (kube-egress.ts).
+ */
+export interface PackageProxy {
+  /** Until when installs are allowed in the room, and by whom; null when they aren't. */
+  status(roomId: string): Promise<Installs | null>;
+  /** Allow installs for `minutes` from now, replacing any earlier allowance. */
+  allow(sandbox: RoomSandbox, minutes: number, by: string): Promise<Installs>;
+  /** Stop installs now. */
+  stop(roomId: string): Promise<void>;
+}
 
 /**
  * Package installs (ADR 0007). While a room's owner allows them, a proxy runs
@@ -18,13 +32,12 @@ export type Installs = { until: string; by: string };
  * out shared by every room's proxy. It tunnels HTTPS to package registries
  * only, and exits by itself when the time is up; the sweep then removes it.
  */
-export class Egress {
+export class Egress implements PackageProxy {
   constructor(
     private readonly docker: Docker,
     private readonly env: Env,
   ) {}
 
-  /** Until when installs are allowed in the room, and by whom; null when they aren't. */
   async status(roomId: string): Promise<Installs | null> {
     const info = await this.docker.getContainer(this.name(roomId)).inspect().catch(() => null);
     const until = Number(info?.Config.Labels[LABEL_UNTIL]);
@@ -32,9 +45,8 @@ export class Egress {
     return { until: new Date(until).toISOString(), by: info.Config.Labels[LABEL_BY] ?? "" };
   }
 
-  /** Allow installs for `minutes` from now, replacing any earlier allowance. */
-  async allow(sandbox: Sandbox, minutes: number, by: string): Promise<Installs> {
-    await sandbox.ensureNetwork();
+  async allow(sandbox: RoomSandbox, minutes: number, by: string): Promise<Installs> {
+    await sandbox.ensureRoom();
     await this.ensureWayOut();
     await this.stop(sandbox.roomId);
     const until = Date.now() + minutes * 60_000;
@@ -45,7 +57,7 @@ export class Egress {
       Entrypoint: ["node", "/opt/ccagent/egress.mjs"],
       Cmd: [],
       User: "10002",
-      Env: [`EGRESS_ALLOW=${HOSTS}`, `EGRESS_UNTIL=${until}`],
+      Env: [`EGRESS_ALLOW=${EGRESS_HOSTS}`, `EGRESS_UNTIL=${until}`],
       WorkingDir: "/",
       Labels: {
         [LABEL_MANAGED]: "1",
@@ -67,7 +79,7 @@ export class Egress {
         Init: true,
         LogConfig: { Type: "json-file", Config: { "max-size": "1m", "max-file": "1" } },
       },
-      NetworkingConfig: { EndpointsConfig: { [this.wayOut]: {}, [sandbox.network]: { Aliases: ["egress"] } } },
+      NetworkingConfig: { EndpointsConfig: { [this.wayOut]: {}, [roomNetwork(this.env.SANDBOX_NAMESPACE, sandbox.roomId)]: { Aliases: ["egress"] } } },
     });
     await container.start();
     // A proxy that can't start (an image from before installs existed) exits at once: say so, not "allowed".
@@ -80,7 +92,6 @@ export class Egress {
     return { until: new Date(until).toISOString(), by };
   }
 
-  /** Stop installs now. */
   async stop(roomId: string): Promise<void> {
     await this.docker
       .getContainer(this.name(roomId))

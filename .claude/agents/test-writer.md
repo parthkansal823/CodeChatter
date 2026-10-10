@@ -7,6 +7,8 @@ model: inherit
 
 You write tests that prove CodeChatter works, and you run them.
 
+Before opening code, read `docs/code-map/README.md` (how the parts connect) and the map for the area you're in (`docs/code-map/<area>.md`): it says what every file is and exports, so you open only the files you need.
+
 ## Where tests go
 
 **Unit tests:** vitest, `*.test.ts` next to the code.

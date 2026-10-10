@@ -7,14 +7,15 @@ import { RoomRegistry } from "./room-session.js";
 import { createRunnerServer } from "./server.js";
 
 /**
- * The runner (ADR 0003): the only service with access to Docker. It keeps one
- * sandbox container per room, syncs the room's files into it, and runs code
- * and terminals there on behalf of the API.
+ * The runner (ADR 0003): the only service with access to Docker, or to the
+ * cluster with RUNNER_DRIVER=kubernetes. It keeps one sandbox per room, syncs
+ * the room's files into it, and runs code and terminals there on behalf of
+ * the API, with the room's databases and package proxy beside it.
  */
 const env = loadEnv();
 // DOCKER_HOST, or the platform default (/var/run/docker.sock, or the Windows named pipe).
 const docker = new Docker();
-// RUNNER_DRIVER=kubernetes: rooms run on the cluster (a namespace each); Docker stays for the rest.
+// RUNNER_DRIVER=kubernetes: rooms run on the cluster, a namespace each, with their databases and package proxies.
 const kube = env.RUNNER_DRIVER === "kubernetes" ? connectKube(env) : null;
 if (kube) log.info(`rooms run on Kubernetes (namespaces cc-${env.SANDBOX_NAMESPACE}-<room>)`);
 const rooms = new RoomRegistry(docker, env, kube);

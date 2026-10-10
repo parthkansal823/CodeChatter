@@ -8,7 +8,6 @@ import {
   type QueryResult,
   type QueryResultSet,
 } from "@codechatter/contracts";
-import type Docker from "dockerode";
 import { createHmac } from "node:crypto";
 import { once } from "node:events";
 import { type Duplex, PassThrough, Writable } from "node:stream";
@@ -29,14 +28,14 @@ import {
 } from "./database-queries.js";
 
 import type { Env } from "./env.js";
-import { log } from "./log.js";
-import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, type Sandbox } from "./sandbox.js";
+import { log, messageOf } from "./log.js";
+import { exitCodeOnceEnded, type ExecHandle, type RoomSandbox } from "./sandbox.js";
 
-const LABEL_KIND = "codechatter.database";
+export const LABEL_KIND = "codechatter.database";
 /** Most of a client's output read; a longer answer is cut, and says so. */
 const MAX_OUTPUT = 4 * 1024 * 1024;
 
-type Spec = {
+export type Spec = {
   image: string;
   /** The image's own database user. The container runs as it from the start: no root, no capabilities. */
   user: string;
@@ -54,7 +53,7 @@ type Spec = {
 };
 
 /** Every database: user "app", database "app", the room's password. Checked by test/databases.e2e.mjs. */
-const SPECS: Record<DatabaseKind, Spec> = {
+export const SPECS: Record<DatabaseKind, Spec> = {
   postgres: {
     image: "postgres:18-alpine",
     user: "70:70",
@@ -141,14 +140,48 @@ export function databaseEnv(password: string): string[] {
   ];
 }
 
+/** What a driver sees of one database right now. */
+export type Observed =
+  | { state: "running"; health: "healthy" | "unhealthy" | "starting" }
+  /** Being made: scheduled, its image downloading, its container created. */
+  | { state: "pending"; detail: string }
+  /** It can't start, and won't by trying again on its own (its image can't be had). */
+  | { state: "failed"; detail: string }
+  /** Asleep with the sandbox, or ended by itself (its exit code says which). */
+  | { state: "exited"; exitCode: number | null }
+  | { state: "none" };
+
 /**
- * One-click databases (roadmap §14 D). Each runs in a container of its own on
- * the room's network, named after its kind, with its data on a volume of its
- * own. Hardened like the sandbox: the image's database user from the start, a
- * read-only root, no capabilities, and memory and process limits.
+ * Where a room's databases run: Docker containers on the room's network
+ * (docker-databases.ts), or StatefulSets in the room's namespace on
+ * Kubernetes (kube-databases.ts). `Databases` does the rest the same way.
+ */
+export interface DatabaseDriver {
+  /** Each database's container or pod, and whether its data is kept. */
+  observe(roomId: string): Promise<Map<DatabaseKind, { now: Observed; data: boolean }>>;
+  /** Make it the first time (its image downloaded, its data volume made), and start it. */
+  bringUp(sandbox: RoomSandbox, kind: DatabaseKind, job: { detail: string }): Promise<void>;
+  /** Stop it; the data stays, and it doesn't wake with the sandbox until started again. */
+  stop(roomId: string, kind: DatabaseKind): Promise<void>;
+  /** Stop it and delete its data. */
+  remove(roomId: string, kind: DatabaseKind): Promise<void>;
+  /** The room's sandbox went idle: its running databases sleep, data kept. */
+  pause(roomId: string): Promise<void>;
+  /** The sandbox started: databases that slept with it wake up. */
+  resume(roomId: string): Promise<void>;
+  /** A client process inside the database's container, as its database user; null when it isn't running. */
+  exec(roomId: string, kind: DatabaseKind, cmd: string[], env: string[], stdin: boolean): Promise<ExecHandle | null>;
+}
+
+/**
+ * One-click databases (roadmap §14 D). Each runs on its own, named after its
+ * kind on the room's network, with its data kept on a volume of its own.
+ * Hardened like the sandbox: the image's database user from the start, a
+ * read-only root, no capabilities, and memory limits.
  *
- * Stop removes the container and keeps the data. A room's databases sleep when
- * its sandbox idles (stopped, not removed) and wake with it (`resume`).
+ * Stop keeps the data. A room's databases sleep when its sandbox idles and
+ * wake with it (`pause`, `resume`). The console, the table browser, backups
+ * and loads run the database's own client inside it (database-queries.ts).
  */
 export class Databases {
   /** Starts in progress, with what each is doing. */
@@ -157,16 +190,12 @@ export class Databases {
   private readonly failures = new Map<string, string>();
 
   constructor(
-    private readonly docker: Docker,
+    private readonly driver: DatabaseDriver,
     private readonly env: Env,
   ) {}
 
   async list(roomId: string): Promise<DatabaseStatus[]> {
-    const filters = { label: [`${LABEL_ROOM}=${roomId}`, `${LABEL_ROLE}=database`, `${LABEL_NAMESPACE}=${this.env.SANDBOX_NAMESPACE}`] };
-    const [containers, volumes] = await Promise.all([
-      this.docker.listContainers({ all: true, filters }),
-      this.docker.listVolumes({ filters }).then((r) => r.Volumes ?? []),
-    ]);
+    const seen = await this.driver.observe(roomId);
     const password = databasePassword(this.env.SERVICE_SECRET, roomId);
     return DATABASE_KINDS.map((kind): DatabaseStatus => {
       const key = this.key(roomId, kind);
@@ -175,33 +204,43 @@ export class Databases {
         if (job) return { state: "starting", detail: job.detail };
         const failure = this.failures.get(key);
         if (failure) return { state: "failed", detail: failure };
-        const container = containers.find((c) => c.Labels[LABEL_KIND] === kind);
-        if (container?.State === "running") {
-          if (container.Status.includes("(healthy)")) return { state: "running" };
-          if (container.Status.includes("(unhealthy)")) return { state: "failed", detail: "It's running but not answering. Stop it and start it again." };
-          return { state: "starting", detail: "Starting up" };
+        const { now, data } = seen.get(kind) ?? { now: { state: "none" } as Observed, data: false };
+        switch (now.state) {
+          case "running":
+            if (now.health === "healthy") return { state: "running" };
+            if (now.health === "unhealthy") return { state: "failed", detail: "It's running but not answering. Stop it and start it again." };
+            return { state: "starting", detail: "Starting up" };
+          case "pending":
+            return { state: "starting", detail: now.detail };
+          case "failed":
+            return { state: "failed", detail: now.detail };
+          case "exited":
+            // 137 and 143 are signals (a stop, a kill) and 255 a Docker restart; anything else is the database's own error.
+            if (now.exitCode !== null && ![0, 137, 143, 255].includes(now.exitCode)) {
+              return { state: "failed", detail: `It stopped with an error (exit code ${now.exitCode}). Start it again, or delete its data.` };
+            }
+            return { state: "stopped" };
+          case "none":
+            return { state: data ? "stopped" : "off" };
         }
-        // 137 and 143 are signals (a stop, a kill) and 255 a Docker restart; anything else is the database's own error.
-        const exit = /^Exited \((\d+)\)/.exec(container?.Status ?? "")?.[1];
-        if (exit && !["0", "137", "143", "255"].includes(exit)) return { state: "failed", detail: `It stopped with an error (exit code ${exit}). Start it again, or delete its data.` };
-        if (container || volumes.some((v) => v.Labels?.[LABEL_KIND] === kind)) return { state: "stopped" };
-        return { state: "off" };
       })();
       return { kind, ...status, connection: this.connection(kind, password) };
     });
   }
 
   /** Start a database (made, with its image downloaded, the first time). Returns at once; `list` follows it. */
-  start(sandbox: Sandbox, kind: DatabaseKind): void {
+  start(sandbox: RoomSandbox, kind: DatabaseKind): void {
     const key = this.key(sandbox.roomId, kind);
     if (this.jobs.has(key)) return;
     this.failures.delete(key);
     const job = { detail: "Starting" };
     this.jobs.set(key, job);
-    void this.bringUp(sandbox, kind, job)
+    void this.driver
+      .bringUp(sandbox, kind, job)
+      .then(() => log.info(`room ${sandbox.roomId}: started its ${kind} database`))
       .catch((error: Error) => {
         log.error(`room ${sandbox.roomId}: ${kind} didn't start`, error);
-        this.failures.set(key, `It didn't start: ${error.message}`);
+        this.failures.set(key, `It didn't start: ${messageOf(error)}`);
       })
       .finally(() => this.jobs.delete(key));
   }
@@ -209,21 +248,30 @@ export class Databases {
   /** Stop a database. Its data stays; it doesn't wake with the sandbox until started again. */
   async stop(roomId: string, kind: DatabaseKind): Promise<void> {
     this.failures.delete(this.key(roomId, kind));
-    const container = this.docker.getContainer(this.name(roomId, kind));
-    await container.stop({ t: 15 }).catch(() => {});
-    await container.remove({ force: true }).catch(() => {});
+    await this.driver.stop(roomId, kind);
   }
 
   /** Delete a database and its data. */
   async remove(roomId: string, kind: DatabaseKind): Promise<void> {
-    await this.stop(roomId, kind);
-    await this.docker
-      .getVolume(this.volume(roomId, kind))
-      .remove()
-      .catch((error: { statusCode?: number }) => {
-        if (error.statusCode !== 404) throw error;
-      });
+    this.failures.delete(this.key(roomId, kind));
+    await this.driver.remove(roomId, kind);
     log.info(`room ${roomId}: deleted its ${kind} database`);
+  }
+
+  /** Delete a database's data and start it again, empty. */
+  async reset(sandbox: RoomSandbox, kind: DatabaseKind): Promise<void> {
+    await this.remove(sandbox.roomId, kind);
+    this.start(sandbox, kind);
+  }
+
+  /** The sandbox went idle: the room's databases sleep (stopped, data kept). */
+  async pause(roomId: string): Promise<void> {
+    await this.driver.pause(roomId);
+  }
+
+  /** The sandbox started: databases that slept with it wake up. */
+  async resume(roomId: string): Promise<void> {
+    await this.driver.resume(roomId);
   }
 
   /** A console query, run by the database's own client inside its container (database-queries.ts). */
@@ -277,15 +325,14 @@ export class Databases {
     kind: DatabaseKind,
   ): Promise<{ file: string; contentType: string; body: PassThrough; done: Promise<{ exitCode: number | null; stderr: string }> } | { down: string }> {
     const { cmd, env, extension, contentType } = dumpCommand(kind, databasePassword(this.env.SERVICE_SECRET, roomId));
-    const started = await this.startExec(roomId, kind, ["timeout", "600", ...cmd], env, false);
-    if ("down" in started) return started;
+    const handle = await this.driver.exec(roomId, kind, ["timeout", "600", ...cmd], env, false);
+    if (!handle) return { down: this.down(kind) };
     const body = new PassThrough();
     const stderr = new Collector(64 * 1024);
-    this.docker.modem.demuxStream(started.stream, body, stderr);
-    const done = ended(started.stream).then(async () => {
+    handle.demux(body, stderr);
+    const done = ended(handle.stream).then(async () => {
       body.end();
-      const { ExitCode } = await started.exec.inspect();
-      return { exitCode: ExitCode ?? null, stderr: stderr.text().trim() };
+      return { exitCode: await exitCodeOnceEnded(handle), stderr: stderr.text().trim() };
     });
     const day = new Date().toISOString().slice(0, 10);
     return { file: `${roomId.toLowerCase()}-${kind}-${day}.${extension}`, contentType, body, done };
@@ -306,30 +353,30 @@ export class Databases {
     if (rdb) return done("Loading a Redis snapshot (.rdb) isn't supported yet. Load a file of commands instead, one per line.");
     if (archive && kind !== "mongo") return done("That's a compressed archive. Load a .sql file.");
     const { cmd, env } = loadCommand(kind, databasePassword(this.env.SERVICE_SECRET, roomId), bytes, archive);
-    const started = await this.startExec(roomId, kind, ["timeout", "600", ...cmd], env, true);
-    if ("down" in started) return done(started.down);
+    const handle = await this.driver.exec(roomId, kind, ["timeout", "600", ...cmd], env, true);
+    if (!handle) return done(this.down(kind));
     const stdout = new Collector(64 * 1024);
     const stderr = new Collector(64 * 1024);
-    this.docker.modem.demuxStream(started.stream, stdout, stderr);
-    const finished = ended(started.stream);
+    handle.demux(stdout, stderr);
+    const finished = ended(handle.stream);
     // Not ended afterwards: the client stops after `bytes`, and on some Docker
     // setups ending our side would close the connection before its answer.
     try {
-      started.stream.write(head);
+      handle.stream.write(head);
       for (let next = await chunks.next(); !next.done; next = await chunks.next()) {
-        if (started.stream.destroyed) break;
-        if (!started.stream.write(Buffer.from(next.value))) await once(started.stream, "drain");
+        if (handle.stream.destroyed) break;
+        if (!handle.stream.write(Buffer.from(next.value))) await once(handle.stream, "drain");
       }
     } catch {
       // The client stopped reading (an error part-way); its answer says why.
     }
     await finished;
-    started.stream.destroy();
-    const { ExitCode } = await started.exec.inspect();
+    const exitCode = await exitCodeOnceEnded(handle);
+    handle.stream.destroy();
     const out = lastLines(stdout.text(), 40);
     const notes = lastLines(stderr.text(), 20);
-    if (ExitCode !== 0) {
-      return { results: out ? [{ type: "value", text: out }] : [], error: ExitCode === 124 ? "Loading took longer than 10 minutes and was stopped." : notes || `It failed (exit code ${ExitCode}).`, ms: Date.now() - t0 };
+    if (exitCode !== 0) {
+      return { results: out ? [{ type: "value", text: out }] : [], error: exitCode === 124 ? "Loading took longer than 10 minutes and was stopped." : notes || `It failed (exit code ${exitCode}).`, ms: Date.now() - t0 };
     }
     const results: QueryResultSet[] = [];
     if (out) results.push({ type: "value", text: out });
@@ -338,110 +385,24 @@ export class Databases {
     return { results, error: null, ms: Date.now() - t0 };
   }
 
-  /** Delete a database's data and start it again, empty. */
-  async reset(sandbox: Sandbox, kind: DatabaseKind): Promise<void> {
-    await this.remove(sandbox.roomId, kind);
-    this.start(sandbox, kind);
-  }
-
-  /** The sandbox went idle: the room's databases sleep (stopped, data kept). */
-  async pause(roomId: string): Promise<void> {
-    for (const info of await this.containers(roomId, "running")) {
-      await this.docker.getContainer(info.Id).stop({ t: 15 }).catch(() => {});
-    }
-  }
-
-  /** The sandbox started: databases that slept with it wake up. */
-  async resume(roomId: string): Promise<void> {
-    for (const info of await this.containers(roomId, "exited")) {
-      await this.docker.getContainer(info.Id).start().catch((error: Error) => log.warn(`room ${roomId}: couldn't wake ${info.Labels[LABEL_KIND]}: ${error.message}`));
-    }
-  }
-
-  private async bringUp(sandbox: Sandbox, kind: DatabaseKind, job: { detail: string }): Promise<void> {
-    const spec = SPECS[kind];
-    await sandbox.ensureNetwork();
-    const present = await this.docker.getImage(spec.image).inspect().then(() => true, () => false);
-    if (!present) {
-      job.detail = `Downloading ${DATABASES[kind].name} (the first time only)`;
-      const stream = (await this.docker.pull(spec.image)) as NodeJS.ReadableStream;
-      await new Promise<void>((resolve, reject) => this.docker.modem.followProgress(stream, (error: Error | null) => (error ? reject(error) : resolve())));
-    }
-    job.detail = "Starting";
-    const container = this.docker.getContainer(this.name(sandbox.roomId, kind));
-    const info = await container.inspect().catch(() => null);
-    if (info?.State.Running) return;
-    if (!info) await this.create(sandbox, kind);
-    await container.start();
-    log.info(`room ${sandbox.roomId}: started its ${kind} database`);
-  }
-
-  private async create(sandbox: Sandbox, kind: DatabaseKind): Promise<void> {
-    const spec = SPECS[kind];
-    const password = databasePassword(this.env.SERVICE_SECRET, sandbox.roomId);
-    const labels = { [LABEL_MANAGED]: "1", [LABEL_NAMESPACE]: this.env.SANDBOX_NAMESPACE, [LABEL_ROOM]: sandbox.roomId, [LABEL_ROLE]: "database", [LABEL_KIND]: kind };
-    const mb = spec.memoryMb * 1024 * 1024;
-    // A new volume starts as the image's data folder, owned by its database user.
-    await this.docker.createVolume({ Name: this.volume(sandbox.roomId, kind), Labels: labels });
-    await this.docker.createContainer({
-      name: this.name(sandbox.roomId, kind),
-      Image: spec.image,
-      User: spec.user,
-      Env: spec.env(password),
-      ...(spec.cmd && { Cmd: spec.cmd(password) }),
-      Labels: labels,
-      // Quick checks while it starts, then a slow one.
-      Healthcheck: { Test: ["CMD-SHELL", spec.health], StartPeriod: 180e9, StartInterval: 2e9, Interval: 30e9, Timeout: 10e9, Retries: 3 } as Docker.HealthConfig,
-      HostConfig: {
-        NetworkMode: sandbox.network,
-        ReadonlyRootfs: true,
-        Tmpfs: Object.fromEntries(spec.tmpfs.map((path) => [path, "rw,nosuid,nodev,mode=1777,size=64m"])),
-        CapDrop: ["ALL"],
-        SecurityOpt: ["no-new-privileges"],
-        PidsLimit: 256,
-        Memory: mb,
-        MemorySwap: mb,
-        NanoCpus: 1e9,
-        Mounts: [{ Type: "volume", Source: this.volume(sandbox.roomId, kind), Target: spec.data }],
-        LogConfig: { Type: "json-file", Config: { "max-size": "2m", "max-file": "1" } },
-      },
-      NetworkingConfig: { EndpointsConfig: { [sandbox.network]: { Aliases: [kind] } } },
-    });
-  }
-
-  /**
-   * Run a client inside the database's container, as its database user,
-   * stopped after 30 seconds (exit code 124). "down" when it isn't running.
-   */
+  /** Run a client inside the database's container, stopped after 30 seconds (exit code 124). "down" when it isn't running. */
   private async exec(
     roomId: string,
     kind: DatabaseKind,
     cmd: string[],
     env: string[] = [],
   ): Promise<{ stdout: string; stderr: string; exitCode: number | null; cut: boolean } | { down: string }> {
-    const started = await this.startExec(roomId, kind, ["timeout", "30", ...cmd], env, false);
-    if ("down" in started) return started;
+    const handle = await this.driver.exec(roomId, kind, ["timeout", "30", ...cmd], env, false);
+    if (!handle) return { down: this.down(kind) };
     const stdout = new Collector(MAX_OUTPUT);
     const stderr = new Collector(64 * 1024);
-    this.docker.modem.demuxStream(started.stream, stdout, stderr);
-    await ended(started.stream);
-    const { ExitCode } = await started.exec.inspect();
-    return { stdout: stdout.text(), stderr: stderr.text(), exitCode: ExitCode ?? null, cut: stdout.cut };
+    handle.demux(stdout, stderr);
+    await ended(handle.stream);
+    return { stdout: stdout.text(), stderr: stderr.text(), exitCode: await exitCodeOnceEnded(handle), cut: stdout.cut };
   }
 
-  /** Start a client inside the database's container, as its database user. "down" when it isn't running. */
-  private async startExec(roomId: string, kind: DatabaseKind, cmd: string[], env: string[], stdin: boolean): Promise<{ exec: Docker.Exec; stream: Duplex } | { down: string }> {
-    const container = this.docker.getContainer(this.name(roomId, kind));
-    let exec: Docker.Exec;
-    try {
-      exec = await container.exec({ Cmd: cmd, Env: env, AttachStdin: stdin, AttachStdout: true, AttachStderr: true });
-    } catch (error) {
-      const status = (error as { statusCode?: number }).statusCode;
-      if (status === 404 || status === 409) return { down: `${DATABASES[kind].name} isn't running. Start it first.` };
-      throw error;
-    }
-    const stream = (await exec.start({ hijack: true, stdin })) as Duplex;
-    return { exec, stream };
+  private down(kind: DatabaseKind): string {
+    return `${DATABASES[kind].name} isn't running. Start it first.`;
   }
 
   private connection(kind: DatabaseKind, password: string): DatabaseConnection {
@@ -457,21 +418,8 @@ export class Databases {
     };
   }
 
-  private containers(roomId: string, state: "running" | "exited"): Promise<Docker.ContainerInfo[]> {
-    const label = [`${LABEL_ROOM}=${roomId}`, `${LABEL_ROLE}=database`, `${LABEL_NAMESPACE}=${this.env.SANDBOX_NAMESPACE}`];
-    return this.docker.listContainers({ all: true, filters: { label, status: [state] } }).catch(() => []);
-  }
-
   private key(roomId: string, kind: DatabaseKind): string {
     return `${roomId}:${kind}`;
-  }
-
-  private name(roomId: string, kind: DatabaseKind): string {
-    return `cc-${this.env.SANDBOX_NAMESPACE}-${kind}-${roomId.toLowerCase()}`;
-  }
-
-  private volume(roomId: string, kind: DatabaseKind): string {
-    return `cc-${this.env.SANDBOX_NAMESPACE}-db-${kind}-${roomId.toLowerCase()}`;
   }
 }
 
@@ -501,7 +449,7 @@ class Collector extends Writable {
   }
 }
 
-/** Resolves once a hijacked exec stream is over, however it ends. */
+/** Resolves once an exec's stream is over, however it ends. */
 function ended(stream: Duplex): Promise<void> {
   return new Promise((resolve) => {
     stream.on("end", resolve);

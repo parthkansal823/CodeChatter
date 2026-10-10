@@ -4,7 +4,6 @@ import type { Duplex } from "node:stream";
 
 import type { Databases } from "./databases.js";
 import { JAIL } from "./plans.js";
-import { Sandbox } from "./sandbox.js";
 import type { RoomSession } from "./room-session.js";
 
 /**
@@ -67,8 +66,7 @@ export async function startDev(session: RoomSession, databases: Databases): Prom
   if (!config) return { error: `This room has no ${ROOM_CONFIG_PATH} to say how to start it.` };
   if ("error" in config) return config;
   if (!config.dev) return { error: `${ROOM_CONFIG_PATH} has no "dev" command.` };
-  // On Kubernetes, room databases come next (roadmap K3); the dev server starts without them.
-  if (session.sandbox instanceof Sandbox) for (const kind of config.databases ?? []) databases.start(session.sandbox, kind);
+  for (const kind of config.databases ?? []) databases.start(session.sandbox, kind);
   await tmux(session, ["kill-session", "-t", DEV_SESSION]);
   // The script travels in the session's environment, never pasted into a command line.
   const started = await tmux(session, ["new-session", "-d", "-s", DEV_SESSION, "-x", "160", "-y", "40", "-e", `CC_DEV_SCRIPT=${devScript({ ...config, dev: config.dev })}`, 'exec bash -c "$CC_DEV_SCRIPT"']);

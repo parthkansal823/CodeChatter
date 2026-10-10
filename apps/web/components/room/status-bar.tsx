@@ -1,13 +1,16 @@
 "use client";
 
 import type { TreeNode } from "@codechatter/workspace-model";
-import { Eye, Settings2 } from "lucide-react";
+import { Eye, Settings2, Sparkles } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { getActiveEditor, useEditorInfo } from "@/components/room/editor/active-editor";
+import { useInlineAi } from "@/components/room/editor/inline-completions";
 import { languageLabel } from "@/components/room/editor/languages";
 import { TAB_SIZES } from "@/components/room/editor/settings";
+import { useEditorSettings } from "@/components/room/editor/settings-store";
 import { openPalette, openSettings } from "@/components/room/editor/ui-store";
+import { useAiSuggestionsAllowed } from "@/components/room/editor/use-inline-completions";
 import { usePeers } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -59,6 +62,7 @@ export function StatusBar({ file }: { file: TreeNode | null }) {
           </>
         )}
         <span className="px-1.5">UTF-8</span>
+        <AiSuggestionsButton />
         <Tooltip>
           <TooltipTrigger asChild>
             <StatusButton aria-label="Editor settings" onClick={openSettings}>
@@ -69,6 +73,35 @@ export function StatusBar({ file }: { file: TreeNode | null }) {
         </Tooltip>
       </div>
     </footer>
+  );
+}
+
+/** AI suggestions on or off in this browser, and why they're paused when they are. */
+function AiSuggestionsButton() {
+  const allowed = useAiSuggestionsAllowed();
+  const on = useEditorSettings((state) => state.aiCompletions);
+  const update = useEditorSettings((state) => state.update);
+  const busy = useInlineAi((state) => state.busy);
+  const pause = useInlineAi((state) => state.pause);
+  if (!allowed) return null;
+  const tip = !on
+    ? "AI suggestions are off. Click to turn them on."
+    : (pause?.reason ?? "AI suggestions are on: Tab accepts one, Esc dismisses it. Click to turn them off.");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <StatusButton
+          aria-label={pause && on ? "AI suggestions (paused)" : "AI suggestions"}
+          aria-pressed={on}
+          onClick={() => update({ aiCompletions: !on })}
+          className="gap-1"
+        >
+          <Sparkles className={cn("size-3", on && !pause && "text-brand", busy && "animate-pulse")} />
+          {!on ? "AI off" : pause ? "AI paused" : "AI"}
+        </StatusButton>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">{tip}</TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -3,21 +3,29 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 /** Where package managers find their proxy: HTTPS_PROXY in every terminal and Run (apps/runner/src/sandbox.ts). */
 export const RELAY_PORT = 3128;
 const OFF = "This room has no internet. Package registries open while the room's owner allows installs (Ports panel)";
+/** The proxy is in the room, so it answers at once; silence this long means it isn't running. */
+const CONNECT_TIMEOUT_MS = 2000;
 
 /**
  * Package managers in the sandbox use http://127.0.0.1:3128 as their proxy:
  * this relay. While the owner allows installs, the room's network has an
  * egress proxy named "egress" (ADR 0007), and each connection passes through
  * to it. Otherwise every request gets a 403 that says why, which pip, npm and
- * curl show, instead of a puzzling DNS error.
+ * curl show, instead of a puzzling DNS error. On Docker the name doesn't
+ * resolve then; on Kubernetes it always does (the sandbox's /etc/hosts), and
+ * the room's network policy drops the connection unanswered, hence the timeout.
  */
 export function startRelay(): Server {
   const server = createServer((client) => {
     client.on("error", () => {});
     let open = false;
     const upstream = connect({ host: "egress", port: RELAY_PORT });
+    upstream.setTimeout(CONNECT_TIMEOUT_MS, () => {
+      if (!open) upstream.destroy(new Error("the package proxy didn't answer"));
+    });
     upstream.once("connect", () => {
       open = true;
+      upstream.setTimeout(0);
       client.pipe(upstream);
       upstream.pipe(client);
     });

@@ -13,7 +13,7 @@ export const LABEL_NAMESPACE = "codechatter.namespace";
 /** What a container is to its room, when it isn't the sandbox: "egress" or "database". */
 export const LABEL_ROLE = "codechatter.role";
 /** Bumped when a container's shape changes (mounts, limits), so older ones are recreated. */
-const LABEL_CONFIG = "codechatter.config";
+export const LABEL_CONFIG = "codechatter.config";
 const CONTAINER_CONFIG = "2";
 
 /** The agent's relay to the room's egress proxy (sandbox/agent/src/relay.ts). */
@@ -42,6 +42,9 @@ const ROOM_SUBNET_BITS = 26;
 
 export class SandboxUnavailableError extends Error {}
 
+/** A room's Docker network (ADR 0007): its sandbox, databases and package proxy are on it. */
+export const roomNetwork = (namespace: string, roomId: string) => `cc-${namespace}-net-${roomId.toLowerCase()}`;
+
 export type ExecOptions = { tty: boolean; cols?: number; rows?: number; env?: string[]; stdin?: boolean };
 
 /**
@@ -57,6 +60,11 @@ export interface RoomSandbox {
   onAgentClosed: () => void;
   /** Start (or reconnect to) it and its agent. Safe to call concurrently. */
   ensure(): Promise<void>;
+  /**
+   * What the room's services (databases, package proxy) need before they start, without
+   * starting the sandbox: its network on Docker, its namespace on Kubernetes.
+   */
+  ensureRoom(): Promise<void>;
   /** Run a process as the sandbox user, in /workspace, with the room's environment. */
   exec(cmd: string[], options: ExecOptions): Promise<ExecHandle>;
   /** Start it again from nothing but its volumes (out of processes, stuck). */
@@ -79,6 +87,16 @@ export type ExecHandle = {
   /** Its exit code once it has ended; null while it runs, or when that can't be told. */
   exitCode(): Promise<number | null>;
 };
+
+/** An exec's exit code, once its stream has ended: the code can be recorded a moment after. */
+export async function exitCodeOnceEnded(handle: ExecHandle): Promise<number | null> {
+  let code = await handle.exitCode().catch(() => null);
+  for (let i = 0; i < 20 && code === null; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    code = await handle.exitCode().catch(() => null);
+  }
+  return code;
+}
 
 /** The parts of Docker's container stats the runner reads. */
 export type ContainerStats = {
@@ -116,7 +134,11 @@ export class Sandbox implements RoomSandbox {
     this.name = `cc-${env.SANDBOX_NAMESPACE}-room-${id}`;
     this.volume = `cc-${env.SANDBOX_NAMESPACE}-ws-${id}`;
     this.home = `cc-${env.SANDBOX_NAMESPACE}-home-${id}`;
-    this.network = `cc-${env.SANDBOX_NAMESPACE}-net-${id}`;
+    this.network = roomNetwork(env.SANDBOX_NAMESPACE, roomId);
+  }
+
+  async ensureRoom(): Promise<void> {
+    await this.ensureNetwork();
   }
 
   /** Start (or reconnect to) the container and its agent. Safe to call concurrently. */

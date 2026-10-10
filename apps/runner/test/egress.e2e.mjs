@@ -5,6 +5,7 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
 import { createFileAtPath, filesDocName, findByPath, trash } from "@codechatter/workspace-model";
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
+import * as k8s from "@kubernetes/client-node";
 import Docker from "dockerode";
 import WebSocket from "ws";
 import * as Y from "yjs";
@@ -13,7 +14,10 @@ const ROOM = process.env.E2E_ROOM ?? "E2ETST"; // seeded for tests; never a room
 const RUNNER = process.env.RUNNER_URL ?? "http://127.0.0.1:4200";
 const COLLAB = process.env.COLLAB_INTERNAL_URL ?? "ws://127.0.0.1:4100";
 const SECRET = process.env.SERVICE_SECRET;
-const NAMESPACE = process.env.SANDBOX_NAMESPACE ?? "dev";
+const health = await fetch(`${RUNNER}/healthz`).then((r) => r.json());
+const KUBE = health.driver === "kubernetes";
+const NAMESPACE = health.namespace ?? process.env.SANDBOX_NAMESPACE ?? "dev";
+console.log(`runner ${RUNNER}: ${health.driver ?? "docker"}, namespace ${NAMESPACE}`);
 if (!SECRET) throw new Error("SERVICE_SECRET missing (run with --env-file=../../.env)");
 
 const results = [];
@@ -31,6 +35,73 @@ const call = (method, path, body) =>
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = new Docker();
 const proxyName = `cc-${NAMESPACE}-egress-${ROOM.toLowerCase()}`;
+const kubeConfig = new k8s.KubeConfig();
+if (KUBE) kubeConfig.loadFromDefault();
+const core = KUBE ? kubeConfig.makeApiClient(k8s.CoreV1Api) : null;
+const networking = KUBE ? kubeConfig.makeApiClient(k8s.NetworkingV1Api) : null;
+const roomNamespace = `cc-${NAMESPACE}-${ROOM.toLowerCase()}`;
+
+/** Docker: the proxy container locked down, on the room's network as "egress" and the shared way out. */
+async function dockerProxyChecks() {
+  const proxy = await docker.getContainer(proxyName).inspect();
+  const networks = proxy.NetworkSettings.Networks;
+  const roomNetwork = `cc-${NAMESPACE}-net-${ROOM.toLowerCase()}`;
+  record(
+    "proxyIsLockedDown",
+    proxy.HostConfig.ReadonlyRootfs && proxy.HostConfig.CapDrop?.includes("ALL") && proxy.Config.User === "10002" && Object.keys(proxy.HostConfig.PortBindings ?? {}).length === 0,
+    `user ${proxy.Config.User}, readonly ${proxy.HostConfig.ReadonlyRootfs}, caps ${proxy.HostConfig.CapDrop}`,
+  );
+  record(
+    "proxyJoinsTheRoomAsEgress",
+    Object.keys(networks).sort().join(",") === [`cc-${NAMESPACE}-egress`, roomNetwork].sort().join(",") && networks[roomNetwork]?.Aliases?.includes("egress"),
+    Object.keys(networks).join(","),
+  );
+}
+
+/**
+ * Kubernetes: the proxy pod locked down; the room knows it as "egress" (its Service, in the
+ * sandbox's /etc/hosts); and its own policy lets it alone out, to DNS and public HTTPS only.
+ */
+async function kubernetesProxyChecks() {
+  const { spec } = await core.readNamespacedPod({ name: "egress", namespace: roomNamespace });
+  const [c] = spec.containers;
+  record(
+    "proxyIsLockedDown",
+    spec.securityContext?.runAsUser === 10002 &&
+      spec.securityContext?.runAsNonRoot === true &&
+      c.securityContext?.readOnlyRootFilesystem === true &&
+      c.securityContext?.capabilities?.drop?.includes("ALL") &&
+      c.securityContext?.allowPrivilegeEscalation === false &&
+      spec.automountServiceAccountToken === false &&
+      !spec.hostNetwork &&
+      !c.ports?.some((port) => port.hostPort),
+    `user ${spec.securityContext?.runAsUser}, readonly ${c.securityContext?.readOnlyRootFilesystem}, caps ${c.securityContext?.capabilities?.drop}`,
+  );
+  const service = await core.readNamespacedService({ name: "egress", namespace: roomNamespace });
+  const sandbox = await core.readNamespacedPod({ name: "sandbox", namespace: roomNamespace });
+  const policy = (await networking.readNamespacedNetworkPolicy({ name: "egress", namespace: roomNamespace })).spec;
+  const ports = (rule) => (rule.ports ?? []).map((port) => `${port.protocol}/${port.port}`).sort().join(",");
+  const [dns, out] = policy.egress ?? [];
+  const publicOnly = out?.to?.length === 1 && out.to[0].ipBlock?.cidr === "0.0.0.0/0" && ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"].every((range) => out.to[0].ipBlock.except?.includes(range));
+  record(
+    "proxyJoinsTheRoomAsEgress",
+    service.spec?.selector?.["codechatter.role"] === "egress" &&
+      sandbox.spec?.hostAliases?.some((alias) => alias.ip === service.spec?.clusterIP && alias.hostnames?.includes("egress")) &&
+      policy.podSelector?.matchLabels?.["codechatter.role"] === "egress" &&
+      policy.egress?.length === 2 &&
+      ports(dns) === "TCP/53,UDP/53" &&
+      dns.to?.[0]?.podSelector?.matchLabels?.["k8s-app"] === "kube-dns" &&
+      ports(out) === "TCP/443" &&
+      publicOnly,
+    JSON.stringify(policy.egress),
+  );
+}
+
+/** Whether the proxy still runs: its container (Docker) or pod (Kubernetes). */
+async function proxyRunning() {
+  if (!KUBE) return (await docker.getContainer(proxyName).inspect().catch(() => null))?.State.Running === true;
+  return (await core.readNamespacedPod({ name: "egress", namespace: roomNamespace }).catch(() => null))?.status?.phase === "Running";
+}
 const dir = `egress-${Date.now().toString(36)}`;
 
 const doc = new Y.Doc();
@@ -152,19 +223,7 @@ try {
   record("allowReturnsUntil", allowed.ok && Date.parse(body.until) > Date.now() + 4 * 60_000 && body.by === "E2E", JSON.stringify(body));
   record("statusShowsInstalls", on?.until === body.until && on?.by === "E2E", JSON.stringify(on));
 
-  const proxy = await docker.getContainer(proxyName).inspect();
-  const networks = proxy.NetworkSettings.Networks;
-  const roomNetwork = `cc-${NAMESPACE}-net-${ROOM.toLowerCase()}`;
-  record(
-    "proxyIsLockedDown",
-    proxy.HostConfig.ReadonlyRootfs && proxy.HostConfig.CapDrop?.includes("ALL") && proxy.Config.User === "10002" && Object.keys(proxy.HostConfig.PortBindings ?? {}).length === 0,
-    `user ${proxy.Config.User}, readonly ${proxy.HostConfig.ReadonlyRootfs}, caps ${proxy.HostConfig.CapDrop}`,
-  );
-  record(
-    "proxyJoinsTheRoomAsEgress",
-    Object.keys(networks).sort().join(",") === [`cc-${NAMESPACE}-egress`, roomNetwork].sort().join(",") && networks[roomNetwork]?.Aliases?.includes("egress"),
-    Object.keys(networks).join(","),
-  );
+  await (KUBE ? kubernetesProxyChecks() : dockerProxyChecks());
 
   const opened = await probe();
   record("registriesTunnel", /^HTTP\/1\.1 200/.test(opened.npm ?? "") && /^HTTP\/1\.1 200/.test(opened.pypi ?? ""), `${opened.npm} | ${opened.pypi}`);
@@ -219,8 +278,8 @@ try {
   await call("PUT", "sandbox/installs", { minutes: 0.1 });
   const brief = await status();
   await sleep(9000);
-  const expired = await docker.getContainer(proxyName).inspect().catch(() => null);
-  record("expiresOnTime", brief !== null && (await status()) === null && expired?.State.Running !== true, `state ${expired?.State.Status ?? "removed"}`);
+  const running = await proxyRunning();
+  record("expiresOnTime", brief !== null && (await status()) === null && !running, `still running: ${running}`);
 } finally {
   await call("DELETE", "sandbox/installs").catch(() => {});
   const folder = findByPath(doc, dir);

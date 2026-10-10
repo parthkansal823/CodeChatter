@@ -72,6 +72,3 @@ export const useAiRequests = create<AiRequestsState>()((set, get) => ({
     return pending;
   },
 }));
-
-// TEMP-TEST: lets the browser test call the store; removed after the run.
-if (typeof window !== "undefined") (window as unknown as { __aiRequests: unknown }).__aiRequests = useAiRequests;

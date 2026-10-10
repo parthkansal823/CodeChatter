@@ -105,6 +105,11 @@ function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">
       run: () => settings.update({ minimap: !settings.minimap }),
     },
     {
+      id: "ai-suggestions",
+      label: settings.aiCompletions ? "Turn AI suggestions off" : "Turn AI suggestions on",
+      run: () => settings.update({ aiCompletions: !settings.aiCompletions }),
+    },
+    {
       id: "zoom-in",
       label: "Zoom in",
       shortcut: "Ctrl =",

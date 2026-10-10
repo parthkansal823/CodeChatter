@@ -2,24 +2,63 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 
 import type { AiSettings } from "./ai.config.js";
+import { COMPLETION, type CompletionRequest } from "./complete.js";
 import type { ModelRequest } from "./prompts.js";
+
+type TokenUsage = { inputTokens: number; outputTokens: number };
 
 export type StreamPiece =
   | { type: "text"; text: string }
   /** `usage` is the provider's own count when it reports one. */
-  | { type: "stop"; stop: "end" | "length" | "refusal"; usage?: { inputTokens: number; outputTokens: number } };
+  | { type: "stop"; stop: "end" | "length" | "refusal"; usage?: TokenUsage };
 
-/** One model behind one interface: text deltas, then how the answer ended. */
+/** An inline completion as the model wrote it (complete.ts cleans it). `usage` is the provider's own count when it reports one. */
+export type CompletionAnswer = { text: string; mode: "fim" | "chat"; truncated: boolean; usage?: TokenUsage };
+
+/** One model behind one interface: text deltas, then how the answer ended; or one short answer for inline completions. */
 export interface AiProvider {
   readonly settings: AiSettings;
   stream(request: ModelRequest, signal: AbortSignal): AsyncGenerator<StreamPiece>;
+  complete(request: CompletionRequest, signal: AbortSignal): Promise<CompletionAnswer>;
 }
 
 export class AnthropicProvider implements AiProvider {
   private readonly client: Anthropic;
+  /** Older models (Haiku 4.5, Sonnet 4.5) refuse `effort`; after one refusal it isn't sent again. */
+  private effort = true;
 
   constructor(readonly settings: AiSettings) {
     this.client = new Anthropic({ apiKey: settings.apiKey, maxRetries: 1 });
+  }
+
+  async complete(request: CompletionRequest, signal: AbortSignal): Promise<CompletionAnswer> {
+    const send = (effort: boolean) =>
+      this.client.messages.create(
+        {
+          model: this.settings.model,
+          max_tokens: COMPLETION.claudeMaxTokens,
+          system: request.chat.system,
+          messages: request.chat.messages.map((turn) => ({ role: turn.role, content: turn.content })),
+          // Current Claude models refuse sampling settings such as temperature; low effort keeps the answer quick instead.
+          ...(effort && { output_config: { effort: "low" as const } }),
+        },
+        // A retry would arrive after the person has typed on.
+        { signal, maxRetries: 0 },
+      );
+    let message: Anthropic.Message;
+    try {
+      message = await send(this.effort);
+    } catch (error) {
+      if (!this.effort || signal.aborted || !(error instanceof Anthropic.BadRequestError)) throw error;
+      this.effort = false;
+      message = await send(false);
+    }
+    return {
+      text: message.content.map((block) => (block.type === "text" ? block.text : "")).join(""),
+      mode: "chat",
+      truncated: message.stop_reason === "max_tokens",
+      usage: { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens },
+    };
   }
 
   async *stream(request: ModelRequest, signal: AbortSignal): AsyncGenerator<StreamPiece> {
@@ -52,9 +91,99 @@ export class AnthropicProvider implements AiProvider {
 /** OpenAI itself or anything that speaks its API: OpenRouter, Groq, Gemini, Together, Ollama, LM Studio… */
 export class OpenAiCompatibleProvider implements AiProvider {
   private readonly client: OpenAI;
+  /** Some models (OpenAI's reasoning ones) refuse temperature and max_tokens; after one refusal they aren't sent again. */
+  private tuned = true;
+  /** Whether the Ollama model fills in the middle (takes a suffix); unknown until Ollama has said. */
+  private fills: boolean | undefined;
 
   constructor(readonly settings: AiSettings) {
     this.client = new OpenAI({ apiKey: settings.apiKey, maxRetries: 1, ...(settings.baseURL && { baseURL: settings.baseURL }) });
+  }
+
+  async complete(request: CompletionRequest, signal: AbortSignal): Promise<CompletionAnswer> {
+    if (this.settings.provider === "ollama" && (await this.canFill(signal))) {
+      try {
+        return await this.fill(request, signal);
+      } catch (error) {
+        if (signal.aborted || !(error instanceof OpenAI.BadRequestError)) throw error;
+        // It refused a suffix after all: use the chat prompt from now on.
+        this.fills = false;
+      }
+    }
+    const send = (tuned: boolean) =>
+      this.client.chat.completions.create(
+        {
+          model: this.settings.model,
+          messages: [
+            { role: "system", content: request.chat.system },
+            ...request.chat.messages.map((turn): OpenAI.Chat.ChatCompletionMessageParam => ({ role: turn.role, content: turn.content })),
+          ],
+          ...(tuned && { temperature: request.temperature, max_tokens: request.maxTokens }),
+        },
+        // A retry would arrive after the person has typed on.
+        { signal, maxRetries: 0 },
+      );
+    let completion: OpenAI.Chat.ChatCompletion;
+    try {
+      completion = await send(this.tuned);
+    } catch (error) {
+      if (!this.tuned || signal.aborted || !(error instanceof OpenAI.BadRequestError)) throw error;
+      this.tuned = false;
+      completion = await send(false);
+    }
+    const choice = completion.choices[0];
+    return {
+      text: choice?.message?.content ?? "",
+      mode: "chat",
+      truncated: choice?.finish_reason === "length",
+      ...(completion.usage && { usage: { inputTokens: completion.usage.prompt_tokens, outputTokens: completion.usage.completion_tokens } }),
+    };
+  }
+
+  /** Ollama's own API, beside the OpenAI-style one under /v1. */
+  private get ollamaBase(): string {
+    return (this.settings.baseURL ?? "").replace(/\/v1$/, "");
+  }
+
+  /** Ollama lists "insert" among a model's capabilities when it fills in the middle (qwen2.5-coder, codellama:code, starcoder2…). */
+  private async canFill(signal: AbortSignal): Promise<boolean> {
+    if (this.fills !== undefined) return this.fills;
+    try {
+      const response = await fetch(`${this.ollamaBase}/api/show`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: this.settings.model }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(3_000)]),
+      });
+      if (!response.ok) return false;
+      const { capabilities } = (await response.json()) as { capabilities?: unknown };
+      this.fills = Array.isArray(capabilities) && capabilities.includes("insert");
+      return this.fills;
+    } catch {
+      return false; // Asked again next time.
+    }
+  }
+
+  /** Fill in the middle through Ollama's OpenAI-style completions endpoint, which takes a suffix. */
+  private async fill(request: CompletionRequest, signal: AbortSignal): Promise<CompletionAnswer> {
+    const completion = await this.client.completions.create(
+      {
+        model: this.settings.model,
+        prompt: request.prefix,
+        // Ollama uses the model's fill-in-the-middle template only when there is a suffix.
+        suffix: request.suffix || "\n",
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
+      },
+      { signal, maxRetries: 0 },
+    );
+    const choice = completion.choices[0];
+    return {
+      text: choice?.text ?? "",
+      mode: "fim",
+      truncated: choice?.finish_reason === "length",
+      ...(completion.usage && { usage: { inputTokens: completion.usage.prompt_tokens, outputTokens: completion.usage.completion_tokens } }),
+    };
   }
 
   async *stream(request: ModelRequest, signal: AbortSignal): AsyncGenerator<StreamPiece> {

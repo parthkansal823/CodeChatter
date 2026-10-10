@@ -32,6 +32,8 @@ export type EditorSettings = {
   stickyScroll: boolean;
   formatOnPaste: boolean;
   formatOnSave: boolean;
+  /** AI suggestions as faint text while you type (inline-completions.ts), in rooms where AI is set up. */
+  aiCompletions: boolean;
 };
 
 export const FONT_SIZE = { min: 10, max: 32, default: 14 } as const;
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   stickyScroll: true,
   formatOnPaste: false,
   formatOnSave: false,
+  aiCompletions: true,
 };
 
 export const clampFontSize = (size: number) =>
@@ -108,5 +111,7 @@ export function monacoOptions(s: EditorSettings): Options {
     guides: { indentation: true, bracketPairs: s.bracketGuides ? "active" : false },
     stickyScroll: { enabled: s.stickyScroll },
     formatOnPaste: s.formatOnPaste,
+    // Off hides any suggestion on screen at once and stops asking for more.
+    inlineSuggest: { enabled: s.aiCompletions },
   };
 }

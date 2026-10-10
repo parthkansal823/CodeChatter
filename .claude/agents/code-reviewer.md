@@ -7,6 +7,8 @@ model: inherit
 
 You review changes in CodeChatter v2: a pnpm + Turborepo TypeScript monorepo with apps/web (Next.js 16), apps/api (NestJS 12), apps/collab (Hocuspocus/Yjs), apps/runner (Docker sandboxes) and packages/* (contracts, workspace-model, db, auth).
 
+Before opening code, read `docs/code-map/README.md` (how the parts connect) and the map for the area you're in (`docs/code-map/<area>.md`): it says what every file is and exports, so you open only the files you need.
+
 ## How to review
 
 1. **See what changed.** Use read-only git: `git -c safe.directory=D:/Projects/Projects_With_Niyati/CodeChatterNK status`, then `diff`, or `diff -- <path>` for a focus area. Never run a git write command.

@@ -3,8 +3,11 @@ import type Docker from "dockerode";
 import type { SandboxStatus } from "@codechatter/contracts";
 
 import { databaseEnv, databasePassword, Databases } from "./databases.js";
+import { DockerDatabases } from "./docker-databases.js";
+import { KubeDatabases } from "./kube-databases.js";
 import { DocSync } from "./doc-sync.js";
-import { Egress, LABEL_UNTIL } from "./egress.js";
+import { Egress, LABEL_UNTIL, type PackageProxy } from "./egress.js";
+import { KubeEgress } from "./kube-egress.js";
 import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { RunManager } from "./runs.js";
@@ -36,8 +39,8 @@ export class RoomSession {
     private readonly databases: Databases,
     kube: Kube | null,
   ) {
-    const roomEnv = databaseEnv(databasePassword(env.SERVICE_SECRET, roomId));
-    this.sandbox = kube ? new KubeSandbox(kube, roomId, env, roomEnv) : new Sandbox(docker, roomId, env, roomEnv);
+    // Kubernetes takes the room's settings from its Secret (kube-sandbox.ts); Docker gets them with each exec.
+    this.sandbox = kube ? new KubeSandbox(kube, roomId, env) : new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)));
     this.sync = new DocSync(roomId, { collabUrl: env.COLLAB_INTERNAL_URL, secret: env.SERVICE_SECRET });
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
     this.tunnels = new TunnelHub(() => this.sandbox.agent);
@@ -123,7 +126,7 @@ export class RoomSession {
 }
 
 export class RoomRegistry {
-  readonly egress: Egress;
+  readonly egress: PackageProxy;
   readonly databases: Databases;
   private readonly sessions = new Map<string, RoomSession>();
   private readonly sweeper: NodeJS.Timeout;
@@ -132,10 +135,10 @@ export class RoomRegistry {
     private readonly docker: Docker,
     private readonly env: Env,
     /** Set when rooms run on Kubernetes (RUNNER_DRIVER=kubernetes). */
-    private readonly kube: Kube | null = null,
+    readonly kube: Kube | null = null,
   ) {
-    this.egress = new Egress(docker, env);
-    this.databases = new Databases(docker, env);
+    this.egress = kube ? new KubeEgress(kube, env) : new Egress(docker, env);
+    this.databases = new Databases(kube ? new KubeDatabases(kube, env) : new DockerDatabases(docker, env), env);
     this.sweeper = setInterval(() => void this.sweep(), 60_000);
   }
 
@@ -263,16 +266,31 @@ export class RoomRegistry {
       }
       withContainer.add(roomId);
     }
-    // On Kubernetes: sandbox pods no session owns (left by an earlier runner) stop after the idle time.
+    // On Kubernetes: sandbox pods no session owns (left by an earlier runner) stop after the
+    // idle time, and the databases of rooms whose sandbox isn't running sleep, as on Docker.
     if (this.kube) {
-      const pods = await this.kube.core.listPodForAllNamespaces({ labelSelector: `${LABEL_MANAGED}=1,${LABEL_NAMESPACE}=${this.env.SANDBOX_NAMESPACE},${LABEL_ROLE}=sandbox` }).catch(() => null);
+      const ours = `${LABEL_MANAGED}=1,${LABEL_NAMESPACE}=${this.env.SANDBOX_NAMESPACE}`;
+      const pods = await this.kube.core.listPodForAllNamespaces({ labelSelector: `${ours},${LABEL_ROLE}=sandbox` }).catch(() => null);
+      const running = new Set<string>();
       for (const pod of pods?.items ?? []) {
         const roomId = pod.metadata?.labels?.[LABEL_ROOM] ?? "";
         const started = pod.metadata?.creationTimestamp ? new Date(pod.metadata.creationTimestamp).getTime() : Date.now();
-        if (this.sessions.has(roomId) || Date.now() - started < this.env.SANDBOX_IDLE_MINUTES * 60_000) continue;
+        if (this.sessions.has(roomId) || Date.now() - started < this.env.SANDBOX_IDLE_MINUTES * 60_000) {
+          if (pod.status?.phase === "Running") running.add(roomId);
+          continue;
+        }
         log.info(`stopping unclaimed sandbox pod in ${pod.metadata?.namespace}`);
         await this.kube.core.deleteNamespacedPod({ name: pod.metadata!.name!, namespace: pod.metadata!.namespace!, gracePeriodSeconds: 0 }).catch(() => {});
       }
+      // Package proxies whose time is up exit by themselves; their pods go here.
+      const proxies = await this.kube.core.listPodForAllNamespaces({ labelSelector: `${ours},${LABEL_ROLE}=egress` }).catch(() => null);
+      for (const pod of proxies?.items ?? []) {
+        if (pod.status?.phase === "Running" && Number(pod.metadata?.annotations?.[LABEL_UNTIL]) > Date.now()) continue;
+        await this.kube.core.deleteNamespacedPod({ name: pod.metadata!.name!, namespace: pod.metadata!.namespace!, gracePeriodSeconds: 0 }).catch(() => {});
+      }
+      const sets = await this.kube.apps.listStatefulSetForAllNamespaces({ labelSelector: `${ours},${LABEL_ROLE}=database` }).catch(() => null);
+      const sleepy = new Set((sets?.items ?? []).filter((set) => set.spec?.replicas).map((set) => set.metadata?.labels?.[LABEL_ROOM] ?? ""));
+      for (const roomId of sleepy) if (roomId && !this.sessions.has(roomId) && !running.has(roomId)) await this.databases.pause(roomId).catch(() => {});
     }
     // The next start makes a room's network again.
     const networks = await this.docker.listNetworks({ filters: ours }).catch(() => []);

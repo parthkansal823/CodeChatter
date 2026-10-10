@@ -12,6 +12,7 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
 
 ## Save tokens
 
+- **Code map first:** read `docs/code-map/README.md` (how the parts connect), then the map for your area (`docs/code-map/<area>.md`: every file, what it is, what it exports), before opening code. A Stop hook regenerates the maps after each turn (`pnpm map` by hand). To change what a map says about a file, fix the file's top comment.
 - Read only what the task needs: grep first, then read the relevant lines. Don't open `client/`, `server/` (v1, being retired), `spikes/`, `node_modules`, or `dist`.
 - Pipe long output through `tail`/`grep`. Don't rerun slow commands to re-read output.
 - Work one piece at a time in the main session; no parallel subagents (they hit the usage limit together and leave half-built code). Never run agents on Sonnet.
@@ -57,6 +58,7 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
 - **End-to-end** (dev stack running):
   - `node --env-file=../../.env test/runner.e2e.mjs`, `test/judge.e2e.mjs`, `test/network.e2e.mjs` (the room network's isolation), `test/egress.e2e.mjs` (package installs: real downloads, takes a minute or two), `test/databases.e2e.mjs` (all five databases) and `test/dev.e2e.mjs` (the dev server from room.json), from `apps/runner`
   - `test/languages.e2e.mjs` (every language) and `test/kubernetes.e2e.mjs` (the playground), from `apps/runner`. Both need the full image: `pnpm sandbox:build:full` and `SANDBOX_IMAGE=codechatter-sandbox:full`.
+  - the same runner tests on the Kubernetes driver (Docker Desktop's cluster): a second runner, `RUNNER_PORT=4202 RUNNER_DRIVER=kubernetes SANDBOX_NAMESPACE=kube pnpm exec tsx watch --env-file-if-exists=../../.env src/main.ts` from `apps/runner`, and `RUNNER_URL=http://127.0.0.1:4202` for the tests
   - browser tests in `apps/web/test/*.e2e.mjs` (Playwright-core + Edge against http://localhost:8080; helpers in `browser.mjs`), run from `apps/web` with `node test/<name>.e2e.mjs`
 - **AI tests:**
   - `ai.e2e.mjs` needs the mock AI: run `node test/mock-ai.mjs` from `apps/api`, and point `.env` at it as its header shows

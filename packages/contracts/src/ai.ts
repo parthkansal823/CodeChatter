@@ -90,6 +90,24 @@ export const AiChatInput = z.object({
 });
 export type AiChatInput = z.infer<typeof AiChatInput>;
 
+/**
+ * Inline completions: ghost text in the editor as you type. The browser sends
+ * the text around the cursor, cut to these sizes, and the server refuses more.
+ */
+export const AI_COMPLETE_LIMITS = { prefixChars: 4_000, suffixChars: 1_000 } as const;
+
+export const AiCompleteInput = z.object({
+  path: WorkspacePath,
+  /** The editor's language id, e.g. "python" or "typescript". */
+  language: z.string().trim().max(40).regex(/^[\w.+#-]*$/, "Invalid language.").default(""),
+  prefix: z.string().max(AI_COMPLETE_LIMITS.prefixChars, "Too much text before the cursor."),
+  suffix: z.string().max(AI_COMPLETE_LIMITS.suffixChars, "Too much text after the cursor.").default(""),
+});
+export type AiCompleteInput = z.infer<typeof AiCompleteInput>;
+
+/** POST /api/rooms/:roomId/ai/complete: the text to insert at the cursor, or "" when the model had nothing useful. */
+export type AiCompletion = { text: string };
+
 export type AiProviderName = "anthropic" | "openai" | "ollama" | "none";
 
 /** GET /api/ai/status: enough for the UI to show the chat or the setup help. */

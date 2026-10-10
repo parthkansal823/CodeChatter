@@ -17,6 +17,7 @@ import { MarkdownPreview } from "@/components/room/editor/markdown-preview";
 import { EditorOverlays } from "@/components/room/editor/overlays";
 import { toggleSplit, toggleZen, useEditorUi } from "@/components/room/editor/ui-store";
 import { useEditorShortcuts } from "@/components/room/editor/shortcuts";
+import { useInlineCompletions } from "@/components/room/editor/use-inline-completions";
 import { Explorer } from "@/components/room/explorer";
 import { useFileTree, usePeers } from "@/components/room/hooks";
 import { PeoplePanel } from "@/components/room/people-panel";
@@ -53,6 +54,7 @@ type Right = string;
 
 function Workspace() {
   const { room, synced, can } = useRoom();
+  useInlineCompletions();
   const run = useRun();
   const tree = useFileTree();
   const peers = usePeers();

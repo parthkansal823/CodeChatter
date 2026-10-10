@@ -12,6 +12,8 @@ import "@codingame/monaco-vscode-standalone-languages";
 import { typescriptDefaults } from "@codingame/monaco-vscode-standalone-typescript-language-features";
 import { MonacoVscodeApiWrapper } from "monaco-languageclient/vscodeApiWrapper";
 
+import { registerInlineCompletions } from "@/components/room/editor/inline-completions";
+
 export { monaco };
 
 let ready: Promise<void> | null = null;
@@ -66,6 +68,14 @@ export function ensureMonaco(): Promise<void> {
       allowNonTsExtensions: true,
     });
     defineThemes();
+    registerInlineCompletions();
+    // VS Code's own code leaves a cancelled wait unhandled now and then (Tab accepting an inline
+    // suggestion cancels one). VS Code ignores its CancellationError ("Canceled"); so do we.
+    // Every other unhandled rejection still reaches the console.
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason: unknown = event.reason;
+      if (reason instanceof Error && reason.name === "Canceled" && reason.message === "Canceled") event.preventDefault();
+    });
   })();
   return ready;
 }

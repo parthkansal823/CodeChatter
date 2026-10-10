@@ -52,7 +52,7 @@ export function ollamaUrl(env: Pick<AiEnv, "OLLAMA_URL">): string | null {
 }
 
 // A local server (Ollama, LM Studio, llama.cpp) needs no key.
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "0.0.0.0", "host.docker.internal"]);
+export const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "0.0.0.0", "host.docker.internal"]);
 
 /**
  * Decide which provider to use from the environment. Never throws: a

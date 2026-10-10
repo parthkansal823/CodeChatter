@@ -6,7 +6,7 @@ import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/pro
 import WebSocket from "ws";
 import * as Y from "yjs";
 
-const ROOM = process.env.E2E_ROOM ?? "E2ETST", RUNNER = "http://127.0.0.1:4200", SECRET = process.env.SERVICE_SECRET;
+const ROOM = process.env.E2E_ROOM ?? "E2ETST", RUNNER = process.env.RUNNER_URL ?? "http://127.0.0.1:4200", SECRET = process.env.SERVICE_SECRET;
 let failed = 0;
 const check = (name, ok, detail = "") => { if (!ok) failed++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  — ${String(detail).replace(/\s+/g, " ").slice(0, 140)}` : ""}`); };
 const doc = new Y.Doc(); const docName = filesDocName(ROOM);

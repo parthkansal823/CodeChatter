@@ -2,7 +2,7 @@ import type { JudgeCase, JudgeEvent } from "@codechatter/contracts";
 import { PassThrough } from "node:stream";
 
 import { JAIL, judgeStepsFor } from "./plans.js";
-import type { RoomSandbox } from "./sandbox.js";
+import { exitCodeOnceEnded, type RoomSandbox } from "./sandbox.js";
 
 const MAX_OUTPUT = 64 * 1024;
 
@@ -53,13 +53,7 @@ async function capture(sandbox: RoomSandbox, script: string, path: string, env: 
     stream.on("error", () => resolve());
   });
   const timeMs = Date.now() - started;
-  // The stream can end a moment before the exit code is recorded.
-  let exitCode = await handle.exitCode().catch(() => null);
-  for (let i = 0; i < 20 && exitCode === null; i++) {
-    await new Promise((r) => setTimeout(r, 50));
-    exitCode = await handle.exitCode().catch(() => null);
-  }
-  return { stdout: out(), stderr: err(), exitCode, timeMs };
+  return { stdout: out(), stderr: err(), exitCode: await exitCodeOnceEnded(handle), timeMs };
 }
 
 /**

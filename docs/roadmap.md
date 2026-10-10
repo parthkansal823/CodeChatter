@@ -183,7 +183,7 @@ Tests:
     - Edit
     - Agent
     - Room summary
-- ⬜ **Inline completions:** ghost text as you type, with debounce and rate limits.
+- ✅ **Inline completions:** ghost text as you type (350 ms pause; typing on cancels the request; Tab accepts, Esc dismisses; on/off in the status bar, settings and palette, kept per browser), from `POST rooms/:id/ai/complete` (needs AI chat and file edit rights; fill-in-the-middle on Ollama models that can, else a prompt with a cursor marker; answers cleaned of fences and repeats; own limit, `AI_COMPLETE_RATE_LIMIT` a minute; usage counted). Tests: 36 Vitest, 8 node:test, API e2e 13/13 and browser e2e 14/14 on local Ollama.
 - ✅ **AI edit:**
   - describe a change, review it side by side, accept it
   - it lands as one change everyone sees live
@@ -771,12 +771,20 @@ A real cluster normally needs privileged containers. Those can't be given to cod
   - Postgres (CloudNativePG) and Valkey; Ingress with cert-manager and the wildcard preview host
 - 🟡 **Kubernetes runner driver** (the owner's priority, 2026-10-09): rooms run on Kubernetes when `RUNNER_DRIVER=kubernetes`; Docker stays the light default for development, and every test runs on both. Built and tested on Docker Desktop's Kubernetes, with the official client (`@kubernetes/client-node`, added).
   - each room is a namespace (`cc-<namespace>-<room>`): deleting the room deletes the namespace, and with it everything the room had
-  - K1 ⬜ the sandbox as a pod: non-root, read-only root, no capabilities, seccomp; PersistentVolumeClaims for the workspace and home; the same agent, runs, terminals and preview tunnel over the Kubernetes exec and attach API (the runner gets one exec interface for both drivers first)
-  - K2 ⬜ the room network as NetworkPolicies: deny-all, the room's own pods only, and `network.e2e.mjs` passing on Kubernetes
-  - K3 ⬜ one-click databases as pods with Services named `postgres`, `mysql`…, and PersistentVolumeClaims
-  - K4 ⬜ the package proxy as a pod, the only one allowed out
-  - K5 ⬜ dev servers and templates, and every runner and browser suite on both drivers
-  - later: gVisor RuntimeClass where the cluster has it; per-pod process limits (Kubernetes sets those per node)
+  - K1 ✅ the sandbox as a pod (`kube-sandbox.ts`): non-root, read-only root, no capabilities, seccomp; PersistentVolumeClaims for the workspace and home; the same agent, runs, terminals and preview tunnel over the Kubernetes exec and attach API, behind one exec interface for both drivers (`RoomSandbox`, `ExecHandle`)
+    - each room runs as its own user (100000 and up); every exec gets exactly the room's environment (`env -i`) and the room's process limit (`prlimit --nproc`, the agent's processes included, like Docker's PID limit)
+    - running out of memory ends the whole pod on Kubernetes 1.32+ (not just the program, as on Docker): the runner notices, waits out the pod status's few seconds of lag, and starts a new pod with the next run; terminals start over
+    - tested with a second runner (`RUNNER_PORT=4202 RUNNER_DRIVER=kubernetes SANDBOX_NAMESPACE=kube`, the tests' `RUNNER_URL`): runner 22/23 (network isolation is K2), judge 9/9, dev server 7/8 (databases are K3); on Docker all pass, with a new out-of-memory case in `runner.e2e.mjs`
+    - on Kubernetes, databases and package installs answer 501 until K3 and K4; `/healthz` checks the cluster too
+  - K2 ✅ the room network as a NetworkPolicy (`room`, made with the namespace before any pod): the room's own pods only, in and out; the sandbox pod has no DNS server, so lookups fail at once (ADR 0007, "On Kubernetes"). `network.e2e.mjs` asks the runner its driver: 11/11 on Kubernetes, 10/10 on Docker; runner 23/23 on Kubernetes
+  - K3 ✅ one-click databases as StatefulSets (`kube-databases.ts`): a claim each for the data, and a Service each named after its kind (`postgres`, `mysql`…) that the sandbox finds through `/etc/hosts`; sleeping with the room scales them to 0. `Databases` is driver-neutral now (status, console, tables, backups, loads), over a small driver for each (`docker-databases.ts`). The room's password is in a Secret, in no pod spec or exec request (Mongo's clients take theirs from the environment now, on both drivers). `databases.e2e.mjs` asks the runner its driver: 33/33 on both; runner, dev server (8/8 with its databases), network and judge pass on both
+  - K4 ✅ the package proxy as a pod (`kube-egress.ts`), the only one allowed out: its own NetworkPolicy lets it reach the cluster's DNS and public HTTPS, nothing else; the sandbox finds it as `egress` in its `/etc/hosts`; it exits on time, with a pod deadline behind that. Both drivers share a `PackageProxy` interface. The sandbox's relay now gives up on the proxy after 2 seconds, so "no internet" comes at once on Kubernetes too, where the room's policy drops the connection unanswered. Sandbox pods check for a newer image each start (`SANDBOX_IMAGE_PULL=Always`), so `pnpm sandbox:build` reaches the cluster. `egress.e2e.mjs` asks the runner its driver: 24/24 on Kubernetes (real npm, pip, Go, Cargo and RubyGems installs)
+  - K5 🟡 every suite on both drivers.
+    - **Done:** every runner suite passes on Kubernetes (runner 23, judge, network 11, egress 24, databases 33, dev server 8, every language 26, the Kubernetes playground 4) and on Docker. Getting there fixed:
+      - the open-files limit: pods get about a billion, Erlang's VM ran out of memory sizing tables by it, so execs now get Docker's 1,048,576
+      - the judge waiting forever on a stream nobody read
+    - **Left:** the browser suites (templates and the rest) against a Kubernetes runner. That means the dev stack's runner on `RUNNER_DRIVER=kubernetes`, which is the owner's call, since the dev stack is shared.
+  - later: gVisor RuntimeClass where the cluster has it; a pod-level PID limit (Kubernetes sets that per node, hence prlimit); the agent reporting the pod's memory and processes itself, instead of an exec before each run
 - ⬜ **Scale and run:**
   - autoscaling (HPA, and KEDA for job queues), Prometheus and OpenTelemetry
   - GitHub Actions building images to GHCR, Argo CD deploying them

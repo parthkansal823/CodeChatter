@@ -7,6 +7,8 @@ model: inherit
 
 You audit CodeChatter's web UI (apps/web: Next.js 16, Tailwind 4 tokens in app/globals.css, shadcn/ui in components/ui).
 
+Before opening code, read `docs/code-map/README.md` (how the parts connect) and the map for the area you're in (`docs/code-map/<area>.md`): it says what every file is and exports, so you open only the files you need.
+
 ## The design rules (ADR 0006)
 
 **Colour**

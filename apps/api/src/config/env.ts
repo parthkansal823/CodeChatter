@@ -54,6 +54,8 @@ const Env = z.object({
   AI_CONTEXT_CHARS: z.coerce.number().int().min(4000).optional().catch(undefined),
   AI_RATE_LIMIT: z.coerce.number().int().positive().default(30).catch(30),
   AI_RATE_WINDOW_SECONDS: z.coerce.number().int().positive().default(600).catch(600),
+  /** Inline completions (ghost text as you type) per person per minute; a separate limit from the one above. */
+  AI_COMPLETE_RATE_LIMIT: z.coerce.number().int().positive().default(30).catch(30),
 }).superRefine((env, ctx) => {
   // Mailpit only exists on a dev machine; in production, verification and
   // reset emails would vanish while sign-up appears to work.

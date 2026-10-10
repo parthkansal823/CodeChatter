@@ -41,6 +41,14 @@ const Env = z.object({
   /** Kubernetes: the size of each room's workspace and home volumes, and their storage class (the cluster's default if unset). */
   SANDBOX_STORAGE_GB: z.coerce.number().int().min(1).default(5),
   SANDBOX_STORAGE_CLASS: z.string().optional(),
+  /**
+   * Kubernetes: when a pod looks for a newer sandbox image. "Always" (the default) picks up
+   * `pnpm sandbox:build` at the next start, as the tag stays the same; "IfNotPresent" suits a
+   * pinned version from a registry.
+   */
+  SANDBOX_IMAGE_PULL: z.enum(["Always", "IfNotPresent"]).default("Always"),
+  /** Kubernetes: the size of each one-click database's volume claim. */
+  DATABASE_STORAGE_GB: z.coerce.number().int().min(1).default(2),
   /** Stop a room's container after this long with no run and no open terminal. */
   SANDBOX_IDLE_MINUTES: z.coerce.number().positive().default(15),
   RUN_TIMEOUT_MINUTES: z.coerce.number().positive().default(30),

@@ -27,7 +27,7 @@ import { log, messageOf } from "./log.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
 import type { RoomRegistry } from "./room-session.js";
 import { RunError } from "./runs.js";
-import { Sandbox, SandboxUnavailableError } from "./sandbox.js";
+import { SandboxUnavailableError } from "./sandbox.js";
 import { openTerminal } from "./terminal.js";
 
 /**
@@ -36,7 +36,7 @@ import { openTerminal } from "./terminal.js";
  * (aud "runner", sub = room id, uid = user); the API has already checked the
  * person's room permissions.
  *
- *   GET  /healthz
+ *   GET  /healthz                   { status, driver, namespace }
  *   DELETE /rooms/:id               the room was deleted: its containers, volumes and network go
  *   POST /maintenance/prune         { rooms } the rooms that exist (a "maintenance" token); the rest are removed
  *   POST /rooms/:id/runs            start; streams NDJSON RunnerEvents
@@ -62,11 +62,6 @@ import { openTerminal } from "./terminal.js";
  *   ANY  /rooms/:id/preview/:port/* dev-server preview (HTTP and WebSocket)
  *   WS   /rooms/:id/terminal?session=&cols=&rows=
  */
-/** Run beside a Docker sandbox for now; on Kubernetes they come next (roadmap §14 F, K3 and K4). */
-const KUBE_LATER = {
-  databases: "Databases aren't on Kubernetes yet; they come next. Run the room on Docker to use them.",
-  installs: "Package installs aren't on Kubernetes yet; they come next. Run the room on Docker to use them.",
-};
 
 /** Biggest file a database loads in one go. */
 const MAX_LOAD_BYTES = 64 * 1024 * 1024;
@@ -106,8 +101,10 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       return json(res, 200, { ok: true });
     }
     if (req.method === "GET" && url.pathname === "/healthz") {
-      const docker = await deps.docker.ping().then(() => true, () => false);
-      return json(res, docker ? 200 : 503, { status: docker ? "ok" : "docker unavailable" });
+      // What the driver runs rooms on: Docker, or the cluster (which then needs no Docker at all).
+      const up = rooms.kube ? await rooms.kube.core.listNamespace({ limit: 1 }).then(() => true, () => false) : await deps.docker.ping().then(() => true, () => false);
+      const status = up ? "ok" : rooms.kube ? "kubernetes unavailable" : "docker unavailable";
+      return json(res, status === "ok" ? 200 : 503, { status, driver: env.RUNNER_DRIVER, namespace: env.SANDBOX_NAMESPACE });
     }
 
     const preview = PREVIEW_PATH.exec(url.pathname);
@@ -162,9 +159,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       const body = z.object({ minutes: z.number().positive().max(INSTALLS_MINUTES) }).safeParse(await readJson(req));
       if (!body.success) return json(res, 400, { error: `minutes must be more than 0 and at most ${INSTALLS_MINUTES}.` });
       try {
-        const sandbox = rooms.get(roomId).sandbox;
-        if (!(sandbox instanceof Sandbox)) return json(res, 501, { error: KUBE_LATER.installs });
-        return json(res, 200, await rooms.egress.allow(sandbox, body.data.minutes, user.name));
+        return json(res, 200, await rooms.egress.allow(rooms.get(roomId).sandbox, body.data.minutes, user.name));
       } catch (error) {
         if (error instanceof SandboxUnavailableError) return json(res, 503, { error: error.message });
         throw error;
@@ -226,7 +221,6 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (route === "POST one") {
       const session = rooms.get(roomId);
       session.touch();
-      if (!(session.sandbox instanceof Sandbox)) return json(res, 501, { error: KUBE_LATER.databases });
       rooms.databases.start(session.sandbox, kind);
       return json(res, 202, await rooms.databases.list(roomId));
     }
@@ -282,7 +276,6 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (route === "POST reset") {
       const session = rooms.get(roomId);
       session.touch();
-      if (!(session.sandbox instanceof Sandbox)) return json(res, 501, { error: KUBE_LATER.databases });
       await rooms.databases.reset(session.sandbox, kind);
       return json(res, 202, await rooms.databases.list(roomId));
     }

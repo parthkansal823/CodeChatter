@@ -2,10 +2,13 @@
 // sandbox writes and reads them by name with the connection from its environment; their data survives a
 // stop and a sleep (the sandbox restarting), and deleting one wipes it.
 //   node --env-file=../../.env test/databases.e2e.mjs      (from apps/runner, with `pnpm dev` running)
+// Against either driver: RUNNER_URL picks the runner, and the runner says which driver it runs.
 import { signServiceToken } from "@codechatter/auth/service-token";
 import { createFileAtPath, filesDocName, findByPath, trash } from "@codechatter/workspace-model";
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
+import * as k8s from "@kubernetes/client-node";
 import Docker from "dockerode";
+import { PassThrough } from "node:stream";
 import WebSocket from "ws";
 import * as Y from "yjs";
 
@@ -13,7 +16,10 @@ const ROOM = process.env.E2E_ROOM ?? "E2ETST"; // seeded for tests; never a room
 const RUNNER = process.env.RUNNER_URL ?? "http://127.0.0.1:4200";
 const COLLAB = process.env.COLLAB_INTERNAL_URL ?? "ws://127.0.0.1:4100";
 const SECRET = process.env.SERVICE_SECRET;
-const NAMESPACE = process.env.SANDBOX_NAMESPACE ?? "dev";
+const health = await fetch(`${RUNNER}/healthz`).then((r) => r.json());
+const KUBE = health.driver === "kubernetes";
+const NAMESPACE = health.namespace ?? process.env.SANDBOX_NAMESPACE ?? "dev";
+console.log(`runner ${RUNNER}: ${health.driver ?? "docker"}, namespace ${NAMESPACE}`);
 const KINDS = ["postgres", "mysql", "mariadb", "mongo", "redis"];
 if (!SECRET) throw new Error("SERVICE_SECRET missing (run with --env-file=../../.env)");
 
@@ -34,6 +40,84 @@ const post = async (path, body) => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const docker = new Docker();
 const container = (kind) => docker.getContainer(`cc-${NAMESPACE}-${kind}-${ROOM.toLowerCase()}`);
+const kubeConfig = new k8s.KubeConfig();
+if (KUBE) kubeConfig.loadFromDefault();
+const core = KUBE ? kubeConfig.makeApiClient(k8s.CoreV1Api) : null;
+const apps = KUBE ? kubeConfig.makeApiClient(k8s.AppsV1Api) : null;
+const roomNamespace = `cc-${NAMESPACE}-${ROOM.toLowerCase()}`;
+
+/** Docker: each container hardened, and on the room's network only, under its kind's name. */
+async function dockerProblems() {
+  const network = `cc-${NAMESPACE}-net-${ROOM.toLowerCase()}`;
+  const problems = [];
+  for (const kind of KINDS) {
+    const info = await container(kind).inspect();
+    const nets = Object.keys(info.NetworkSettings.Networks);
+    const user = info.Config.User ?? "";
+    if (!user || user.startsWith("0") || user === "root") problems.push(`${kind} runs as root`);
+    if (!info.HostConfig.ReadonlyRootfs) problems.push(`${kind} root is writable`);
+    if (!info.HostConfig.CapDrop?.includes("ALL")) problems.push(`${kind} keeps capabilities`);
+    if (!info.HostConfig.SecurityOpt?.includes("no-new-privileges")) problems.push(`${kind} may gain privileges`);
+    if (!(info.HostConfig.Memory > 0)) problems.push(`${kind} has no memory limit`);
+    if (Object.keys(info.HostConfig.PortBindings ?? {}).length) problems.push(`${kind} publishes ports`);
+    if (nets.length !== 1 || nets[0] !== network || !info.NetworkSettings.Networks[network]?.Aliases?.includes(kind)) problems.push(`${kind} networks ${nets.join("+")}`);
+  }
+  return problems;
+}
+
+/**
+ * Kubernetes: each pod hardened, with no Kubernetes token, behind a Service of its kind's name that
+ * the sandbox's /etc/hosts has; and the password in neither the pods' specs nor the sandbox's.
+ */
+async function kubernetesProblems(password) {
+  const problems = [];
+  const sandbox = await core.readNamespacedPod({ name: "sandbox", namespace: roomNamespace });
+  if (JSON.stringify(sandbox.spec).includes(password)) problems.push("the sandbox's spec holds the password");
+  for (const kind of KINDS) {
+    const { spec } = await core.readNamespacedPod({ name: `${kind}-0`, namespace: roomNamespace });
+    const [c] = spec.containers;
+    if (!(c.securityContext?.runAsUser ?? spec.securityContext?.runAsUser) || spec.securityContext?.runAsNonRoot !== true) problems.push(`${kind} runs as root`);
+    if (!c.securityContext?.readOnlyRootFilesystem) problems.push(`${kind} root is writable`);
+    if (!c.securityContext?.capabilities?.drop?.includes("ALL")) problems.push(`${kind} keeps capabilities`);
+    if (c.securityContext?.allowPrivilegeEscalation !== false) problems.push(`${kind} may gain privileges`);
+    if (!c.resources?.limits?.memory) problems.push(`${kind} has no memory limit`);
+    if (spec.hostNetwork || c.ports?.some((port) => port.hostPort)) problems.push(`${kind} publishes ports`);
+    if (spec.automountServiceAccountToken !== false) problems.push(`${kind} gets a Kubernetes token`);
+    if (JSON.stringify(spec).includes(password)) problems.push(`${kind}'s spec holds the password`);
+    const service = await core.readNamespacedService({ name: kind, namespace: roomNamespace });
+    if (service.spec?.selector?.["codechatter.database"] !== kind) problems.push(`${kind} has no Service`);
+    if (!sandbox.spec?.hostAliases?.some((alias) => alias.ip === service.spec?.clusterIP && alias.hostnames?.includes(kind))) problems.push(`the sandbox has no name for ${kind}`);
+  }
+  return problems;
+}
+
+/** MongoDB's own shell inside its container (the sandbox doesn't have it). Returns what it printed. */
+async function mongoShell(url, script) {
+  const cmd = ["mongosh", "--quiet", url, "--eval", script];
+  let text = "";
+  if (KUBE) {
+    const out = new PassThrough().on("data", (chunk) => (text += chunk.toString("latin1")));
+    await new Promise((resolve, reject) => {
+      new k8s.Exec(kubeConfig).exec(roomNamespace, "mongo-0", "mongo", cmd, out, out, null, false, () => resolve()).catch(reject);
+    });
+    return text;
+  }
+  const exec = await container("mongo").exec({ Cmd: cmd, AttachStdout: true, AttachStderr: true });
+  const stream = await exec.start({});
+  stream.on("data", (chunk) => (text += chunk.toString("latin1")));
+  await new Promise((resolve) => stream.on("end", resolve));
+  return text;
+}
+
+/** As when the room idles: the database stops (Docker) or scales to nothing (Kubernetes), its data kept. */
+async function putToSleep(kind) {
+  if (!KUBE) return container(kind).stop({ t: 5 });
+  await apps.replaceNamespacedStatefulSetScale({ name: kind, namespace: roomNamespace, body: { metadata: { name: kind, namespace: roomNamespace }, spec: { replicas: 0 } } });
+  for (let i = 0; i < 60; i++) {
+    if (await core.readNamespacedPod({ name: `${kind}-0`, namespace: roomNamespace }).then(() => false, () => true)) return;
+    await sleep(500);
+  }
+}
 const dir = `db-${Date.now().toString(36)}`;
 
 /** Polls until every listed database is in `state` (or the time runs out); returns the last list. */
@@ -123,22 +207,10 @@ try {
   const up = await waitFor(KINDS, "running");
   record("allFiveRun", KINDS.every((kind) => up.find((d) => d.kind === kind)?.state === "running"), `${Date.now() - t0}ms ${states(up)}`);
 
-  // Hardened like the sandbox, and on the room's network only, under their own names.
-  const network = `cc-${NAMESPACE}-net-${ROOM.toLowerCase()}`;
-  const problems = [];
-  for (const kind of KINDS) {
-    const info = await container(kind).inspect();
-    const nets = Object.keys(info.NetworkSettings.Networks);
-    const user = info.Config.User ?? "";
-    if (!user || user.startsWith("0") || user === "root") problems.push(`${kind} runs as root`);
-    if (!info.HostConfig.ReadonlyRootfs) problems.push(`${kind} root is writable`);
-    if (!info.HostConfig.CapDrop?.includes("ALL")) problems.push(`${kind} keeps capabilities`);
-    if (!info.HostConfig.SecurityOpt?.includes("no-new-privileges")) problems.push(`${kind} may gain privileges`);
-    if (!(info.HostConfig.Memory > 0)) problems.push(`${kind} has no memory limit`);
-    if (Object.keys(info.HostConfig.PortBindings ?? {}).length) problems.push(`${kind} publishes ports`);
-    if (nets.length !== 1 || nets[0] !== network || !info.NetworkSettings.Networks[network]?.Aliases?.includes(kind)) problems.push(`${kind} networks ${nets.join("+")}`);
-  }
-  record("databasesAreHardenedAndPrivate", problems.length === 0, problems.join("; "));
+  // Hardened like the sandbox, and in the room only, under their own names.
+  const password = off.find((d) => d.kind === "postgres")?.connection?.password ?? "";
+  const problems = KUBE ? await kubernetesProblems(password) : await dockerProblems();
+  record("databasesAreHardenedAndPrivate", password.length > 0 && problems.length === 0, problems.join("; "));
 
   // The console: each database's own client, inside its container, read into results.
   const ask = async (kind, query) => (await post(`databases/${kind}/query`, { query })).body ?? {};
@@ -223,11 +295,7 @@ try {
   record("mongoFromTheSandbox", line(mongo, "mongo") === "hello answered", line(mongo, "mongo"));
   // The room's credentials let you in (checked with MongoDB's own shell, which the sandbox doesn't have).
   const url = up.find((d) => d.kind === "mongo").connection.url.replace("@mongo:", "@127.0.0.1:");
-  const exec = await container("mongo").exec({ Cmd: ["mongosh", "--quiet", url, "--eval", "db.notes.insertOne({ n: 42 }); print(db.notes.countDocuments())"], AttachStdout: true, AttachStderr: true });
-  const stream = await exec.start({});
-  let shell = "";
-  stream.on("data", (chunk) => (shell += chunk.toString("latin1")));
-  await new Promise((resolve) => stream.on("end", resolve));
+  const shell = await mongoShell(url, "db.notes.insertOne({ n: 42 }); print(db.notes.countDocuments())");
   record("mongoCredentialsWork", /\b1\s*$/.test(shell.replace(/[^\x20-\x7e\n]/g, "").trim()), shell.replace(/[^\x20-\x7e]/g, " ").trim().slice(-80));
 
   // Stop keeps the data; starting again brings it back.
@@ -240,7 +308,7 @@ try {
   record("dataSurvivesStopAndStart", line(again, "postgres") === "42", line(again, "postgres"));
 
   // Asleep with an idle room (stopped, not removed), awake when its sandbox starts.
-  await container("redis").stop({ t: 5 });
+  await putToSleep("redis");
   await call("POST", "sandbox/restart");
   const woke = await waitFor(["redis"], "running", 60_000);
   const awake = await run(`${dir}/read.sh`);

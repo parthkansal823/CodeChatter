@@ -80,3 +80,15 @@ The client reads exactly the file's length, `head -c N | client`. Closing the ex
 - Rotating `SERVICE_SECRET` changes the password; a database made before needs its data deleted and starting again.
 - MySQL's self-signed certificate is accepted by the sandbox's MariaDB client (`/etc/mysql/conf.d/codechatter.cnf`). The connection never leaves the room's network.
 - Idle MongoDB uses about 400 MB and MySQL about 190 MB; their limits are 768 MB and 512 MB.
+
+## On Kubernetes (2026-10-10)
+
+With `RUNNER_DRIVER=kubernetes` the same databases run in the room's namespace (`kube-databases.ts`), and everything above holds:
+
+- each is a StatefulSet named after its kind, with one pod (`postgres-0`) and a volume claim for its data (`data-postgres-0`)
+- a Service of the same name sits in front of it. The sandbox has no DNS server (ADR 0007), so it finds the Services through `/etc/hosts` entries (`hostAliases`); the Services are made with the namespace, before any pod, so their addresses are known when the sandbox starts
+- the Services include pods that aren't ready yet, so a database takes connections as soon as it listens. Readiness only drives its health in the panel: a startup probe checks every 2 seconds while it starts, then a readiness probe every 30 (the same check as Docker's health check)
+- sleeping with the room scales the StatefulSet to 0; waking scales it back. Stop deletes the StatefulSet and keeps the claim, and delete removes both
+- the password lives in the room's Secret. Each pod expands it into the image's own settings when it starts, so it's in no pod spec. Client commands (console, backups, loads) build their settings from it inside the pod (`MYSQL_PWD="$CC_PASSWORD"`), so it's in no exec request either, which a cluster's audit log could record
+- the client settings stay out of the containers' environment: the images' start-up scripts read it too. MySQL's script failed to create its user when `MYSQL_PWD` was set
+- Docker's per-container process limit has no per-pod equivalent: the kubelet sets one per node (`podPidsLimit`), which a production cluster should set

@@ -59,3 +59,22 @@ Probes from containers on Docker 29.7 (Docker Desktop):
 - Allowing installs also lets any program that honours `HTTPS_PROXY` (for example `requests` in Python) reach the registries, and only them. Other sites get a clear 403.
 - Maven and Gradle don't read `HTTPS_PROXY`; neither is in the images yet. When they are, their proxy settings go in the image.
 - The home volume, like the workspace volume, has no size limit yet; disk quotas come with production hardening.
+
+## On Kubernetes (2026-10-09)
+
+With `RUNNER_DRIVER=kubernetes` each room is a namespace, and the same rule holds through a NetworkPolicy, `room`, made with the namespace before any pod:
+
+- every pod in the namespace (the sandbox, and later its databases and package proxy) takes connections only from the namespace's pods, and makes them only to the namespace's pods
+- so not another room, the Kubernetes API, the node's kubelet, the Docker Desktop host, cloud metadata or the internet
+- policies need a network plugin that enforces them. Docker Desktop's cluster (kindnet, with kube-network-policies) does; so do Calico and Cilium
+- the sandbox pod has no DNS server (`dnsPolicy: None`, nameserver 127.0.0.1), so a lookup fails at once, as on Docker, rather than after the resolver's timeouts. CoreDNS would also answer outside names, which leaks data through lookups. The room's own services will get `/etc/hosts` entries (`hostAliases`) to their Service addresses when they run on Kubernetes (roadmap K3, K4)
+
+`network.e2e.mjs` asks the runner which driver it runs and checks both: 11 checks on Kubernetes, 10 on Docker.
+
+### Package installs on Kubernetes (2026-10-10)
+
+- the proxy runs as a pod named `egress` in the room's namespace (`kube-egress.ts`), from the sandbox image, as the agent's user, locked down like the sandbox
+- a second NetworkPolicy, `egress`, selects only that pod and lets it out to the cluster's DNS (port 53) and to public addresses on 443. Private, link-local and shared ranges are excepted, and the proxy refuses private addresses itself too
+- the sandbox reaches it through a Service named `egress`, which is in its `/etc/hosts` from the start
+- with no proxy running, that Service has no pods behind it. A pod outside any policy gets "connection refused" from it at once; the room's policy, though, drops the connection unanswered (kube-network-policies ignores an `ipBlock` for a Service address). So the sandbox's relay waits 2 seconds for the proxy and then answers "403 This room has no internet", as on Docker, where the name doesn't resolve then
+- the proxy exits when its time is up; `activeDeadlineSeconds` ends the pod a minute later if it hasn't, and the sweep deletes ended proxy pods

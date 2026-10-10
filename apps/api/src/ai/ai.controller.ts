@@ -1,10 +1,24 @@
 import type { AuthSession } from "@codechatter/auth";
-import { AiChatInput, RoomCode, type AiStatus, type AiStreamEvent, type AiTokenCount, type AiUsage } from "@codechatter/contracts";
 import {
+  AiChatInput,
+  AiCompleteInput,
+  can,
+  RoomCode,
+  type AiCompletion,
+  type AiStatus,
+  type AiStreamEvent,
+  type AiTokenCount,
+  type AiUsage,
+} from "@codechatter/contracts";
+import {
+  BadGatewayException,
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
+  GatewayTimeoutException,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Logger,
@@ -20,6 +34,7 @@ import { ZodPipe } from "../common/zod.pipe.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient } from "../runner/runner.client.js";
 import { AiService } from "./ai.service.js";
+import { buildCompletionRequest, cleanCompletion, completionLimitMessage, completionTimeoutMs, completionUsage } from "./complete.js";
 import type { RunContext, SummaryContext } from "./context.js";
 import { buildModelRequest } from "./prompts.js";
 import { describeAiError, type StreamPiece } from "./providers.js";
@@ -141,6 +156,51 @@ export class AiController {
       if (!recorded && outputChars > 0) await record(estimateUsage(request, outputChars));
       clearInterval(heartbeat);
       res.end();
+    }
+  }
+
+  /**
+   * Ghost text at the cursor: the text to insert there, or "" when the model
+   * had nothing useful. Short and quick, with a per-person limit of its own.
+   */
+  @Post("rooms/:roomId/ai/complete")
+  @HttpCode(200)
+  async complete(
+    @CurrentSession() session: AuthSession,
+    @Param("roomId", new ZodPipe(RoomCode)) roomId: string,
+    @Body(new ZodPipe(AiCompleteInput)) input: AiCompleteInput,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AiCompletion> {
+    // A suggestion is typed into the file: it takes the right to edit as well as to use the AI.
+    const { role } = await this.rooms.require(roomId, session.user.id, "files.edit");
+    if (!can(role, "room.chat")) throw new ForbiddenException("You don't have access to do that in this room.");
+    const provider = this.ai.provider;
+    if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");
+    if (!input.prefix.trim() && !input.suffix.trim()) return { text: "" };
+
+    const limit = await this.ai.hitCompletion(session.user.id);
+    if (!limit.allowed) {
+      res.setHeader("Retry-After", String(limit.retryAfterSeconds));
+      throw new HttpException(completionLimitMessage(this.ai.completionLimit, limit.retryAfterSeconds), HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const request = buildCompletionRequest(input);
+    // The person typed on (the editor cancels the request) or the model is too slow: stop paying for an answer nobody sees.
+    const gone = new AbortController();
+    res.on("close", () => {
+      if (!res.writableFinished) gone.abort();
+    });
+    const deadline = AbortSignal.timeout(completionTimeoutMs(provider.settings));
+    try {
+      const answer = await provider.complete(request, AbortSignal.any([gone.signal, deadline]));
+      const tokens = answer.usage ? { ...answer.usage, estimated: false } : completionUsage(request, answer.mode, answer.text.length);
+      await this.ai.record(session.user.id, tokens).catch((error) => this.logger.warn(`AI usage not recorded: ${String(error)}`));
+      return { text: cleanCompletion(answer.text, input, { truncated: answer.truncated }) };
+    } catch (error) {
+      if (gone.signal.aborted) return { text: "" };
+      if (deadline.aborted) throw new GatewayTimeoutException("The AI took too long to suggest anything.");
+      this.logger.warn(`AI completion failed in room ${roomId}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new BadGatewayException(describeAiError(error, provider.settings, false) ?? "The AI request failed. Try again.");
     }
   }
 }

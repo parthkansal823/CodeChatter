@@ -232,6 +232,16 @@ export function SettingsDialog({
               onChange={(v) => update({ formatOnSave: v })}
             />
           </Section>
+
+          <Section title="AI">
+            <Toggle
+              id="set-ai-suggestions"
+              label="Suggestions as you type"
+              hint="Faint text from the room's AI. Tab accepts it, Esc dismisses it"
+              checked={s.aiCompletions}
+              onChange={(v) => update({ aiCompletions: v })}
+            />
+          </Section>
         </div>
         <DialogFooter className="border-t px-5 py-3 sm:justify-between">
           <Button variant="outline" size="sm" onClick={reset}>

@@ -28,8 +28,8 @@ export function queryCommand(kind: DatabaseKind, query: string, password: string
       return { cmd: ["mariadb", "--xml", "-vv", "--init-command=SET SESSION max_statement_time=30", "-u", "app", "app", "-e", query], env: [`MYSQL_PWD=${password}`] };
     case "mongo":
       return {
-        cmd: ["mongosh", "--quiet", "--norc", mongoUrl(password), "--json=relaxed", "--eval", mongoEval(query)],
-        env: [],
+        cmd: ["sh", "-c", 'exec mongosh --quiet --norc "$CC_MONGO_URL" --json=relaxed --eval "$1"', "sh", mongoEval(query)],
+        env: [mongoEnv(password)],
       };
     case "redis":
       // valkey-cli reads one command per line from stdin, quotes and all; the password is in REDISCLI_AUTH.
@@ -69,7 +69,7 @@ export function dumpCommand(kind: DatabaseKind, password: string): { cmd: string
     case "mariadb":
       return { cmd: ["mariadb-dump", "-u", "app", "--single-transaction", "app"], env: [`MYSQL_PWD=${password}`], extension: "sql", contentType: "application/sql" };
     case "mongo":
-      return { cmd: ["mongodump", `--uri=${mongoUrl(password)}`, "--archive", "--gzip", "--quiet"], env: [], extension: "archive.gz", contentType: "application/gzip" };
+      return { cmd: ["sh", "-c", 'exec mongodump --uri="$CC_MONGO_URL" --archive --gzip --quiet'], env: [mongoEnv(password)], extension: "archive.gz", contentType: "application/gzip" };
     case "redis":
       return { cmd: ["valkey-cli", "--no-auth-warning", "--rdb", "-"], env: [], extension: "rdb", contentType: "application/octet-stream" };
   }
@@ -82,7 +82,7 @@ export function dumpCommand(kind: DatabaseKind, password: string): { cmd: string
  * every Docker, so the client gets its end of input this way.
  */
 export function loadCommand(kind: DatabaseKind, password: string, bytes: number, archive: boolean): { cmd: string[]; env: string[] } {
-  const piped = (client: string) => ["sh", "-c", `head -c "$1" | ${client}`, "sh", String(bytes), mongoUrl(password)];
+  const piped = (client: string) => ["sh", "-c", `head -c "$1" | ${client}`, "sh", String(bytes)];
   switch (kind) {
     case "postgres":
       return { cmd: piped("psql -X -q -v ON_ERROR_STOP=1 -o /dev/null -U app -d app -f -"), env: [`PGPASSWORD=${password}`] };
@@ -91,7 +91,7 @@ export function loadCommand(kind: DatabaseKind, password: string, bytes: number,
     case "mariadb":
       return { cmd: piped("mariadb -u app app"), env: [`MYSQL_PWD=${password}`] };
     case "mongo":
-      return { cmd: piped(archive ? 'mongorestore --uri="$2" --archive --gzip --drop --quiet' : 'mongosh --quiet --norc "$2"'), env: [] };
+      return { cmd: piped(archive ? 'mongorestore --uri="$CC_MONGO_URL" --archive --gzip --drop --quiet' : 'mongosh --quiet --norc "$CC_MONGO_URL"'), env: [mongoEnv(password)] };
     case "redis":
       return { cmd: piped("valkey-cli --no-auth-warning"), env: [] };
   }
@@ -102,8 +102,13 @@ export function sniff(head: Buffer): { archive: boolean; rdb: boolean } {
   return { archive: head[0] === 0x1f && head[1] === 0x8b, rdb: head.subarray(0, 5).toString("latin1") === "REDIS" };
 }
 
-function mongoUrl(password: string): string {
-  return `mongodb://app:${password}@127.0.0.1:27017/app?authSource=admin`;
+/**
+ * The connection for Mongo's clients, in their environment: they take no
+ * password from one of their own, and a command line is easier to see (in the
+ * container's process list, or a cluster's audit log of execs).
+ */
+function mongoEnv(password: string): string {
+  return `CC_MONGO_URL=mongodb://app:${password}@127.0.0.1:27017/app?authSource=admin`;
 }
 
 /** The console's answer from what the client printed. */
