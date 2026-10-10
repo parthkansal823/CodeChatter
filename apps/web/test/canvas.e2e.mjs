@@ -97,8 +97,9 @@ check("exportsPng", png.bytes.subarray(1, 4).toString() === "PNG" && png.name.en
 
 // A design's PDF gives each top-level frame its own page.
 await a.getByRole("button", { name: "Design", exact: true }).click();
-// The tool reopens the last design itself; only from the list does the name need a click (in the header it renames).
-if (!(await a.locator("[data-canvas]:visible").first().isVisible().catch(() => false))) await a.getByText(`Logo ${stamp}`, { exact: true }).first().click();
+// The tool reopens the last design itself, once its document syncs: wait for that, and only if it
+// doesn't come, open it from the list (clicking the name in the header would start renaming it).
+if (!(await ok(a.locator("[data-canvas]:visible").first().waitFor({ timeout: 10_000 })))) await a.getByText(`Logo ${stamp}`, { exact: true }).first().click();
 await a.locator("[data-canvas]:visible").first().waitFor({ timeout: 20_000 });
 await a.getByRole("button", { name: /^Frame/ }).first().click();
 await drag(a, [30, 320], [200, 440]); // the design canvas sits between the Layers and properties panels

@@ -1,6 +1,7 @@
 export * from "./model.js";
 export * from "./templates.js";
 export * from "./languages.js";
+export * from "./notebook.js";
 
 /**
  * Document names, so the collab server and every client agree. One Yjs

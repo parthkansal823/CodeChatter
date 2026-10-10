@@ -1,15 +1,20 @@
 "use client";
 
 import { flatten, type TreeNode } from "@codechatter/workspace-model";
+import { Eye } from "lucide-react";
 
 import { PresenceAvatar, presenceVar } from "@/components/presence/presence";
+import { useEditorUi } from "@/components/room/editor/ui-store";
 import { usePeers } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
+import { Button } from "@/components/ui/button";
 
-/** Who is here and which file each person is in. Click to jump to their file. */
+/** Who is here and which file each person is in. Click to jump to their file, or follow them as they move. */
 export function PeoplePanel({ tree, onOpen }: { tree: TreeNode[]; onOpen: (node: TreeNode) => void }) {
   const { me, mySlot } = useRoom();
   const peers = usePeers();
+  const following = useEditorUi((state) => state.following);
+  const follow = useEditorUi((state) => state.follow);
   const files = new Map(flatten(tree).map((n) => [n.id, n]));
 
   return (
@@ -27,12 +32,12 @@ export function PeoplePanel({ tree, onOpen }: { tree: TreeNode[]; onOpen: (node:
         {peers.map((peer) => {
           const file = peer.activeFileId ? files.get(peer.activeFileId) : undefined;
           return (
-            <li key={peer.user.id}>
+            <li key={peer.user.id} className="flex items-center gap-1">
               <button
                 type="button"
                 disabled={!file}
                 onClick={() => file && onOpen(file)}
-                className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-accent disabled:hover:bg-transparent"
+                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-accent disabled:hover:bg-transparent"
                 title={file ? `Open ${file.path}` : undefined}
               >
                 <PresenceAvatar name={peer.user.name} image={peer.user.image} slot={peer.user.slot} size={26} />
@@ -44,6 +49,16 @@ export function PeoplePanel({ tree, onOpen }: { tree: TreeNode[]; onOpen: (node:
                   </span>
                 </span>
               </button>
+              <Button
+                variant={following === peer.user.id ? "secondary" : "ghost"}
+                size="icon-xs"
+                aria-pressed={following === peer.user.id}
+                aria-label={following === peer.user.id ? `Stop following ${peer.user.name}` : `Follow ${peer.user.name}`}
+                title={following === peer.user.id ? "Stop following" : "Follow: their file opens for you as they move"}
+                onClick={() => follow(following === peer.user.id ? null : peer.user.id)}
+              >
+                <Eye />
+              </Button>
             </li>
           );
         })}

@@ -46,6 +46,15 @@ RUN apt-get update \
  && mkdir -p /etc/mysql/conf.d \
  && printf '[client]\nskip-ssl-verify-server-cert\n' > /etc/mysql/conf.d/codechatter.cnf
 
+# The Python data pack and notebooks: numpy, pandas and matplotlib, and Jupyter's kernel
+# and client, which kernel.py drives for the runner (apps/runner/src/notebooks.ts). Its
+# own layer, so the toolchains above stay cached.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      python3-numpy python3-pandas python3-matplotlib python3-ipykernel python3-jupyter-client \
+ && rm -rf /var/lib/apt/lists/*
+COPY image/kernel.py /usr/local/lib/codechatter/kernel.py
+
 # Node from the official image, copied without its ENV (NODE_VERSION, YARN_VERSION
 # would otherwise leak into every program's environment; spike S2 finding 3).
 COPY --from=node /usr/local/bin/node /usr/local/bin/node

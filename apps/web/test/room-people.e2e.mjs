@@ -73,6 +73,15 @@ await page.waitForTimeout(1500);
 const after = await terminalMatchesPage();
 check("terminalFollowsTheme", before.ok && after.ok, JSON.stringify({ before, after }));
 
+// Following from the People panel (opened from the faces in the top bar): one click, and again to stop.
+await page.getByTitle("Who's here").click();
+const followTwo = page.getByRole("button", { name: "Follow test2" });
+await followTwo.click();
+const banner = page.getByText(/Following test2/);
+check("followFromPeoplePanel", (await banner.waitFor({ timeout: 5_000 }).then(() => true, () => false)) && (await page.getByRole("button", { name: "Stop following test2" }).getAttribute("aria-pressed")) === "true");
+await page.getByRole("button", { name: "Stop following test2" }).click();
+check("stopFollowingFromPeoplePanel", await banner.waitFor({ state: "detached", timeout: 5_000 }).then(() => true, () => false));
+
 await page.screenshot({ path: process.env.SHOT ?? join(tmpdir(), "room-people.png") });
 await browser.close();
 check("noPageErrors", errors.length === 0, errors.join(" | "));

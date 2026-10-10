@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Logo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { REPO_URL, SHOWCASE } from "@/lib/showcase";
 import { cn } from "@/lib/utils";
 
 /** The hairline under the header appears only once the page has scrolled. */
@@ -32,17 +33,27 @@ export function SiteHeader() {
         </Link>
         <nav className="hidden items-center gap-5 text-muted-foreground md:flex">
           <Link href="/#features" className="transition-colors hover:text-foreground">Product</Link>
-          <Link href="/#automations" className="transition-colors hover:text-foreground">Automations</Link>
+          <Link href="/#services" className="transition-colors hover:text-foreground">Databases</Link>
           <Link href="/#security" className="transition-colors hover:text-foreground">Security</Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/sign-in">Sign in</Link>
-          </Button>
-          <Button size="sm" asChild>
-            <Link href="/sign-up">Start a room</Link>
-          </Button>
+          {SHOWCASE ? (
+            REPO_URL && (
+              <Button size="sm" asChild>
+                <a href={REPO_URL}>See the code</a>
+              </Button>
+            )
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href="/sign-up">Start a room</Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </header>

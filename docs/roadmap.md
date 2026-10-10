@@ -119,7 +119,7 @@ One private Docker container per room (ADR 0003). It has no network, no secrets,
   - custom input
   - import samples from AtCoder and CSES links; Codeforces refuses automated requests, so paste those
   - judge end-to-end 9/9, browser 4/4
-- ⬜ Network switch (owner only, audited, turns itself off after 1 hour, allow-listed package registries).
+- ✅ Network switch (owner only, audited, turns itself off after 1 hour, allow-listed package registries): built as **package installs** (section 14, the room network; `egress.e2e.mjs` 24/24 on both drivers).
 - ⬜ Python notebooks (.ipynb) with a kernel in the sandbox.
 
 **Production and tests:**
@@ -139,7 +139,10 @@ One private Docker container per room (ADR 0003). It has no network, no secrets,
   - code suggestions are readable in the light theme (they showed white text on light grey); a test now measures their contrast
 - ✅ **Tools plug-in point** in the room (`components/room/tools/registry.ts`): side tools next to Chat, main tools in the editor area.
 - ✅ **Room documents:** files, pages, api, designs and boards, plus per-item page, design and board documents, all authorised and persisted by collab.
-- ⬜ A test that rooms can't read each other's files (by design each room has its own volume and container).
+- ✅ **A test that rooms can't read each other's files** (`apps/runner/test/isolation.e2e.mjs`, 2026-10-10), 6/6 on Docker and Kubernetes:
+  - another room is made through the API, with a file only it has, which its own sandbox reads
+  - this room's sandbox looks everywhere it can read for that file and finds nothing; the jail leaves it `/workspace` and `/tmp` only
+  - its sandbox mounts only its own storage: its two volumes (Docker), or its own namespace's claims (Kubernetes)
 
 ## 3. Recruiter kit ⬜
 
@@ -147,9 +150,27 @@ One private Docker container per room (ADR 0003). It has no network, no secrets,
   - one click makes a guest account and opens a guided-tour room with runnable examples and pre-filled tests; no sign-up, no email
   - limited to 5 a hour per network; guests are deleted after a day; `DEMO_ENABLED` turns it on in production
   - browser test 4/4
-- ⬜ **README:** GIF, 2-minute video link, feature list, architecture diagram, tech stack, "run it in 3 commands".
-- ⬜ **Showcase mode:** the landing page deployable on Vercel for free, with buttons that open the video and GitHub.
-- ⬜ Demo video script: what to record and in which order.
+- 🟡 **README** (2026-10-10):
+  - ✅ **Written for v2** (it described v1):
+    - the features, and three screenshots from the Kubernetes demo (`docs/images/`)
+    - the security model, an architecture diagram (Mermaid, checked to render) and the stack
+    - running it locally or on Kubernetes, and the test suites with their counts
+  - ⬜ A GIF and a 2-minute video link.
+- ✅ **Showcase mode** (2026-10-10):
+  - **What it is:** the landing page on its own, for Vercel's free plan (`NEXT_PUBLIC_SHOWCASE=1`, `apps/web/lib/showcase.ts`; steps in `docs/deploy.md`).
+  - **What changes:**
+    - the buttons open the demo video, the code and how to run it, instead of signing in
+    - the app's pages, sign-in included, lead back home
+    - the Docker web image takes the same build arguments
+  - **Tested** as a production build in a container; Vercel itself not tried yet.
+  - **The landing page now claims only what's built.**
+    - It advertised automations, organisations, an audit log, time travel, revocable sessions and an AI typeface, none of which exist yet.
+    - Those sections are now one-click databases and dev servers, and a truthful "Safe to share a room".
+    - The agent's diffs say Accept and Reject, as the panel does.
+- ✅ Demo video script ([docs/demo-script.md](demo-script.md)), 2026-10-10:
+  - setup, a shot list with times and what to say, and what to do with the video afterwards
+  - each shot shows something that works today
+  - the recording is the owner's
 
 ## 4. AI copilot and AI agent 🟡
 
@@ -607,7 +628,7 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
   - ✅ **Zen mode** (Ctrl+K Z) hides everything but the code
   - ⬜ grid splits, an image viewer, CSV as a table
 - ✅ **Change language mode** for a file, from the palette or the status bar.
-- ✅ **Follow someone:** their file opens for you as they move, with a banner and a Stop button (like Live Share).
+- ✅ **Follow someone:** their file opens for you as they move, with a banner and a Stop button (like Live Share). Start it from the palette ("Follow someone…") or, since 2026-10-10, with the Follow button beside each person in the People panel (the faces in the top bar); `room-people.e2e.mjs` 7/7.
 - ✅ **Search and replace across files** (Ctrl+Shift+F, Ctrl+Shift+H; the Search view shares the sidebar with Files):
   - match case, whole word and regex (a bad one says why), include and exclude globs; results grouped by file, live as anyone edits, capped at 2,000 with a note
   - a result opens its file with the match selected; arrow keys move through results
@@ -794,7 +815,7 @@ A real cluster normally needs privileged containers. Those can't be given to cod
     | docs | 8 |
     | API studio | 7 |
     | diagrams | 7 |
-    | canvas | 11/12; the 12th fails on Docker too, in its own drag step |
+    | canvas | 12 (after a fix: the canvas header kept its toolbar in place while a name was being renamed, so the first click after a rename no longer misses) |
     | templates (all seven) | 8 |
   - ⬜ **Later:**
     - several replicas (collab joined through Valkey)
@@ -815,7 +836,7 @@ A real cluster normally needs privileged containers. Those can't be given to cod
     - **Done:** every runner suite passes on Kubernetes (runner 23, judge, network 11, egress 24, databases 33, dev server 8, every language 26, the Kubernetes playground 4) and on Docker. Getting there fixed:
       - the open-files limit: pods get about a billion, Erlang's VM ran out of memory sizing tables by it, so execs now get Docker's 1,048,576
       - the judge waiting forever on a stream nobody read
-    - **Browser suites** against the Helm chart's deployment on Docker Desktop's Kubernetes (`APP_URL=http://localhost:8090`), with no change to the shared dev stack: templates 8/8 (all seven frameworks, with real installs through the proxy pod and Postgres as a StatefulSet), editor, databases, installs, new room, room people, search, docs, API studio and diagrams. Canvas is 11/12 on both drivers (the test's frame drag). The AI suites need an AI provider, which the demo leaves off.
+    - **Browser suites** against the Helm chart's deployment on Docker Desktop's Kubernetes (`APP_URL=http://localhost:8090`), with no change to the shared dev stack: templates 8/8 (all seven frameworks, with real installs through the proxy pod and Postgres as a StatefulSet), editor, databases, installs, new room, room people, search, docs, API studio and diagrams. Canvas 12/12 on both, after a fix to the canvas header (its toolbar moved when a name changed width, losing the click). The AI suites need an AI provider, which the demo leaves off.
   - later: gVisor RuntimeClass where the cluster has it; a pod-level PID limit (Kubernetes sets that per node, hence prlimit); the agent reporting the pod's memory and processes itself, instead of an exec before each run
 - ⬜ **Scale and run:**
   - autoscaling (HPA, and KEDA for job queues), Prometheus and OpenTelemetry

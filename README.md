@@ -1,173 +1,139 @@
 # CodeChatter
 
-CodeChatter is a collaborative coding workspace with shared rooms, live presence, Monaco-based editing, in-room terminal access, runnable starter projects, and optional Gemini-backed AI assistance.
+A collaborative IDE in the browser. People in a room edit the same files live, and run them in the room's own isolated sandbox. The room also brings databases, a live preview of its dev server, AI help and design tools into the same place.
 
-## What It Includes
+![A room: two people in the same file, and the room's dev server running](docs/images/room.png)
 
-- Real-time room collaboration with presence, typing state, and cursor sharing
-- Workspace-based coding with Monaco editor, file tree, tabs, and run output
-- Private room invite links, one-time owner approval queues, and owner-only room settings
-- Room chat with file attachments, plus whiteboard, flowchart, notes, and Pomodoro panels
-- In-room video calls and screen sharing over WebRTC
-- GitHub import, push, and two-way folder sync
-- JWT auth with email one-time codes, plus Google and GitHub OAuth
-- Starter templates for blank rooms, Python, web prototyping, Node/Express, and DSA practice
-- DSA starter language support for Python, JavaScript, TypeScript, C, C++, Java, Go, Rust, PHP, Ruby, Shell, Lua, Perl, Swift, and Kotlin
+## What it does
 
-## Tech Stack
+- **Edit together.**
+  - One shared editor (Monaco on a Yjs CRDT): live cursors and presence, and follow mode.
+  - Search and replace across files, split and diff editors, and a command palette.
+  - Ghost-text AI completions as you type.
+- **Run anything.** Every room has its own sandbox: a container on Docker, or a pod on Kubernetes.
+  - Run for 31 languages, and shared terminals.
+  - A judge that checks code against test cases.
+  - A preview of the room's dev server, on an origin of its own.
+- **Start from a template.** React, Vue, Svelte, Express with Postgres, FastAPI, Flask or Django. The room's dev server installs what it needs and starts, as `.codechatter/room.json` says.
+- **One-click databases.** PostgreSQL, MySQL, MariaDB, MongoDB and Redis per room. Each comes with a query console, a table browser, backups, seeds and a reset.
+- **AI in the room.**
+  - Chat about the code, and edits you review as diffs.
+  - An agent that runs commands in the sandbox, and completions as you type.
+  - Runs on Ollama, Claude, Gemini or any OpenAI-compatible API.
+- **Tools beside the code.**
+  - Shared docs and a whiteboard.
+  - A design canvas with frames, layers, exports, and CSS or HTML handoff.
+  - Diagrams, and an HTTP client for the room's own server.
 
-- Frontend: React 19, Vite 7, Tailwind CSS, Framer Motion, Monaco Editor, XTerm
-- Backend: FastAPI, WebSockets, Authlib, HTTPX
-- Database: MongoDB (mongomock for tests)
+| One-click databases | The design canvas |
+|---|---|
+| ![PostgreSQL's console in a room](docs/images/databases.png) | ![A design with a frame, shapes and layers](docs/images/design.png) |
 
-## Repository Structure
+## Safe to share a room
 
-```text
-client/
-  src/
-    components/
-      code-room/
-    hooks/
-      code-room/
-      ui/
-    utils/
-      room/
-server/
-  core/        # settings, security primitives, schemas, middleware
-  routes/      # HTTP + WebSocket endpoints
-  services/    # AI, email, OAuth, collaboration, code runner
-  tests/       # pytest suite
-  database.py
-  main.py
+- **Locked-down sandboxes.**
+  - Each room's sandbox runs as a non-root user, with a read-only root, no capabilities, seccomp, and memory and process limits.
+  - None of the server's secrets are in it. A fork bomb or a program that runs out of memory resets the sandbox, not the server.
+- **Private networks.**
+  - A room's network reaches only the room's own services: not the internet, not the host, not other rooms.
+  - Package installs open only when the room's owner allows them, through a proxy that lets HTTPS reach package registries and nothing else.
+- **On Kubernetes, the same rules.**
+  - A NetworkPolicy per room, and a Secret per room for its database password.
+  - The runner has only the access it needs, and an admission policy keeps it to its rooms' namespaces.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  browser([Browser]) --> edge[Caddy<br/>one origin]
+  edge --> web[web<br/>Next.js]
+  edge --> api[api<br/>NestJS: REST, auth,<br/>Socket.IO, terminals]
+  edge --> collab[collab<br/>Hocuspocus / Yjs]
+  api --> runner[runner]
+  runner -- "a peer on each room's files" --> collab
+  api & collab --> pg[(PostgreSQL)]
+  api & collab --> valkey[(Valkey)]
+  subgraph room["Each room: Docker containers, or a Kubernetes namespace"]
+    sandbox[sandbox<br/>agent, runs, terminals]
+    dbs[(its databases)]
+    proxy[package proxy<br/>only while allowed]
+  end
+  runner --> room
 ```
 
-## Local Setup
+The runner is the only part that can reach Docker or the cluster, and only the API can reach the runner. The runner keeps each room's files in sync between the shared document and the sandbox, through a small agent inside the sandbox.
 
-### 1. Backend
+## Built with
 
-```powershell
-cd server
-python -m venv venv
-.\venv\Scripts\python -m pip install -r requirements.txt
-Copy-Item .env.example .env.local
-.\venv\Scripts\python -m uvicorn main:app --reload
+| | |
+|---|---|
+| Web | Next.js 16, React 19, Tailwind CSS 4, shadcn/ui, Monaco, xterm.js |
+| Real time | Yjs with Hocuspocus, Socket.IO |
+| API | NestJS, Better Auth (sessions, email verification, Google and GitHub sign-in), zod contracts shared across the monorepo |
+| Data | PostgreSQL 18 with Drizzle, Valkey 9 |
+| Sandboxes | Docker, or Kubernetes through `@kubernetes/client-node`; a Helm chart for the whole app |
+| Quality | TypeScript end to end, Vitest, Playwright, pnpm and Turborepo |
+
+## Run it locally
+
+With Node 24, pnpm and Docker Desktop:
+
+```sh
+pnpm install
+cp .env.example .env    # then set BETTER_AUTH_SECRET and SERVICE_SECRET, as the file shows
+pnpm setup              # databases, migrations, test data, the sandbox image
+pnpm dev                # http://localhost:8080
 ```
 
-The backend loads `server/.env.local` first, then `server/.env` if present.
+Sign in as `test1@codechatter.local` with the password `codechatter123`, and open the room "Team playground".
 
-### 2. Frontend
+## Run it on Kubernetes
 
-```powershell
-cd client
-npm install
-Copy-Item .env.example .env.local
-npm run dev
+The Helm chart in [`infra/helm/codechatter`](infra/helm/codechatter/README.md) runs the whole app on a cluster. Each room gets a namespace of its own on the same cluster. Its defaults are a demo on Docker Desktop's built-in Kubernetes:
+
+```sh
+pnpm k8s:images && pnpm sandbox:build
+helm install codechatter infra/helm/codechatter --namespace codechatter --create-namespace
+# then open http://localhost:8090
 ```
 
-Vite loads `client/.env.local` automatically.
+## Tested end to end
 
-### 3. Database
+Every feature has a test against the running app: real sandboxes, real databases and a real browser.
 
-The backend expects MongoDB on `mongodb://localhost:27017`. To run without
-installing MongoDB, set `MONGODB_URI=mongomock://localhost` for an in-memory
-database (data is lost on restart).
+- **Runner suites** (runs, terminals, isolation, installs, databases, every language), on both Docker and Kubernetes:
 
-## Tests and Checks
+  | Suite | Checks |
+  |---|---|
+  | runner | 23 |
+  | network isolation | 11 |
+  | package installs | 24 |
+  | databases | 33 |
+  | dev server | 8 |
+  | every language | 26 |
+  | judge | all pass |
 
-```powershell
-# Backend suite (no MongoDB or SMTP required)
-cd server
-.\venv\Scripts\python -m pip install -r requirements-dev.txt
-.\venv\Scripts\python -m pytest
+- **Browser suites** (Playwright and Edge), against the dev stack and the Kubernetes demo:
 
-# Frontend lint and production build
-cd client
-npm run lint
-npm run build
-```
+  | Suite | Checks |
+  |---|---|
+  | templates | 8 |
+  | editor | 16 |
+  | search | 23 |
+  | databases | 15 |
+  | canvas | 12 |
+  | docs | 8 |
+  | installs | 7 |
+  | inline completions | 14 |
+  | and more | |
 
-## Docker Deploy
+- **Unit tests:** hundreds of them across the API, the runner, the contracts and the sandbox agent.
 
-```powershell
-Copy-Item server/.env.example server/.env.local
-docker compose up --build
-```
+## Read more
 
-This starts:
+- [Roadmap](docs/roadmap.md): what's built, and what's next
+- [Decisions](docs/adr): why it's built this way, one decision per record
+- [Code map](docs/code-map/README.md): every file, what it does, and how the parts connect
+- [Deploying](docs/deploy.md): one server with Docker, or Kubernetes
 
-- `app` on `http://localhost:8000`
-- `mongo` on `mongodb://localhost:27017`
-
-The runtime image installs Node, Java, Go, PHP, Ruby, and a C/C++ toolchain so
-the in-room runner supports more than Python. It runs as an unprivileged user
-and stores runtime data in the `app-data` volume.
-
-## Environment Variables
-
-### Frontend
-
-Use [client/.env.example](client/.env.example) as the template. Only
-`VITE_`-prefixed values reach the browser, and all of them are public once
-built — never put secrets there.
-
-```env
-VITE_API_URL=https://your-api.example
-```
-
-### Backend
-
-Use [server/.env.example](server/.env.example) as the template.
-
-```env
-SECRET_KEY=replace-with-a-long-random-secret
-SESSION_SECRET_KEY=replace-with-a-second-long-random-secret
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB_NAME=codechatter
-CODECHATTER_DATA_DIR=/absolute/path/for/runtime-data
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-GEMINI_API_KEY=
-```
-
-Generate the two secrets with:
-
-```powershell
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-```
-
-## Production Notes
-
-- Set `FRONTEND_URL` and `ALLOWED_ORIGINS` correctly before deployment. OAuth
-  callback URLs are only built for hosts in that allow-list.
-- With `ENVIRONMENT=production` the server refuses to start unless `SECRET_KEY`
-  and `SESSION_SECRET_KEY` are set. That is deliberate: a generated key changes
-  on every restart and differs per worker, silently invalidating all sessions.
-- Without SMTP configured, sign-in codes cannot be delivered. In development
-  they are written to the log; in production that fallback is disabled, because
-  a one-time code in a log file is a full MFA bypass.
-- `CODECHATTER_DATA_DIR` holds workspace snapshots and chat uploads. Point it at
-  a persistent volume.
-- Keep real credentials in `.env.local` or your platform's secret manager.
-
-## Security Notes
-
-- Chat attachments are restricted to an extension allow-list that excludes
-  browser-renderable markup (`.html`, `.svg`), because uploads are served from
-  the API origin and would otherwise be stored XSS.
-- The `E2EE` badge on room chat is **not** end-to-end encryption. The key is
-  derived from the room ID plus a constant compiled into the client bundle, so
-  it obscures message text at rest but gives no confidentiality against the
-  server or anyone holding a room link. See the note at the top of
-  [client/src/utils/crypto.js](client/src/utils/crypto.js).
-- The in-room runner executes user-submitted code in a temporary directory with
-  a wall-clock timeout, but **without a sandbox**. Do not expose a public
-  instance without isolating the runtime (container-per-run, seccomp, or a
-  dedicated execution service).
-
-## Before Publishing
-
-- Local env files stay untracked; secrets only in `.env.local`
-- Build output and virtual environments stay ignored
-- Add a `LICENSE` file if you want others to reuse the code
+`client/` and `server/` hold the first version (React and FastAPI). It is being retired.

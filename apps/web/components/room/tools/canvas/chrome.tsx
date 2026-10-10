@@ -98,7 +98,11 @@ export function NameField({ name, editable, onRename, label }: { name: string; e
   );
 }
 
-/** Top bar of an open canvas: back to the list, the name, tools in the middle, actions on the right. */
+/**
+ * Top bar of an open canvas: back to the list, the name, tools in the middle, actions on the
+ * right. Three columns, so the tools stay put while the name changes width (renaming turns it
+ * into a wider field and back): a toolbar that moves under the pointer loses the click.
+ */
 export function CanvasHeader({
   backLabel,
   onBack,
@@ -115,14 +119,16 @@ export function CanvasHeader({
   onClose: () => void;
 }) {
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-chrome px-2">
-      <Button variant="ghost" size="xs" onClick={onBack} aria-label={`Back to ${backLabel.toLowerCase()}`}>
-        <ChevronLeft /> {backLabel}
-      </Button>
-      <span className="text-muted-foreground">/</span>
-      <div className="flex min-w-0 items-center">{name}</div>
-      <div className="mx-auto flex items-center gap-0.5">{children}</div>
-      <div className="flex items-center gap-1.5">
+    <header className="grid h-10 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] items-center gap-2 border-b bg-chrome px-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <Button variant="ghost" size="xs" onClick={onBack} aria-label={`Back to ${backLabel.toLowerCase()}`}>
+          <ChevronLeft /> {backLabel}
+        </Button>
+        <span className="text-muted-foreground">/</span>
+        <div className="flex min-w-0 items-center">{name}</div>
+      </div>
+      <div className="flex items-center gap-0.5">{children}</div>
+      <div className="flex items-center justify-end gap-1.5">
         {actions}
         <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
           <X />

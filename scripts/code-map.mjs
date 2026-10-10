@@ -25,8 +25,9 @@ const SKIP_DIRS = new Set(["node_modules", "dist", ".next", "build", "coverage",
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
+  // A folder's own files first, then its folders: each folder gets one heading in the map.
   return readdirSync(dir, { withFileTypes: true })
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => Number(a.isDirectory()) - Number(b.isDirectory()) || a.name.localeCompare(b.name))
     .flatMap((entry) => {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) return SKIP_DIRS.has(entry.name) ? [] : walk(path);

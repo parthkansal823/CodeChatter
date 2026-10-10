@@ -1,6 +1,8 @@
-import { Bot, GitBranch, ShieldCheck, TerminalSquare, Workflow } from "lucide-react";
+import { BookOpen, Bot, CirclePlay, Code2, Database, GitBranch, ShieldCheck, TerminalSquare } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+
+import { DEMO_VIDEO_URL, REPO_URL, RUN_IT_URL, SHOWCASE } from "@/lib/showcase";
 
 import { JoinWithCode } from "@/components/marketing/join-with-code";
 import { LiveHeadline } from "@/components/marketing/live-headline";
@@ -22,11 +24,17 @@ export default function LandingPage() {
             edit, run and message stays in sync.
           </p>
           <div className="mt-9 flex animate-rise flex-col gap-3 [animation-delay:0.65s] sm:flex-row sm:items-center">
-            <Button size="lg" asChild>
-              <Link href="/sign-up">Start a room</Link>
-            </Button>
-            <TryDemoButton />
-            <JoinWithCode />
+            {SHOWCASE ? (
+              <ShowcaseActions />
+            ) : (
+              <>
+                <Button size="lg" asChild>
+                  <Link href="/sign-up">Start a room</Link>
+                </Button>
+                <TryDemoButton />
+                <JoinWithCode />
+              </>
+            )}
           </div>
         </div>
         <div className="mt-16 animate-rise [animation-delay:1s] sm:mt-20">
@@ -50,32 +58,42 @@ export default function LandingPage() {
         <Feature
           icon={<Bot className="size-4" />}
           title="Let the agent take a step"
-          body="Ask for a change and the agent plans it, edits the files, runs the tests and shows each step as a diff you can keep or undo. Its code is set in its own typeface, so you always know who wrote what."
+          body="Ask for a change and the agent plans it, edits the files and runs commands in the room's sandbox, showing each step as a diff you accept or reject. Suggestions appear as you type, too."
           visual={<AgentVisual />}
         />
         <Feature
-          id="automations"
-          icon={<Workflow className="size-4" />}
-          title="Automate the busywork"
-          body="Build flows visually: run tests when a file is saved, post to Slack when a room changes, snapshot every night. Connect GitHub, webhooks and anything that speaks HTTP."
-          visual={<FlowVisual />}
+          id="services"
+          icon={<Database className="size-4" />}
+          title="Databases and dev servers in one click"
+          body="Start PostgreSQL, MySQL, MariaDB, MongoDB or Redis for the room, with a console and a table browser. Templates for React, Vue, Svelte, Express, FastAPI, Flask and Django install and start their dev server, with a live preview."
+          visual={<ServicesVisual />}
         />
         <Feature
           id="security"
           icon={<ShieldCheck className="size-4" />}
-          title="Safe to use at work"
-          body="Organisations, roles and an audit log. Two-factor sign-in, sessions you can revoke, and every room's history kept so you can go back to any moment."
-          visual={<AuditVisual />}
+          title="Safe to share a room"
+          body="Every room's sandbox runs locked down on a private network: no internet, no host, no other rooms. Package installs open only while the room's owner allows them, and only to package registries. A program that runs away, a fork bomb say, resets its own sandbox and nothing else."
+          visual={<NetworkVisual />}
           last
         />
       </section>
 
       <InView className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-5 py-20 sm:flex-row sm:items-center">
-          <h2 className={`font-wide text-2xl font-semibold tracking-[-0.02em] ${reveal}`}>Open a room and send the link.</h2>
-          <Button size="lg" asChild className={`sm:ml-auto ${reveal}`} style={delay(120)}>
-            <Link href="/sign-up">Start a room</Link>
-          </Button>
+          <h2 className={`font-wide text-2xl font-semibold tracking-[-0.02em] ${reveal}`}>
+            {SHOWCASE ? "Run it yourself, in four commands." : "Open a room and send the link."}
+          </h2>
+          {SHOWCASE ? (
+            RUN_IT_URL && (
+              <Button size="lg" asChild className={`sm:ml-auto ${reveal}`} style={delay(120)}>
+                <a href={RUN_IT_URL}>How to run it</a>
+              </Button>
+            )
+          ) : (
+            <Button size="lg" asChild className={`sm:ml-auto ${reveal}`} style={delay(120)}>
+              <Link href="/sign-up">Start a room</Link>
+            </Button>
+          )}
         </div>
       </InView>
     </>
@@ -193,51 +211,80 @@ function AgentVisual() {
         <span className="select-none text-brand">+ </span>return subtotal + (subtotal &gt;= 50 ? 0 : shipping);
       </div>
       <div className={`mt-3 flex gap-2 font-sans whitespace-normal ${reveal}`} style={delay(1400)}>
-        <span className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">Keep</span>
-        <span className="rounded-md border px-2.5 py-1 text-xs font-medium">Undo</span>
+        <span className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">Accept</span>
+        <span className="rounded-md border px-2.5 py-1 text-xs font-medium">Reject</span>
       </div>
     </Frame>
   );
 }
 
-function FlowVisual() {
-  const nodes = [
-    { label: "File saved", sub: "src/**/*.ts" },
-    { label: "Run tests", sub: "npm test" },
-    { label: "If tests fail", sub: "exit code ≠ 0" },
-    { label: "Post to chat", sub: "#checkout" },
+function ServicesVisual() {
+  const rows = [
+    { name: "PostgreSQL 18", detail: "postgres:5432", state: "Running" },
+    { name: "Redis (Valkey 9)", detail: "redis:6379", state: "Running" },
+    { name: "Dev server", detail: "npm run dev", state: "Running on port 5173" },
   ];
   return (
-    <div className="flex flex-wrap items-center gap-y-2 rounded-lg border bg-panel p-4">
-      {nodes.map((node, i) => (
-        <div key={node.label} className="flex items-center">
-          {i > 0 && <span className={`h-px w-6 bg-foreground/40 ${growX}`} style={delay(i * 300 - 60)} />}
-          <div className={`rounded-md border bg-background px-3 py-2 ${reveal}`} style={delay(i * 300 + 80)}>
-            <div className="text-sm font-medium">{node.label}</div>
-            <div className="font-mono text-xs text-muted-foreground">{node.sub}</div>
-          </div>
+    <div className="overflow-hidden rounded-lg border bg-panel">
+      {rows.map((row, i) => (
+        <div key={row.name} className={`flex items-center gap-3 border-t px-4 py-2.5 first:border-t-0 ${reveal}`} style={delay(150 + i * 170)}>
+          <span className="size-1.5 shrink-0 rounded-full bg-success" aria-hidden />
+          <span className="font-medium">{row.name}</span>
+          <span className="truncate font-mono text-xs text-muted-foreground">{row.detail}</span>
+          <span className="ml-auto shrink-0 text-xs text-muted-foreground">{row.state}</span>
+        </div>
+      ))}
+      <div className={`border-t px-4 py-2.5 font-mono text-[12.5px] ${reveal}`} style={delay(700)}>
+        <span className="text-muted-foreground">select</span> name, role <span className="text-muted-foreground">from</span> team;
+        <span className="ml-3 text-xs text-muted-foreground">3 rows, 4 ms</span>
+      </div>
+    </div>
+  );
+}
+
+function NetworkVisual() {
+  const reach = [
+    ["The internet", "blocked"],
+    ["Other rooms, the host", "blocked"],
+    ["npm, PyPI, crates.io", "open for 1 hour, allowed by Parth"],
+  ];
+  return (
+    <div className="overflow-hidden rounded-lg border bg-panel">
+      {reach.map(([what, how], i) => (
+        <div key={what} className={`flex items-center gap-3 border-t px-4 py-2.5 first:border-t-0 ${revealDown}`} style={delay(150 + i * 170)}>
+          <span className="font-medium">{what}</span>
+          <span className={`ml-auto shrink-0 text-xs ${how === "blocked" ? "text-muted-foreground" : "text-foreground"}`}>{how}</span>
         </div>
       ))}
     </div>
   );
 }
 
-function AuditVisual() {
-  const events = [
-    ["Ananya", "changed Parth's role to editor", "2m"],
-    ["Parth", "turned on network access for 1 hour", "18m"],
-    ["Ananya", "restored checkout-service to 10:42", "1h"],
-  ];
+/** Showcase mode (lib/showcase.ts): the video, the code and how to run it, instead of signing in. */
+function ShowcaseActions() {
   return (
-    <div className="overflow-hidden rounded-lg border bg-panel">
-      {events.map(([who, what, when], i) => (
-        // Newest first, arriving from the top like a live feed.
-        <div key={what} className={`flex items-center gap-3 border-t px-4 py-2.5 first:border-t-0 ${revealDown}`} style={delay(150 + i * 170)}>
-          <span className="font-medium">{who}</span>
-          <span className="truncate text-muted-foreground">{what}</span>
-          <span className="ml-auto shrink-0 text-xs text-muted-foreground">{when}</span>
-        </div>
-      ))}
-    </div>
+    <>
+      {DEMO_VIDEO_URL && (
+        <Button size="lg" asChild>
+          <a href={DEMO_VIDEO_URL}>
+            <CirclePlay /> Watch the 2-minute demo
+          </a>
+        </Button>
+      )}
+      {REPO_URL && (
+        <Button size="lg" variant={DEMO_VIDEO_URL ? "outline" : "default"} asChild>
+          <a href={REPO_URL}>
+            <Code2 /> See the code
+          </a>
+        </Button>
+      )}
+      {RUN_IT_URL && (
+        <Button size="lg" variant="ghost" asChild>
+          <a href={RUN_IT_URL}>
+            <BookOpen /> Run it yourself
+          </a>
+        </Button>
+      )}
+    </>
   );
 }

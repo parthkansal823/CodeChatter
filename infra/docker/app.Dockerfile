@@ -34,6 +34,10 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs ./
 RUN pnpm fetch
 
 FROM deps AS build
+# Showcase mode, the landing page on its own (apps/web/lib/showcase.ts): next build bakes
+# these in. Empty for the app itself.
+ARG NEXT_PUBLIC_SHOWCASE="" NEXT_PUBLIC_REPO_URL="" NEXT_PUBLIC_DEMO_VIDEO_URL=""
+ENV NEXT_PUBLIC_SHOWCASE=$NEXT_PUBLIC_SHOWCASE NEXT_PUBLIC_REPO_URL=$NEXT_PUBLIC_REPO_URL NEXT_PUBLIC_DEMO_VIDEO_URL=$NEXT_PUBLIC_DEMO_VIDEO_URL
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
 RUN pnpm turbo run build \
