@@ -1,8 +1,21 @@
 "use client";
 
 import type { RoomSummary } from "@codechatter/contracts";
-import { flatten, type TreeNode } from "@codechatter/workspace-model";
-import { BookOpen, Columns2, Eye, FileCode2, Globe2, MessageSquare, Search, SquareTerminal, X } from "lucide-react";
+import { flatten, isNotebookName, languageFor, type TreeNode } from "@codechatter/workspace-model";
+import {
+  BookOpen,
+  Columns2,
+  Eye,
+  FileCode2,
+  Globe2,
+  Image as ImageIcon,
+  ListTree,
+  MessageSquare,
+  Search,
+  SquareTerminal,
+  Table2,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { usePanelRef } from "react-resizable-panels";
@@ -13,14 +26,25 @@ import { CodeEditor } from "@/components/room/code-editor";
 import { useRoomTabs, useTabs } from "@/components/room/editor-store";
 import type { PaletteCommand } from "@/components/room/editor/command-palette";
 import { DiffView } from "@/components/room/editor/diff-view";
-import { MarkdownPreview } from "@/components/room/editor/markdown-preview";
+import { FilePreview } from "@/components/room/editor/file-preview";
+import { previewKindOf, PREVIEW_LABEL } from "@/components/room/editor/preview-kind";
+import { OutlineView } from "@/components/room/editor/outline-view";
 import { EditorOverlays } from "@/components/room/editor/overlays";
+import { useEditorSettings } from "@/components/room/editor/settings-store";
 import { toggleSplit, toggleZen, useEditorUi } from "@/components/room/editor/ui-store";
+import { LSP_LANGUAGES, startLanguageClient, stopLanguageClients } from "@/components/room/editor/language-client";
+import { setEditorOpener } from "@/components/room/editor/editor-opener";
+import { revealInFile, type RevealRange } from "@/components/room/editor/reveal";
+import { setFormatRoom } from "@/components/room/editor/sandbox-format";
+import { clearRoomFiles, mirrorRoomFiles } from "@/components/room/editor/workspace-fs";
 import { useEditorShortcuts } from "@/components/room/editor/shortcuts";
 import { useInlineCompletions } from "@/components/room/editor/use-inline-completions";
 import { Explorer } from "@/components/room/explorer";
+import { runAll } from "@/components/room/notebook/kernel";
+import { NotebookView } from "@/components/room/notebook/notebook-view";
 import { useFileTree, usePeers } from "@/components/room/hooks";
 import { PeoplePanel } from "@/components/room/people-panel";
+import { ensureMonaco } from "@/components/room/monaco-setup";
 import { RoomProvider, useRoom } from "@/components/room/room-context";
 import { RunButton } from "@/components/room/run-button";
 import { canRunPath, RunProvider, useRun } from "@/components/room/run-context";
@@ -53,15 +77,20 @@ export default function RoomWorkspace({ room, me }: { room: RoomSummary; me: Me 
 type Right = string;
 
 function Workspace() {
-  const { room, synced, can } = useRoom();
+  const { room, doc, synced, can } = useRoom();
   useInlineCompletions();
+  // Format document for Python, C, C++, shell, Go and Rust goes to this room's sandbox.
+  useEffect(() => {
+    setFormatRoom(room.id);
+    return () => setFormatRoom(null);
+  }, [room.id]);
   const run = useRun();
   const tree = useFileTree();
   const peers = usePeers();
   const tabs = useRoomTabs(room.id);
   const { open, close, prune } = useTabs();
-  // The left sidebar: the file list or Search, or neither. Clicking the open one's icon closes it.
-  const [sidebar, setSidebar] = useState<"files" | "search" | null>("files");
+  // The left sidebar: the file list, Search or the Outline, or none. Clicking the open one's icon closes it.
+  const [sidebar, setSidebar] = useState<"files" | "search" | "outline" | null>("files");
   const showFiles = sidebar === "files";
   /** Ctrl+Shift+F (seeded from the editor's selection), Ctrl+Shift+H, the palette and the activity bar. */
   const openSearch = (options: { seed?: boolean; replace?: boolean } = {}) => {
@@ -88,6 +117,16 @@ function Workspace() {
   const openTabs = tabs.open.map((id) => files.get(id)).filter((n): n is TreeNode => Boolean(n));
   const activeFile = tabs.active ? (files.get(tabs.active) ?? null) : null;
 
+  // IntelliSense from the sandbox's language servers, for people who write code here, from
+  // the first file in a language that has one; it runs until they leave the room.
+  const canEdit = can("files.edit");
+  const activeLanguage = activeFile ? languageFor(activeFile.name) : null;
+  useEffect(() => {
+    const language = LSP_LANGUAGES.find((l) => l === activeLanguage);
+    if (canEdit && language) void startLanguageClient(room.id, language);
+  }, [canEdit, activeLanguage, room.id]);
+  useEffect(() => () => void stopLanguageClients(), [room.id]);
+
   // Files deleted by anyone disappear from everyone's tabs.
   useEffect(() => {
     if (synced) prune(room.id, new Set(files.keys()));
@@ -111,6 +150,26 @@ function Workspace() {
     const node = files.get(id);
     if (node) openFile(node);
   };
+  // Go to definition and the like into another file: open its tab at that place.
+  const openAt = useRef<(path: string, range: RevealRange) => boolean>(() => false);
+  useEffect(() => {
+    openAt.current = (path, range) => {
+      const node = [...files.values()].find((n) => n.kind === "file" && n.path === path);
+      if (!node) return false;
+      openFile(node);
+      revealInFile(node, range);
+      return true;
+    };
+  });
+  useEffect(() => {
+    setEditorOpener((path, range) => openAt.current(path, range));
+    return () => setEditorOpener(null);
+  }, []);
+  // Every room file, readable by the editor's services (for definitions in files nobody has open).
+  useEffect(() => {
+    if (synced) void ensureMonaco().then(() => mirrorRoomFiles(doc, [...files.values()]));
+  }, [synced, files, doc]);
+  useEffect(() => () => clearRoomFiles(), [room.id]);
 
   // The bottom panel (Output + terminals) collapses instead of unmounting, so
   // terminals stay connected while it's hidden.
@@ -126,7 +185,10 @@ function Workspace() {
     }
   };
   const runActive = () => {
-    if (!activeFile || !canRunPath(activeFile.path) || !can("code.run")) return;
+    if (!activeFile || !can("code.run")) return;
+    // A notebook runs in its own kernel, cell by cell: Run is Run all.
+    if (isNotebookName(activeFile.name)) return void runAll(room.id, doc, activeFile.id);
+    if (!canRunPath(activeFile.path)) return;
     showPanel("output");
     void run.start(activeFile.path);
   };
@@ -198,19 +260,22 @@ function Workspace() {
   const editorUi = useEditorUi(
     useShallow((state) => ({
       zen: state.zen,
-      markdownPreview: state.markdownPreview,
+      filePreview: state.filePreview,
       following: state.following,
       splitFileId: state.splitFileId,
       diff: state.diff,
-      setMarkdownPreview: state.setMarkdownPreview,
+      setFilePreview: state.setFilePreview,
       setSplit: state.setSplit,
       setDiff: state.setDiff,
       follow: state.follow,
     })),
   );
-  const { zen, markdownPreview, following } = editorUi;
+  const { zen, filePreview, following } = editorUi;
   const splitFile = editorUi.splitFileId ? (files.get(editorUi.splitFileId) ?? null) : null;
-  const isMarkdown = activeFile ? /\.(md|markdown)$/i.test(activeFile.name) : false;
+  // Markdown, CSV and SVG files have a preview (beside the code, or on its own).
+  const previewKind = activeFile ? previewKindOf(activeFile.name) : null;
+  const isNotebook = activeFile ? isNotebookName(activeFile.name) : false;
+  const breadcrumbs = useEditorSettings((state) => state.breadcrumbs);
   const diffLeft = editorUi.diff ? files.get(editorUi.diff.leftId) : undefined;
   const diffRight = editorUi.diff ? files.get(editorUi.diff.rightId) : undefined;
   const diffFiles = diffLeft && diffRight ? ([diffLeft, diffRight] as const) : null;
@@ -234,6 +299,16 @@ function Workspace() {
       run: () => setSidebar(showFiles ? null : "files"),
     },
     { id: "search", label: "Search in files", shortcut: "Ctrl Shift F", run: () => openSearch({ seed: true }) },
+    {
+      id: "outline",
+      label: sidebar === "outline" ? "Hide the outline" : "Show the outline",
+      run: () => setSidebar(sidebar === "outline" ? null : "outline"),
+    },
+    {
+      id: "breadcrumbs",
+      label: breadcrumbs ? "Hide breadcrumbs" : "Show breadcrumbs",
+      run: () => useEditorSettings.getState().update({ breadcrumbs: !breadcrumbs }),
+    },
     ...(can("files.edit")
       ? [
           {
@@ -289,6 +364,13 @@ function Workspace() {
             >
               <Search className="size-[18px]" />
             </ActivityButton>
+            <ActivityButton
+              label="Outline"
+              active={sidebar === "outline"}
+              onClick={() => setSidebar(sidebar === "outline" ? null : "outline")}
+            >
+              <ListTree className="size-[18px]" />
+            </ActivityButton>
             <span aria-hidden className="my-1 h-px w-6 bg-border" />
             <div role="group" aria-label="Apps" className="flex flex-col items-center gap-1">
               {mainTools.map((tool) => {
@@ -328,6 +410,8 @@ function Workspace() {
                   <PanelSkeleton />
                 ) : sidebar === "search" ? (
                   <SearchView onOpen={openFile} />
+                ) : sidebar === "outline" ? (
+                  <OutlineView />
                 ) : (
                   <Explorer activeFileId={activeFile?.id ?? null} onOpen={openFile} />
                 )}
@@ -359,17 +443,18 @@ function Workspace() {
                           onClose={(id) => close(room.id, id)}
                           actions={
                             <>
-                              {isMarkdown && (
+                              {previewKind && (
                                 <Button
                                   size="xs"
-                                  variant={markdownPreview !== "off" ? "secondary" : "ghost"}
-                                  aria-pressed={markdownPreview !== "off"}
-                                  title="Markdown preview (Ctrl+K V beside, Ctrl+Shift+V on its own)"
+                                  variant={filePreview !== "off" ? "secondary" : "ghost"}
+                                  aria-pressed={filePreview !== "off"}
+                                  title={`${PREVIEW_LABEL[previewKind]} (Ctrl+K V beside, Ctrl+Shift+V on its own)`}
                                   onClick={() =>
-                                    editorUi.setMarkdownPreview(markdownPreview === "off" ? "side" : "off")
+                                    editorUi.setFilePreview(filePreview === "off" ? "side" : "off")
                                   }
                                 >
-                                  <BookOpen /> Markdown preview
+                                  {previewKind === "table" ? <Table2 /> : previewKind === "image" ? <ImageIcon /> : <BookOpen />}{" "}
+                                  {PREVIEW_LABEL[previewKind]}
                                 </Button>
                               )}
                               {hasHtml && (
@@ -422,32 +507,34 @@ function Workspace() {
                             />
                           ) : !activeFile ? (
                             <EmptyEditor synced={synced} />
-                          ) : isMarkdown && markdownPreview === "full" ? (
-                            <MarkdownPreview
-                              fileId={activeFile.id}
-                              name={activeFile.name}
+                          ) : previewKind && filePreview === "full" ? (
+                            <FilePreview
+                              file={activeFile}
+                              kind={previewKind}
                               mode="full"
-                              onMode={editorUi.setMarkdownPreview}
+                              onMode={editorUi.setFilePreview}
                             />
-                          ) : (isMarkdown && markdownPreview === "side") || splitFile ? (
+                          ) : (previewKind && filePreview === "side") || splitFile ? (
                             <ResizablePanelGroup orientation="horizontal">
                               <ResizablePanel id="pane-primary" minSize={200}>
-                                <CodeEditor file={activeFile} role="primary" />
+                                {isNotebook ? <NotebookView file={activeFile} /> : <CodeEditor file={activeFile} role="primary" />}
                               </ResizablePanel>
                               <ResizableHandle />
                               <ResizablePanel id="pane-second" minSize={200}>
-                                {isMarkdown && markdownPreview === "side" ? (
-                                  <MarkdownPreview
-                                    fileId={activeFile.id}
-                                    name={activeFile.name}
+                                {previewKind && filePreview === "side" ? (
+                                  <FilePreview
+                                    file={activeFile}
+                                    kind={previewKind}
                                     mode="side"
-                                    onMode={editorUi.setMarkdownPreview}
+                                    onMode={editorUi.setFilePreview}
                                   />
                                 ) : splitFile ? (
                                   <SplitPane file={splitFile} onClose={() => editorUi.setSplit(null)} />
                                 ) : null}
                               </ResizablePanel>
                             </ResizablePanelGroup>
+                          ) : isNotebook ? (
+                            <NotebookView file={activeFile} />
                           ) : (
                             <CodeEditor file={activeFile} role="primary" />
                           )}

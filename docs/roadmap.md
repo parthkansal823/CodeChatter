@@ -14,7 +14,7 @@ Each phase ends with automated tests and a working demo.
 | # | Phase | Why this position |
 |---|---|---|
 | 1 | Foundations and live editor | ✅ Everything else builds on it |
-| 2 | Run and terminal in a sandbox | 🟡 The core promise of a coding room |
+| 2 | Run and terminal in a sandbox | ✅ The core promise of a coding room |
 | 3 | Recruiter kit | Makes the project easy to show: one-click demo, README, video |
 | 4 | AI copilot and AI agent | 🟡 The most impressive feature in a demo |
 | 5 | Collaboration tools | Whiteboard, notes, video: what makes it a *room*, not just an editor |
@@ -80,7 +80,7 @@ Each phase ends with automated tests and a working demo.
 
 **Tests:** auth flow 11/11, collab 10/10, workspace model 10/10, permissions and contracts 10/10, production smoke test 10/10.
 
-## 2. Run and terminal in a sandbox 🟡
+## 2. Run and terminal in a sandbox ✅
 
 One private Docker container per room (ADR 0003). It has no network, no secrets, a read-only system, and limits on CPU, memory and process count.
 
@@ -120,7 +120,15 @@ One private Docker container per room (ADR 0003). It has no network, no secrets,
   - import samples from AtCoder and CSES links; Codeforces refuses automated requests, so paste those
   - judge end-to-end 9/9, browser 4/4
 - ✅ Network switch (owner only, audited, turns itself off after 1 hour, allow-listed package registries): built as **package installs** (section 14, the room network; `egress.e2e.mjs` 24/24 on both drivers).
-- ⬜ Python notebooks (.ipynb) with a kernel in the sandbox.
+- ✅ **Python notebooks** (.ipynb), 2026-10-20:
+  - a `.ipynb` file opens cell by cell, and everyone edits cells at once (each cell is its own Y.Text, `packages/workspace-model/src/notebook.ts`); a coloured line shows who is in which cell
+  - cells run in an IPython kernel in the room's sandbox, inside the jail (`sandbox/image/kernel.py`, driven by `apps/runner/src/notebooks.ts`): one kernel per notebook, variables shared by everyone's cells
+  - outputs arrive for everyone as they come: printed text, returned values, matplotlib plots, pandas tables (in a frame that runs no scripts), Markdown, and coloured tracebacks; they're saved with the notebook
+  - Shift+Enter runs and moves on, Ctrl+Enter runs in place, Alt+Enter adds a cell below; the title bar's Run is Run all; an error stops the cells after it; Interrupt, Restart and Shut down
+  - text (Markdown) cells, add, move, delete and switch cell types
+  - the `.ipynb` text follows the cells (the runner is its only writer), so the sandbox, search and downloads see a real notebook
+  - fixed before release: a cell went blank and stopped taking typing when a notebook was the page's first editor (VS Code's services took over its anonymous model and disposed of it); cells now have registered addresses like files
+  - tests: `apps/runner/test/notebooks.e2e.mjs` 14/14, browser `apps/web/test/notebook.e2e.mjs` 24/24 (two people), `components/room/notebook/ansi.test.ts` 6/6
 
 **Production and tests:**
 - ✅ Runner and sandbox image in production compose; the production smoke test runs code end to end (11/11).
@@ -614,11 +622,15 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
   - ✅ **Quick Open** (Ctrl+P, fuzzy), **go to line** (Ctrl+G, `line:column` works), **go to symbol** (Ctrl+Shift+O)
     - fixed: in a room with a few hundred files, Enter in Quick Open or Compare could pick nothing (the highlight followed a list about to change)
     - Ctrl+Enter belongs to a tool that marks itself `data-own-run-key`: API Studio sends without also running the open file, and the database console runs its query
-  - ⬜ breadcrumbs and an Outline view
+  - ✅ **breadcrumbs** above each editor (2026-10-20): the file's folders, the file, and the symbols the cursor is in; a folder's menu opens its files in that pane, the file's menu is its outline, a symbol's menu lists the ones beside it. On by default; Settings or the palette hide them
+  - ✅ **Outline view** in the sidebar (with Files and Search): the open file's symbols, the one the cursor is in marked, a filter, click or Enter to go there; it follows typing and the editor you last used
+  - ✅ symbols for more languages: TypeScript and JavaScript from their worker as before; Python, Markdown, Go, Rust and shell read from the text (`editor/outline.ts`) until the language servers come. Go to symbol (Ctrl+Shift+O) uses them too
+  - tests: `outline.test.ts` 11/11, browser `apps/web/test/outline.e2e.mjs` 21/21
 - 🟡 **Editing:**
   - ✅ multi-cursor and column selection, folding, sticky scroll, bracket-pair colours and guides, minimap
   - ✅ format document (Shift+Alt+F); Ctrl+S formats when "format on save" is on; every edit saves as you type
-  - ⬜ snippets, Emmet for HTML and CSS
+  - ✅ **snippets** (2026-10-20) for Python, JavaScript, TypeScript, Java, C, C++ (with a competitive-programming template, `cp`), Go, Rust, HTML, CSS, Markdown and shell: offered with completions as you type (Tab moves through the placeholders), and from Insert snippet… in the palette (`editor/snippets.ts`; tests: `snippets.test.ts` 4/4, browser `snippets.e2e.mjs` 9/9). Only snippets the typed word starts are offered, so the file's own words still complete (Monaco offers them only when nothing else does)
+  - ✅ **Emmet** for HTML and CSS (2026-10-20, `emmet-monaco-es`): abbreviations like `ul>li*3` or `m10` among the completions, Tab or Enter expands them (browser `keys.e2e.mjs`)
 - 🟡 **Layout:**
   - ✅ a **split editor** (Ctrl+\\) with any file on the right
   - ✅ **compare two files** in a diff editor; both sides are the live files
@@ -626,7 +638,12 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
     - beside the file (Ctrl+K V, or the tab bar's Markdown preview button)
     - or on its own to read (Ctrl+Shift+V, or Preview only)
   - ✅ **Zen mode** (Ctrl+K Z) hides everything but the code
-  - ⬜ grid splits, an image viewer, CSV as a table
+  - ✅ **file previews** (2026-10-20), with the same button and keys as Markdown's (Ctrl+K V beside, Ctrl+Shift+V on its own):
+    - **CSV and TSV as a table**, live as anyone types: quoted cells, a sticky header (or not: a switch), click a heading to sort (numbers by value), a filter across every cell, numbers right-aligned, the first 1,000 rows drawn; double-click a row to see its line in the code
+    - **SVG as an image**: fit or actual size, its size shown, on a checkerboard; drawn as an image, so a script in the file never runs
+    - tests: `csv.test.ts` 10/10, browser `apps/web/test/preview.e2e.mjs` 19/19
+  - ⬜ PNG, JPEG and other binary images: they need binary files in the room first (§5 Files; today the sandbox syncs text files only)
+  - ⬜ grid splits
 - ✅ **Change language mode** for a file, from the palette or the status bar.
 - ✅ **Follow someone:** their file opens for you as they move, with a banner and a Stop button (like Live Share). Start it from the palette ("Follow someone…") or, since 2026-10-10, with the Follow button beside each person in the People panel (the faces in the top bar); `room-people.e2e.mjs` 7/7.
 - ✅ **Search and replace across files** (Ctrl+Shift+F, Ctrl+Shift+H; the Search view shares the sidebar with Files):
@@ -638,14 +655,25 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
  line endings, which break shell scripts in the Linux sandbox (files are 
  unless they already use 
 )
-- ⬜ **IntelliSense for every language:**
-  - language servers run inside the room's sandbox (basedpyright, typescript-language-server, clangd, jdtls, gopls, rust-analyzer…), reached over a WebSocket through the API and runner (§5 of the plan)
-  - gives completions, hover docs, signature help, go to definition and references, rename, quick fixes, and a Problems panel
-- ⬜ **Formatters:** Prettier, Black or Ruff, clang-format, gofmt, rustfmt, google-java-format, run in the sandbox.
+- 🟡 **IntelliSense for every language:** language servers run inside the room's sandbox, inside the jail, reached over a WebSocket through the API (`/ws/lsp`, edit rights) and the runner (`lsp.ts`, one server per editor, ended when the editor goes); the browser's client is `monaco-languageclient` (`editor/language-client.ts`)
+  - ✅ **Python** (Pyright 1.1.400, both images), 2026-10-20: type errors and other problems underlined as you type, completions, hover with signatures and docstrings, go to definition (F12 or Ctrl+click, into another file's tab), references and the rest of what Pyright offers; imports between the room's files resolve, because the server reads them from the sandbox
+  - the editor's services can read every room file (`editor/workspace-fs.ts`), so a definition in a file nobody has open still opens
+  - fixed on the way: Go to line (and every palette page) now hands focus back to the code
+  - known: Pyright 1.1.400 stops answering after `initialized` when a client offers workspace-folder changes; the runner turns that offer off (a room has one folder)
+  - tests: `lsp.test.ts` 6/6, `apps/runner/test/lsp.e2e.mjs` 8/8, browser `apps/web/test/lsp.e2e.mjs` 9/9
+  - ⬜ next: C and C++ (clangd), Go (gopls) and Rust (rust-analyzer) in the full image, Java (jdtls); TypeScript and JavaScript already have IntelliSense in the browser
+  - ⬜ a Problems panel listing every file's problems
+- 🟡 **Formatters** (2026-10-20): Format document (Shift+Alt+F, and on save when that's on) for languages the browser can't format itself runs their formatter in the room's sandbox, inside the jail:
+  - ✅ Python (Ruff), C and C++ (clang-format, following a `.clang-format` file), shell (shfmt, with the editor's indentation) in both images; Go (gofmt) and Rust (rustfmt) in the full image
+  - ✅ the result lands as small edits, one per changed run of lines, so others' cursors stay put (`editor/line-edits.ts`); one Undo puts it back; a syntax error leaves the file alone and shows the formatter's message
+  - JavaScript, TypeScript, JSON, CSS and HTML keep Monaco's own formatter in the browser
+  - tests: `line-edits.test.ts` 6/6, `apps/runner/test/format.e2e.mjs` 9/9, browser `apps/web/test/format.e2e.mjs` 8/8
+  - ⬜ Java (google-java-format), and Prettier for a project that has its own config
 - ⬜ **Debugger:** breakpoints, step, variables, watch, call stack and a debug console, over the Debug Adapter Protocol (debugpy, Node inspector, gdb or lldb, Delve) in the sandbox.
 - 🟡 **Personal settings:**
   - ✅ font size and ligatures, tab size and indentation, word wrap, minimap, line numbers, whitespace, cursor style, bracket colours, sticky scroll, format on save (Ctrl+,)
-  - ⬜ Vim and Emacs keybindings, themes (import VS Code theme JSON), saved to your account
+  - ✅ **Vim key bindings** (2026-10-20, `monaco-vim`, loaded only for people who turn them on): Settings, Key bindings, or the palette; modes, motions, operators, registers and : commands, with the mode and the command line under the editor; `:w` does what Ctrl+S does. Browser `keys.e2e.mjs` 12/12 (with Emmet)
+  - ⬜ Emacs key bindings (the `monaco-emacs` package hasn't been updated since 2022), themes (import VS Code theme JSON), settings saved to your account rather than this browser
 - ⬜ **Tasks and launch configs** (`.vscode/tasks.json` and `launch.json` understood).
 - ⬜ **Extensions** from Open VSX through the VS Code extension host. Last: the largest piece.
 
@@ -677,7 +705,7 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
     - others: SQL (SQLite), Prolog (`.pro`), COBOL
   - ✅ highlighting for these in the editor (closest grammar where Monaco has none)
   - ⬜ not packaged for Debian yet, so a later batch from official releases: Zig, Nim, Julia, Dart, Swift, Scala 3, F#
-- ⬜ **Python data pack:** numpy, pandas, matplotlib (plots shown in Output), Jupyter notebooks (§2).
+- ✅ **Python data pack:** numpy, pandas, matplotlib and the Jupyter kernel in the base image; plots and tables show in notebooks (§2). A plain Run has no plot window: save plots to a file there.
 
 ### Room network (foundation) ✅
 A room has no internet by default; the owner can open package registries, and nothing else, for an hour. Decision and evidence: ADR 0007.

@@ -4,6 +4,7 @@ import { monaco } from "@/components/room/monaco-setup";
 
 import { getPrimaryEditor } from "./active-editor";
 import { modelOwner } from "./file-models";
+import { previewKindOf } from "./preview-kind";
 import { useEditorUi } from "./ui-store";
 
 type Editor = monaco.editor.IStandaloneCodeEditor;
@@ -20,10 +21,10 @@ let pending: { fileId: string; range: RevealRange; until: number } | null = null
  * soon as it does, after the file's saved place is restored.
  */
 export function revealInFile(file: { id: string; name: string }, range: RevealRange) {
-  // A comparison or a Markdown file's full preview would hide the editor it lands in.
+  // A comparison or a file's full preview (Markdown, a table, an image) would hide the editor it lands in.
   const ui = useEditorUi.getState();
   if (ui.diff) ui.setDiff(null);
-  if (ui.markdownPreview === "full" && /\.(md|markdown)$/i.test(file.name)) ui.setMarkdownPreview("off");
+  if (ui.filePreview === "full" && previewKindOf(file.name)) ui.setFilePreview("off");
   pending = { fileId: file.id, range, until: Date.now() + 5000 };
   const editor = getPrimaryEditor();
   if (editor) applyPendingReveal(editor);

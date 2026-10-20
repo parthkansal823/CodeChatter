@@ -3,15 +3,15 @@
 import type { TreeNode } from "@codechatter/workspace-model";
 import { create } from "zustand";
 
-export type MarkdownPreviewMode = "off" | "side" | "full";
+export type FilePreviewMode = "off" | "side" | "full";
 
 /** Ctrl+K V and Ctrl+Shift+V: the same key again turns the preview off. */
-export function toggleMarkdownPreview(mode: Exclude<MarkdownPreviewMode, "off">) {
+export function toggleFilePreview(mode: Exclude<FilePreviewMode, "off">) {
   const ui = useEditorUi.getState();
-  ui.setMarkdownPreview(ui.markdownPreview === mode ? "off" : mode);
+  ui.setFilePreview(ui.filePreview === mode ? "off" : mode);
 }
 
-export type PalettePage = "commands" | "language" | "people" | "line" | "symbols";
+export type PalettePage = "commands" | "language" | "people" | "line" | "symbols" | "snippets";
 
 /** The one dialog that can be open over the editor at a time. */
 export type Overlay =
@@ -30,8 +30,8 @@ type State = {
   /** The file shown in the second editor on the right, if it is open. */
   splitFileId: string | null;
   diff: { leftId: string; rightId: string } | null;
-  /** A Markdown file's preview: off, beside the code (Ctrl+K V), or on its own (Ctrl+Shift+V). */
-  markdownPreview: MarkdownPreviewMode;
+  /** A Markdown, CSV or SVG file's preview (preview-kind.ts): off, beside the code (Ctrl+K V), or on its own (Ctrl+Shift+V). */
+  filePreview: FilePreviewMode;
   /** User id of the person whose file and cursor this editor follows. */
   following: string | null;
   /** Language modes picked by hand, by file id. They last until you leave the room. */
@@ -41,7 +41,7 @@ type State = {
   setZen: (on: boolean) => void;
   setSplit: (fileId: string | null) => void;
   setDiff: (diff: State["diff"]) => void;
-  setMarkdownPreview: (mode: MarkdownPreviewMode) => void;
+  setFilePreview: (mode: FilePreviewMode) => void;
   follow: (userId: string | null) => void;
   setLanguage: (fileId: string, language: string) => void;
   reset: () => void;
@@ -52,7 +52,7 @@ const INITIAL = {
   zen: false,
   splitFileId: null,
   diff: null,
-  markdownPreview: "off" as MarkdownPreviewMode,
+  filePreview: "off" as FilePreviewMode,
   following: null,
   languageOverrides: {},
 } satisfies Partial<State>;
@@ -64,7 +64,7 @@ export const useEditorUi = create<State>()((set) => ({
   setZen: (zen) => set({ zen }),
   setSplit: (splitFileId) => set({ splitFileId }),
   setDiff: (diff) => set({ diff }),
-  setMarkdownPreview: (markdownPreview) => set({ markdownPreview }),
+  setFilePreview: (filePreview) => set({ filePreview }),
   follow: (following) => set({ following }),
   setLanguage: (fileId, language) =>
     set((s) => ({ languageOverrides: { ...s.languageOverrides, [fileId]: language } })),

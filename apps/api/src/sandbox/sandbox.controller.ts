@@ -11,9 +11,17 @@ import type { Env } from "../config/env.js";
 import { ENV, PREVIEW_HOSTS } from "../infra/tokens.js";
 import { createPreviewTicket, type PreviewHosts } from "../preview/preview-proxy.js";
 import { RoomsService } from "../rooms/rooms.service.js";
-import { RunnerClient } from "../runner/runner.client.js";
+import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js";
 
 const PreviewInput = z.object({ port: z.number().int().min(1).max(65535) });
+const FormatInput = z.object({
+  path: z.string().min(1).max(1024),
+  language: z.enum(["python", "c", "cpp", "shell", "go", "rust"]),
+  // The API takes JSON bodies up to 1 MB; the editor sends files up to 512 KB.
+  text: z.string().max(600_000),
+  tabSize: z.number().int().min(1).max(8),
+  insertSpaces: z.boolean(),
+});
 
 /** The room's sandbox: live status (ports, CPU, memory), restart, package installs, and preview links. */
 @Controller("rooms/:roomId")
@@ -95,6 +103,23 @@ export class SandboxController {
     await this.rooms.require(room, session.user.id, "terminal.open");
     await this.runner.restart(room, session.user);
     return { ok: true };
+  }
+
+  /**
+   * Format document for languages the browser can't format (apps/runner/src/format.ts).
+   * The formatter runs in the sandbox, and its result changes the file, so it needs edit rights.
+   */
+  @Post("format")
+  @HttpCode(200)
+  async format(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Body(new ZodPipe(FormatInput)) input: z.infer<typeof FormatInput>) {
+    const room = this.room(roomId);
+    await this.rooms.require(room, session.user.id, "files.edit");
+    try {
+      return await this.runner.format(room, session.user, input);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
   }
 
   /** A one-time link that opens a dev server's preview on its own origin. */

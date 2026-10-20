@@ -48,6 +48,10 @@ const CURSOR_BLINK_OPTIONS: Option<EditorSettings["cursorBlinking"]>[] = [
   ["expand", "Expand"],
   ["solid", "Steady"],
 ];
+const KEYMAP_OPTIONS: Option<EditorSettings["keymap"]>[] = [
+  ["standard", "Standard"],
+  ["vim", "Vim"],
+];
 const INDENT_OPTIONS: Option<"spaces" | "tabs">[] = [
   ["spaces", "Spaces"],
   ["tabs", "Tabs"],
@@ -181,6 +185,24 @@ export function SettingsDialog({
               checked={s.stickyScroll}
               onChange={(v) => update({ stickyScroll: v })}
             />
+            <Toggle
+              id="set-breadcrumbs"
+              label="Breadcrumbs"
+              hint="The file's folders and the symbol you're in, above the code"
+              checked={s.breadcrumbs}
+              onChange={(v) => update({ breadcrumbs: v })}
+            />
+          </Section>
+
+          <Section title="Keys">
+            <Row label="Key bindings" htmlFor="set-keymap">
+              <Choice
+                id="set-keymap"
+                value={s.keymap}
+                options={KEYMAP_OPTIONS}
+                onChange={(v) => update({ keymap: v })}
+              />
+            </Row>
           </Section>
 
           <Section title="Cursor">

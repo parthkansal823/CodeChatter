@@ -19,7 +19,8 @@ export type EditorInfo = {
   language: string;
 };
 
-export const useEditorInfo = create<{ info: EditorInfo | null }>()(() => ({ info: null }));
+/** The status bar's facts, and the editor they're about (the Outline view follows it). */
+export const useEditorInfo = create<{ info: EditorInfo | null; editor: Editor | null }>()(() => ({ info: null, editor: null }));
 
 export function readInfo(editor: Editor): EditorInfo | null {
   const model = editor.getModel();
@@ -51,7 +52,7 @@ export const isActiveEditor = (editor: Editor) => getActiveEditor() === editor;
 
 export function setActiveEditor(editor: Editor | null) {
   active = editor;
-  useEditorInfo.setState({ info: editor ? readInfo(editor) : null });
+  useEditorInfo.setState({ info: editor ? readInfo(editor) : null, editor: editor ?? panes.primary });
 }
 
 /** Register a pane's editor; the returned function unregisters it and hands "active" back to the main editor. */
@@ -61,5 +62,6 @@ export function registerPane(role: PaneRole, editor: Editor): () => void {
   return () => {
     if (panes[role] === editor) panes[role] = null;
     if (active === editor) setActiveEditor(panes.primary);
+    else if (useEditorInfo.getState().editor === editor) useEditorInfo.setState({ editor: getActiveEditor() });
   };
 }

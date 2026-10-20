@@ -33,6 +33,13 @@ export class RunnerClient {
     return url.toString();
   }
 
+  /** A language server for one editor (the runner's lsp.ts). */
+  lspUrl(roomId: string, language: string): string {
+    const url = new URL(`/rooms/${roomId}/lsp`, this.env.RUNNER_URL.replace(/^http/, "ws"));
+    url.searchParams.set("language", language);
+    return url.toString();
+  }
+
   /** Start a run; yields the runner's events until the run exits. */
   async *start(roomId: string, user: RunnerUser, body: { path: string; stateVector: string }): AsyncGenerator<RunnerEvent> {
     const response = await this.call(`/rooms/${roomId}/runs`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
@@ -149,6 +156,31 @@ export class RunnerClient {
     if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error);
     if (!response.ok) throw new RunnerUnavailableError();
     return (await response.json()) as DevServerStatus;
+  }
+
+  /**
+   * A notebook's kernel: run cells, interrupt, restart or shut down. Answers with the
+   * kernel's status; the cells' outputs arrive in the room's files document.
+   */
+  async notebook(roomId: string, user: RunnerUser, fileId: string, action: "run" | "interrupt" | "restart" | "shutdown", body: object = {}): Promise<unknown> {
+    const response = await this.call(`/rooms/${roomId}/notebooks/${fileId}/${action}`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
+    if (response.status === 400 || response.status === 409) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw response.status === 400 ? new BadRequestException(message) : new ConflictException(message);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response.json();
+  }
+
+  /** A file's text through its language's formatter in the sandbox; a formatter's refusal comes back in its words. */
+  async format(roomId: string, user: RunnerUser, body: { path: string; language: string; text: string; tabSize: number; insertSpaces: boolean }): Promise<{ text: string }> {
+    const response = await this.call(`/rooms/${roomId}/format`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
+    if (response.status === 400 || response.status === 409) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw response.status === 400 ? new BadRequestException(message) : new ConflictException(message);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as { text: string };
   }
 
   /** The room was deleted: the runner removes its containers, volumes and network. */

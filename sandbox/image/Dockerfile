@@ -30,6 +30,22 @@ RUN apt-get update \
 COPY image/cc-jail.c /src/cc-jail.c
 RUN gcc -O2 -Wall -Werror -o /cc-jail /src/cc-jail.c
 
+# Formatters for the editor's Format document (apps/runner/src/format.ts): Ruff for
+# Python, clang-format for C and C++, shfmt for shell. Standalone binaries from a
+# stage of their own (Debian's clang-format would bring all of LLVM), copied into
+# both images late, so changing them doesn't rebuild the toolchains.
+FROM debian:trixie-slim AS formatters
+ARG RUFF_VERSION=0.11.0
+ARG CLANG_FORMAT_VERSION=19.1.7
+RUN apt-get update  && apt-get install -y --no-install-recommends python3-pip shfmt  && pip install --no-cache-dir --break-system-packages --target /tmp/py "ruff==${RUFF_VERSION}" "clang-format==${CLANG_FORMAT_VERSION}"  && mkdir /out  && cp /tmp/py/bin/ruff /out/ruff  && cp "$(find /tmp/py -type f -path '*/clang_format/data/bin/clang-format' | head -n 1)" /out/clang-format  && cp /usr/bin/shfmt /out/shfmt  && /out/ruff --version && /out/clang-format --version && /out/shfmt --version
+
+# Language servers for the editor's IntelliSense (apps/runner/src/lsp.ts): Pyright for
+# Python, a Node program like the rest of Node here. Its own stage and copied late,
+# like the formatters.
+FROM node:24-slim AS lsp
+ARG PYRIGHT_VERSION=1.1.400
+RUN npm install -g --prefix /tmp/npm "pyright@${PYRIGHT_VERSION}"  && mkdir -p /out/lib /out/bin  && mv /tmp/npm/lib/node_modules/pyright /out/lib/pyright  && ln -s /usr/local/lib/pyright/langserver.index.js /out/bin/pyright-langserver  && node /out/lib/pyright/index.js --version
+
 # Shared by both images: the base languages, Node and the users.
 FROM debian:trixie-slim AS core
 RUN apt-get update \
@@ -75,6 +91,10 @@ ENTRYPOINT ["node", "/opt/ccagent/agent.mjs"]
 
 # The base image: what every room gets by default.
 FROM core AS base
+# clangd, the C and C++ language server (apps/runner/src/lsp.ts); its own layer.
+RUN apt-get update  && apt-get install -y --no-install-recommends clangd  && rm -rf /var/lib/apt/lists/*
+COPY --from=formatters /out/ /usr/local/bin/
+COPY --from=lsp /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -115,6 +135,11 @@ COPY --from=k8s /out/k8s /usr/local/lib/k8s
 RUN ln -s ../lib/kotlinc/bin/kotlinc /usr/local/bin/kotlinc  && ln -s ../lib/k8s/kubectl ../lib/k8s/helm ../lib/k8s/kwokctl /usr/local/bin/
 COPY --chmod=755 image/k8s /usr/local/bin/k8s
 COPY image/kwok.yaml /usr/local/lib/k8s/kwok.yaml
+# rustfmt for Format document (gofmt comes with Go), and the language servers for C and C++,
+# Go and Rust (apps/runner/src/lsp.ts); a layer of their own, so the big one stays cached.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked     apt-get update  && apt-get install -y --no-install-recommends rustfmt clangd gopls rust-analyzer
+COPY --from=formatters /out/ /usr/local/bin/
+COPY --from=lsp /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).

@@ -7,12 +7,16 @@ import {
   RegisteredFileSystemProvider,
   RegisteredMemoryFile,
 } from "@codingame/monaco-vscode-files-service-override";
+import { emmetCSS, emmetHTML } from "emmet-monaco-es";
 import * as monaco from "monaco-editor";
 import "@codingame/monaco-vscode-standalone-languages";
 import { typescriptDefaults } from "@codingame/monaco-vscode-standalone-typescript-language-features";
 import { MonacoVscodeApiWrapper } from "monaco-languageclient/vscodeApiWrapper";
 
+import { openFromWorkbench, registerEditorOpenerOnce } from "@/components/room/editor/editor-opener";
 import { registerInlineCompletions } from "@/components/room/editor/inline-completions";
+import { registerSandboxFormatters } from "@/components/room/editor/sandbox-format";
+import { registerSnippets } from "@/components/room/editor/snippet-provider";
 
 export { monaco };
 
@@ -54,7 +58,8 @@ export function ensureMonaco(): Promise<void> {
     };
     await new MonacoVscodeApiWrapper({
       $type: "classic",
-      viewsConfig: { $type: "EditorService" },
+      // Another file's definition (the language client) opens as the room's own tab.
+      viewsConfig: { $type: "EditorService", openEditorFunc: openFromWorkbench },
       monacoWorkerFactory: () => {},
     }).start();
 
@@ -69,6 +74,12 @@ export function ensureMonaco(): Promise<void> {
     });
     defineThemes();
     registerInlineCompletions();
+    registerSnippets();
+    registerSandboxFormatters();
+    // Emmet abbreviations (ul>li*3, .card>h2+p) among the completions of HTML and CSS.
+    emmetHTML(monaco, ["html"]);
+    emmetCSS(monaco, ["css", "scss", "less"]);
+    registerEditorOpenerOnce();
     // VS Code's own code leaves a cancelled wait unhandled now and then (Tab accepting an inline
     // suggestion cancels one). VS Code ignores its CancellationError ("Canceled"); so do we.
     // Every other unhandled rejection still reaches the console.

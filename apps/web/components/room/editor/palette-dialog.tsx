@@ -1,9 +1,11 @@
 "use client";
 
-import type { ComponentProps, ReactNode } from "react";
+import { useEffect, type ComponentProps, type ReactNode } from "react";
 
 import { Command } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+import { getActiveEditor } from "./active-editor";
 
 /**
  * The shell of Quick Open and the command palette: a dialog near the top of
@@ -24,6 +26,17 @@ export function PaletteDialog({
   description: string;
   children: ReactNode;
 } & Omit<ComponentProps<typeof Command>, "children" | "title">) {
+  // Closed by unmounting, so the dialog can't hand focus back itself: back to the code,
+  // unless the command put it somewhere (chat's box, a panel).
+  useEffect(
+    () => () => {
+      setTimeout(() => {
+        const focused = document.activeElement;
+        if (!focused || focused === document.body) getActiveEditor()?.focus();
+      }, 0);
+    },
+    [],
+  );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent

@@ -4,6 +4,11 @@ import { describe, it } from "node:test";
 import { clampFontSize, DEFAULT_SETTINGS, FONT_SIZE, monacoOptions, sanitizeSettings } from "./settings";
 
 describe("sanitizeSettings", () => {
+  it("keeps a known keymap and drops anything else", () => {
+    assert.equal(sanitizeSettings({ keymap: "vim" }).keymap, "vim");
+    assert.equal(sanitizeSettings({ keymap: "emacs" }).keymap, "standard");
+  });
+
   it("fills everything from defaults when nothing was saved", () => {
     assert.deepEqual(sanitizeSettings(undefined), DEFAULT_SETTINGS);
     assert.deepEqual(sanitizeSettings("nope"), DEFAULT_SETTINGS);

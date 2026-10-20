@@ -17,12 +17,15 @@ import { getActiveEditor } from "./active-editor";
 import { formatDocument } from "./format";
 import { PaletteDialog } from "./palette-dialog";
 import { useEditorSettings } from "./settings-store";
+import { previewKindOf, PREVIEW_LABEL } from "./preview-kind";
+import { insertSnippet } from "./snippet-provider";
+import { snippetsFor, type Snippet } from "./snippets";
 import { getSymbols, type SymbolItem } from "./symbols";
 import {
   openPalette,
   openQuickOpen,
   openSettings,
-  toggleMarkdownPreview,
+  toggleFilePreview,
   toggleSplit,
   toggleZen,
   useEditorUi,
@@ -47,6 +50,7 @@ export function CommandPalette({ page, activeFile, extra, onCompare, onClose }: 
   if (page === "symbols") return <GoToSymbol onClose={onClose} />;
   if (page === "language") return <ChangeLanguage fileId={activeFile?.id ?? null} onClose={onClose} />;
   if (page === "people") return <FollowPerson onClose={onClose} />;
+  if (page === "snippets") return <InsertSnippet onClose={onClose} />;
   return <Commands activeFile={activeFile} extra={extra} onCompare={onCompare} onClose={onClose} />;
 }
 
@@ -57,7 +61,7 @@ const dialogProps = (onClose: () => void) => ({
 
 function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">) {
   const settings = useEditorSettings();
-  const markdown = activeFile?.name.toLowerCase().endsWith(".md") ?? false;
+  const preview = activeFile ? previewKindOf(activeFile.name) : null;
   const editorCommands: PaletteCommand[] = [
     { id: "quick-open", label: "Go to file…", shortcut: "Ctrl P", run: openQuickOpen },
     { id: "go-line", label: "Go to line…", shortcut: "Ctrl G", run: () => openPalette("line") },
@@ -68,6 +72,7 @@ function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">
       run: () => openPalette("symbols"),
     },
     { id: "language", label: "Change language mode…", run: () => openPalette("language") },
+    { id: "snippet", label: "Insert snippet…", run: () => openPalette("snippets") },
     { id: "format", label: "Format document", shortcut: "Shift Alt F", run: () => void formatDocument() },
     {
       id: "split",
@@ -76,24 +81,29 @@ function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">
       run: () => toggleSplit(activeFile?.id ?? null),
     },
     { id: "compare", label: "Compare with another file…", run: onCompare },
-    ...(markdown
+    ...(preview
       ? [
           {
-            id: "markdown-side",
-            label: "Open Markdown preview to the side",
+            id: "preview-side",
+            label: `Open ${PREVIEW_LABEL[preview]} to the side`,
             shortcut: "Ctrl K V",
-            run: () => toggleMarkdownPreview("side"),
+            run: () => toggleFilePreview("side"),
           },
           {
-            id: "markdown-full",
-            label: "Open Markdown preview",
+            id: "preview-full",
+            label: `Open ${PREVIEW_LABEL[preview]}`,
             shortcut: "Ctrl Shift V",
-            run: () => toggleMarkdownPreview("full"),
+            run: () => toggleFilePreview("full"),
           },
         ]
       : []),
     { id: "zen", label: "Toggle Zen mode", shortcut: "Ctrl K Z", run: toggleZen },
     { id: "follow", label: "Follow someone…", run: () => openPalette("people") },
+    {
+      id: "vim",
+      label: settings.keymap === "vim" ? "Turn Vim key bindings off" : "Turn Vim key bindings on",
+      run: () => settings.update({ keymap: settings.keymap === "vim" ? "standard" : "vim" }),
+    },
     {
       id: "wrap",
       label: settings.wordWrap ? "Turn word wrap off" : "Turn word wrap on",
@@ -268,6 +278,32 @@ function GoToSymbol({ onClose }: { onClose: () => void }) {
           >
             <span style={{ paddingLeft: symbol.depth * 12 }}>{symbol.name}</span>
             <CommandShortcut>{symbol.kind}</CommandShortcut>
+          </CommandItem>
+        ))}
+      </CommandList>
+    </PaletteDialog>
+  );
+}
+
+/** The snippets for this file's language: pick one to put it in at the cursor. */
+function InsertSnippet({ onClose }: { onClose: () => void }) {
+  const editor = getActiveEditor();
+  const language = editor?.getModel()?.getLanguageId() ?? null;
+  const list = language ? snippetsFor(language) : [];
+  const pick = (snippet: Snippet) => {
+    onClose();
+    // After the dialog has handed focus back.
+    if (editor) setTimeout(() => insertSnippet(editor, snippet), 0);
+  };
+  return (
+    <PaletteDialog {...dialogProps(onClose)} title="Insert snippet" description="Pick a snippet for this file's language">
+      <CommandInput placeholder={language ? "Snippet" : "Open a file first"} className="h-9 py-0" />
+      <CommandList className="max-h-[min(60vh,420px)]">
+        <CommandEmpty>{language ? "No snippets for this language." : "No file is open."}</CommandEmpty>
+        {list.map((snippet) => (
+          <CommandItem key={snippet.prefix} value={`${snippet.prefix} ${snippet.label}`} onSelect={() => pick(snippet)} className="py-1.5">
+            {snippet.label}
+            <CommandShortcut>{snippet.prefix}</CommandShortcut>
           </CommandItem>
         ))}
       </CommandList>

@@ -424,7 +424,7 @@ export class Databases {
 }
 
 /** Keeps up to `limit` bytes of a stream and drops the rest, noting that it did. */
-class Collector extends Writable {
+export class Collector extends Writable {
   private readonly chunks: Buffer[] = [];
   private size = 0;
   cut = false;
@@ -450,7 +450,7 @@ class Collector extends Writable {
 }
 
 /** Resolves once an exec's stream is over, however it ends. */
-function ended(stream: Duplex): Promise<void> {
+export function ended(stream: Duplex): Promise<void> {
   return new Promise((resolve) => {
     stream.on("end", resolve);
     stream.on("close", resolve);

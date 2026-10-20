@@ -1,14 +1,11 @@
 "use client";
 
 import { textOf } from "@codechatter/workspace-model";
-import { Columns2, Maximize2, X } from "lucide-react";
-import { useCallback, useRef, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { useRoom } from "@/components/room/room-context";
-import type { MarkdownPreviewMode } from "@/components/room/editor/ui-store";
-import { Button } from "@/components/ui/button";
 
 const remarkPlugins = [remarkGfm];
 
@@ -64,7 +61,7 @@ const components: Components = {
 };
 
 /** The file's live text: re-renders as anyone types. */
-function useFileText(fileId: string): string {
+export function useFileText(fileId: string): string {
   const { doc } = useRoom();
   const version = useRef(0);
   const subscribe = useCallback(
@@ -80,60 +77,24 @@ function useFileText(fileId: string): string {
     },
     [doc, fileId],
   );
-  useSyncExternalStore(
+  const tick = useSyncExternalStore(
     subscribe,
     () => version.current,
     () => 0,
   );
-  return textOf(doc, fileId)?.toString() ?? "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the tick is the change
+  return useMemo(() => textOf(doc, fileId)?.toString() ?? "", [doc, fileId, tick]);
 }
 
-type Props = {
-  fileId: string;
-  name: string;
-  mode: Exclude<MarkdownPreviewMode, "off">;
-  onMode: (mode: MarkdownPreviewMode) => void;
-};
-
-/** The open Markdown file, rendered live as people type: beside the code, or on its own to read. */
-export function MarkdownPreview({ fileId, name, mode, onMode }: Props) {
-  const text = useFileText(fileId);
+/** A Markdown file, rendered with document-sized type (a README, not a chat message). */
+export function MarkdownBody({ text }: { text: string }) {
   return (
-    <section aria-label={`Preview of ${name}`} className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-8 shrink-0 items-center border-b bg-chrome pr-1 pl-3 text-xs text-muted-foreground">
-        <span className="truncate">Preview: {name}</span>
-        {mode === "side" ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="ml-auto"
-            title="Ctrl+Shift+V"
-            onClick={() => onMode("full")}
-          >
-            <Maximize2 /> Preview only
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="ml-auto"
-            title="Ctrl+K V"
-            onClick={() => onMode("side")}
-          >
-            <Columns2 /> Show the code
-          </Button>
-        )}
-        <Button variant="ghost" size="icon-xs" aria-label="Close the preview" onClick={() => onMode("off")}>
-          <X />
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <article className="mx-auto max-w-3xl px-8 py-6 text-sm">
-          <Markdown remarkPlugins={remarkPlugins} components={components}>
-            {text}
-          </Markdown>
-        </article>
-      </div>
-    </section>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <article className="mx-auto max-w-3xl px-8 py-6 text-sm">
+        <Markdown remarkPlugins={remarkPlugins} components={components}>
+          {text}
+        </Markdown>
+      </article>
+    </div>
   );
 }

@@ -25,6 +25,7 @@ import { RoomsService } from "./rooms/rooms.service.js";
 import { RunnerClient } from "./runner/runner.client.js";
 import { DatabasesController } from "./sandbox/databases.controller.js";
 import { RoomJanitor } from "./rooms/room-janitor.js";
+import { NotebooksController } from "./sandbox/notebooks.controller.js";
 import { SandboxController } from "./sandbox/sandbox.controller.js";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -42,7 +43,7 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, AiController, JudgeController, HttpStudioController, DemoController],
+  controllers: [HealthController, MeController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, NotebooksController, AiController, JudgeController, HttpStudioController, DemoController],
   providers: [
     AiService,
     AuditService,

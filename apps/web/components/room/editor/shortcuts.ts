@@ -9,7 +9,7 @@ import {
   openPalette,
   openQuickOpen,
   openSettings,
-  toggleMarkdownPreview,
+  toggleFilePreview,
   toggleSplit,
   toggleZen,
   useEditorUi,
@@ -46,7 +46,7 @@ export function useEditorShortcuts(activeFileId: string | null) {
         chordUntil = 0;
         if (!mod && !event.altKey && key === "v") {
           take();
-          toggleMarkdownPreview("side");
+          toggleFilePreview("side");
           return;
         }
         if (!mod && !event.altKey && key === "z") {
@@ -77,7 +77,7 @@ export function useEditorShortcuts(activeFileId: string | null) {
         else openQuickOpen();
       } else if (key === "v" && event.shiftKey && !event.altKey && !inMonaco && !inField) {
         take();
-        toggleMarkdownPreview("full");
+        toggleFilePreview("full");
       } else if (key === "o" && event.shiftKey && !event.altKey) {
         take();
         openPalette("symbols");

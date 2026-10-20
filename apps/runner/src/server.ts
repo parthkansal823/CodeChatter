@@ -27,6 +27,9 @@ import { log, messageOf } from "./log.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
 import type { RoomRegistry } from "./room-session.js";
 import { RunError } from "./runs.js";
+import { FormatError, formatText, MAX_FORMAT_BYTES } from "./format.js";
+import { LANGUAGE_SERVERS, MAX_LSP_MESSAGE, openLanguageServer } from "./lsp.js";
+import { NotebookError } from "./notebooks.js";
 import { SandboxUnavailableError } from "./sandbox.js";
 import { openTerminal } from "./terminal.js";
 
@@ -59,8 +62,12 @@ import { openTerminal } from "./terminal.js";
  *   GET  /rooms/:id/databases/:kind/dump    a backup, streamed
  *   POST /rooms/:id/databases/:kind/load    a file (the body, or ?path= one of the room's) run through its client
  *   POST /rooms/:id/databases/:kind/reset   delete its data and start it again
+ *   POST /rooms/:id/notebooks/:fileId/run   { cellIds, stateVector? } run cells in the notebook's kernel (outputs go into the room's files document)
+ *   POST /rooms/:id/notebooks/:fileId/interrupt|restart|shutdown
+ *   POST /rooms/:id/format                { path, language, text, tabSize, insertSpaces } the text through the language's formatter (format.ts)
  *   ANY  /rooms/:id/preview/:port/* dev-server preview (HTTP and WebSocket)
  *   WS   /rooms/:id/terminal?session=&cols=&rows=
+ *   WS   /rooms/:id/lsp?language=           a language server for one editor (lsp.ts)
  */
 
 /** Biggest file a database loads in one go. */
@@ -116,6 +123,12 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
 
     const database = /^\/rooms\/([A-Z0-9]{6})\/databases(?:\/([a-z]+)(?:\/(stop|query|tables|preview|dump|load|reset))?)?$/.exec(url.pathname);
     if (database) return handleDatabases(req, res, url, database[1]!, database[2], database[3]);
+
+    const notebook = /^\/rooms\/([A-Z0-9]{6})\/notebooks\/([a-zA-Z0-9-]{8,64})\/(run|interrupt|restart|shutdown)$/.exec(url.pathname);
+    if (notebook && req.method === "POST") return handleNotebook(req, res, notebook[1]!, notebook[2]!, notebook[3]!);
+
+    const format = /^\/rooms\/([A-Z0-9]{6})\/format$/.exec(url.pathname);
+    if (format && req.method === "POST") return handleFormat(req, res, format[1]!);
 
     const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|judge|dev)$/.exec(url.pathname);
     if (!match || !RoomCode.safeParse(match[1]).success) return json(res, 404, { error: "Not found." });
@@ -285,6 +298,59 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     return json(res, 200, await rooms.databases.list(roomId));
   }
 
+  /** A notebook's kernel: run cells (their outputs arrive in the room's files document), interrupt, restart, shut down. */
+  async function handleNotebook(req: IncomingMessage, res: ServerResponse, roomId: string, fileId: string, action: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const session = rooms.get(roomId);
+    try {
+      if (action === "run") {
+        const body = z
+          .object({ cellIds: z.array(z.string().min(1).max(64)).min(1).max(1000), stateVector: z.string().max(4_000_000).optional() })
+          .safeParse(await readJson(req, 8 * 1024 * 1024));
+        if (!body.success) return json(res, 400, { error: "Send the cells to run." });
+        session.touch();
+        await session.ready();
+        // The cells as the caller sees them: their latest edits first, as for a run.
+        if (body.data.stateVector) await session.sync.waitFor(body.data.stateVector);
+        return json(res, 202, await session.notebooks.run(fileId, body.data.cellIds));
+      }
+      if (action === "interrupt") return json(res, 200, session.notebooks.interrupt(fileId));
+      if (action === "restart") {
+        await session.ready();
+        return json(res, 200, await session.notebooks.restart(fileId));
+      }
+      return json(res, 200, session.notebooks.shutdown(fileId));
+    } catch (error) {
+      if (error instanceof NotebookError || error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** Format document for Python, C, C++, shell, Go and Rust: the text back, formatted, or why not. */
+  async function handleFormat(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const body = z
+      .object({
+        path: z.string().min(1).max(1024),
+        language: z.string().min(1).max(40),
+        text: z.string().max(MAX_FORMAT_BYTES),
+        tabSize: z.number().int().min(1).max(8).default(4),
+        insertSpaces: z.boolean().default(true),
+      })
+      .safeParse(await readJson(req, MAX_FORMAT_BYTES * 2));
+    if (!body.success) return json(res, 400, { error: "Send the file's path, language and text." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      const { path, language, text, tabSize, insertSpaces } = body.data;
+      return json(res, 200, { text: await formatText(session.sandbox, language, path, text, { tabSize, insertSpaces }) });
+    } catch (error) {
+      if (error instanceof FormatError || error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
   /** Streams the run as newline-delimited JSON until it exits. Closing the request stops the run. */
   async function startRun(
     res: ServerResponse,
@@ -331,8 +397,21 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
   }
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+  // Language servers send and take whole files: their own server, with room for that.
+  const lspWss = new WebSocketServer({ noServer: true, maxPayload: MAX_LSP_MESSAGE });
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://runner");
+    const lsp = /^\/rooms\/([A-Z0-9]{6})\/lsp$/.exec(url.pathname);
+    if (lsp) {
+      const language = url.searchParams.get("language") ?? "";
+      if (!authorize(req, lsp[1]!) || !LANGUAGE_SERVERS[language]) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      lspWss.handleUpgrade(req, socket, head, (ws) => void openLanguageServer(ws, rooms.get(lsp[1]!), language));
+      return;
+    }
     const preview = PREVIEW_PATH.exec(url.pathname);
     if (preview) {
       if (!authorize(req, preview[1]!)) {

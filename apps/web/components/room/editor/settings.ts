@@ -12,6 +12,8 @@ export const CURSOR_STYLES = [
 ] as const;
 export const CURSOR_BLINKING = ["smooth", "blink", "phase", "expand", "solid"] as const;
 export const TAB_SIZES = [2, 3, 4, 8] as const;
+/** How keys behave in the editor: the usual way, or Vim's (modes, motions, :commands). */
+export const KEYMAPS = ["standard", "vim"] as const;
 
 /** Per-person editor preferences, kept in this browser (see settings-store.ts). */
 export type EditorSettings = {
@@ -30,10 +32,13 @@ export type EditorSettings = {
   bracketColors: boolean;
   bracketGuides: boolean;
   stickyScroll: boolean;
+  /** The file's folders and the symbol you're in, above the code (breadcrumbs.tsx). */
+  breadcrumbs: boolean;
   formatOnPaste: boolean;
   formatOnSave: boolean;
   /** AI suggestions as faint text while you type (inline-completions.ts), in rooms where AI is set up. */
   aiCompletions: boolean;
+  keymap: (typeof KEYMAPS)[number];
 };
 
 export const FONT_SIZE = { min: 10, max: 32, default: 14 } as const;
@@ -53,9 +58,11 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   bracketColors: false,
   bracketGuides: false,
   stickyScroll: true,
+  breadcrumbs: true,
   formatOnPaste: false,
   formatOnSave: false,
   aiCompletions: true,
+  keymap: "standard",
 };
 
 export const clampFontSize = (size: number) =>
@@ -86,6 +93,7 @@ export function sanitizeSettings(raw: unknown): EditorSettings {
     else if (key === "renderWhitespace" && WHITESPACE.includes(value as never)) out[key] = value;
     else if (key === "cursorStyle" && CURSOR_STYLES.includes(value as never)) out[key] = value;
     else if (key === "cursorBlinking" && CURSOR_BLINKING.includes(value as never)) out[key] = value;
+    else if (key === "keymap" && KEYMAPS.includes(value as never)) out[key] = value;
   }
   return out as EditorSettings;
 }

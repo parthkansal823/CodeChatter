@@ -12,6 +12,7 @@ import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { RunManager } from "./runs.js";
 import { KubeSandbox, roomNamespace, type Kube } from "./kube-sandbox.js";
+import { NotebookKernels } from "./notebooks.js";
 import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, Sandbox, type RoomSandbox } from "./sandbox.js";
 import { TunnelHub } from "./tunnel.js";
 
@@ -24,10 +25,13 @@ export class RoomSession {
   readonly sandbox: RoomSandbox;
   readonly sync: DocSync;
   readonly runs: RunManager;
+  readonly notebooks: NotebookKernels;
   readonly tunnels: TunnelHub;
   /** Ports something in the sandbox listens on (reported by the agent). */
   ports: number[] = [];
   terminals = 0;
+  /** Editors connected to a language server (lsp.ts): someone is working here. */
+  languageServers = 0;
   private lastCpu: { total: number; system: number } | null = null;
   private lastActive = Date.now();
   private readying: Promise<void> | null = null;
@@ -43,6 +47,7 @@ export class RoomSession {
     this.sandbox = kube ? new KubeSandbox(kube, roomId, env) : new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)));
     this.sync = new DocSync(roomId, { collabUrl: env.COLLAB_INTERNAL_URL, secret: env.SERVICE_SECRET });
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
+    this.notebooks = new NotebookKernels(this.sandbox, this.sync.doc, this.sync.synced(60_000).catch(() => {}));
     this.tunnels = new TunnelHub(() => this.sandbox.agent);
     this.sandbox.onAgentEvent = (event) => {
       if (event.ev === "ports") this.ports = event.ports;
@@ -114,11 +119,18 @@ export class RoomSession {
   }
 
   isIdle(now = Date.now()): boolean {
-    return !this.runs.running && this.terminals === 0 && now - this.lastActive > this.env.SANDBOX_IDLE_MINUTES * 60_000;
+    return (
+      !this.runs.running &&
+      !this.notebooks.busy &&
+      this.terminals === 0 &&
+      this.languageServers === 0 &&
+      now - this.lastActive > this.env.SANDBOX_IDLE_MINUTES * 60_000
+    );
   }
 
   async close(): Promise<void> {
     await this.runs.stop("stopped").catch(() => {});
+    this.notebooks.closeAll("The room was idle, so its sandbox stopped. Run a cell to start a new kernel.");
     await this.databases.pause(this.roomId).catch(() => {});
     await this.sandbox.stop();
     this.sync.destroy();

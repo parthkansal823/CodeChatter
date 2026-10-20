@@ -18,7 +18,7 @@ import {
 import { liveEditors, modelOwner } from "./file-models";
 import { attachRemoteCursors } from "./remote-cursors";
 import { applyPendingReveal } from "./reveal";
-import { useEditorUi, toggleMarkdownPreview } from "./ui-store";
+import { useEditorUi, toggleFilePreview } from "./ui-store";
 
 type Editor = monaco.editor.IStandaloneCodeEditor;
 
@@ -75,18 +75,18 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
     editor.onDidChangeModelLanguage(refreshInfo),
   ];
 
-  // Markdown preview beside the code, or on its own, as in VS Code (Monaco owns Ctrl+K chords in here).
+  // A Markdown, CSV or SVG file's preview beside the code, or on its own, as in VS Code (Monaco owns Ctrl+K chords in here).
   editor.addAction({
-    id: "cc.markdownSide",
-    label: "Open Markdown preview to the side",
+    id: "cc.previewSide",
+    label: "Open preview to the side",
     keybindings: [monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyCode.KeyV)],
-    run: () => toggleMarkdownPreview("side"),
+    run: () => toggleFilePreview("side"),
   });
   editor.addAction({
-    id: "cc.markdownFull",
-    label: "Open Markdown preview",
+    id: "cc.previewFull",
+    label: "Open preview",
     keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyV],
-    run: () => toggleMarkdownPreview("full"),
+    run: () => toggleFilePreview("full"),
   });
 
   editor.addAction({
