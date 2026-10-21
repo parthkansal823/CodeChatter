@@ -7,6 +7,7 @@ import type * as Y from "yjs";
 
 import { monacoOptions } from "@/components/room/editor/settings";
 import { currentSettings, useSettingsValues } from "@/components/room/editor/settings-store";
+import { editorThemeId } from "@/components/room/editor/themes";
 import { ensureMonaco, monaco, registerWorkspaceFile } from "@/components/room/monaco-setup";
 
 export type CellKeys = {
@@ -41,6 +42,7 @@ export function CellEditor({ address, source, language, readOnly, focusToken, ke
   const [ready, setReady] = useState(false);
   const { resolvedTheme } = useTheme();
   const settings = useSettingsValues();
+  const themeSetting = settings.editorTheme;
   // The latest handlers, read when a key is pressed (the editor is made once).
   const latest = useRef({ keys, onFocus });
   useEffect(() => {
@@ -68,7 +70,7 @@ export function CellEditor({ address, source, language, readOnly, focusToken, ke
         readOnly,
         readOnlyMessage: { value: "You can view this room but not edit it. Ask the owner for editor access." },
         ariaLabel: label,
-        theme: document.documentElement.classList.contains("dark") ? "cc-dark" : "cc-light",
+        theme: editorThemeId(document.documentElement.classList.contains("dark")),
       });
       const binding = new MonacoBinding(source, model, new Set([editor]));
       // Cells are \n, like every file in the room (an empty model takes the OS's ending).
@@ -147,8 +149,8 @@ export function CellEditor({ address, source, language, readOnly, focusToken, ke
   }, [readOnly, ready]);
 
   useEffect(() => {
-    if (ready) monaco.editor.setTheme(resolvedTheme === "dark" ? "cc-dark" : "cc-light");
-  }, [ready, resolvedTheme]);
+    if (ready) monaco.editor.setTheme(editorThemeId(resolvedTheme === "dark", themeSetting));
+  }, [ready, resolvedTheme, themeSetting]);
 
   useEffect(() => {
     editorRef.current?.updateOptions({ ...monacoOptions(settings), ...CELL_OPTIONS });

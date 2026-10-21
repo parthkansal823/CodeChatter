@@ -136,7 +136,7 @@ export const messages = pgTable(
       .notNull()
       .references(() => rooms.id, { onDelete: "cascade" }),
     userId: text().references(() => user.id, { onDelete: "set null" }),
-    kind: text().$type<"text" | "code" | "file" | "system">().notNull().default("text"),
+    kind: text().$type<"text" | "code" | "file" | "system" | "github">().notNull().default("text"),
     body: text().notNull(),
     /** Sender-chosen id: a send retried after a reconnect lands once. */
     clientId: uuid(),
@@ -183,3 +183,53 @@ export const auditEvents = pgTable(
   },
   (t) => [index().on(t.orgId, t.createdAt.desc()), index().on(t.targetId, t.createdAt.desc())],
 );
+
+/**
+ * A person's editor settings and the VS Code themes they imported, so they follow them to
+ * any browser (web: components/room/editor/settings-sync.ts). One row per person.
+ */
+export const userSettings = pgTable("user_settings", {
+  userId: text()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  editor: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+  themes: jsonb().$type<unknown[]>().notNull().default([]),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * A room made from a GitHub repository (api: github/), one row per room. `files` holds the
+ * repository's text files as imported, gzipped JSON [{ path, content }]: collab seeds the room's
+ * files document from it, and it's the base the room's changes are compared with.
+ */
+export const roomRepos = pgTable("room_repos", {
+  roomId: text()
+    .primaryKey()
+    .references(() => rooms.id, { onDelete: "cascade" }),
+  owner: text().notNull(),
+  name: text().notNull(),
+  branch: text().notNull(),
+  /** The repository's default branch, where pull requests from the room go (null for rooms imported before it was kept). */
+  defaultBranch: text(),
+  commitSha: text().notNull(),
+  files: bytea().notNull(),
+  importedBy: text().references(() => user.id, { onDelete: "set null" }),
+  importedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  /** The secret GitHub signs the room's webhook deliveries with, sealed like tokens; null when activity isn't posted to chat. */
+  webhookSecret: text(),
+  /** The webhook's id on GitHub when the room made it (so it can remove it); null when it was added by hand. */
+  webhookId: bigint({ mode: "number" }),
+});
+
+/**
+ * A person's GitHub token, for private repositories. Sealed with AES-256-GCM under a key from
+ * BETTER_AUTH_SECRET (api: github/token-box.ts); `login` is whose it is, checked when it was saved.
+ */
+export const githubTokens = pgTable("github_tokens", {
+  userId: text()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  login: text().notNull(),
+  sealed: text().notNull(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});

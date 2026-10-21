@@ -18,7 +18,8 @@ export type ChatMessage = {
   roomId: string;
   clientId: string | null;
   author: { id: string; name: string; image: string | null } | null;
-  kind: "text" | "code" | "file" | "system";
+  /** "github": activity from the room's repository (api: github/webhook.controller.ts), with no author. */
+  kind: "text" | "code" | "file" | "system" | "github";
   body: string;
   createdAt: string;
 };

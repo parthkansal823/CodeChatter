@@ -39,6 +39,8 @@ export type EditorSettings = {
   /** AI suggestions as faint text while you type (inline-completions.ts), in rooms where AI is set up. */
   aiCompletions: boolean;
   keymap: (typeof KEYMAPS)[number];
+  /** "auto" follows the app's light or dark; else a built-in Monaco theme or an imported one (themes.ts). */
+  editorTheme: string;
 };
 
 export const FONT_SIZE = { min: 10, max: 32, default: 14 } as const;
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   formatOnSave: false,
   aiCompletions: true,
   keymap: "standard",
+  editorTheme: "auto",
 };
 
 export const clampFontSize = (size: number) =>
@@ -94,6 +97,7 @@ export function sanitizeSettings(raw: unknown): EditorSettings {
     else if (key === "cursorStyle" && CURSOR_STYLES.includes(value as never)) out[key] = value;
     else if (key === "cursorBlinking" && CURSOR_BLINKING.includes(value as never)) out[key] = value;
     else if (key === "keymap" && KEYMAPS.includes(value as never)) out[key] = value;
+    else if (key === "editorTheme" && typeof value === "string" && /^(auto|vs|vs-dark|hc-black|hc-light|custom-[a-z0-9]{1,40})$/.test(value)) out[key] = value;
   }
   return out as EditorSettings;
 }

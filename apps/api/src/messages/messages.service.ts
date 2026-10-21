@@ -43,6 +43,13 @@ export class MessagesService {
     return toDto({ message: message!, author: author ? { ...author, image: author.image ?? null } : null }, input.clientId);
   }
 
+  /** A message with no author, from the room's integrations (GitHub activity). */
+  async post(roomId: string, kind: "github" | "system", body: string): Promise<ChatMessage> {
+    const [message] = await this.handle.db.insert(schema.messages).values({ roomId, kind, body }).returning();
+    await this.handle.db.update(schema.rooms).set({ lastActiveAt: new Date() }).where(eq(schema.rooms.id, roomId));
+    return toDto({ message: message!, author: null });
+  }
+
   /** Newest first, `limit` at a time; pass the oldest id you have to page back. uuidv7 ids sort by time. */
   async list(roomId: string, options: { before?: string; limit: number }): Promise<ChatMessage[]> {
     const rows = await this.handle.db

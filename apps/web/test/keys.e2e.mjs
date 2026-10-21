@@ -104,10 +104,11 @@ try {
   check("flowCompletes", false, `${error instanceof Error ? error.message.split("\n")[0] : String(error)} (screenshot: ${shot})`);
 } finally {
   try {
-    await a.evaluate(() => {
-      // Leave the browser's settings as they were for other tests.
-      const raw = localStorage.getItem("cc-editor-settings");
-      if (raw) localStorage.setItem("cc-editor-settings", raw.replace('"keymap":"vim"', '"keymap":"standard"'));
+    // Settings are saved to the account: put the defaults back there (and in this browser) for other tests.
+    await a.evaluate(async () => {
+      localStorage.removeItem("cc-editor-settings");
+      localStorage.removeItem("cc-editor-themes");
+      await fetch("/api/me/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ editor: {}, themes: [] }) });
     });
     const tree = a.getByRole("tree", { name: "Files" });
     for (const name of created) {

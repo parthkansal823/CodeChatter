@@ -60,7 +60,7 @@ export function RoomsTable({ rooms }: { rooms: RoomSummary[] }) {
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="font-mono">{room.id}</span>
                     <span aria-hidden className="h-3 w-px bg-border" />
-                    <span>{templateName(room.templateId)}</span>
+                    <span className={room.repo ? "truncate font-mono" : undefined}>{room.repo ?? templateName(room.templateId)}</span>
                   </div>
                 </td>
                 <td className="py-3 pr-4">

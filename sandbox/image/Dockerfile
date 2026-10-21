@@ -136,8 +136,9 @@ RUN ln -s ../lib/kotlinc/bin/kotlinc /usr/local/bin/kotlinc  && ln -s ../lib/k8s
 COPY --chmod=755 image/k8s /usr/local/bin/k8s
 COPY image/kwok.yaml /usr/local/lib/k8s/kwok.yaml
 # rustfmt for Format document (gofmt comes with Go), and the language servers for C and C++,
-# Go and Rust (apps/runner/src/lsp.ts); a layer of their own, so the big one stays cached.
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked     apt-get update  && apt-get install -y --no-install-recommends rustfmt clangd gopls rust-analyzer
+# Go and Rust (apps/runner/src/lsp.ts; rust-src lets rust-analyzer read the standard library);
+# a layer of their own, so the big one stays cached.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked     apt-get update  && apt-get install -y --no-install-recommends rustfmt clangd gopls rust-analyzer rust-src
 COPY --from=formatters /out/ /usr/local/bin/
 COPY --from=lsp /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail

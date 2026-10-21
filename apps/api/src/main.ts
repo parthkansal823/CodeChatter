@@ -2,6 +2,7 @@ import "reflect-metadata";
 
 import type { Auth, OriginPolicy } from "@codechatter/auth";
 import { NestFactory } from "@nestjs/core";
+import { json } from "express";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { toNodeHandler } from "better-auth/node";
 import { Logger } from "nestjs-pino";
@@ -40,6 +41,14 @@ const preview = previewProxy({
 express.use(preview.http);
 express.all("/api/auth/{*splat}", toNodeHandler(app.get<Auth>(AUTH)));
 
+// GitHub's webhook deliveries are checked against their exact bytes (github/webhook.controller.ts).
+express.use(
+  "/api/github/webhooks",
+  json({ limit: "5mb", verify: (req, _res, raw) => void ((req as unknown as { rawBody: Buffer }).rawBody = raw) }),
+);
+// A commit carries the room's changed files, up to what an import takes; everything else stays at 1 MB.
+express.use("/api/rooms/:roomId/repo/commit", json({ limit: "30mb" }));
+express.use("/api/rooms/:roomId/repo/publish", json({ limit: "30mb" }));
 app.useBodyParser("json", { limit: "1mb" });
 app.useWebSocketAdapter(new ValkeyIoAdapter(app, env.VALKEY_URL));
 app.setGlobalPrefix("api");

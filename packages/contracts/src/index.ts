@@ -1,6 +1,7 @@
 export * from "./ai.js";
 export * from "./chat.js";
 export * from "./databases.js";
+export * from "./github.js";
 export * from "./http-studio.js";
 export * from "./permissions.js";
 export * from "./room-config.js";

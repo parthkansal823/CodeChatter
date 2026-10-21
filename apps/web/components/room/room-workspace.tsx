@@ -1,7 +1,7 @@
 "use client";
 
 import type { RoomSummary } from "@codechatter/contracts";
-import { flatten, isNotebookName, languageFor, type TreeNode } from "@codechatter/workspace-model";
+import { flatten, isNotebookName, languageFor, textOf, type TreeNode } from "@codechatter/workspace-model";
 import {
   BookOpen,
   Columns2,
@@ -9,18 +9,21 @@ import {
   FileCode2,
   Globe2,
   Image as ImageIcon,
+  GitBranch,
   ListTree,
+  Rows2,
+  SquareX,
   MessageSquare,
   Search,
   SquareTerminal,
   Table2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { usePanelRef } from "react-resizable-panels";
 
-import { BottomPanel, MAX_TERMINALS, type PanelTab } from "@/components/room/bottom-panel";
+import { BottomPanel, MAX_TERMINALS, type PanelTab, type RunningTask } from "@/components/room/bottom-panel";
 import { ChatPanel } from "@/components/room/chat-panel";
 import { CodeEditor } from "@/components/room/code-editor";
 import { useRoomTabs, useTabs } from "@/components/room/editor-store";
@@ -31,11 +34,25 @@ import { previewKindOf, PREVIEW_LABEL } from "@/components/room/editor/preview-k
 import { OutlineView } from "@/components/room/editor/outline-view";
 import { EditorOverlays } from "@/components/room/editor/overlays";
 import { useEditorSettings } from "@/components/room/editor/settings-store";
-import { toggleSplit, toggleZen, useEditorUi } from "@/components/room/editor/ui-store";
-import { LSP_LANGUAGES, startLanguageClient, stopLanguageClients } from "@/components/room/editor/language-client";
+import {
+  closeSplits,
+  splitDown,
+  toggleSplit,
+  toggleZen,
+  useEditorUi,
+  type SplitSlot,
+} from "@/components/room/editor/ui-store";
+import {
+  LSP_LANGUAGES,
+  startLanguageClient,
+  stopLanguageClients,
+} from "@/components/room/editor/language-client";
 import { setEditorOpener } from "@/components/room/editor/editor-opener";
 import { revealInFile, type RevealRange } from "@/components/room/editor/reveal";
+import { useProblems } from "@/components/room/editor/problems";
 import { setFormatRoom } from "@/components/room/editor/sandbox-format";
+import { useSettingsSync } from "@/components/room/editor/settings-sync";
+import { buildTask, readTasks, taskInput, TASKS_PATH, type Task } from "@/components/room/editor/tasks";
 import { clearRoomFiles, mirrorRoomFiles } from "@/components/room/editor/workspace-fs";
 import { useEditorShortcuts } from "@/components/room/editor/shortcuts";
 import { useInlineCompletions } from "@/components/room/editor/use-inline-completions";
@@ -50,7 +67,13 @@ import { RunButton } from "@/components/room/run-button";
 import { canRunPath, RunProvider, useRun } from "@/components/room/run-context";
 import { startSearch } from "@/components/room/search/search-store";
 import { SearchView } from "@/components/room/search/search-view";
+import { PullRequestView } from "@/components/room/source-control/pull-request-view";
+import { GistDialog } from "@/components/room/source-control/gist-dialog";
+import { RepoDiffView } from "@/components/room/source-control/repo-diff-view";
+import { SourceControlView } from "@/components/room/source-control/source-control-view";
+import { useRoomRepo } from "@/components/room/source-control/use-repo";
 import { StatusBar } from "@/components/room/status-bar";
+import { TaskPicker } from "@/components/room/task-picker";
 import { TabBar } from "@/components/room/tab-bar";
 import { TitleBar } from "@/components/room/title-bar";
 import { AI_TOOL_ID, useOpenAiOnRequest } from "@/components/room/tools/ai/ai-requests";
@@ -79,6 +102,10 @@ type Right = string;
 function Workspace() {
   const { room, doc, synced, can } = useRoom();
   useInlineCompletions();
+  // Your editor settings and themes, from and to your account.
+  useSettingsSync();
+  // What the language servers and TypeScript report: the Problems tab and the status bar's counts.
+  const problems = useProblems();
   // Format document for Python, C, C++, shell, Go and Rust goes to this room's sandbox.
   useEffect(() => {
     setFormatRoom(room.id);
@@ -89,8 +116,11 @@ function Workspace() {
   const peers = usePeers();
   const tabs = useRoomTabs(room.id);
   const { open, close, prune } = useTabs();
-  // The left sidebar: the file list, Search or the Outline, or none. Clicking the open one's icon closes it.
-  const [sidebar, setSidebar] = useState<"files" | "search" | "outline" | null>("files");
+  // The left sidebar: the file list, Search, the Outline or Source control, or none. Clicking the open one's icon closes it.
+  const [sidebar, setSidebar] = useState<"files" | "search" | "outline" | "scm" | null>("files");
+  // Source control: for a room on GitHub, and publishing one that isn't.
+  const repo = useRoomRepo();
+  const [gistOpen, setGistOpen] = useState(false);
   const showFiles = sidebar === "files";
   /** Ctrl+Shift+F (seeded from the editor's selection), Ctrl+Shift+H, the palette and the activity bar. */
   const openSearch = (options: { seed?: boolean; replace?: boolean } = {}) => {
@@ -225,14 +255,49 @@ function Workspace() {
     if (panelTab === `terminal-${n}`) setPanelTab("output");
   };
 
+  // Tasks (.vscode/tasks.json and npm scripts) run in your Task terminal, one at a time.
+  const [task, setTask] = useState<RunningTask | null>(null);
+  const [taskPicker, setTaskPicker] = useState<{ title: string; tasks: Task[] } | null>(null);
+  const roomTasks = () =>
+    readTasks(
+      [...files.values()]
+        .filter((n) => n.kind === "file" && (n.path === TASKS_PATH || n.name === "package.json"))
+        .map((n) => ({ path: n.path, text: textOf(doc, n.id)?.toString() ?? "" })),
+      { activePath: activeFile?.path ?? null },
+    );
+  const runTask = (picked: Task) => {
+    if (!can("terminal.open")) return;
+    // A new id per run, so the Task terminal types the line again even for the same task.
+    setTask((prev) => ({ label: picked.label, input: taskInput(picked), id: (prev?.id ?? 0) + 1 }));
+    showPanel("task");
+  };
+  const pickTask = () => setTaskPicker({ title: "Run task", tasks: roomTasks() });
+  /** Ctrl+Shift+B: the default build task, or a choice of the build tasks (or of every task when none is marked build). */
+  const runBuildTask = () => {
+    if (!can("terminal.open")) return;
+    const tasks = roomTasks();
+    const build = buildTask(tasks);
+    if (build) return runTask(build);
+    const builds = tasks.filter((t) => t.group === "build");
+    setTaskPicker({ title: "Run build task", tasks: builds.length ? builds : tasks });
+  };
+  const closeTask = () => {
+    setTask(null);
+    if (panelTab === "task") setPanelTab("output");
+  };
+
   // Ctrl/Cmd+Enter runs the open file from anywhere (Monaco's own Ctrl+Enter
   // is overridden); Ctrl+` opens a terminal. Keys typed into a terminal are its
   // own, and so is Ctrl+Enter in a tool that marks itself data-own-run-key (API
   // Studio sends, the database console runs its query).
   // Ctrl+Shift+F opens Search (Ctrl+Shift+H with replace), as in VS Code.
-  const shortcuts = useRef({ runActive, openTerminal, openSearch });
+  const openSourceControl = () => {
+    useEditorUi.getState().setZen(false);
+    setSidebar("scm");
+  };
+  const shortcuts = useRef({ runActive, openTerminal, openSearch, runBuildTask, openSourceControl });
   useEffect(() => {
-    shortcuts.current = { runActive, openTerminal, openSearch };
+    shortcuts.current = { runActive, openTerminal, openSearch, runBuildTask, openSourceControl };
   });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -245,6 +310,16 @@ function Workspace() {
       } else if (event.key === "`") {
         event.preventDefault();
         shortcuts.current.openTerminal();
+      } else if (event.shiftKey && event.key.toLowerCase() === "b") {
+        // Ctrl+Shift+B, as in VS Code (Edge would show its favourites bar).
+        event.preventDefault();
+        event.stopPropagation();
+        shortcuts.current.runBuildTask();
+      } else if (event.shiftKey && event.key.toLowerCase() === "g" && !ownKey) {
+        // Ctrl+Shift+G, as in VS Code.
+        event.preventDefault();
+        event.stopPropagation();
+        shortcuts.current.openSourceControl();
       } else if (event.shiftKey && /^[fh]$/i.test(event.key) && !ownKey) {
         event.preventDefault();
         event.stopPropagation();
@@ -263,15 +338,25 @@ function Workspace() {
       filePreview: state.filePreview,
       following: state.following,
       splitFileId: state.splitFileId,
+      splitBelowId: state.splitBelowId,
+      splitBelowRightId: state.splitBelowRightId,
       diff: state.diff,
+      repoDiff: state.repoDiff,
+      pullRequest: state.pullRequest,
       setFilePreview: state.setFilePreview,
       setSplit: state.setSplit,
       setDiff: state.setDiff,
+      setRepoDiff: state.setRepoDiff,
+      setPullRequest: state.setPullRequest,
       follow: state.follow,
     })),
   );
   const { zen, filePreview, following } = editorUi;
+  // The editor grid: up to three more editors, right, below and below right.
   const splitFile = editorUi.splitFileId ? (files.get(editorUi.splitFileId) ?? null) : null;
+  const splitBelow = editorUi.splitBelowId ? (files.get(editorUi.splitBelowId) ?? null) : null;
+  const splitBelowRight = editorUi.splitBelowRightId ? (files.get(editorUi.splitBelowRightId) ?? null) : null;
+  const anySplit = Boolean(splitFile || splitBelow || splitBelowRight);
   // Markdown, CSV and SVG files have a preview (beside the code, or on its own).
   const previewKind = activeFile ? previewKindOf(activeFile.name) : null;
   const isNotebook = activeFile ? isNotebookName(activeFile.name) : false;
@@ -298,12 +383,33 @@ function Workspace() {
       label: showFiles ? "Hide the file list" : "Show the file list",
       run: () => setSidebar(showFiles ? null : "files"),
     },
-    { id: "search", label: "Search in files", shortcut: "Ctrl Shift F", run: () => openSearch({ seed: true }) },
+    {
+      id: "search",
+      label: "Search in files",
+      shortcut: "Ctrl Shift F",
+      run: () => openSearch({ seed: true }),
+    },
+    { id: "problems", label: "Show problems", run: () => showPanel("problems") },
+    ...(can("terminal.open")
+      ? [
+          { id: "task", label: "Run task…", run: pickTask },
+          { id: "build-task", label: "Run build task", shortcut: "Ctrl Shift B", run: runBuildTask },
+        ]
+      : []),
     {
       id: "outline",
       label: sidebar === "outline" ? "Hide the outline" : "Show the outline",
       run: () => setSidebar(sidebar === "outline" ? null : "outline"),
     },
+    {
+      id: "source-control",
+      label: repo === null ? "Publish the room to GitHub" : "Show source control",
+      shortcut: "Ctrl Shift G",
+      run: () => setSidebar("scm"),
+    },
+    ...(activeFile
+      ? [{ id: "gist", label: "Share the file as a GitHub gist…", run: () => setGistOpen(true) }]
+      : []),
     {
       id: "breadcrumbs",
       label: breadcrumbs ? "Hide breadcrumbs" : "Show breadcrumbs",
@@ -354,7 +460,11 @@ function Workspace() {
             aria-label="Panels"
             className="flex w-activitybar shrink-0 flex-col items-center gap-1 border-r bg-chrome py-2"
           >
-            <ActivityButton label="Files" active={showFiles} onClick={() => setSidebar(showFiles ? null : "files")}>
+            <ActivityButton
+              label="Files"
+              active={showFiles}
+              onClick={() => setSidebar(showFiles ? null : "files")}
+            >
               <FileCode2 className="size-[18px]" />
             </ActivityButton>
             <ActivityButton
@@ -370,6 +480,13 @@ function Workspace() {
               onClick={() => setSidebar(sidebar === "outline" ? null : "outline")}
             >
               <ListTree className="size-[18px]" />
+            </ActivityButton>
+            <ActivityButton
+              label="Source control"
+              active={sidebar === "scm"}
+              onClick={() => setSidebar(sidebar === "scm" ? null : "scm")}
+            >
+              <GitBranch className="size-[18px]" />
             </ActivityButton>
             <span aria-hidden className="my-1 h-px w-6 bg-border" />
             <div role="group" aria-label="Apps" className="flex flex-col items-center gap-1">
@@ -412,6 +529,8 @@ function Workspace() {
                   <SearchView onOpen={openFile} />
                 ) : sidebar === "outline" ? (
                   <OutlineView />
+                ) : sidebar === "scm" ? (
+                  <SourceControlView onOpen={openFile} />
                 ) : (
                   <Explorer activeFileId={activeFile?.id ?? null} onOpen={openFile} />
                 )}
@@ -453,7 +572,13 @@ function Workspace() {
                                     editorUi.setFilePreview(filePreview === "off" ? "side" : "off")
                                   }
                                 >
-                                  {previewKind === "table" ? <Table2 /> : previewKind === "image" ? <ImageIcon /> : <BookOpen />}{" "}
+                                  {previewKind === "table" ? (
+                                    <Table2 />
+                                  ) : previewKind === "image" ? (
+                                    <ImageIcon />
+                                  ) : (
+                                    <BookOpen />
+                                  )}{" "}
                                   {PREVIEW_LABEL[previewKind]}
                                 </Button>
                               )}
@@ -479,6 +604,28 @@ function Workspace() {
                                   <Columns2 />
                                 </Button>
                               )}
+                              {activeFile && (
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  aria-label="Split down"
+                                  title="Split editor down: below this one, then below the right one"
+                                  onClick={() => splitDown(activeFile.id)}
+                                >
+                                  <Rows2 />
+                                </Button>
+                              )}
+                              {anySplit && (
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  aria-label="Close all split editors"
+                                  title="Back to one editor"
+                                  onClick={closeSplits}
+                                >
+                                  <SquareX />
+                                </Button>
+                              )}
                             </>
                           }
                         />
@@ -499,7 +646,17 @@ function Workspace() {
                           </div>
                         )}
                         <div className="min-h-0 flex-1">
-                          {diffFiles ? (
+                          {editorUi.pullRequest ? (
+                            <PullRequestView
+                              number={editorUi.pullRequest}
+                              onClose={() => editorUi.setPullRequest(null)}
+                            />
+                          ) : editorUi.repoDiff ? (
+                            <RepoDiffView
+                              path={editorUi.repoDiff}
+                              onClose={() => editorUi.setRepoDiff(null)}
+                            />
+                          ) : diffFiles ? (
                             <DiffView
                               left={diffFiles[0]}
                               right={diffFiles[1]}
@@ -514,29 +671,29 @@ function Workspace() {
                               mode="full"
                               onMode={editorUi.setFilePreview}
                             />
-                          ) : (previewKind && filePreview === "side") || splitFile ? (
-                            <ResizablePanelGroup orientation="horizontal">
-                              <ResizablePanel id="pane-primary" minSize={200}>
-                                {isNotebook ? <NotebookView file={activeFile} /> : <CodeEditor file={activeFile} role="primary" />}
-                              </ResizablePanel>
-                              <ResizableHandle />
-                              <ResizablePanel id="pane-second" minSize={200}>
-                                {previewKind && filePreview === "side" ? (
+                          ) : (
+                            <EditorGrid
+                              main={
+                                isNotebook ? (
+                                  <NotebookView file={activeFile} />
+                                ) : (
+                                  <CodeEditor file={activeFile} role="primary" />
+                                )
+                              }
+                              preview={
+                                previewKind && filePreview === "side" ? (
                                   <FilePreview
                                     file={activeFile}
                                     kind={previewKind}
                                     mode="side"
                                     onMode={editorUi.setFilePreview}
                                   />
-                                ) : splitFile ? (
-                                  <SplitPane file={splitFile} onClose={() => editorUi.setSplit(null)} />
-                                ) : null}
-                              </ResizablePanel>
-                            </ResizablePanelGroup>
-                          ) : isNotebook ? (
-                            <NotebookView file={activeFile} />
-                          ) : (
-                            <CodeEditor file={activeFile} role="primary" />
+                                ) : null
+                              }
+                              right={splitFile}
+                              below={splitBelow}
+                              belowRight={splitBelowRight}
+                            />
                           )}
                         </div>
                       </div>
@@ -579,6 +736,9 @@ function Workspace() {
                   onAddTerminal={addTerminal}
                   onCloseTerminal={closeTerminal}
                   onClose={() => panel.current?.collapse()}
+                  problems={problems}
+                  task={task}
+                  onCloseTask={closeTask}
                 />
               </ResizablePanel>
             </ResizablePanelGroup>
@@ -656,9 +816,18 @@ function Workspace() {
           Leave Zen mode <span className="text-muted-foreground">Ctrl K Z</span>
         </Button>
       ) : (
-        <StatusBar file={activeFile} />
+        <StatusBar file={activeFile} problems={problems} onProblems={() => showPanel("problems")} />
       )}
       <EditorOverlays openFile={openFile} activeFile={activeFile} commands={roomCommands} />
+      {taskPicker && (
+        <TaskPicker
+          title={taskPicker.title}
+          tasks={taskPicker.tasks}
+          onRun={runTask}
+          onClose={() => setTaskPicker(null)}
+        />
+      )}
+      <GistDialog file={activeFile} open={gistOpen} onOpenChange={setGistOpen} />
     </div>
   );
 }
@@ -692,32 +861,92 @@ function useSidePanel(
   return [value, set];
 }
 
-/** The second editor, beside the first: any file, so you can read one while writing another. */
-function SplitPane({ file, onClose }: { file: TreeNode; onClose: () => void }) {
-  const change = () => {
-    const ui = useEditorUi.getState();
-    ui.open({
+const SLOT_LABEL: Record<SplitSlot, string> = {
+  right: "Split editor",
+  below: "Editor below",
+  belowRight: "Editor below right",
+};
+const SLOT_ROLE = { right: "split", below: "split-below", belowRight: "split-below-right" } as const;
+
+/** One of the grid's other editors: any file, so you can read one while writing another. */
+function SplitPane({ slot, file }: { slot: SplitSlot; file: TreeNode }) {
+  const ui = useEditorUi.getState;
+  const change = () =>
+    ui().open({
       kind: "pickFile",
-      title: "Show in the split",
+      title: "Show in this editor",
       exclude: null,
-      onPick: (picked) => ui.setSplit(picked.id),
+      onPick: (picked) => ui().setSplitSlot(slot, picked.id),
     });
-  };
+  const closeLabel =
+    slot === "right" ? "Close the split editor" : `Close the ${SLOT_LABEL[slot].toLowerCase()}`;
   return (
-    <section aria-label={`Split editor: ${file.path}`} className="flex h-full min-h-0 flex-col">
+    <section aria-label={`${SLOT_LABEL[slot]}: ${file.path}`} className="flex h-full min-h-0 flex-col">
       <div className="flex h-8 shrink-0 items-center gap-1 border-b bg-chrome pr-1 pl-3 text-xs">
         <span className="truncate">{file.path}</span>
         <Button variant="ghost" size="xs" className="ml-auto" onClick={change}>
           Change file
         </Button>
-        <Button variant="ghost" size="icon-xs" aria-label="Close the split editor" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={closeLabel}
+          onClick={() => ui().setSplitSlot(slot, null)}
+        >
           <X />
         </Button>
       </div>
       <div className="min-h-0 flex-1">
-        <CodeEditor file={file} role="split" />
+        <CodeEditor file={file} role={SLOT_ROLE[slot]} />
       </div>
     </section>
+  );
+}
+
+/**
+ * The editors in VS Code's grid: the main one (top left), the preview or a split on its
+ * right, one below it, and one below the right one. Columns and rows resize.
+ */
+function EditorGrid({
+  main,
+  preview,
+  right,
+  below,
+  belowRight,
+}: {
+  main: ReactNode;
+  preview: ReactNode;
+  right: TreeNode | null;
+  below: TreeNode | null;
+  belowRight: TreeNode | null;
+}) {
+  const stack = (id: string, top: ReactNode, bottom: ReactNode) => (
+    <ResizablePanelGroup orientation="vertical">
+      <ResizablePanel id={`${id}-top`} minSize={100}>
+        {top}
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel id={`${id}-bottom`} minSize={100}>
+        {bottom}
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+  const left = below ? stack("grid-left", main, <SplitPane slot="below" file={below} />) : main;
+  const rightTop = preview ?? (right ? <SplitPane slot="right" file={right} /> : null);
+  const rightBottom = belowRight ? <SplitPane slot="belowRight" file={belowRight} /> : null;
+  const rightColumn =
+    rightTop && rightBottom ? stack("grid-right", rightTop, rightBottom) : (rightTop ?? rightBottom);
+  if (!rightColumn) return <>{left}</>;
+  return (
+    <ResizablePanelGroup orientation="horizontal">
+      <ResizablePanel id="grid-left" minSize={200}>
+        {left}
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel id="grid-right" minSize={200}>
+        {rightColumn}
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
 

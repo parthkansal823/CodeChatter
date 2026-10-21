@@ -12,7 +12,9 @@ import {
 import type { DbHandle } from "@codechatter/db";
 import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { gzipSync } from "node:zlib";
 
+import { GithubService } from "../github/github.service.js";
 import { DB } from "../infra/tokens.js";
 import { RoomsRepository } from "./rooms.repository.js";
 
@@ -30,6 +32,7 @@ function newRoomCode(): string {
 export class RoomsService {
   constructor(
     private readonly rooms: RoomsRepository,
+    private readonly github: GithubService,
     @Inject(DB) private readonly handle: DbHandle,
   ) {}
 
@@ -54,8 +57,9 @@ export class RoomsService {
 
   async list(userId: string): Promise<RoomSummary[]> {
     const rows = await this.rooms.listForUser(userId);
-    const members = await this.rooms.membersFor(rows.map((r) => r.room.id));
-    return rows.map(({ room, role }) => this.summarize(room, role, members.filter((m) => m.roomId === room.id)));
+    const ids = rows.map((r) => r.room.id);
+    const [members, repos] = await Promise.all([this.rooms.membersFor(ids), this.rooms.reposFor(ids)]);
+    return rows.map(({ room, role }) => this.summarize(room, role, members.filter((m) => m.roomId === room.id), repos.get(room.id) ?? null));
   }
 
   async create(session: AuthSession, input: CreateRoomInput): Promise<CreatedRoom> {
@@ -64,6 +68,18 @@ export class RoomsService {
     if (!(await this.rooms.isOrgMember(orgId, userId))) {
       throw new ForbiddenException("You're not a member of that organisation.");
     }
+
+    // Download first: a repository that can't be imported leaves no empty room behind.
+    const repo = input.repo ? await this.github.download(userId, input.repo) : null;
+    const repoRow = repo && {
+      owner: repo.owner,
+      name: repo.name,
+      branch: repo.branch,
+      defaultBranch: repo.defaultBranch,
+      commitSha: repo.commitSha,
+      files: gzipSync(JSON.stringify(repo.files)),
+      importedBy: userId,
+    };
 
     const inviteToken = randomBytes(24).toString("base64url");
     for (let attempt = 0; ; attempt++) {
@@ -74,16 +90,25 @@ export class RoomsService {
             orgId,
             name: input.name,
             description: input.description,
-            templateId: input.templateId,
+            templateId: repo ? "blank" : input.templateId,
             visibility: input.visibility,
             joinPolicy: input.joinPolicy,
             inviteTokenHash: sha256(inviteToken),
             createdBy: userId,
           },
           userId,
+          repoRow ?? undefined,
         );
         const me = { roomId: room.id, id: userId, name: session.user.name, image: session.user.image ?? null };
-        return { ...this.summarize(room, "owner", [me]), inviteToken };
+        const imported = repo && {
+          repo: `${repo.owner}/${repo.name}`,
+          branch: repo.branch,
+          commit: repo.commitSha,
+          files: repo.files.length,
+          skipped: repo.skipped,
+          truncated: repo.truncated,
+        };
+        return { ...this.summarize(room, "owner", [me], imported?.repo ?? null), inviteToken, ...(imported && { imported }) };
       } catch (error) {
         // 31^6 ≈ 887M codes; a collision is rare, so retry a few times.
         if ((error as { code?: string }).code === "23505" && attempt < 5) continue;
@@ -131,19 +156,22 @@ export class RoomsService {
   }
 
   private async summaryFor(room: RoomRow, role: RoomRole): Promise<RoomSummary> {
-    return this.summarize(room, role, await this.rooms.membersFor([room.id]));
+    const [members, repos] = await Promise.all([this.rooms.membersFor([room.id]), this.rooms.reposFor([room.id])]);
+    return this.summarize(room, role, members, repos.get(room.id) ?? null);
   }
 
   private summarize(
     room: RoomRow,
     role: RoomRole,
     members: Array<{ id: string; name: string; image: string | null }>,
+    repo: string | null,
   ): RoomSummary {
     return {
       id: room.id,
       name: room.name,
       description: room.description,
       templateId: room.templateId,
+      repo,
       visibility: room.visibility,
       joinPolicy: room.joinPolicy,
       role,

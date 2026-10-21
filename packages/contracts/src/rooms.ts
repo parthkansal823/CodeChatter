@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { RepoImport, type RepoImportSummary } from "./github.js";
 import { ROOM_ROLES } from "./permissions.js";
 
 /** Six characters, no look-alikes (0/O, 1/I/L), easy to read aloud. */
@@ -18,6 +19,8 @@ export const CreateRoomInput = z.object({
   templateId: z.enum(TEMPLATE_IDS).default("blank"),
   visibility: z.enum(["private", "public"]).default("private"),
   joinPolicy: z.enum(["invite", "approval", "open"]).default("invite"),
+  /** Start from a GitHub repository's files instead of a template. */
+  repo: RepoImport.optional(),
 });
 export type CreateRoomInput = z.infer<typeof CreateRoomInput>;
 
@@ -36,6 +39,8 @@ export type RoomSummary = {
   name: string;
   description: string;
   templateId: string | null;
+  /** "owner/name" when the room was made from a GitHub repository. */
+  repo: string | null;
   visibility: "private" | "public";
   joinPolicy: "invite" | "approval" | "open";
   role: z.infer<typeof RoomRoleSchema>;
@@ -45,7 +50,7 @@ export type RoomSummary = {
   lastActiveAt: string;
 };
 
-export type CreatedRoom = RoomSummary & { inviteToken: string };
+export type CreatedRoom = RoomSummary & { inviteToken: string; imported?: RepoImportSummary };
 
 export type JoinResult =
   | { status: "joined"; room: RoomSummary }

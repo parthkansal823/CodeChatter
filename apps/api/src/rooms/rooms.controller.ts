@@ -30,7 +30,7 @@ export class RoomsController {
   ) {
     const room = await this.rooms.create(session, input);
     await this.audit.record(
-      { orgId: session.session.activeOrganizationId ?? null, actorId: session.user.id, action: "room.create", targetType: "room", targetId: room.id, data: { name: room.name, visibility: room.visibility } },
+      { orgId: session.session.activeOrganizationId ?? null, actorId: session.user.id, action: "room.create", targetType: "room", targetId: room.id, data: { name: room.name, visibility: room.visibility, ...(room.imported && { repo: room.imported.repo, commit: room.imported.commit }) } },
       request,
     );
     return room;

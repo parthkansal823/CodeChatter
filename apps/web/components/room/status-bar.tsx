@@ -1,10 +1,11 @@
 "use client";
 
 import type { TreeNode } from "@codechatter/workspace-model";
-import { Eye, Settings2, Sparkles } from "lucide-react";
+import { CircleAlert, Eye, Settings2, Sparkles, TriangleAlert } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { getActiveEditor, useEditorInfo } from "@/components/room/editor/active-editor";
+import type { Problem } from "@/components/room/editor/problems";
 import { useInlineAi } from "@/components/room/editor/inline-completions";
 import { languageLabel } from "@/components/room/editor/languages";
 import { TAB_SIZES } from "@/components/room/editor/settings";
@@ -25,7 +26,7 @@ const STATUS = {
 
 const ROLE = { owner: "Owner", editor: "Editor", runner: "Can run", viewer: "Viewer", interviewer: "Interviewer", candidate: "Candidate" } as const;
 
-export function StatusBar({ file }: { file: TreeNode | null }) {
+export function StatusBar({ file, problems, onProblems }: { file: TreeNode | null; problems: Problem[]; onProblems: () => void }) {
   const { status, room, can } = useRoom();
   const peers = usePeers();
   const info = useEditorInfo((state) => state.info);
@@ -44,6 +45,7 @@ export function StatusBar({ file }: { file: TreeNode | null }) {
         </span>
       )}
       <span>{peers.length === 0 ? "Only you" : `${peers.length + 1} people`}</span>
+      <ProblemCounts problems={problems} onClick={onProblems} />
       <div className="ml-auto flex h-full items-center">
         {show && (
           <>
@@ -136,5 +138,26 @@ function IndentMenu({ insertSpaces, tabSize }: { insertSpaces: boolean; tabSize:
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Errors and warnings in the open files, as VS Code shows them; a click opens the Problems tab. */
+function ProblemCounts({ problems, onClick }: { problems: Problem[]; onClick: () => void }) {
+  const errors = problems.filter((p) => p.severity === "error").length;
+  const warnings = problems.filter((p) => p.severity === "warning").length;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Problems: ${errors} ${errors === 1 ? "error" : "errors"}, ${warnings} ${warnings === 1 ? "warning" : "warnings"}`}
+      className="flex h-full items-center gap-2 px-1.5 hover:bg-accent hover:text-foreground"
+    >
+      <span className="flex items-center gap-0.5">
+        <CircleAlert className={cn("size-3", errors > 0 && "text-destructive")} /> {errors}
+      </span>
+      <span className="flex items-center gap-0.5">
+        <TriangleAlert className={cn("size-3", warnings > 0 && "text-warning")} /> {warnings}
+      </span>
+    </button>
   );
 }

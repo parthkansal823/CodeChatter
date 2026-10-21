@@ -8,6 +8,11 @@ import { SessionGuard } from "./auth/session.guard.js";
 import { ProblemFilter } from "./common/problem.filter.js";
 import { DemoController } from "./demo/demo.controller.js";
 import { DemoService } from "./demo/demo.service.js";
+import { GithubController } from "./github/github.controller.js";
+import { GithubService } from "./github/github.service.js";
+import { SourceControlController } from "./github/source-control.controller.js";
+import { SourceControlService } from "./github/source-control.service.js";
+import { WebhookController } from "./github/webhook.controller.js";
 import { HealthController } from "./health/health.controller.js";
 import { HttpStudioController } from "./http-studio/http-studio.controller.js";
 import { HttpStudioService } from "./http-studio/http-studio.service.js";
@@ -43,11 +48,13 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, NotebooksController, AiController, JudgeController, HttpStudioController, DemoController],
+  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, NotebooksController, SourceControlController, WebhookController, AiController, JudgeController, HttpStudioController, DemoController],
   providers: [
     AiService,
     AuditService,
     DemoService,
+    GithubService,
+    SourceControlService,
     HttpStudioService,
     RoomJanitor,
     RoomsRepository,

@@ -9,7 +9,7 @@ import type { RoomsService } from "../rooms/rooms.service.js";
 import type { RunnerClient } from "../runner/runner.client.js";
 
 /** Languages with a language server in the sandbox image (the runner's lsp.ts has the same list). */
-export const LSP_LANGUAGES = new Set(["python"]);
+export const LSP_LANGUAGES = new Set(["python", "c", "cpp", "go", "rust"]);
 /** Biggest message either way: a whole file's text, a long completion list. */
 const MAX_MESSAGE = 8 * 1024 * 1024;
 
@@ -57,7 +57,8 @@ export function attachLspProxy(server: Server, deps: { auth: Auth; origins: Orig
       for (const message of early.splice(0)) upstream.send(message);
     });
     upstream.on("message", (data) => client.readyState === WebSocket.OPEN && client.send(data.toString()));
-    upstream.on("close", () => client.close(1000));
+    // The runner's own codes (4404: this sandbox has no server for the language) come through with their reason.
+    upstream.on("close", (code, reason) => client.close(code >= 4000 && code < 5000 ? code : 1000, reason.toString()));
     upstream.on("error", () => client.close(1011, "The language server isn't reachable."));
     client.on("message", (data) => {
       if (upstream.readyState === WebSocket.OPEN) upstream.send(data.toString());

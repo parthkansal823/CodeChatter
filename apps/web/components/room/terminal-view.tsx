@@ -3,7 +3,7 @@
 import type { TerminalClientMessage, TerminalServerMessage } from "@codechatter/contracts";
 import type { Terminal } from "@xterm/xterm";
 import { RotateCw } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useRoom } from "@/components/room/room-context";
 import { XtermView } from "@/components/room/xterm-view";
@@ -16,8 +16,12 @@ type Status = "connecting" | "ready" | "closed";
  * /ws/terminal (same origin, so the session cookie authenticates it). tmux
  * keeps the shell alive, so reconnecting brings back the same session.
  */
-/** Your terminal `n`, or the room's shared dev server session (`shared="dev"`, everyone sees the same screen). */
-export function TerminalView({ n = 1, shared }: { n?: number; shared?: "dev" }) {
+/**
+ * Your terminal `n`, the room's shared dev server session (`shared="dev"`, everyone sees
+ * the same screen), or your Task terminal (`shared="task"`), which types each new `input`
+ * (a task's command line) once it's connected.
+ */
+export function TerminalView({ n = 1, shared, input }: { n?: number; shared?: "dev" | "task"; input?: { text: string; id: number } | null }) {
   const { room } = useRoom();
   const [status, setStatus] = useState<Status>("connecting");
   const [message, setMessage] = useState<string | null>(null);
@@ -27,6 +31,19 @@ export function TerminalView({ n = 1, shared }: { n?: number; shared?: "dev" }) 
   const send = (message: TerminalClientMessage) => {
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message));
   };
+
+  // A task's command line, typed once per run when the terminal is ready (now, or once it connects):
+  // Ctrl+C first, to stop the last task, and the line a moment later (the shell drops what's typed with it).
+  const typed = useRef(0);
+  const inputId = input?.id ?? 0;
+  const inputText = input?.text ?? "";
+  useEffect(() => {
+    if (status !== "ready" || !inputId || typed.current === inputId) return;
+    typed.current = inputId;
+    send({ t: "in", d: "\x03" });
+    // Not cancelled by a cleanup: React may clean up and run this again, and the line must still go once.
+    setTimeout(() => send({ t: "in", d: inputText }), 300);
+  }, [status, inputId, inputText]);
 
   const onReady = (term: Terminal) => {
     let disposed = false;

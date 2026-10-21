@@ -43,9 +43,12 @@ export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins:
       const n = Math.min(MAX_TERMINALS, Math.max(1, Number(url.searchParams.get("n")) || 1));
       const cols = Number(url.searchParams.get("cols")) || 80;
       const rows = Number(url.searchParams.get("rows")) || 24;
-      // Your own terminal n, or the room's shared dev server session (its .codechatter/room.json).
-      // Both need terminal rights, checked above; the dev session is a shell like any other.
-      const name = url.searchParams.get("shared") === "dev" ? "dev" : `u${session.user.id.replace(/[^a-zA-Z0-9]/g, "")}-${n}`.slice(0, 40);
+      // Your own terminal n, your Task terminal (tasks.json and npm scripts run there), or the
+      // room's shared dev server session (its .codechatter/room.json). All need terminal rights,
+      // checked above; the dev session is a shell like any other.
+      const shared = url.searchParams.get("shared");
+      const you = `u${session.user.id.replace(/[^a-zA-Z0-9]/g, "")}`;
+      const name = shared === "dev" ? "dev" : `${you}-${shared === "task" ? "task" : n}`.slice(0, 40);
       const user = { id: session.user.id, name: session.user.name };
       wss.handleUpgrade(req, socket, head, (client) => pipe(client, room.data, name, cols, rows, user));
     })().catch((error: unknown) => {

@@ -643,7 +643,7 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
     - **SVG as an image**: fit or actual size, its size shown, on a checkerboard; drawn as an image, so a script in the file never runs
     - tests: `csv.test.ts` 10/10, browser `apps/web/test/preview.e2e.mjs` 19/19
   - ⬜ PNG, JPEG and other binary images: they need binary files in the room first (§5 Files; today the sandbox syncs text files only)
-  - ⬜ grid splits
+  - ✅ **grid splits** (2026-10-21): up to four editors as VS Code splits them: Ctrl+\ to the right, Split down below the main editor and then below the right one, each with its own file (Change file), breadcrumbs and close button, Close all split editors to go back to one; rows and columns resize. Browser `grid.e2e.mjs` 9/9
 - ✅ **Change language mode** for a file, from the palette or the status bar.
 - ✅ **Follow someone:** their file opens for you as they move, with a banner and a Stop button (like Live Share). Start it from the palette ("Follow someone…") or, since 2026-10-10, with the Follow button beside each person in the People panel (the faces in the top bar); `room-people.e2e.mjs` 7/7.
 - ✅ **Search and replace across files** (Ctrl+Shift+F, Ctrl+Shift+H; the Search view shares the sidebar with Files):
@@ -660,9 +660,14 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
   - the editor's services can read every room file (`editor/workspace-fs.ts`), so a definition in a file nobody has open still opens
   - fixed on the way: Go to line (and every palette page) now hands focus back to the code
   - known: Pyright 1.1.400 stops answering after `initialized` when a client offers workspace-folder changes; the runner turns that offer off (a room has one folder)
-  - tests: `lsp.test.ts` 6/6, `apps/runner/test/lsp.e2e.mjs` 8/8, browser `apps/web/test/lsp.e2e.mjs` 9/9
-  - ⬜ next: C and C++ (clangd), Go (gopls) and Rust (rust-analyzer) in the full image, Java (jdtls); TypeScript and JavaScript already have IntelliSense in the browser
-  - ⬜ a Problems panel listing every file's problems
+  - ✅ **C and C++** (clangd 19, both images), 2026-10-21: gcc's headers (bits/stdc++.h too), C17 and C++20 for files without a build setup, no background index (it would write .cache/ into the room)
+  - ✅ **Go** (gopls) and **Rust** (rust-analyzer, with rust-src) in the full image; in the base image the server says it comes with the full image. rust-analyzer finds a crate at the workspace's root or one folder down, keeps cargo offline, and reads the standard library from its sources (the sandbox has no network)
+  - the servers' own formatting is left out (the room's Format document runs the same tools), so a file never has two formatters
+  - fixed on the way: a palette page that moves to the code (Go to line) no longer leaves focus on the page
+  - tests: `lsp.test.ts` 9/9, `apps/runner/test/lsp.e2e.mjs` 12/12 (Python, C++, Go, Rust), browser `apps/web/test/lsp.e2e.mjs` 11/11 (Python and C++)
+  - ⬜ next: Java (jdtls, large), and problems for files nobody has open; TypeScript and JavaScript already have IntelliSense in the browser
+  - ✅ **Problems** (2026-10-21): a tab beside Output with what the language servers and TypeScript report in the open files, grouped by file, with a filter and a switch each for errors, warnings and info; a click puts the cursor on it. The status bar counts errors and warnings, and opens the tab. "Show problems" in the palette. Browser `problems.e2e.mjs` 10/10
+  - ⬜ problems in files nobody has open (each server reports open files; a whole-project check would run in the sandbox)
 - 🟡 **Formatters** (2026-10-20): Format document (Shift+Alt+F, and on save when that's on) for languages the browser can't format itself runs their formatter in the room's sandbox, inside the jail:
   - ✅ Python (Ruff), C and C++ (clang-format, following a `.clang-format` file), shell (shfmt, with the editor's indentation) in both images; Go (gofmt) and Rust (rustfmt) in the full image
   - ✅ the result lands as small edits, one per changed run of lines, so others' cursors stay put (`editor/line-edits.ts`); one Undo puts it back; a syntax error leaves the file alone and shows the formatter's message
@@ -673,8 +678,12 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
 - 🟡 **Personal settings:**
   - ✅ font size and ligatures, tab size and indentation, word wrap, minimap, line numbers, whitespace, cursor style, bracket colours, sticky scroll, format on save (Ctrl+,)
   - ✅ **Vim key bindings** (2026-10-20, `monaco-vim`, loaded only for people who turn them on): Settings, Key bindings, or the palette; modes, motions, operators, registers and : commands, with the mode and the command line under the editor; `:w` does what Ctrl+S does. Browser `keys.e2e.mjs` 12/12 (with Emmet)
-  - ⬜ Emacs key bindings (the `monaco-emacs` package hasn't been updated since 2022), themes (import VS Code theme JSON), settings saved to your account rather than this browser
-- ⬜ **Tasks and launch configs** (`.vscode/tasks.json` and `launch.json` understood).
+  - ✅ **Editor themes** (2026-10-21): Settings, Theme: the room's own (following the app's light or dark), Visual Studio Light and Dark, and high contrast light and dark; **Import…** takes a VS Code theme's .json (comments and trailing commas fine), with its editor colours and its TextMate scopes mapped onto the highlighters' tokens (`editor/vscode-theme.ts`); imported themes stay in this browser and can be removed. Tests: `vscode-theme.test.ts` 6/6, browser `themes.e2e.mjs` 11/11
+  - ✅ **settings saved to your account** (2026-10-21): the editor settings and imported themes follow you to any browser (`user_settings`, migration `0002_user_settings`; GET and PUT `/api/me/settings`; `editor/settings-sync.ts`). Loaded when a room opens, saved a moment after a change; a change this browser didn't get to save (a reload right after it) wins over the account's older copy. Browser `account-settings.e2e.mjs` 5/5
+  - ⬜ Emacs key bindings (the `monaco-emacs` package hasn't been updated since 2022)
+- 🟡 **Tasks and launch configs:**
+  - ✅ **tasks** (2026-10-21): `.vscode/tasks.json` (shell, process and npm tasks; args, folder, environment, build and test groups; `${file}`, `${workspaceFolder}` and the rest) and every package.json's scripts. Run task… in the palette, and Ctrl+Shift+B for the default build task. A task runs in your own Task terminal (a tab beside the others), which Ctrl+C's the last one first, as VS Code reuses its task terminal; it needs terminal rights. Tests: `tasks.test.ts` 8/8, browser `tasks.e2e.mjs` 8/8
+  - ⬜ `launch.json`: comes with the debugger
 - ⬜ **Extensions** from Open VSX through the VS Code extension host. Last: the largest piece.
 
 ### B. Every language ✅ (24 more languages)
@@ -873,17 +882,35 @@ A real cluster normally needs privileged containers. Those can't be given to cod
 
 ### E. GitHub
 - ✅ Sign in with GitHub (needs a GitHub OAuth app; see Housekeeping).
-- ⬜ **Import a repo into a room**, public or private (your token is encrypted).
-  - The API downloads it through the GitHub API, so the sandbox still needs no internet.
-  - An "Open in CodeChatter" link: `/new?repo=owner/name`.
-- ⬜ **Source Control panel:**
-  - changes since the last sync, diffs, and commit and push to a branch
-  - commits are made through the GitHub API from the room's files
-  - pull, which arrives as a normal edit everyone sees
-  - switch branches
-- ⬜ **Pull requests:** open a PR from the room, and review a PR's diff in the room with comments synced to GitHub.
-- ⬜ **Webhooks:** pushes, PRs and Actions results posted to room chat.
-- ⬜ **Export:** a room to a new repo in one click; a file as a gist.
+- ✅ **Import a repo into a room** (2026-10-21), public or private.
+  - New room has a GitHub choice: `owner/name`, `owner/name@branch`, or any GitHub link (`…/tree/branch` too). The room is named after the repository unless you name it, and the rooms list shows the repository.
+  - The API downloads one tarball through the GitHub API (`api/src/github`, its own small tar reader), so the sandbox still needs no internet. Text files only: binaries, links and files over 1 MB stay out, and a room takes at most 3,000 files and 25 MB; the invite step says what came in and what stayed out.
+  - The files are kept with the room (`room_repos`, gzipped, with the branch and commit) and collab seeds the room from them once, as it does templates. They're the base Source Control will compare with.
+  - Private repositories: a personal access token in Settings (a new page; the user menu linked to it already). GitHub checks it when it's saved; it's sealed with AES-256-GCM under a key from BETTER_AUTH_SECRET and never sent back.
+  - An "Open in CodeChatter" link: `/new?repo=owner/name` (after sign-in when needed).
+  - One import at a time per person; clear messages for a missing repository, a refused token, GitHub's hourly limit without a token, and repositories over 60 MB compressed.
+  - Tests: `github-import.e2e.mjs` 16/16 against real GitHub (octocat/Spoon-Knife), unit tests for the tar reader, file picking, token sealing and repository parsing.
+- ✅ **Source Control panel** (2026-10-21), for rooms made from a repository (activity bar, Ctrl+Shift+G, the palette):
+  - the room's changes since the last sync (changed, added, deleted), worked out in the browser against the base the API keeps; each opens as a diff, GitHub's version beside the live file; Discard puts a file back
+  - commit and push to the room's branch or a new one, with your own GitHub token, through the Git Data API (a tree on the base commit, a commit, then the branch moved forward only; file modes kept). A branch with commits the room hasn't seen is refused until you pull; so is a commit with conflict markers still in it.
+  - pull: the API fetches the branch, the browser merges it line by line (diff3, as git does) into everyone's files as one edit, and conflicts are marked `<<<<<<<` as in git
+  - switch branches (once changes are committed or discarded); everyone's view follows a sync through the files document
+  - every sync names the base it was made against, so a stale view is refused, and a room syncs one at a time
+  - Tests: `apps/api/test/source-control.e2e.mjs` 23/23 against a mock GitHub with real git objects (its own API on :4011), `apps/web/test/source-control.e2e.mjs` 19/19 against real GitHub without a token, and the merge's unit tests (8)
+- ✅ **Pull requests** (2026-10-21), in the Source Control view:
+  - the repository's open pull requests; one opens in the editor area with its description and each file's diff (both line numbers, added and removed lines marked, binary files noted)
+  - review comments on lines, as threads under them, outdated ones at the file's top; comment on any line (a removed line goes on the old side, as on GitHub) and reply, posted with your token, so it's the review GitHub shows
+  - open a pull request from the room's branch into the default branch (kept from the import, `room_repos.default_branch`); from the default branch itself the room says to commit to a new branch first
+  - Tests: the API suite against the mock GitHub now 34/34 (open, already open, list, files, line comment, reply, a line off the diff), `apps/web/test/pull-requests.e2e.mjs` 18/18 (real Spoon-Knife pull requests read through the API, then the review UI with the room's routes answered in the browser), and the patch parser's unit tests
+- ✅ **Webhooks** (2026-10-21): pushes, pull requests (opened, merged, closed, reopened, ready for review) and finished Actions runs posted to room chat as messages from "GitHub", with their links.
+  - Turned on in the Source Control view (Activity in chat, for people who manage the room). With a token that can, the webhook is made on GitHub; otherwise its address and secret show once, to add by hand. Turning it on again replaces the secret; off removes the webhook.
+  - `POST /api/github/webhooks/:room` takes only deliveries signed with the room's secret (sealed in `room_repos`), about the room's repository; GitHub needs a public address to reach it (docs/deploy.md).
+  - Tests: the API suite against the mock GitHub now 43/43 (made with a token, ping, push, bad or missing signature, another repository, a quiet event, reconnect, off, by hand), `apps/web/test/webhooks.e2e.mjs` 14/14 (by hand, a signed push shows in chat with its link), and the messages' unit tests
+- ✅ **Export** (2026-10-21):
+  - a room that isn't on GitHub shows Publish in the Source Control view (now in every room; Ctrl+Shift+G): a new repository of yours (private unless you say so, named from the room) with exactly the room's files as one commit, and the room is then linked to it, so commit, pull, pull requests and webhooks work there
+  - a file as a gist from the palette ("Share the file as a GitHub gist…"), secret unless made public, with its link to copy
+  - both use your token (repo and gist scopes; Settings' link asks for both)
+  - Tests: the API suite against the mock GitHub (now several repositories, and gists) 52/52, `apps/web/test/export.e2e.mjs` 13/13
 
 ## Developer tooling ✅
 

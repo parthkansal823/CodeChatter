@@ -41,6 +41,8 @@ export function PaletteDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
+        // A pick that focuses the code (Go to line) keeps it: the dialog doesn't move focus as it goes.
+        onCloseAutoFocus={(event) => event.preventDefault()}
         className="top-[14%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
       >
         <DialogHeader className="sr-only">

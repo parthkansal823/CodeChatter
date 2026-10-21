@@ -1,6 +1,8 @@
 "use client";
 
 import { LogIn, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { use } from "react";
 
 import { PageHeader, useMe } from "@/components/app/app-shell";
 import { JoinRoomDialog } from "@/components/rooms/join-room-dialog";
@@ -10,7 +12,10 @@ import { useRooms } from "@/components/rooms/use-rooms";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export default function DashboardPage() {
+/** `?repo=owner/name` (from the /new?repo= link) opens New room on that repository. */
+export default function DashboardPage({ searchParams }: { searchParams: Promise<{ repo?: string }> }) {
+  const { repo } = use(searchParams);
+  const router = useRouter();
   const me = useMe();
   const rooms = useRooms();
   const firstName = me.user.name.split(" ")[0];
@@ -36,7 +41,12 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Rooms" description={`Welcome back, ${firstName}. Pick up where you left off.`} actions={actions} />
+      <PageHeader
+        title="Rooms"
+        description={`Welcome back, ${firstName}. Pick up where you left off.`}
+        actions={actions}
+      />
+      {repo && <NewRoomDialog defaultOpen initialRepo={repo} onClosed={() => router.replace("/dashboard")} />}
 
       {rooms.isPending ? (
         <div className="grid gap-3 px-6 py-6 sm:px-8">
@@ -56,8 +66,8 @@ export default function DashboardPage() {
         <div className="mx-auto max-w-md px-6 py-20 text-center">
           <h2 className="font-wide text-xl font-semibold tracking-[-0.015em]">No rooms yet</h2>
           <p className="mt-2 text-muted-foreground">
-            A room is a shared workspace: files, a terminal, chat and a sandbox to run code. Start one and send the
-            link, or join a room someone shared with you.
+            A room is a shared workspace: files, a terminal, chat and a sandbox to run code. Start one and
+            send the link, or join a room someone shared with you.
           </p>
           <div className="mt-6 flex justify-center gap-2">{actions}</div>
         </div>

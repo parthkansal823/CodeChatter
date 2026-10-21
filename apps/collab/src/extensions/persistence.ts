@@ -1,3 +1,5 @@
+import { gunzipSync } from "node:zlib";
+
 import { schema, type DbHandle } from "@codechatter/db";
 import { initDoc, isInitialised, parseDocName, templateFiles } from "@codechatter/workspace-model";
 import type { Extension, onChangePayload, onLoadDocumentPayload, onStoreDocumentPayload } from "@hocuspocus/server";
@@ -15,8 +17,8 @@ import type { CollabContext } from "./access.js";
  *    persisted, so a crash of the originating instance loses nothing.
  *  - Snapshots are compacted from the log (never from a live replica) under an
  *    advisory lock, so a snapshot can't claim a seq whose update it lacks.
- *  - A new room is seeded from its template exactly once, even when two
- *    instances load it at the same moment.
+ *  - A new room is seeded from its template, or the GitHub repository it was
+ *    made from, exactly once, even when two instances load it at the same moment.
  */
 export function persistenceExtension(handle: DbHandle, instance: string): Extension {
   const { db } = handle;
@@ -58,8 +60,11 @@ export function persistenceExtension(handle: DbHandle, instance: string): Extens
         return;
       }
       const room = await tx.query.rooms.findFirst({ where: eq(schema.rooms.id, parsed.roomId), columns: { templateId: true } });
+      // A room made from a GitHub repository starts with its files instead of a template's.
+      const repo = await tx.query.roomRepos.findFirst({ where: eq(schema.roomRepos.roomId, parsed.roomId), columns: { files: true } });
+      const files = repo ? (JSON.parse(gunzipSync(repo.files).toString("utf8")) as Array<{ path: string; content: string }>) : templateFiles(room?.templateId);
       const seeded = new Y.Doc();
-      initDoc(seeded, room?.templateId ?? "blank", templateFiles(room?.templateId));
+      initDoc(seeded, room?.templateId ?? "blank", files);
       const update = Y.encodeStateAsUpdate(seeded);
       await tx.insert(schema.docUpdates).values({ docName, origin: `${instance}:seed`, update });
       Y.applyUpdate(doc, update);

@@ -61,6 +61,7 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
   - the same runner tests on the Kubernetes driver (Docker Desktop's cluster): a second runner, `RUNNER_PORT=4202 RUNNER_DRIVER=kubernetes SANDBOX_NAMESPACE=kube pnpm exec tsx watch --env-file-if-exists=../../.env src/main.ts` from `apps/runner`, and `RUNNER_URL=http://127.0.0.1:4202` for the tests
   - browser tests in `apps/web/test/*.e2e.mjs` (Playwright-core + Edge against http://localhost:8080; helpers in `browser.mjs`), run from `apps/web` with `node test/<name>.e2e.mjs`
   - the same browser tests against the Kubernetes demo (the Helm chart, `infra/helm/codechatter/README.md`, at http://localhost:8090): `APP_URL=http://localhost:8090 node test/<name>.e2e.mjs`
+- **GitHub tests:** `test/source-control.e2e.mjs` from `apps/api` starts its own API on :4011 (from the dev watcher's `dist`) against a mock GitHub (`test/mock-github.mjs`); `apps/web/test/github-import.e2e.mjs`, `source-control.e2e.mjs`, `pull-requests.e2e.mjs`, `webhooks.e2e.mjs` and `export.e2e.mjs` use real GitHub without a token (octocat/Spoon-Knife; GitHub allows 60 requests an hour without one, about 25 for all five), answering writes in the browser.
 - **AI tests:**
   - `ai.e2e.mjs` needs the mock AI: run `node test/mock-ai.mjs` from `apps/api`, and point `.env` at it as its header shows
   - `ai-ollama.e2e.mjs` uses the local Ollama, which `.env` normally points at

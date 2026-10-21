@@ -93,6 +93,11 @@ export class EventsGateway implements OnGatewayInit {
     if (parsed.success) await socket.leave(channel(parsed.data));
   }
 
+  /** A message posted by the server (GitHub activity) to everyone in the room. */
+  postToChat(roomId: string, message: ChatMessage): void {
+    this.server.to(channel(roomId)).emit("chat:message", message);
+  }
+
   @SubscribeMessage("chat:send")
   async send(@ConnectedSocket() socket: RoomSocket, @MessageBody() body: unknown): Promise<Ack<ChatMessage>> {
     const input = SendMessageInput.safeParse(body);

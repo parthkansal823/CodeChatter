@@ -31,6 +31,8 @@ const Env = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GITHUB_CLIENT_ID: z.string().optional().default(""),
   GITHUB_CLIENT_SECRET: z.string().optional().default(""),
+  /** Where repositories are imported from (github/github.service.ts); GitHub Enterprise has its own. */
+  GITHUB_API_URL: z.url().default("https://api.github.com"),
   /** "Try the demo": one-click guest accounts (off unless set in production). */
   DEMO_ENABLED: z
     .enum(["true", "false", ""])

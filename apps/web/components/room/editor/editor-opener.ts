@@ -14,6 +14,11 @@ export function setEditorOpener(opener: Opener | null): void {
   open = opener;
 }
 
+/** Open a room file at a place (the Problems tab, say); false when it isn't one. */
+export function openRoomFile(path: string, range: RevealRange): boolean {
+  return open?.(path, range) ?? false;
+}
+
 type Selection = { startLineNumber: number; startColumn: number; endLineNumber?: number; endColumn?: number };
 
 /**

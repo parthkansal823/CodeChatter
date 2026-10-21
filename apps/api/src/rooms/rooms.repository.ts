@@ -7,6 +7,7 @@ import { DB } from "../infra/tokens.js";
 
 type RoomRow = typeof schema.rooms.$inferSelect;
 type NewRoom = typeof schema.rooms.$inferInsert;
+type NewRoomRepo = typeof schema.roomRepos.$inferInsert;
 export type MemberRow = typeof schema.roomMembers.$inferSelect;
 
 /** Queries only. Business rules live in RoomsService. */
@@ -36,11 +37,12 @@ export class RoomsRepository {
     return Boolean(row);
   }
 
-  /** Room + owner membership in one transaction: a room never exists ownerless. */
-  async createWithOwner(room: NewRoom, ownerId: string): Promise<RoomRow> {
+  /** Room + owner membership (and the repository it's made from) in one transaction: a room never exists ownerless. */
+  async createWithOwner(room: NewRoom, ownerId: string, repo?: Omit<NewRoomRepo, "roomId">): Promise<RoomRow> {
     return this.db.transaction(async (tx) => {
       const [created] = await tx.insert(schema.rooms).values(room).returning();
       await tx.insert(schema.roomMembers).values({ roomId: created!.id, userId: ownerId, role: "owner" });
+      if (repo) await tx.insert(schema.roomRepos).values({ ...repo, roomId: created!.id });
       return created!;
     });
   }
@@ -74,6 +76,16 @@ export class RoomsRepository {
   }
 
   /** Active members for a set of rooms, oldest first (owners lead the preview). */
+  /** "owner/name" of the repository each room was made from, for rooms made from one. */
+  async reposFor(roomIds: string[]): Promise<Map<string, string>> {
+    if (roomIds.length === 0) return new Map();
+    const rows = await this.db
+      .select({ roomId: schema.roomRepos.roomId, owner: schema.roomRepos.owner, name: schema.roomRepos.name })
+      .from(schema.roomRepos)
+      .where(inArray(schema.roomRepos.roomId, roomIds));
+    return new Map(rows.map((row) => [row.roomId, `${row.owner}/${row.name}`]));
+  }
+
   membersFor(roomIds: string[]) {
     if (roomIds.length === 0) return Promise.resolve([]);
     return this.db

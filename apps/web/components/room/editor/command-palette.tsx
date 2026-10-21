@@ -26,6 +26,8 @@ import {
   openQuickOpen,
   openSettings,
   toggleFilePreview,
+  closeSplits,
+  splitDown,
   toggleSplit,
   toggleZen,
   useEditorUi,
@@ -80,6 +82,8 @@ function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">
       shortcut: "Ctrl \\",
       run: () => toggleSplit(activeFile?.id ?? null),
     },
+    { id: "split-down", label: "Split editor down", run: () => splitDown(activeFile?.id ?? null) },
+    { id: "split-close", label: "Close all split editors", run: closeSplits },
     { id: "compare", label: "Compare with another file…", run: onCompare },
     ...(preview
       ? [

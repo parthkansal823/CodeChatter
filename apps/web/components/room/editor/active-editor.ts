@@ -42,8 +42,9 @@ export function readInfo(editor: Editor): EditorInfo | null {
 
 // The pane you last focused is "the editor" for shortcuts, the status bar and what
 // other people see you doing. The main editor is the default.
-export type PaneRole = "primary" | "split" | "diff";
-const panes: Record<PaneRole, Editor | null> = { primary: null, split: null, diff: null };
+/** The main editor, the grid's others (split: right, split-below, split-below-right), and a comparison. */
+export type PaneRole = "primary" | "split" | "split-below" | "split-below-right" | "diff";
+const panes: Record<PaneRole, Editor | null> = { primary: null, split: null, "split-below": null, "split-below-right": null, diff: null };
 let active: Editor | null = null;
 
 export const getActiveEditor = (): Editor | null => active ?? panes.primary;

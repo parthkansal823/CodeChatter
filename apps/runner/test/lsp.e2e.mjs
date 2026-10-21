@@ -40,8 +40,8 @@ createFileAtPath(doc, `${dir}/app.py`, APP, null);
 const uri = `file:///workspace/${dir}/app.py`;
 
 /** A JSON-RPC connection over the runner's socket. */
-function connect() {
-  const ws = new WebSocket(`${RUNNER.replace(/^http/, "ws")}/rooms/${ROOM}/lsp?language=python`, { headers: headers() });
+function connect(language = "python") {
+  const ws = new WebSocket(`${RUNNER.replace(/^http/, "ws")}/rooms/${ROOM}/lsp?language=${language}`, { headers: headers() });
   let next = 1;
   const pending = new Map();
   const notes = [];
@@ -164,6 +164,81 @@ try {
   client.ws.close();
   await sleep(3000);
   record("serverStopsWhenClosed", (await pyrightProcesses()) === 0);
+
+  // C++ with clangd (both images): gcc's headers, a compile error, and completions on a vector.
+  const cppUri = `file:///workspace/${dir}/main.cpp`;
+  const CPP = `#include <bits/stdc++.h>
+int main() {
+  std::vector<int> v;
+  int n = "x";
+  v.
+}
+`;
+  createFileAtPath(doc, `${dir}/main.cpp`, CPP, null);
+  await sleep(1000);
+  const cpp = connect("cpp");
+  await cpp.opened;
+  await cpp.request("initialize", { processId: null, rootUri: "file:///workspace", capabilities: { textDocument: { publishDiagnostics: {}, completion: { completionItem: { snippetSupport: true } } } } });
+  cpp.notify("initialized", {});
+  cpp.notify("textDocument/didOpen", { textDocument: { uri: cppUri, languageId: "cpp", version: 1, text: CPP } });
+  const cppDiagnostics = await cpp.note((n) => n.method === "textDocument/publishDiagnostics" && n.params.uri === cppUri && n.params.diagnostics.length > 0);
+  const cppMessages = cppDiagnostics?.params.diagnostics.map((d) => d.message) ?? [];
+  record("cppReportsError", cppMessages.some((m) => /cannot initialize|const char/.test(m)) && !cppMessages.some((m) => /file not found/.test(m)), cppMessages.join(" | "));
+  const cppCompletion = await cpp.request("textDocument/completion", { textDocument: { uri: cppUri }, position: { line: 4, character: 4 } });
+  const cppItems = (Array.isArray(cppCompletion.result) ? cppCompletion.result : (cppCompletion.result?.items ?? [])).map((i) => i.filterText ?? i.label.trim());
+  record("cppCompletes", cppItems.includes("push_back"), `${cppItems.length} items: ${cppItems.slice(0, 6).join(", ")}`);
+  cpp.ws.close();
+
+  // Go and Rust come with the full image; the base image says so when asked.
+  const FULL = (process.env.SANDBOX_IMAGE ?? "").includes("full");
+  for (const [language, file, text, line, character, expected] of [
+    ["go", "hello/main.go", `package main
+
+import "fmt"
+
+func main() {
+	fmt.Pr
+}
+`, 5, 7, "Println"],
+    // A crate one folder below the workspace, where rust-analyzer looks for Cargo.toml.
+    ["rust", "src/main.rs", `fn main() {
+    let s = String::new();
+    s.
+}
+`, 2, 6, "len"],
+  ]) {
+    if (language === "rust") createFileAtPath(doc, `${dir}/Cargo.toml`, `[package]
+name = "crab"
+version = "0.1.0"
+edition = "2021"
+`, null);
+    if (language === "go") createFileAtPath(doc, `${dir}/hello/go.mod`, `module hello
+
+go 1.22
+`, null);
+    createFileAtPath(doc, `${dir}/${file}`, text, null);
+    await sleep(1500);
+    const lsp = connect(language);
+    const closedWith = new Promise((resolve) => lsp.ws.once("close", (code, reason) => resolve(`${code} ${reason}`)));
+    await lsp.opened;
+    if (!FULL) {
+      lsp.notify("initialized", {});
+      record(`${language}NeedsFullImage`, /^4404 .*full image/.test(await closedWith), await closedWith);
+      continue;
+    }
+    const fileUri = `file:///workspace/${dir}/${file}`;
+    await lsp.request("initialize", { processId: null, rootUri: "file:///workspace", capabilities: { textDocument: { completion: { completionItem: { snippetSupport: true } } } } }, 120_000);
+    lsp.notify("initialized", {});
+    lsp.notify("textDocument/didOpen", { textDocument: { uri: fileUri, languageId: language, version: 1, text } });
+    let labels = [];
+    // Servers that index a project first (rust-analyzer) answer with little until they're done.
+    for (const until = Date.now() + 120_000; Date.now() < until && !labels.includes(expected); await sleep(2000)) {
+      const result = await lsp.request("textDocument/completion", { textDocument: { uri: fileUri }, position: { line, character } }, 60_000).catch(() => null);
+      labels = (Array.isArray(result?.result) ? result.result : (result?.result?.items ?? [])).map((i) => i.filterText ?? i.label.trim());
+    }
+    record(`${language}Completes`, labels.includes(expected), `${labels.length} items: ${labels.slice(0, 6).join(", ")}`);
+    lsp.ws.close();
+  }
 } catch (error) {
   record("flowCompletes", false, error instanceof Error ? error.message : String(error));
 } finally {

@@ -4,8 +4,10 @@ import { ROOM_CONFIG_PATH } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import {
   ChevronDown,
+  CircleAlert,
   FlaskConical,
   Gauge,
+  ListChecks,
   Loader2,
   Plus,
   Rocket,
@@ -15,8 +17,10 @@ import {
 } from "lucide-react";
 
 import { DevServerPanel } from "@/components/room/dev-server-panel";
+import type { Problem } from "@/components/room/editor/problems";
 import { useRoomFiles } from "@/components/room/editor/room-files";
 import { PortsPanel } from "@/components/room/ports-panel";
+import { ProblemsPanel } from "@/components/room/problems-panel";
 import { useRoom } from "@/components/room/room-context";
 import { useRun } from "@/components/room/run-context";
 import { RunOutput } from "@/components/room/run-output";
@@ -28,7 +32,10 @@ import { cn } from "@/lib/utils";
 
 export const MAX_TERMINALS = 4;
 
-export type PanelTab = "output" | "tests" | "ports" | "dev" | `terminal-${number}`;
+export type PanelTab = "output" | "problems" | "tests" | "ports" | "dev" | "task" | `terminal-${number}`;
+
+/** The task running in your Task terminal: its name, and the line typed for this run. */
+export type RunningTask = { label: string; input: string; id: number };
 
 /**
  * The panel under the editor: the room's shared Run output plus your
@@ -43,8 +50,16 @@ export function BottomPanel({
   onAddTerminal,
   onCloseTerminal,
   onClose,
+  problems,
+  task,
+  onCloseTask,
 }: {
+  /** The last task you ran (Run task…), in its own terminal tab. */
+  task: RunningTask | null;
+  onCloseTask: () => void;
   tab: PanelTab;
+  /** What the language servers and TypeScript report in the open files (the Problems tab). */
+  problems: Problem[];
   /** The open file (the Tests tab shows its test cases). */
   file: TreeNode | null;
   onTab: (tab: PanelTab) => void;
@@ -77,6 +92,14 @@ export function BottomPanel({
               <span aria-label="running" className="size-1.5 animate-pulse rounded-full bg-brand" />
             )}
           </PanelTabButton>
+          <PanelTabButton selected={tab === "problems"} onClick={() => onTab("problems")}>
+            <CircleAlert className="size-3.5" /> Problems
+            {problems.length > 0 && (
+              <span className="min-w-4 rounded-full bg-secondary px-1 text-center text-2xs text-muted-foreground tabular-nums">
+                {problems.length}
+              </span>
+            )}
+          </PanelTabButton>
           <PanelTabButton selected={tab === "tests"} onClick={() => onTab("tests")}>
             <FlaskConical className="size-3.5" /> Tests
           </PanelTabButton>
@@ -86,6 +109,11 @@ export function BottomPanel({
           {hasDevServer && (
             <PanelTabButton selected={tab === "dev"} onClick={() => onTab("dev")}>
               <Rocket className="size-3.5" /> Dev server
+            </PanelTabButton>
+          )}
+          {task && (
+            <PanelTabButton selected={tab === "task"} onClick={() => onTab("task")} onClose={onCloseTask}>
+              <ListChecks className="size-3.5" /> Task: {task.label}
             </PanelTabButton>
           )}
           {terminals.map((n) => (
@@ -134,6 +162,9 @@ export function BottomPanel({
         <div className={cn("absolute inset-0", tab !== "output" && "hidden")}>
           <RunOutput />
         </div>
+        <div className={cn("absolute inset-0", tab !== "problems" && "hidden")}>
+          <ProblemsPanel problems={problems} />
+        </div>
         <div className={cn("absolute inset-0", tab !== "tests" && "hidden")}>
           <TestsPanel file={file} />
         </div>
@@ -143,6 +174,11 @@ export function BottomPanel({
         {hasDevServer && (
           <div className={cn("absolute inset-0", tab !== "dev" && "hidden")}>
             <DevServerPanel visible={tab === "dev"} />
+          </div>
+        )}
+        {task && (
+          <div className={cn("absolute inset-0", tab !== "task" && "hidden")}>
+            <TerminalView shared="task" input={{ text: task.input, id: task.id }} />
           </div>
         )}
         {terminals.map((n) => (

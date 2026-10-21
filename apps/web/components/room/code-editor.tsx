@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTabs } from "@/components/room/editor-store";
 import type { PaneRole } from "@/components/room/editor/active-editor";
 import { Breadcrumbs } from "@/components/room/editor/breadcrumbs";
+import { editorThemeId } from "@/components/room/editor/themes";
 import { attachVim } from "@/components/room/editor/vim-mode";
 import { acquireModel, restoreViewState, saveViewState } from "@/components/room/editor/file-models";
 import { RemoteCursorStyles } from "@/components/room/editor/remote-cursors";
@@ -19,6 +20,9 @@ import { useRoom } from "@/components/room/room-context";
 
 const READ_ONLY_ROOM = "You can view this room but not edit it. Ask the owner for editor access.";
 const READ_ONLY_NOTEBOOK = "This is the notebook's saved form, kept in step with its cells. Open the file on its own to edit the cells.";
+
+/** Which grid slot (ui-store.ts) each split editor shows. */
+const SLOT_OF_ROLE = { split: "right", "split-below": "below", "split-below-right": "belowRight" } as const;
 
 type Props = {
   file: TreeNode | null;
@@ -63,7 +67,7 @@ export function CodeEditor({ file, role }: Props) {
         padding: { top: 12, bottom: 12 },
         readOnly,
         readOnlyMessage: { value: READ_ONLY_ROOM },
-        theme: document.documentElement.classList.contains("dark") ? "cc-dark" : "cc-light",
+        theme: editorThemeId(document.documentElement.classList.contains("dark")),
         ...monacoOptions(currentSettings()),
       });
       editorRef.current = editor;
@@ -82,11 +86,13 @@ export function CodeEditor({ file, role }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The editor theme (Settings): the room's own follows the app's light or dark.
+  const themeSetting = settings.editorTheme;
   useEffect(() => {
     if (!ready) return;
-    monaco.editor.setTheme(resolvedTheme === "dark" ? "cc-dark" : "cc-light");
+    monaco.editor.setTheme(editorThemeId(resolvedTheme === "dark", themeSetting));
     wired.current?.refreshMarks();
-  }, [ready, resolvedTheme]);
+  }, [ready, resolvedTheme, themeSetting]);
 
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly, readOnlyMessage: { value: notebook && can("files.edit") ? READ_ONLY_NOTEBOOK : READ_ONLY_ROOM } });
@@ -145,7 +151,8 @@ export function CodeEditor({ file, role }: Props) {
   }, [editor, vim]);
 
   // A file picked from a breadcrumb opens in this pane: a tab in the main editor, or the split's file.
-  const openHere = (fileId: string) => (role === "split" ? useEditorUi.getState().setSplit(fileId) : open(room.id, fileId));
+  const openHere = (fileId: string) =>
+    role === "primary" ? open(room.id, fileId) : useEditorUi.getState().setSplitSlot(SLOT_OF_ROLE[role], fileId);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

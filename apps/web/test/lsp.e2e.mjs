@@ -47,6 +47,8 @@ async function goTo(line, column) {
   await a.getByRole("dialog", { name: "Go to line" }).waitFor({ timeout: 5_000 });
   await a.keyboard.type(`${line}:${column}`);
   await a.keyboard.press("Enter");
+  // Focus comes back to the code as the dialog goes (a moment later, not in the same tick).
+  await a.waitForFunction(() => Boolean(document.activeElement?.closest(".monaco-editor")), null, { timeout: 5_000 });
 }
 
 try {
@@ -95,6 +97,17 @@ try {
   await token("area").last().click();
   await a.keyboard.up("Control");
   check("ctrlClickGoesToDefinition", await ok(shapesTab.waitFor({ timeout: 15_000 })));
+
+  // C++ with clangd: a compile error underlined, and a vector's members completed.
+  await newFile("main.cpp", "#include <bits/stdc++.h>\nint main() {\n  std::vector<int> v;\n  int n = \"x\";\n  return 0;\n}\n");
+  check("cppErrorUnderlined", await ok(a.locator(".monaco-editor .squiggly-error").first().waitFor({ state: "attached", timeout: 120_000 })));
+  // A new line after `std::vector<int> v;` (line 3 ends at column 22).
+  await goTo(3, 22);
+  await a.keyboard.insertText("\n  v.pu");
+  await a.keyboard.press("Control+Space");
+  const pushBack = await ok(a.locator(".suggest-widget .monaco-list-row", { hasText: "push_back" }).first().waitFor({ timeout: 30_000 }));
+  check("cppCompletes", pushBack, await a.locator(".suggest-widget").innerText().catch(() => "no suggestion list"));
+  await a.keyboard.press("Escape");
   await a.screenshot({ path: join(process.env.SHOT_DIR ?? tmpdir(), "lsp.png") });
 } catch (error) {
   const shot = join(tmpdir(), "lsp-failed.png");

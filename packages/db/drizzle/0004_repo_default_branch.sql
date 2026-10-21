@@ -1,0 +1,1 @@
+ALTER TABLE "room_repos" ADD COLUMN "default_branch" text;

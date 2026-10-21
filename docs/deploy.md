@@ -72,6 +72,8 @@ docker image prune -f   # reclaim space from old images
 
 Copy backups off the server, for example with a nightly cron job to object storage.
 
+**GitHub activity in chat** (a room's Source Control view → Activity in chat) needs GitHub to reach `APP_URL/api/github/webhooks/<room>`, so it works on a public address, not on localhost. Each delivery must be signed with the room's secret; nothing else is accepted on that path.
+
 ## Safety rules the stack enforces
 
 - **The API refuses to start** if `APP_URL` is not `https://`. Production cookies are Secure, so over plain http nobody could stay signed in.

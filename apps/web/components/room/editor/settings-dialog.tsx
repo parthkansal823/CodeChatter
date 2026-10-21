@@ -1,7 +1,8 @@
 "use client";
 
-import { Minus, Plus } from "lucide-react";
-import type { ReactNode } from "react";
+import { Minus, Plus, Trash2 } from "lucide-react";
+import { useRef, type ChangeEvent, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,8 @@ import { Switch } from "@/components/ui/switch";
 
 import { FONT_SIZE, TAB_SIZES, type EditorSettings } from "./settings";
 import { useEditorSettings, useSettingsValues } from "./settings-store";
+import { BUILT_IN_THEMES, importVsCodeTheme, useImportedThemes } from "./themes";
+import { ThemeError } from "./vscode-theme";
 
 type Option<T extends string> = readonly [value: T, label: string];
 
@@ -68,6 +71,25 @@ export function SettingsDialog({
   const update = useEditorSettings((state) => state.update);
   const reset = useEditorSettings((state) => state.reset);
   const zoom = useEditorSettings((state) => state.zoom);
+  const imported = useImportedThemes((state) => state.themes);
+  const removeTheme = useImportedThemes((state) => state.remove);
+  const themeFile = useRef<HTMLInputElement>(null);
+  const themeOptions: Option<string>[] = [...BUILT_IN_THEMES, ...imported.map((t) => [t.id, t.name] as const)];
+  // A theme removed in another tab, say: the room's own.
+  const themeValue = themeOptions.some(([id]) => id === s.editorTheme) ? s.editorTheme : "auto";
+  const onThemeFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 1024 * 1024) return void toast.error("That file is too big for a theme (over 1 MB).");
+    try {
+      const theme = importVsCodeTheme(await file.text());
+      update({ editorTheme: theme.id });
+      toast.success(`${theme.name} is your editor theme.`);
+    } catch (error) {
+      toast.error(error instanceof ThemeError ? error.message : "That theme couldn't be read.");
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,7 +97,7 @@ export function SettingsDialog({
         <DialogHeader className="border-b px-5 py-4">
           <DialogTitle className="text-base">Editor settings</DialogTitle>
           <DialogDescription>
-            Saved in this browser for you only. Changes apply as you make them.
+            Saved to your account, so they follow you to any browser. Changes apply as you make them.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[62vh] overflow-y-auto px-5 py-3">
@@ -149,6 +171,35 @@ export function SettingsDialog({
           </Section>
 
           <Section title="Display">
+            <Row label="Theme" htmlFor="set-theme" hint="Import a VS Code theme's .json to add it">
+              <div className="flex items-center gap-1">
+                <Choice id="set-theme" value={themeValue} options={themeOptions} onChange={(v) => update({ editorTheme: v })} />
+                {themeValue.startsWith("custom-") && (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="Remove this theme"
+                    onClick={() => {
+                      removeTheme(themeValue);
+                      update({ editorTheme: "auto" });
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
+                )}
+                <Button variant="outline" size="xs" onClick={() => themeFile.current?.click()}>
+                  Import…
+                </Button>
+                <input
+                  ref={themeFile}
+                  type="file"
+                  accept=".json,.jsonc,application/json"
+                  aria-label="VS Code theme file"
+                  className="sr-only"
+                  onChange={(event) => void onThemeFile(event)}
+                />
+              </div>
+            </Row>
             <Toggle
               id="set-wrap"
               label="Word wrap"
