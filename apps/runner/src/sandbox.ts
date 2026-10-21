@@ -268,6 +268,9 @@ export class Sandbox implements RoomSandbox {
         await agent.request({ op: "ping" }, 5000);
       } else {
         const ready = agent.waitReady(20_000);
+        // If the start fails, closing the agent rejects `ready` with nobody waiting on it:
+        // handled here, or Node takes the whole runner down (it did, mid-preview).
+        ready.catch(() => {});
         await container.start();
         await ready;
       }

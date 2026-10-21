@@ -1,7 +1,7 @@
 import type { RoomAction } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import type { LucideIcon } from "lucide-react";
-import { Database, NotebookText, PenTool, Presentation, Send, Sparkles, Workflow } from "lucide-react";
+import { Boxes, Database, NotebookText, PenTool, Presentation, Send, Sparkles, Workflow } from "lucide-react";
 import type { ComponentType } from "react";
 
 /** What every room tool receives from the workspace. */
@@ -36,10 +36,49 @@ export type RoomTool = {
  */
 export const ROOM_TOOLS: RoomTool[] = [
   { id: "ai", label: "AI", icon: Sparkles, placement: "side", load: () => import("./ai/ai-panel") },
-  { id: "docs", label: "Docs", icon: NotebookText, placement: "main", load: () => import("./docs/docs-tool") },
+  {
+    id: "docs",
+    label: "Docs",
+    icon: NotebookText,
+    placement: "main",
+    load: () => import("./docs/docs-tool"),
+  },
   { id: "api", label: "API", icon: Send, placement: "main", load: () => import("./api-studio/api-studio") },
-  { id: "databases", label: "Databases", icon: Database, placement: "main", load: () => import("./databases/databases-tool") },
-  { id: "design", label: "Design", icon: PenTool, placement: "main", load: () => import("./design/design-tool") },
-  { id: "board", label: "Whiteboard", icon: Presentation, placement: "main", load: () => import("./board/board-tool") },
-  { id: "diagrams", label: "Diagrams", icon: Workflow, placement: "main", load: () => import("./diagrams/diagrams-tool") },
+  {
+    id: "databases",
+    label: "Databases",
+    icon: Database,
+    placement: "main",
+    load: () => import("./databases/databases-tool"),
+  },
+  {
+    id: "kubernetes",
+    label: "Kubernetes",
+    icon: Boxes,
+    placement: "main",
+    // Using the room's cluster is running code in its sandbox.
+    visible: (can) => can("code.run"),
+    load: () => import("./kubernetes/kubernetes-tool"),
+  },
+  {
+    id: "design",
+    label: "Design",
+    icon: PenTool,
+    placement: "main",
+    load: () => import("./design/design-tool"),
+  },
+  {
+    id: "board",
+    label: "Whiteboard",
+    icon: Presentation,
+    placement: "main",
+    load: () => import("./board/board-tool"),
+  },
+  {
+    id: "diagrams",
+    label: "Diagrams",
+    icon: Workflow,
+    placement: "main",
+    load: () => import("./diagrams/diagrams-tool"),
+  },
 ];

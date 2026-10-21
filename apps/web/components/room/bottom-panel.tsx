@@ -3,6 +3,7 @@
 import { ROOM_CONFIG_PATH } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import {
+  Bug,
   ChevronDown,
   CircleAlert,
   FlaskConical,
@@ -16,6 +17,8 @@ import {
   X,
 } from "lucide-react";
 
+import { DebugConsole } from "@/components/room/debug/debug-console";
+import { useDebug } from "@/components/room/debug/debug-store";
 import { DevServerPanel } from "@/components/room/dev-server-panel";
 import type { Problem } from "@/components/room/editor/problems";
 import { useRoomFiles } from "@/components/room/editor/room-files";
@@ -32,7 +35,8 @@ import { cn } from "@/lib/utils";
 
 export const MAX_TERMINALS = 4;
 
-export type PanelTab = "output" | "problems" | "tests" | "ports" | "dev" | "task" | `terminal-${number}`;
+export type PanelTab =
+  "output" | "problems" | "tests" | "ports" | "dev" | "task" | "debug" | `terminal-${number}`;
 
 /** The task running in your Task terminal: its name, and the line typed for this run. */
 export type RunningTask = { label: string; input: string; id: number };
@@ -71,6 +75,10 @@ export function BottomPanel({
 }) {
   const { can } = useRoom();
   const run = useRun();
+  // The Debug console is there while the room's debugger has something to say.
+  const debugging = useDebug((s) => s.session !== null);
+  const debugOutput = useDebug((s) => s.output.length > 0);
+  const showDebug = debugging || debugOutput || tab === "debug";
   const canTerminal = can("terminal.open");
   // The Dev server tab is there when the room says how to run its app.
   const hasDevServer = useRoomFiles().some((file) => file.path === ROOM_CONFIG_PATH);
@@ -100,6 +108,12 @@ export function BottomPanel({
               </span>
             )}
           </PanelTabButton>
+          {showDebug && (
+            <PanelTabButton selected={tab === "debug"} onClick={() => onTab("debug")}>
+              <Bug className="size-3.5" /> Debug console
+              {debugging && <span aria-label="debugging" className="size-1.5 rounded-full bg-brand" />}
+            </PanelTabButton>
+          )}
           <PanelTabButton selected={tab === "tests"} onClick={() => onTab("tests")}>
             <FlaskConical className="size-3.5" /> Tests
           </PanelTabButton>
@@ -165,6 +179,11 @@ export function BottomPanel({
         <div className={cn("absolute inset-0", tab !== "problems" && "hidden")}>
           <ProblemsPanel problems={problems} />
         </div>
+        {showDebug && (
+          <div className={cn("absolute inset-0", tab !== "debug" && "hidden")}>
+            <DebugConsole />
+          </div>
+        )}
         <div className={cn("absolute inset-0", tab !== "tests" && "hidden")}>
           <TestsPanel file={file} />
         </div>

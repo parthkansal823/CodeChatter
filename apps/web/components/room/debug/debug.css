@@ -1,0 +1,38 @@
+/* The debugger's marks in Monaco's gutter (breakpoint-gutter.ts): tokens only, so they follow the theme. */
+
+.monaco-editor .cc-breakpoint,
+.monaco-editor .cc-breakpoint-hint,
+.monaco-editor .cc-debug-arrow {
+  cursor: pointer;
+}
+
+.monaco-editor .cc-breakpoint::before,
+.monaco-editor .cc-breakpoint-hint::before {
+  content: "";
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin: 0.45em auto 0;
+  border-radius: 9999px;
+  background: var(--destructive);
+}
+
+.monaco-editor .cc-breakpoint-hint::before {
+  opacity: 0.35;
+}
+
+/* Where the program is paused: an arrow in the gutter and the line tinted with the brand. */
+.monaco-editor .cc-debug-arrow::before {
+  content: "";
+  display: block;
+  width: 0;
+  height: 0;
+  margin: 0.35em auto 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 9px solid var(--brand);
+}
+
+.monaco-editor .cc-debug-line {
+  background: var(--brand-muted);
+}

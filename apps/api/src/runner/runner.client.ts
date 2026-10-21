@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, DevServerStatus, JudgeInput, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import type { DatabaseKind, DatabaseStatus, DevServerStatus, JudgeInput, KubeRequest, KubeResponse, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
@@ -37,6 +37,13 @@ export class RunnerClient {
   lspUrl(roomId: string, language: string): string {
     const url = new URL(`/rooms/${roomId}/lsp`, this.env.RUNNER_URL.replace(/^http/, "ws"));
     url.searchParams.set("language", language);
+    return url.toString();
+  }
+
+  /** The room's shared debug session; `drive` lets this person start, step and evaluate. */
+  debugUrl(roomId: string, drive: boolean): string {
+    const url = new URL(`/rooms/${roomId}/debug`, this.env.RUNNER_URL.replace(/^http/, "ws"));
+    url.searchParams.set("mode", drive ? "drive" : "watch");
     return url.toString();
   }
 
@@ -181,6 +188,17 @@ export class RunnerClient {
     }
     if (!response.ok) throw new RunnerUnavailableError();
     return (await response.json()) as { text: string };
+  }
+
+  /** The Kubernetes panel's requests, to the playground in the room's sandbox (runner: kube.ts). */
+  async kube(roomId: string, user: RunnerUser, body: KubeRequest): Promise<KubeResponse> {
+    const response = await this.call(`/rooms/${roomId}/kube`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
+    if (response.status === 400 || response.status === 409) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw response.status === 400 ? new BadRequestException(message) : new ConflictException(message);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as KubeResponse;
   }
 
   /** The room was deleted: the runner removes its containers, volumes and network. */

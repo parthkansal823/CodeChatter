@@ -12,6 +12,7 @@ import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { RunManager } from "./runs.js";
 import { KubeSandbox, roomNamespace, type Kube } from "./kube-sandbox.js";
+import { DebugHub } from "./debug.js";
 import { NotebookKernels } from "./notebooks.js";
 import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, Sandbox, type RoomSandbox } from "./sandbox.js";
 import { TunnelHub } from "./tunnel.js";
@@ -32,6 +33,10 @@ export class RoomSession {
   terminals = 0;
   /** Editors connected to a language server (lsp.ts): someone is working here. */
   languageServers = 0;
+  /** The room's debugger (debug.ts), shared by everyone in it. */
+  readonly debugger: DebugHub;
+  /** A debug session is on: a paused program counts as work. */
+  debugging = false;
   private lastCpu: { total: number; system: number } | null = null;
   private lastActive = Date.now();
   private readying: Promise<void> | null = null;
@@ -49,6 +54,7 @@ export class RoomSession {
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
     this.notebooks = new NotebookKernels(this.sandbox, this.sync.doc, this.sync.synced(60_000).catch(() => {}));
     this.tunnels = new TunnelHub(() => this.sandbox.agent);
+    this.debugger = new DebugHub(this);
     this.sandbox.onAgentEvent = (event) => {
       if (event.ev === "ports") this.ports = event.ports;
       else if (event.ev === "tcp_connected" || event.ev === "tcp_data" || event.ev === "tcp_closed") this.tunnels.handle(event);
@@ -124,6 +130,7 @@ export class RoomSession {
       !this.notebooks.busy &&
       this.terminals === 0 &&
       this.languageServers === 0 &&
+      !this.debugging &&
       now - this.lastActive > this.env.SANDBOX_IDLE_MINUTES * 60_000
     );
   }

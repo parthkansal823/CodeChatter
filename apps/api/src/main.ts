@@ -11,6 +11,7 @@ import { AppModule } from "./app.module.js";
 import type { Env } from "./config/env.js";
 import { AUTH, ENV, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./infra/tokens.js";
 import { previewProxy, type PreviewHosts } from "./preview/preview-proxy.js";
+import { attachDebugProxy } from "./realtime/debug.proxy.js";
 import { attachLspProxy } from "./realtime/lsp.proxy.js";
 import { attachTerminalProxy } from "./realtime/terminal.proxy.js";
 import { ValkeyIoAdapter } from "./realtime/valkey-io.adapter.js";
@@ -61,6 +62,12 @@ attachTerminalProxy(app.getHttpServer(), {
   runner: app.get(RunnerClient),
 });
 attachLspProxy(app.getHttpServer(), {
+  auth: app.get<Auth>(AUTH),
+  origins: app.get<OriginPolicy>(ORIGINS),
+  rooms: app.get(RoomsService),
+  runner: app.get(RunnerClient),
+});
+attachDebugProxy(app.getHttpServer(), {
   auth: app.get<Auth>(AUTH),
   origins: app.get<OriginPolicy>(ORIGINS),
   rooms: app.get(RoomsService),

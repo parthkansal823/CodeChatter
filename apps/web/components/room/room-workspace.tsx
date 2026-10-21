@@ -9,6 +9,7 @@ import {
   FileCode2,
   Globe2,
   Image as ImageIcon,
+  Bug,
   GitBranch,
   ListTree,
   Rows2,
@@ -31,6 +32,9 @@ import type { PaletteCommand } from "@/components/room/editor/command-palette";
 import { DiffView } from "@/components/room/editor/diff-view";
 import { FilePreview } from "@/components/room/editor/file-preview";
 import { previewKindOf, PREVIEW_LABEL } from "@/components/room/editor/preview-kind";
+import { connectDebugger, step, stopDebugging, useDebug } from "@/components/room/debug/debug-store";
+import { DebugView } from "@/components/room/debug/debug-view";
+import { startPicked } from "@/components/room/debug/start";
 import { OutlineView } from "@/components/room/editor/outline-view";
 import { EditorOverlays } from "@/components/room/editor/overlays";
 import { useEditorSettings } from "@/components/room/editor/settings-store";
@@ -117,7 +121,7 @@ function Workspace() {
   const tabs = useRoomTabs(room.id);
   const { open, close, prune } = useTabs();
   // The left sidebar: the file list, Search, the Outline or Source control, or none. Clicking the open one's icon closes it.
-  const [sidebar, setSidebar] = useState<"files" | "search" | "outline" | "scm" | null>("files");
+  const [sidebar, setSidebar] = useState<"files" | "search" | "outline" | "scm" | "debug" | null>("files");
   // Source control: for a room on GitHub, and publishing one that isn't.
   const repo = useRoomRepo();
   const [gistOpen, setGistOpen] = useState(false);
@@ -295,12 +299,71 @@ function Workspace() {
     useEditorUi.getState().setZen(false);
     setSidebar("scm");
   };
-  const shortcuts = useRef({ runActive, openTerminal, openSearch, runBuildTask, openSourceControl });
-  useEffect(() => {
-    shortcuts.current = { runActive, openTerminal, openSearch, runBuildTask, openSourceControl };
+  // F5 starts debugging the open file, or continues; Shift+F5 stops; F6 pauses; F10, F11
+  // and Shift+F11 step over, into and out, as in VS Code (F9, a breakpoint, is the editor's).
+  const debugKey = (event: KeyboardEvent): boolean => {
+    if (!can("code.run") || event.ctrlKey || event.metaKey || event.altKey) return false;
+    const session = useDebug.getState().session;
+    const paused = session?.state === "stopped";
+    if (event.key === "F5" && event.shiftKey) {
+      if (!session) return false;
+      stopDebugging();
+    } else if (event.key === "F5") {
+      if (session) {
+        if (paused) void step("continue");
+      } else if (startPicked(doc, activeFile?.path ?? null)) {
+        // The configuration picked in Run and debug, else the open file.
+        setSidebar("debug");
+      } else return false;
+    } else if (event.key === "F6" && session && !paused) void step("pause");
+    else if (event.key === "F10" && paused) void step("next");
+    else if (event.key === "F11" && paused) void step(event.shiftKey ? "stepOut" : "stepIn");
+    else return false;
+    return true;
+  };
+  const debugConsole = () => {
+    if (sidebar === "debug") showPanel("debug");
+  };
+  const shortcuts = useRef({
+    runActive,
+    openTerminal,
+    openSearch,
+    runBuildTask,
+    openSourceControl,
+    debugKey,
+    debugConsole,
   });
   useEffect(() => {
+    shortcuts.current = {
+      runActive,
+      openTerminal,
+      openSearch,
+      runBuildTask,
+      openSourceControl,
+      debugKey,
+      debugConsole,
+    };
+  });
+  // Everyone in the room follows its debugger, so a session anyone starts shows for all;
+  // with Run and debug open, a session starting opens the Debug console under the editor.
+  useEffect(() => {
+    const disconnect = connectDebugger(room.id);
+    const stopWatching = useDebug.subscribe((state, before) => {
+      if (state.session && !before.session) shortcuts.current.debugConsole();
+    });
+    return () => {
+      stopWatching();
+      disconnect();
+    };
+  }, [room.id]);
+  const debugging = useDebug((s) => s.session !== null);
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (/^F(5|6|10|11)$/.test(event.key) && shortcuts.current.debugKey(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
       const ownKey = (event.target as HTMLElement | null)?.closest?.(".xterm, [data-own-run-key]");
       if (event.key === "Enter" && !ownKey) {
@@ -488,6 +551,16 @@ function Workspace() {
             >
               <GitBranch className="size-[18px]" />
             </ActivityButton>
+            <ActivityButton
+              label="Run and debug"
+              active={sidebar === "debug"}
+              onClick={() => setSidebar(sidebar === "debug" ? null : "debug")}
+            >
+              <Bug className="size-[18px]" />
+              {debugging && sidebar !== "debug" && (
+                <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-brand" />
+              )}
+            </ActivityButton>
             <span aria-hidden className="my-1 h-px w-6 bg-border" />
             <div role="group" aria-label="Apps" className="flex flex-col items-center gap-1">
               {mainTools.map((tool) => {
@@ -531,6 +604,8 @@ function Workspace() {
                   <OutlineView />
                 ) : sidebar === "scm" ? (
                   <SourceControlView onOpen={openFile} />
+                ) : sidebar === "debug" ? (
+                  <DebugView activeFile={activeFile} />
                 ) : (
                   <Explorer activeFileId={activeFile?.id ?? null} onOpen={openFile} />
                 )}

@@ -3,6 +3,7 @@
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
 
+import { attachBreakpoints } from "@/components/room/debug/breakpoint-gutter";
 import { monaco } from "@/components/room/monaco-setup";
 
 import {
@@ -26,7 +27,8 @@ type Editor = monaco.editor.IStandaloneCodeEditor;
  * What every Monaco editor in the room shares, whichever pane it sits in:
  * tell others which file and selection you are in (only from the pane you
  * last used), draw their carets and scrollbar marks, feed the status bar and
- * register the zen-mode chord. Returns a refresh for after theme changes.
+ * register the zen-mode chord, and show the room's breakpoints. Returns a refresh for
+ * after theme changes.
  */
 export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusProvider) {
   const awareness = provider.awareness!;
@@ -34,6 +36,7 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
   liveEditors.add(editor);
   const unregister = registerPane(role, editor);
   const cursors = attachRemoteCursors(editor, doc, awareness);
+  const breakpoints = attachBreakpoints(editor, doc);
 
   const announceFile = (source: Editor | null) =>
     provider.setAwarenessField("activeFileId", modelOwner(source?.getModel() ?? null)?.fileId ?? null);
@@ -102,6 +105,7 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
       const wasActive = getActiveEditor() === editor;
       listeners.forEach((l) => l.dispose());
       cursors.dispose();
+      breakpoints.dispose();
       liveEditors.delete(editor);
       unregister();
       // Closing the pane you were in puts you back in the main editor, and so does your presence.

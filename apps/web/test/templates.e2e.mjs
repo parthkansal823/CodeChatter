@@ -13,6 +13,12 @@ const CASES = [
   { id: "react", name: "React (Vite)", port: 5173, heading: "Hello from React", counter: true },
   { id: "vue", name: "Vue (Vite)", port: 5173, heading: "Hello from Vue", counter: true },
   { id: "svelte", name: "Svelte (Vite)", port: 5173, heading: "Hello from Svelte", counter: true },
+  { id: "nextjs", name: "Next.js", port: 3000, heading: "Hello from Next.js", counter: true },
+  { id: "sveltekit", name: "SvelteKit", port: 5173, heading: "Hello from SvelteKit", counter: true },
+  { id: "astro", name: "Astro", port: 4321, heading: "Hello from Astro", counter: true },
+  { id: "solid", name: "Solid (Vite)", port: 5173, heading: "Hello from Solid", counter: true },
+  { id: "fastify", name: "Fastify", port: 3000, heading: "Hello from Fastify" },
+  { id: "hono", name: "Hono", port: 3000, heading: "Hello from Hono" },
   { id: "express-postgres", name: "Express and PostgreSQL", port: 3000, heading: "Hello from Express and PostgreSQL", text: "0 notes" },
   { id: "fastapi", name: "FastAPI", port: 8000, text: "Hello from FastAPI" },
   { id: "flask", name: "Flask", port: 5000, heading: "Hello from Flask" },
@@ -46,23 +52,32 @@ async function startDevServer(port) {
 
 for (const template of CASES.filter((c) => !only || only.includes(c.id))) {
   let roomId = null;
+  let previewPage = null;
   const t0 = Date.now();
   try {
     roomId = await newRoom(template.name);
     await startDevServer(template.port);
     const [preview] = await Promise.all([page.waitForEvent("popup"), page.getByRole("button", { name: "Open preview" }).click()]);
+    previewPage = preview;
     await preview.waitForLoadState("domcontentloaded");
     if (template.heading) await preview.getByRole("heading", { name: template.heading }).waitFor({ timeout: 60_000 });
     if (template.text) await preview.getByText(template.text).first().waitFor({ timeout: 60_000 });
     if (template.counter) {
-      await preview.getByRole("button", { name: "Clicked 0 times" }).click();
-      await preview.getByRole("button", { name: "Clicked 1 times" }).waitFor({ timeout: 10_000 });
+      // A server-rendered page (Next.js, SvelteKit) shows the button before it hydrates, and a
+      // click before then does nothing: click until one counts (each try waits two seconds).
+      const counted = preview.getByRole("button", { name: "Clicked 1 times" });
+      for (let tries = 0; tries < 30 && !(await counted.isVisible()); tries++) {
+        await preview.getByRole("button", { name: "Clicked 0 times" }).click({ timeout: 5_000 }).catch(() => {});
+        await counted.waitFor({ timeout: 2_000 }).catch(() => {});
+      }
+      await counted.waitFor({ timeout: 1_000 });
     }
     check(`${template.id}RunsInThePreview`, true, `${Math.round((Date.now() - t0) / 1000)}s`);
     await preview.close();
   } catch (error) {
+    // The preview, when it opened (that's where it went wrong), else the room.
     const shot = join(tmpdir(), `template-${template.id}-failed.png`);
-    await page.screenshot({ path: shot }).catch(() => {});
+    await (previewPage && !previewPage.isClosed() ? previewPage : page).screenshot({ path: shot }).catch(() => {});
     check(`${template.id}RunsInThePreview`, false, `${error instanceof Error ? error.message.split("\n")[0] : String(error)} (screenshot: ${shot})`);
   } finally {
     if (roomId) {

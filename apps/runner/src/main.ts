@@ -40,3 +40,5 @@ async function shutdown() {
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+// One room's stray failure must not stop every room's sandboxes: say what it was and carry on.
+process.on("unhandledRejection", (reason) => log.error("unhandled rejection", reason));

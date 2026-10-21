@@ -3,7 +3,28 @@
  * templates in server/database.py), kept small: enough to run and to show
  * what the template is for, nothing to delete first.
  */
-export type TemplateId = "blank" | "python" | "node" | "web" | "dsa" | "interview" | "tour" | "kubernetes" | "react" | "fastapi" | "vue" | "svelte" | "express-postgres" | "flask" | "django";
+export type TemplateId =
+  | "blank"
+  | "python"
+  | "node"
+  | "web"
+  | "dsa"
+  | "interview"
+  | "tour"
+  | "kubernetes"
+  | "react"
+  | "fastapi"
+  | "vue"
+  | "svelte"
+  | "express-postgres"
+  | "flask"
+  | "django"
+  | "nextjs"
+  | "sveltekit"
+  | "astro"
+  | "solid"
+  | "fastify"
+  | "hono";
 /** A starter file; `tests` pre-fills the Tests tab for it (input and expected output). */
 export type TemplateFile = { path: string; content: string; tests?: Array<{ input: string; expected: string }> };
 
@@ -1115,6 +1136,406 @@ export const TEMPLATE_FILES: Record<TemplateId, TemplateFile[]> = {
         "",
         "def hello(request):",
         '    return JsonResponse({"message": "Hello from Django", "path": request.path})',
+      ),
+    },
+  ],
+  nextjs: [
+    {
+      path: "README.md",
+      content: lines(
+        "# Next.js",
+        "",
+        "Open the **Dev server** tab in the bottom panel and press **Start**. The first start installs",
+        "the packages (the room's owner allows package installs in the **Ports** tab), then `next dev`",
+        "runs; choose **Open preview** when it's ready. Edits in `app/` show up as you save.",
+        "",
+        "`app/page.jsx` is the page; `app/counter.jsx` is a client component.",
+      ),
+    },
+    {
+      path: ".codechatter/room.json",
+      content: lines("{", '  "install": "npm install",', '  "installed": "node_modules/.bin/next",', '  "dev": "npm run dev",', '  "port": 3000', "}"),
+    },
+    {
+      path: "package.json",
+      content: lines(
+        "{",
+        '  "name": "next-app",',
+        '  "private": true,',
+        '  "scripts": { "dev": "NEXT_TELEMETRY_DISABLED=1 next dev -H 0.0.0.0 -p 3000", "build": "next build", "start": "next start" },',
+        '  "dependencies": { "next": "^16.0.0", "react": "^19.1.0", "react-dom": "^19.1.0" }',
+        "}",
+      ),
+    },
+    {
+      path: "next.config.mjs",
+      content: lines(
+        "/** The room's preview opens the dev server on an address of its own: let it load the dev scripts. */",
+        "export default {",
+        '  allowedDevOrigins: ["*.localhost", "*.preview.localhost"],',
+        "};",
+      ),
+    },
+    {
+      path: "app/layout.jsx",
+      content: lines(
+        'export const metadata = { title: "Next.js app" };',
+        "",
+        "export default function RootLayout({ children }) {",
+        "  return (",
+        '    <html lang="en">',
+        '      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif" }}>{children}</body>',
+        "    </html>",
+        "  );",
+        "}",
+      ),
+    },
+    {
+      path: "app/page.jsx",
+      content: lines(
+        'import Counter from "./counter";',
+        "",
+        "export default function Page() {",
+        "  return (",
+        '    <main style={{ padding: "2rem" }}>',
+        "      <h1>Hello from Next.js</h1>",
+        "      <p>",
+        "        Edit <code>app/page.jsx</code>: the preview updates when you save.",
+        "      </p>",
+        "      <Counter />",
+        "    </main>",
+        "  );",
+        "}",
+      ),
+    },
+    {
+      path: "app/counter.jsx",
+      content: lines(
+        '"use client";',
+        "",
+        'import { useState } from "react";',
+        "",
+        "export default function Counter() {",
+        "  const [count, setCount] = useState(0);",
+        "  return <button onClick={() => setCount(count + 1)}>Clicked {count} times</button>;",
+        "}",
+      ),
+    },
+  ],
+  sveltekit: [
+    {
+      path: "README.md",
+      content: lines(
+        "# SvelteKit",
+        "",
+        "Open the **Dev server** tab in the bottom panel and press **Start**. The first start installs",
+        "the packages (the room's owner allows package installs in the **Ports** tab), then Vite runs;",
+        "choose **Open preview** when it's ready. Pages live in `src/routes/`.",
+      ),
+    },
+    {
+      path: ".codechatter/room.json",
+      content: lines("{", '  "install": "npm install",', '  "installed": "node_modules/.bin/vite",', '  "dev": "npm run dev",', '  "port": 5173', "}"),
+    },
+    {
+      path: "package.json",
+      content: lines(
+        "{",
+        '  "name": "sveltekit-app",',
+        '  "private": true,',
+        '  "type": "module",',
+        '  "scripts": { "dev": "vite dev", "build": "vite build", "preview": "vite preview" },',
+        '  "devDependencies": { "@sveltejs/kit": "^2.20.0", "@sveltejs/vite-plugin-svelte": "^6.0.0", "svelte": "^5.0.0", "vite": "^7.0.0" }',
+        "}",
+      ),
+    },
+    {
+      path: "svelte.config.js",
+      content: lines("// An adapter (say @sveltejs/adapter-node) is only needed to build for a server.", "export default { kit: {} };"),
+    },
+    {
+      path: "vite.config.js",
+      content: lines(
+        'import { sveltekit } from "@sveltejs/kit/vite";',
+        'import { defineConfig } from "vite";',
+        "",
+        "// The room's preview reaches the dev server through a proxy, on an address of its own.",
+        "export default defineConfig({",
+        "  plugins: [sveltekit()],",
+        '  server: { host: "0.0.0.0", port: 5173, strictPort: true, allowedHosts: true },',
+        "});",
+      ),
+    },
+    {
+      path: "src/app.html",
+      content: lines(
+        "<!doctype html>",
+        '<html lang="en">',
+        "  <head>",
+        '    <meta charset="utf-8" />',
+        '    <meta name="viewport" content="width=device-width, initial-scale=1" />',
+        "    %sveltekit.head%",
+        "  </head>",
+        '  <body style="margin: 0; font-family: system-ui, sans-serif">',
+        "    <div>%sveltekit.body%</div>",
+        "  </body>",
+        "</html>",
+      ),
+    },
+    {
+      path: "src/routes/+page.svelte",
+      content: lines(
+        "<script>",
+        "  let count = $state(0);",
+        "</script>",
+        "",
+        "<main style=\"padding: 2rem\">",
+        "  <h1>Hello from SvelteKit</h1>",
+        "  <p>Edit <code>src/routes/+page.svelte</code>: the preview updates as you type.</p>",
+        "  <button onclick={() => count++}>Clicked {count} times</button>",
+        "</main>",
+      ),
+    },
+  ],
+  astro: [
+    {
+      path: "README.md",
+      content: lines(
+        "# Astro",
+        "",
+        "Open the **Dev server** tab in the bottom panel and press **Start**. The first start installs",
+        "the packages (the room's owner allows package installs in the **Ports** tab), then Astro runs;",
+        "choose **Open preview** when it's ready. Pages live in `src/pages/`.",
+      ),
+    },
+    {
+      path: ".codechatter/room.json",
+      content: lines("{", '  "install": "npm install",', '  "installed": "node_modules/.bin/astro",', '  "dev": "npm run dev",', '  "port": 4321', "}"),
+    },
+    {
+      path: "package.json",
+      content: lines(
+        "{",
+        '  "name": "astro-site",',
+        '  "private": true,',
+        '  "type": "module",',
+        '  "scripts": { "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev", "build": "astro build", "preview": "astro preview" },',
+        '  "dependencies": { "astro": "^5.0.0" }',
+        "}",
+      ),
+    },
+    {
+      path: "astro.config.mjs",
+      content: lines(
+        'import { defineConfig } from "astro/config";',
+        "",
+        "// The room's preview reaches the dev server through a proxy, on an address of its own.",
+        "export default defineConfig({",
+        "  server: { host: true, port: 4321 },",
+        "  vite: { server: { allowedHosts: true } },",
+        "});",
+      ),
+    },
+    {
+      path: "src/pages/index.astro",
+      content: lines(
+        "---",
+        'const title = "Hello from Astro";',
+        "---",
+        "",
+        '<html lang="en">',
+        "  <head>",
+        '    <meta charset="utf-8" />',
+        "    <title>{title}</title>",
+        "  </head>",
+        '  <body style="margin: 0; padding: 2rem; font-family: system-ui, sans-serif">',
+        "    <h1>{title}</h1>",
+        "    <p>Edit <code>src/pages/index.astro</code>: the preview updates as you save.</p>",
+        "    <button id=\"counter\">Clicked 0 times</button>",
+        "    <script>",
+        "      let count = 0;",
+        '      const button = document.getElementById("counter");',
+        '      button.addEventListener("click", () => {',
+        "        count += 1;",
+        "        button.textContent = `Clicked ${count} times`;",
+        "      });",
+        "    </script>",
+        "  </body>",
+        "</html>",
+      ),
+    },
+  ],
+  solid: [
+    {
+      path: "README.md",
+      content: lines(
+        "# Solid (Vite)",
+        "",
+        "Open the **Dev server** tab in the bottom panel and press **Start**. The first start installs",
+        "the packages (the room's owner allows package installs in the **Ports** tab), then Vite runs;",
+        "choose **Open preview** when it's ready. Edits in `src/` show up as you type.",
+      ),
+    },
+    {
+      path: ".codechatter/room.json",
+      content: lines("{", '  "install": "npm install",', '  "installed": "node_modules/.bin/vite",', '  "dev": "npm run dev",', '  "port": 5173', "}"),
+    },
+    {
+      path: "package.json",
+      content: lines(
+        "{",
+        '  "name": "solid-app",',
+        '  "private": true,',
+        '  "type": "module",',
+        '  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },',
+        '  "dependencies": { "solid-js": "^1.9.0" },',
+        '  "devDependencies": { "vite": "^7.0.0", "vite-plugin-solid": "^2.11.0" }',
+        "}",
+      ),
+    },
+    {
+      path: "vite.config.js",
+      content: lines(
+        'import { defineConfig } from "vite";',
+        'import solid from "vite-plugin-solid";',
+        "",
+        "// The room's preview reaches the dev server through a proxy, on an address of its own.",
+        "export default defineConfig({",
+        "  plugins: [solid()],",
+        '  server: { host: "0.0.0.0", port: 5173, strictPort: true, allowedHosts: true },',
+        "});",
+      ),
+    },
+    {
+      path: "index.html",
+      content: lines(
+        "<!doctype html>",
+        '<html lang="en">',
+        "  <head>",
+        '    <meta charset="UTF-8" />',
+        '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+        "    <title>Solid app</title>",
+        "  </head>",
+        '  <body style="margin: 0; font-family: system-ui, sans-serif">',
+        '    <div id="root"></div>',
+        '    <script type="module" src="/src/index.jsx"></script>',
+        "  </body>",
+        "</html>",
+      ),
+    },
+    {
+      path: "src/index.jsx",
+      content: lines('import { render } from "solid-js/web";', "", 'import App from "./App";', "", 'render(() => <App />, document.getElementById("root"));'),
+    },
+    {
+      path: "src/App.jsx",
+      content: lines(
+        'import { createSignal } from "solid-js";',
+        "",
+        "export default function App() {",
+        "  const [count, setCount] = createSignal(0);",
+        "  return (",
+        '    <main style={{ padding: "2rem" }}>',
+        "      <h1>Hello from Solid</h1>",
+        "      <p>",
+        "        Edit <code>src/App.jsx</code>: the preview updates as you type.",
+        "      </p>",
+        "      <button onClick={() => setCount(count() + 1)}>Clicked {count()} times</button>",
+        "    </main>",
+        "  );",
+        "}",
+      ),
+    },
+  ],
+  fastify: [
+    {
+      path: "README.md",
+      content: lines(
+        "# Fastify",
+        "",
+        "Open the **Dev server** tab in the bottom panel and press **Start**. The first start installs",
+        "the packages (the room's owner allows package installs in the **Ports** tab), then the server",
+        "runs and restarts on every save; choose **Open preview** when it's ready.",
+        "",
+        "Try `GET /api/hello?name=you` from the API tool, or the preview.",
+      ),
+    },
+    {
+      path: ".codechatter/room.json",
+      content: lines("{", '  "install": "npm install",', '  "installed": "node_modules/fastify",', '  "dev": "npm run dev",', '  "port": 3000', "}"),
+    },
+    {
+      path: "package.json",
+      content: lines(
+        "{",
+        '  "name": "fastify-api",',
+        '  "private": true,',
+        '  "type": "module",',
+        '  "scripts": { "dev": "node --watch server.js", "start": "node server.js" },',
+        '  "dependencies": { "fastify": "^5.0.0" }',
+        "}",
+      ),
+    },
+    {
+      path: "server.js",
+      content: lines(
+        'import Fastify from "fastify";',
+        "",
+        "const app = Fastify({ logger: true });",
+        "",
+        'app.get("/", async (request, reply) =>',
+        '  reply.type("text/html").send("<h1>Hello from Fastify</h1><p>Try <a href=\\"/api/hello?name=you\\">/api/hello</a>.</p>"),',
+        ");",
+        "",
+        'app.get("/api/hello", async (request) => ({ message: `Hello, ${request.query.name ?? "world"}`, at: new Date().toISOString() }));',
+        "",
+        "// 0.0.0.0, so the room's preview can reach it.",
+        'await app.listen({ host: "0.0.0.0", port: 3000 });',
+      ),
+    },
+  ],
+  hono: [
+    {
+      path: "README.md",
+      content: lines(
+        "# Hono",
+        "",
+        "Open the **Dev server** tab in the bottom panel and press **Start**. The first start installs",
+        "the packages (the room's owner allows package installs in the **Ports** tab), then the server",
+        "runs and restarts on every save; choose **Open preview** when it's ready.",
+        "",
+        "Try `GET /api/hello?name=you` from the API tool, or the preview.",
+      ),
+    },
+    {
+      path: ".codechatter/room.json",
+      content: lines("{", '  "install": "npm install",', '  "installed": "node_modules/hono",', '  "dev": "npm run dev",', '  "port": 3000', "}"),
+    },
+    {
+      path: "package.json",
+      content: lines(
+        "{",
+        '  "name": "hono-api",',
+        '  "private": true,',
+        '  "type": "module",',
+        '  "scripts": { "dev": "node --watch server.js", "start": "node server.js" },',
+        '  "dependencies": { "@hono/node-server": "^1.14.0", "hono": "^4.7.0" }',
+        "}",
+      ),
+    },
+    {
+      path: "server.js",
+      content: lines(
+        'import { serve } from "@hono/node-server";',
+        'import { Hono } from "hono";',
+        "",
+        "const app = new Hono();",
+        "",
+        'app.get("/", (c) => c.html("<h1>Hello from Hono</h1><p>Try <a href=\\"/api/hello?name=you\\">/api/hello</a>.</p>"));',
+        'app.get("/api/hello", (c) => c.json({ message: `Hello, ${c.req.query("name") ?? "world"}`, at: new Date().toISOString() }));',
+        "",
+        "// 0.0.0.0, so the room's preview can reach it.",
+        'serve({ fetch: app.fetch, hostname: "0.0.0.0", port: 3000 }, (info) => console.log(`Listening on port ${info.port}`));',
       ),
     },
   ],

@@ -3,6 +3,7 @@ export * from "./chat.js";
 export * from "./databases.js";
 export * from "./github.js";
 export * from "./http-studio.js";
+export * from "./kubernetes.js";
 export * from "./permissions.js";
 export * from "./room-config.js";
 export * from "./rooms.js";

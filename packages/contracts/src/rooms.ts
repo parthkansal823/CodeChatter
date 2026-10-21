@@ -11,7 +11,7 @@ export const RoomCode = z
   .toUpperCase()
   .regex(/^[A-Z0-9]{6}$/, "Room codes are 6 letters and numbers.");
 
-export const TEMPLATE_IDS = ["blank", "python", "node", "web", "dsa", "interview", "tour", "kubernetes", "react", "fastapi", "vue", "svelte", "express-postgres", "flask", "django"] as const;
+export const TEMPLATE_IDS = ["blank", "python", "node", "web", "dsa", "interview", "tour", "kubernetes", "react", "fastapi", "vue", "svelte", "express-postgres", "flask", "django", "nextjs", "sveltekit", "astro", "solid", "fastify", "hono"] as const;
 
 export const CreateRoomInput = z.object({
   name: z.string().trim().min(1, "Give the room a name.").max(80, "Keep it under 80 characters."),

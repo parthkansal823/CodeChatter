@@ -248,21 +248,21 @@ Tests:
 - ⬜ **Flowchart:** Mermaid source edited together, with a live render.
 - ⬜ **Notes:** shared notes, private notes, and a shared focus timer.
 - ⬜ **Video and voice:** LiveKit (SFU with TURN), a dock and picture-in-picture, screen share.
-- ⬜ **GitHub:** import a repository, commit, push and open pull requests.
+- ✅ **GitHub:** import a repository, commit, push and open pull requests (done in section 14 E, through the GitHub API).
 - ⬜ **Files:** uploads (images and binaries in S3), zip import and export.
 - ⬜ **Notifications:** inbox with unread counts and an email digest, plus an activity feed per room.
 - ⬜ **Public rooms:** explore page, open read-only, fork into your own room.
 
-## 6. Pro editing ⬜
+## 6. Pro editing 🟡
 
-- ⬜ **Language servers in the sandbox:** Python (basedpyright), Go, C/C++ (clangd), Rust. TypeScript runs in the browser.
+- ✅ **Language servers in the sandbox:** Python (Pyright), Go, C/C++ (clangd), Rust. TypeScript runs in the browser. (Section 14 A.)
 - ⬜ **Time travel:** checkpoints (manual, automatic every 10 minutes, and before AI edits), a history slider, diff, and restore.
 - ⬜ **Inline comment threads** on code, anchored so they survive edits.
-- ⬜ **Search and replace** across the workspace.
-- ⬜ **Split and diff editors.**
-- ⬜ **Follow and Present mode:** see what a teammate sees.
+- ✅ **Search and replace** across the workspace. (Section 14 A.)
+- ✅ **Split and diff editors**, up to a grid of four. (Section 14 A.)
+- 🟡 **Follow and Present mode:** see what a teammate sees. Follow is done (section 14 A); Present mode is not.
 - ⬜ **Command palette and shortcuts:** one hotkey registry, a shortcuts sheet, and keybinding settings.
-- ⬜ **Source Control panel:** real git in the sandbox (branch, diff, commit, push).
+- 🟡 **Source Control panel:** branch, diff, commit and push are done through the GitHub API (section 14 E); real git in the sandbox is not.
 - ⬜ **Secret scanning** before a push.
 
 ## 7. Interview mode ⬜
@@ -316,9 +316,9 @@ Tests:
 
 ### Deeper collaboration
 
-- ⬜ **Multiplayer debugger:**
-  - breakpoints everyone sees, stepping together, and a shared variables and call-stack view
-  - Debug Adapter Protocol in the sandbox: debugpy for Python, the Node inspector, gdb for C/C++
+- 🟡 **Multiplayer debugger:** done for Python, C and C++ (section 14 A, Debugger)
+  - ✅ breakpoints everyone sees, stepping together, and a shared variables and call-stack view
+  - ✅ Debug Adapter Protocol in the sandbox: debugpy for Python, gdb for C/C++; ⬜ the Node inspector
 - ⬜ **Suggestion mode:**
   - edits become proposals that the file's owner accepts or rejects, like "Suggesting" in Google Docs, but for code
   - built on Yjs, so proposals merge like any edit
@@ -674,7 +674,14 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
   - JavaScript, TypeScript, JSON, CSS and HTML keep Monaco's own formatter in the browser
   - tests: `line-edits.test.ts` 6/6, `apps/runner/test/format.e2e.mjs` 9/9, browser `apps/web/test/format.e2e.mjs` 8/8
   - ⬜ Java (google-java-format), and Prettier for a project that has its own config
-- ⬜ **Debugger:** breakpoints, step, variables, watch, call stack and a debug console, over the Debug Adapter Protocol (debugpy, Node inspector, gdb or lldb, Delve) in the sandbox.
+- 🟡 **Debugger** (2026-10-21), multiplayer: one session for the whole room, which everyone follows; people who can run code start it, step and evaluate, the rest watch.
+  - ✅ Python (debugpy) and C and C++ (gdb's own Debug Adapter Protocol mode, compiled with debug information first), both already in both images, inside the jail like a Run
+  - ✅ breakpoints in the gutter (click left of a line number, or F9), shared through the files document and anchored to their lines, so they stay put while people edit above them; sent to the debugger at once, even while it runs
+  - ✅ Run and debug view (keys as in VS Code: F5 start or continue, F10, F11, Shift+F11, F6 pause, Shift+F5 stop): who started it and where it's paused, Variables (expandable), Watch, Call stack (a frame shows its variables and opens its file), Breakpoints; the paused line is marked in everyone's editor
+  - ✅ Debug console tab: the program's output for everyone, and expressions in the paused frame (gdb takes its own commands there)
+  - how: the runner is the debug adapter's client (`debug.ts`): it starts the session, sends the room's breakpoints, numbers each person's requests and sends each answer back to whoever asked; events go to all. The API's `/ws/debug` lets in room members, driving for Run rights.
+  - Tests: `apps/runner/test/debug.e2e.mjs` 22/22 (two people on a Python session and a C one, a live breakpoint, a compile error, watch-only limits), `apps/web/test/debugger.e2e.mjs` 20/20 (two people in the browser), and the breakpoints' unit tests (anchoring through someone else's edits)
+  - ⬜ JavaScript and TypeScript (the Node inspector through js-debug), Go (Delve), Java
 - 🟡 **Personal settings:**
   - ✅ font size and ligatures, tab size and indentation, word wrap, minimap, line numbers, whitespace, cursor style, bracket colours, sticky scroll, format on save (Ctrl+,)
   - ✅ **Vim key bindings** (2026-10-20, `monaco-vim`, loaded only for people who turn them on): Settings, Key bindings, or the palette; modes, motions, operators, registers and : commands, with the mode and the command line under the editor; `:w` does what Ctrl+S does. Browser `keys.e2e.mjs` 12/12 (with Emmet)
@@ -683,7 +690,7 @@ Monaco is VS Code's editor, and `monaco-vscode-api` brings VS Code's own service
   - ⬜ Emacs key bindings (the `monaco-emacs` package hasn't been updated since 2022)
 - 🟡 **Tasks and launch configs:**
   - ✅ **tasks** (2026-10-21): `.vscode/tasks.json` (shell, process and npm tasks; args, folder, environment, build and test groups; `${file}`, `${workspaceFolder}` and the rest) and every package.json's scripts. Run task… in the palette, and Ctrl+Shift+B for the default build task. A task runs in your own Task terminal (a tab beside the others), which Ctrl+C's the last one first, as VS Code reuses its task terminal; it needs terminal rights. Tests: `tasks.test.ts` 8/8, browser `tasks.e2e.mjs` 8/8
-  - ⬜ `launch.json`: comes with the debugger
+  - ✅ **`launch.json`** (2026-10-21) for the debugger: Run and debug picks a configuration (or the open file), and F5 runs the one picked. Python configurations by program or module (`-m`), C and C++ ones by source file (the room compiles it); args, cwd, env, stopOnEntry (stopAtEntry) and justMyCode, with `${file}`, `${workspaceFolder}` and the rest filled in; attach and other debuggers are listed with why they're skipped. "Add a launch.json" writes a starter file. The runner checks every path stays in the room. Tests: `launch.test.ts` 3/3, the runner's `debug.e2e.mjs` now 29/29 (arguments, environment, folder, stopping on entry, a module, C with arguments, refusals), browser `launch.e2e.mjs` 9/9
 - ⬜ **Extensions** from Open VSX through the VS Code extension host. Last: the largest piece.
 
 ### B. Every language ✅ (24 more languages)
@@ -780,6 +787,7 @@ Decision and design: ADR 0008.
 - ⬜ Later: SQLite in the panel (it needs no server: `sqlite3` is in the full image), DuckDB, ClickHouse, OpenSearch, Neo4j.
 
 ### C. Frameworks 🟡
+- ✅ Fixed while adding templates (2026-10-21): a sandbox that failed to start while a preview's WebSocket waited for it crashed the whole runner (an unhandled promise rejection). `sandbox.ts` now handles it, and the runner logs any other stray rejection instead of exiting.
 - ✅ **`.codechatter/room.json`** says how to install, run and preview a room: `install` (run when the `installed` path is missing), `dev`, `port`, and the `databases` to start first. Templates and imported projects both use it; a broken one is explained, not run.
 - ✅ **The Dev server tab** (bottom panel, when the room has a room.json):
   - **Start** installs if needed (through the package proxy), starts the room's databases, then runs the dev server in one terminal everyone in the room shares
@@ -789,12 +797,14 @@ Decision and design: ADR 0008.
 - 🟡 **Templates that start in one click:**
   - ✅ frontend: React, Vue and Svelte, each on Vite with live reload in the preview
   - ✅ backend: Express with the room's PostgreSQL (started with it), FastAPI, Flask and Django; the Node.js API template has a room.json too
-  - ⬜ frontend: Next.js, Nuxt, SvelteKit, Angular, Astro, Solid
-  - ⬜ backend: NestJS, Fastify, Hono, Spring Boot, Laravel, Rails, Gin, Axum, ASP.NET Core (the JVM, PHP, Ruby, Go, Rust and .NET ones need their build tools in the image)
+  - ✅ (2026-10-21) frontend: Next.js (App Router, a client component), SvelteKit, Astro and Solid (Vite)
+  - ✅ (2026-10-21) backend: Fastify and Hono, restarting on every save
+  - ⬜ frontend: Nuxt, Angular (big installs, so a pre-warmed cache first)
+  - ⬜ backend: NestJS, Spring Boot, Laravel, Rails, Gin, Axum, ASP.NET Core (the JVM, PHP, Ruby, Go, Rust and .NET ones need their build tools in the image)
 - ⬜ **Pre-warmed caches** for the templates, so a new React or Django room starts in seconds (today the first start downloads its packages, about a minute).
 - ✅ **Tests:**
   - `apps/runner/test/dev.e2e.mjs` (8/8): reads room.json; installs first and skips it on restart; starts its databases; answers through the preview; explains a broken room.json; stops
-  - `apps/web/test/templates.e2e.mjs`: as a person would, for all seven: a room from the template, allow installs, Start, then the app works in the preview (the front ends' counters count). Real downloads, 15 to 60 seconds each; each room is deleted after. `TEMPLATES=react,flask` runs some
+  - `apps/web/test/templates.e2e.mjs`: as a person would, for all thirteen (6 to 61 seconds each here; a server-rendered page's counter is clicked until it has hydrated): a room from the template, allow installs, Start, then the app works in the preview (the front ends' counters count). Real downloads, 15 to 60 seconds each; each room is deleted after. `TEMPLATES=react,flask` runs some
 
 ### F. Kubernetes
 
@@ -814,9 +824,13 @@ A real cluster normally needs privileged containers. Those can't be given to cod
     - its Go threads count as processes, so rooms on the full image get 2 GB and 1024 processes on this PC (`.env`)
   - a rebuilt image reaches a running room when its sandbox restarts (Ports tab, Restart sandbox)
   - ⬜ `kubeconform` with offline schemas, so manifests can be checked without a cluster
-- ⬜ **Kubernetes panel** (like Lens or VS Code's Kubernetes extension):
-  - namespaces, workloads, services and events; YAML and describe for anything
-  - apply the open file in one click; logs and port-forward once workloads are real
+- 🟡 **Kubernetes panel** (like Lens or VS Code's Kubernetes extension), a room tool (Apps → Kubernetes, for people who can run code):
+  - ✅ (2026-10-21) start and stop the playground; workloads (Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, Pods), Services, Ingresses, ConfigMaps, namespaces, nodes and events, with counts, a namespace filter, health and ages, refreshed every few seconds
+  - ✅ YAML and describe for any of them, and delete (asked twice); Secrets stay out, so their values never show
+  - ✅ apply the open manifest (YAML or JSON) in one click, as it is in the editor; kubectl's own words when it refuses
+  - how: `POST /rooms/:id/kube` on the runner (`kube.ts`) runs kubectl in the sandbox's jail, as a Run would, and sums each object up; the API's `/api/rooms/:id/kube` needs Run rights and logs changes in the audit log
+  - Tests: `apps/runner/test/kube.e2e.mjs` 18/18 and `apps/web/test/kubernetes-panel.e2e.mjs` 13/13 on the real playground, and the summaries' unit tests
+  - ⬜ logs and port-forward, once workloads are real (pods are simulated in the playground)
 - ⬜ **Kubernetes-aware editor:** YAML completions and checks from the Kubernetes schemas (monaco-yaml, which needs a new package; kubeconform as the fallback in the sandbox).
 - ⬜ **Real workloads** (after the room network and databases):
   - a per-room virtual cluster (vcluster) on the platform's own cluster, with quotas and gVisor

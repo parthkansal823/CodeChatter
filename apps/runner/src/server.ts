@@ -3,6 +3,7 @@ import {
   DATABASE_KINDS,
   INSTALLS_MINUTES,
   JudgeInput,
+  KubeRequest,
   QueryInput,
   RoomCode,
   RunInput,
@@ -28,6 +29,7 @@ import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.j
 import type { RoomRegistry } from "./room-session.js";
 import { RunError } from "./runs.js";
 import { FormatError, formatText, MAX_FORMAT_BYTES } from "./format.js";
+import { KubeError, kubeApply, kubeDelete, kubeObject, kubePower, kubeResources, kubeStatus } from "./kube.js";
 import { LANGUAGE_SERVERS, MAX_LSP_MESSAGE, openLanguageServer } from "./lsp.js";
 import { NotebookError } from "./notebooks.js";
 import { SandboxUnavailableError } from "./sandbox.js";
@@ -65,9 +67,11 @@ import { openTerminal } from "./terminal.js";
  *   POST /rooms/:id/notebooks/:fileId/run   { cellIds, stateVector? } run cells in the notebook's kernel (outputs go into the room's files document)
  *   POST /rooms/:id/notebooks/:fileId/interrupt|restart|shutdown
  *   POST /rooms/:id/format                { path, language, text, tabSize, insertSpaces } the text through the language's formatter (format.ts)
+ *   POST /rooms/:id/kube                  { op, … } the Kubernetes playground: status, up, down, resources, object, apply, delete (kube.ts)
  *   ANY  /rooms/:id/preview/:port/* dev-server preview (HTTP and WebSocket)
  *   WS   /rooms/:id/terminal?session=&cols=&rows=
  *   WS   /rooms/:id/lsp?language=           a language server for one editor (lsp.ts)
+ *   WS   /rooms/:id/debug?mode=drive|watch    the room's shared debug session (debug.ts)
  */
 
 /** Biggest file a database loads in one go. */
@@ -129,6 +133,8 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
 
     const format = /^\/rooms\/([A-Z0-9]{6})\/format$/.exec(url.pathname);
     if (format && req.method === "POST") return handleFormat(req, res, format[1]!);
+    const kube = /^\/rooms\/([A-Z0-9]{6})\/kube$/.exec(url.pathname);
+    if (kube && req.method === "POST") return handleKube(req, res, kube[1]!);
 
     const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|judge|dev)$/.exec(url.pathname);
     if (!match || !RoomCode.safeParse(match[1]).success) return json(res, 404, { error: "Not found." });
@@ -351,6 +357,38 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     }
   }
 
+  /** The room's Kubernetes panel: kubectl against the playground in the sandbox, or why it couldn't. */
+  async function handleKube(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const body = KubeRequest.safeParse(await readJson(req, 2 * 1024 * 1024));
+    if (!body.success) return json(res, 400, { error: body.error.issues[0]?.message ?? "Not a request the panel makes." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      const request = body.data;
+      const { sandbox } = session;
+      switch (request.op) {
+        case "status":
+          return json(res, 200, await kubeStatus(sandbox));
+        case "up":
+        case "down":
+          return json(res, 200, { output: await kubePower(sandbox, request.op === "up") });
+        case "resources":
+          return json(res, 200, await kubeResources(sandbox));
+        case "object":
+          return json(res, 200, { output: await kubeObject(sandbox, request.ref, request.view) });
+        case "apply":
+          return json(res, 200, { output: await kubeApply(sandbox, request.text) });
+        case "delete":
+          return json(res, 200, { output: await kubeDelete(sandbox, request.ref) });
+      }
+    } catch (error) {
+      if (error instanceof KubeError || error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
   /** Streams the run as newline-delimited JSON until it exits. Closing the request stops the run. */
   async function startRun(
     res: ServerResponse,
@@ -410,6 +448,20 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
         return;
       }
       lspWss.handleUpgrade(req, socket, head, (ws) => void openLanguageServer(ws, rooms.get(lsp[1]!), language));
+      return;
+    }
+    const debug = /^\/rooms\/([A-Z0-9]{6})\/debug$/.exec(url.pathname);
+    if (debug) {
+      const claims = authorize(req, debug[1]!);
+      if (!claims) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      const session = rooms.get(debug[1]!);
+      // The API says who may drive (Run rights); everyone else in the room watches.
+      const drive = url.searchParams.get("mode") === "drive";
+      lspWss.handleUpgrade(req, socket, head, (ws) => session.debugger.join(ws, { name: claims.name ?? "Someone", drive }));
       return;
     }
     const preview = PREVIEW_PATH.exec(url.pathname);
