@@ -5,6 +5,7 @@ import type { Duplex } from "node:stream";
 import type { Databases } from "./databases.js";
 import { JAIL } from "./plans.js";
 import type { RoomSession } from "./room-session.js";
+import { MANIFESTS, warmArchive, warmFolder, type WarmIndex } from "./warm-cache.js";
 
 /**
  * The room's dev server (roadmap §14 C): what `.codechatter/room.json` says to
@@ -34,11 +35,22 @@ export function readRoomConfig(session: RoomSession): RoomConfig | { error: stri
 /**
  * What the dev session runs: the install when what it installs is missing,
  * then the dev server. When either stops, a shell stays open in the session,
- * so its output can still be read and commands run by hand.
+ * so its output can still be read and commands run by hand. With `archive` (a
+ * pre-warmed install of exactly these dependency files, warm-cache.ts), the
+ * install is unpacked from it first, so nothing is downloaded.
  */
-export function devScript(config: RoomConfig & { dev: string }): string {
+export function devScript(config: RoomConfig & { dev: string }, archive: string | null = null): string {
   const show = (command: string) => `printf '\\033[2m$ %s\\033[0m\\n' ${quote(command)}`;
   const lines = ["cd /workspace || exit 1"];
+  const folder = warmFolder(config);
+  if (config.install && config.installed && archive && folder) {
+    lines.push(
+      `if [ ! -e ${quote(config.installed)} ] && [ -f ${quote(archive)} ]; then`,
+      `  printf '\\033[2mUnpacking the packages this template was warmed with (no download)…\\033[0m\\n'`,
+      `  tar -xf ${quote(archive)} -C /workspace || rm -rf ${quote(folder)}`,
+      "fi",
+    );
+  }
   if (config.install) {
     lines.push(
       config.installed ? `if [ ! -e ${quote(config.installed)} ]; then` : "if true; then",
@@ -49,6 +61,17 @@ export function devScript(config: RoomConfig & { dev: string }): string {
   }
   lines.push(show(config.dev), config.dev, "echo", 'echo "[The dev server stopped. Start it again from the Dev server tab, or run it here.]"', "exec bash");
   return lines.join("\n");
+}
+
+/** The room's dependency files as they are now (warm-cache.ts names an install by them). */
+function manifests(session: RoomSession): Map<string, string> {
+  const doc = session.sync.doc;
+  const found = new Map<string, string>();
+  for (const name of MANIFESTS) {
+    const node = findByPath(doc, name);
+    if (node?.kind === "file") found.set(name, textOf(doc, node.id)?.toString() ?? "");
+  }
+  return found;
 }
 
 /** A word for sh, single-quoted. */
@@ -69,7 +92,8 @@ export async function startDev(session: RoomSession, databases: Databases): Prom
   for (const kind of config.databases ?? []) databases.start(session.sandbox, kind);
   await tmux(session, ["kill-session", "-t", DEV_SESSION]);
   // The script travels in the session's environment, never pasted into a command line.
-  const started = await tmux(session, ["new-session", "-d", "-s", DEV_SESSION, "-x", "160", "-y", "40", "-e", `CC_DEV_SCRIPT=${devScript({ ...config, dev: config.dev })}`, 'exec bash -c "$CC_DEV_SCRIPT"']);
+  const script = devScript({ ...config, dev: config.dev }, warmArchive(config, manifests(session)));
+  const started = await tmux(session, ["new-session", "-d", "-s", DEV_SESSION, "-x", "160", "-y", "40", "-e", `CC_DEV_SCRIPT=${script}`, 'exec bash -c "$CC_DEV_SCRIPT"']);
   return started === 0 ? null : { error: "The dev server couldn't start in the sandbox." };
 }
 
@@ -78,14 +102,22 @@ export async function stopDev(session: RoomSession): Promise<void> {
 }
 
 /** Without waking the sandbox: room.json, whether the dev session exists, whether its port listens, and whether it needs installing. */
-export async function devStatus(session: RoomSession): Promise<DevServerStatus> {
+export async function devStatus(session: RoomSession, warm: WarmIndex): Promise<DevServerStatus> {
   await session.sync.synced();
   const config = readRoomConfig(session);
   const settings = config && !("error" in config) ? config : null;
   const up = Boolean(session.sandbox.agent?.alive);
   const running = up && (await tmux(session, ["has-session", "-t", DEV_SESSION])) === 0;
   let needsInstall: boolean | null = settings?.install ? null : false;
-  if (settings?.install && settings.installed && up) needsInstall = (await inWorkspace(session, ["test", "-e", settings.installed])) !== 0;
+  // Installed already, or a warmed install to unpack: either way, nothing to download.
+  const archive = settings?.install ? warmArchive(settings, manifests(session)) : null;
+  if (settings?.install && settings.installed && up) {
+    const test = archive ? `test -e "$1" || test -f "$2"` : `test -e "$1"`;
+    needsInstall = (await inWorkspace(session, ["sh", "-c", test, "cc-dev", settings.installed, archive ?? ""])) !== 0;
+  } else if (archive && (await warm.has(archive))) {
+    // No sandbox to look in yet (a new room's first seconds), but the warm volume has its install.
+    needsInstall = false;
+  }
   return { config, running, listening: running && settings?.port !== undefined && session.ports.includes(settings.port), needsInstall };
 }
 

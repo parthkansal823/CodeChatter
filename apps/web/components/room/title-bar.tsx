@@ -11,6 +11,8 @@ import { usePeers } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { copyText } from "@/lib/clipboard";
+import { keyLabel, keysFor } from "@/components/room/editor/keybindings";
+import { useEditorSettings } from "@/components/room/editor/settings-store";
 import { openQuickOpen } from "@/components/room/editor/ui-store";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -28,6 +30,8 @@ export type SidePanel = {
 export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePanel }) {
   const { room, me, mySlot, status } = useRoom();
   const peers = usePeers();
+  // Go to file's key, as you've set it (keybindings.ts).
+  const quickOpenKey = useEditorSettings((state) => keysFor("quick-open", state.keybindings)[0]);
 
   async function copyCode() {
     if (await copyText(room.id)) toast.success(`Room code ${room.id} copied`);
@@ -72,7 +76,7 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
         >
           <Search className="size-3.5 shrink-0" />
           <span className="flex-1 truncate">Search files, or type &gt; for commands</span>
-          <Kbd>Ctrl P</Kbd>
+          {quickOpenKey && <Kbd>{keyLabel(quickOpenKey)}</Kbd>}
         </button>
       </div>
 

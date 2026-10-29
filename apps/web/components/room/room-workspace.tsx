@@ -54,11 +54,11 @@ import {
 import { setEditorOpener } from "@/components/room/editor/editor-opener";
 import { revealInFile, type RevealRange } from "@/components/room/editor/reveal";
 import { useProblems } from "@/components/room/editor/problems";
-import { setFormatRoom } from "@/components/room/editor/sandbox-format";
+import { hasPrettierConfig, setFormatRoom, setPrettier } from "@/components/room/editor/sandbox-format";
 import { useSettingsSync } from "@/components/room/editor/settings-sync";
 import { buildTask, readTasks, taskInput, TASKS_PATH, type Task } from "@/components/room/editor/tasks";
 import { clearRoomFiles, mirrorRoomFiles } from "@/components/room/editor/workspace-fs";
-import { useEditorShortcuts } from "@/components/room/editor/shortcuts";
+import { useEditorShortcuts, useKeyCommands, type KeyCommand } from "@/components/room/editor/shortcuts";
 import { useInlineCompletions } from "@/components/room/editor/use-inline-completions";
 import { Explorer } from "@/components/room/explorer";
 import { runAll } from "@/components/room/notebook/kernel";
@@ -109,14 +109,20 @@ function Workspace() {
   // Your editor settings and themes, from and to your account.
   useSettingsSync();
   // What the language servers and TypeScript report: the Problems tab and the status bar's counts.
-  const problems = useProblems();
-  // Format document for Python, C, C++, shell, Go and Rust goes to this room's sandbox.
+  const problems = useProblems(room.id);
+  // Format document for Python, C, C++, shell, Go, Rust and Java goes to this room's sandbox.
   useEffect(() => {
     setFormatRoom(room.id);
     return () => setFormatRoom(null);
   }, [room.id]);
   const run = useRun();
   const tree = useFileTree();
+  // With a Prettier config in the room, its web files format with the project's own Prettier.
+  const usesPrettier = useMemo(() => hasPrettierConfig(tree), [tree]);
+  useEffect(() => {
+    setPrettier(usesPrettier);
+    return () => setPrettier(false);
+  }, [usesPrettier]);
   const peers = usePeers();
   const tabs = useRoomTabs(room.id);
   const { open, close, prune } = useTabs();
@@ -293,7 +299,7 @@ function Workspace() {
   // Ctrl/Cmd+Enter runs the open file from anywhere (Monaco's own Ctrl+Enter
   // is overridden); Ctrl+` opens a terminal. Keys typed into a terminal are its
   // own, and so is Ctrl+Enter in a tool that marks itself data-own-run-key (API
-  // Studio sends, the database console runs its query).
+  // Studio sends, the database console runs its query): keybindings.ts's "notOwnKey".
   // Ctrl+Shift+F opens Search (Ctrl+Shift+H with replace), as in VS Code.
   const openSourceControl = () => {
     useEditorUi.getState().setZen(false);
@@ -301,48 +307,49 @@ function Workspace() {
   };
   // F5 starts debugging the open file, or continues; Shift+F5 stops; F6 pauses; F10, F11
   // and Shift+F11 step over, into and out, as in VS Code (F9, a breakpoint, is the editor's).
-  const debugKey = (event: KeyboardEvent): boolean => {
-    if (!can("code.run") || event.ctrlKey || event.metaKey || event.altKey) return false;
-    const session = useDebug.getState().session;
-    const paused = session?.state === "stopped";
-    if (event.key === "F5" && event.shiftKey) {
-      if (!session) return false;
-      stopDebugging();
-    } else if (event.key === "F5") {
-      if (session) {
-        if (paused) void step("continue");
-      } else if (startPicked(doc, activeFile?.path ?? null)) {
-        // The configuration picked in Run and debug, else the open file.
-        setSidebar("debug");
-      } else return false;
-    } else if (event.key === "F6" && session && !paused) void step("pause");
-    else if (event.key === "F10" && paused) void step("next");
-    else if (event.key === "F11" && paused) void step(event.shiftKey ? "stepOut" : "stepIn");
-    else return false;
-    return true;
-  };
+  // Each says when it doesn't apply, and the key goes on to the page.
+  const paused = () => useDebug.getState().session?.state === "stopped";
+  const debugCommands: KeyCommand[] = can("code.run")
+    ? [
+        {
+          id: "debug-continue",
+          label: "Start or continue debugging",
+          group: "Debug",
+          run: () => {
+            const session = useDebug.getState().session;
+            if (session) {
+              if (paused()) void step("continue");
+              return true;
+            }
+            // The configuration picked in Run and debug, else the open file.
+            if (!startPicked(doc, activeFile?.path ?? null)) return false;
+            setSidebar("debug");
+          },
+        },
+        {
+          id: "debug-stop",
+          label: "Stop debugging",
+          group: "Debug",
+          run: () => Boolean(useDebug.getState().session) && (stopDebugging(), true),
+        },
+        {
+          id: "debug-pause",
+          label: "Pause",
+          group: "Debug",
+          run: () => Boolean(useDebug.getState().session) && !paused() && (void step("pause"), true),
+        },
+        { id: "debug-over", label: "Step over", group: "Debug", run: () => paused() && (void step("next"), true) },
+        { id: "debug-into", label: "Step into", group: "Debug", run: () => paused() && (void step("stepIn"), true) },
+        { id: "debug-out", label: "Step out", group: "Debug", run: () => paused() && (void step("stepOut"), true) },
+      ]
+    : [];
+  useKeyCommands("debug", debugCommands);
   const debugConsole = () => {
     if (sidebar === "debug") showPanel("debug");
   };
-  const shortcuts = useRef({
-    runActive,
-    openTerminal,
-    openSearch,
-    runBuildTask,
-    openSourceControl,
-    debugKey,
-    debugConsole,
-  });
+  const shortcuts = useRef({ debugConsole });
   useEffect(() => {
-    shortcuts.current = {
-      runActive,
-      openTerminal,
-      openSearch,
-      runBuildTask,
-      openSourceControl,
-      debugKey,
-      debugConsole,
-    };
+    shortcuts.current = { debugConsole };
   });
   // Everyone in the room follows its debugger, so a session anyone starts shows for all;
   // with Run and debug open, a session starting opens the Debug console under the editor.
@@ -357,42 +364,8 @@ function Workspace() {
     };
   }, [room.id]);
   const debugging = useDebug((s) => s.session !== null);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (/^F(5|6|10|11)$/.test(event.key) && shortcuts.current.debugKey(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-      const ownKey = (event.target as HTMLElement | null)?.closest?.(".xterm, [data-own-run-key]");
-      if (event.key === "Enter" && !ownKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        shortcuts.current.runActive();
-      } else if (event.key === "`") {
-        event.preventDefault();
-        shortcuts.current.openTerminal();
-      } else if (event.shiftKey && event.key.toLowerCase() === "b") {
-        // Ctrl+Shift+B, as in VS Code (Edge would show its favourites bar).
-        event.preventDefault();
-        event.stopPropagation();
-        shortcuts.current.runBuildTask();
-      } else if (event.shiftKey && event.key.toLowerCase() === "g" && !ownKey) {
-        // Ctrl+Shift+G, as in VS Code.
-        event.preventDefault();
-        event.stopPropagation();
-        shortcuts.current.openSourceControl();
-      } else if (event.shiftKey && /^[fh]$/i.test(event.key) && !ownKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        shortcuts.current.openSearch({ seed: true, replace: event.key.toLowerCase() === "h" });
-      }
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, []);
-  useEditorShortcuts(activeFile?.id ?? null);
+  // Every key (Ctrl+Enter runs, Ctrl+` a terminal, F5 debugs…) is the key registry's (editor/keybindings.ts).
+  useEditorShortcuts();
 
   // Editor layout from the editor's own store: split, Markdown preview, comparison, Zen mode, following someone.
   const editorUi = useEditorUi(
@@ -439,8 +412,8 @@ function Workspace() {
 
   // The room's commands, for the command palette (Ctrl+Shift+P).
   const roomCommands: PaletteCommand[] = [
-    { id: "run", label: "Run the open file", shortcut: "Ctrl Enter", run: runActive },
-    { id: "terminal", label: "Open a terminal", shortcut: "Ctrl `", run: openTerminal },
+    { id: "run", label: "Run the open file", run: runActive },
+    { id: "terminal", label: "Open a terminal", run: openTerminal },
     {
       id: "files",
       label: showFiles ? "Hide the file list" : "Show the file list",
@@ -449,14 +422,13 @@ function Workspace() {
     {
       id: "search",
       label: "Search in files",
-      shortcut: "Ctrl Shift F",
       run: () => openSearch({ seed: true }),
     },
     { id: "problems", label: "Show problems", run: () => showPanel("problems") },
     ...(can("terminal.open")
       ? [
           { id: "task", label: "Run task…", run: pickTask },
-          { id: "build-task", label: "Run build task", shortcut: "Ctrl Shift B", run: runBuildTask },
+          { id: "build-task", label: "Run build task", run: runBuildTask },
         ]
       : []),
     {
@@ -467,8 +439,7 @@ function Workspace() {
     {
       id: "source-control",
       label: repo === null ? "Publish the room to GitHub" : "Show source control",
-      shortcut: "Ctrl Shift G",
-      run: () => setSidebar("scm"),
+      run: openSourceControl,
     },
     ...(activeFile
       ? [{ id: "gist", label: "Share the file as a GitHub gist…", run: () => setGistOpen(true) }]
@@ -483,7 +454,6 @@ function Workspace() {
           {
             id: "replace",
             label: "Replace in files",
-            shortcut: "Ctrl Shift H",
             run: () => openSearch({ seed: true, replace: true }),
           },
         ]

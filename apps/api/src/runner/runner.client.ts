@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, DevServerStatus, JudgeInput, KubeRequest, KubeResponse, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import type { DatabaseKind, DatabaseStatus, DevServerStatus, JudgeInput, KubeRequest, KubeResponse, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
@@ -20,10 +20,18 @@ export class RunnerUnavailableError extends Error {
  */
 @Injectable()
 export class RunnerClient {
+  /** Each room's sandbox image, as its settings say (RoomsService notes it on every check of a room). */
+  private readonly images = new Map<string, "base" | "full" | "default">();
+
   constructor(@Inject(ENV) private readonly env: Env) {}
 
+  noteImage(roomId: string, image: "base" | "full" | "default"): void {
+    this.images.set(roomId, image);
+  }
+
   headers(roomId: string, user: RunnerUser): Record<string, string> {
-    const token = signServiceToken(this.env.SERVICE_SECRET, { aud: "runner", sub: roomId, uid: user.id, name: user.name });
+    // The room's image goes with every call: the runner starts its sandbox from it.
+    const token = signServiceToken(this.env.SERVICE_SECRET, { aud: "runner", sub: roomId, uid: user.id, name: user.name, img: this.images.get(roomId) });
     return { authorization: `Bearer ${token}`, "content-type": "application/json" };
   }
 
@@ -188,6 +196,40 @@ export class RunnerClient {
     }
     if (!response.ok) throw new RunnerUnavailableError();
     return (await response.json()) as { text: string };
+  }
+
+  /** The room's SQLite or DuckDB files (runner: sqlite.ts, duckdb.ts): the list, or a file's tables, a query or a table's first rows. */
+  async fileDatabase<T>(engine: "sqlite" | "duckdb", roomId: string, user: RunnerUser, action: "files" | "tables" | "query" | "preview", body?: unknown): Promise<T> {
+    const response = await this.call(`/rooms/${roomId}/${engine}${action === "files" ? "" : `/${action}`}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: this.headers(roomId, user),
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+    });
+    if (response.status === 400 || response.status === 409) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw response.status === 400 ? new BadRequestException(message) : new ConflictException(message);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as T;
+  }
+
+  /** A SQLite file's backup or load, streamed as for the servers' (`action` carries its query string). */
+  async sqliteStream(roomId: string, user: RunnerUser, action: string, init: RequestInit & { duplex?: "half" }): Promise<Response> {
+    const response = await this.call(`/rooms/${roomId}/sqlite/${action}`, { ...init, headers: { ...this.headers(roomId, user), ...(init.headers as Record<string, string>) } });
+    if ([400, 404, 409, 411, 413].includes(response.status)) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw new HttpException(message ?? "SQLite couldn't do that.", response.status);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response;
+  }
+
+  /** Check the whole room with the project-wide checkers in its sandbox (runner: check.ts). */
+  async check(roomId: string, user: RunnerUser): Promise<RoomCheck> {
+    const response = await this.call(`/rooms/${roomId}/check`, { method: "POST", headers: this.headers(roomId, user), body: "{}" });
+    if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error);
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as RoomCheck;
   }
 
   /** The Kubernetes panel's requests, to the playground in the room's sandbox (runner: kube.ts). */

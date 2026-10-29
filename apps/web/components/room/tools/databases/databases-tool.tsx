@@ -6,25 +6,28 @@ import {
   type DatabaseConnection,
   type DatabaseKind,
   type DatabaseStatus,
+  type DuckdbListing,
+  type SqliteFile,
 } from "@codechatter/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Database, Loader2, Play, Square, Table2, Trash2, X } from "lucide-react";
+import { Copy, Database, FileText, Loader2, Play, RefreshCw, Sheet, Square, Table2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { useRoom } from "@/components/room/room-context";
+import { formatBytes } from "@/components/room/tools/api-studio/format";
 import type { RoomToolProps } from "@/components/room/tools/registry";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import { DatabaseConsole } from "./database-console";
+import { DatabaseConsole, type ConsoleTarget } from "./database-console";
 
 type Change = "start" | "stop" | "delete";
 
 /** Which database each room had open, so closing and reopening the tool returns to it. */
-const lastOpened = new Map<string, DatabaseKind>();
+const lastOpened = new Map<string, ConsoleTarget>();
 
 const STATE: Record<DatabaseStatus["state"], { label: string; dot: string }> = {
   off: { label: "Off", dot: "bg-muted-foreground/40" },
@@ -38,7 +41,9 @@ const STATE: Record<DatabaseStatus["state"], { label: string; dot: string }> = {
  * One-click databases (roadmap §14 D): PostgreSQL, MySQL, MariaDB, MongoDB and
  * Redis, each next to the room's sandbox on its private network. Code in
  * terminals and Run reaches them by name, with the connection already in its
- * environment; nothing outside the room can.
+ * environment; nothing outside the room can. Below them, the room's SQLite and DuckDB
+ * files, and its data files for DuckDB, which need no server: the console opens them
+ * in the sandbox.
  */
 export default function DatabasesTool({ close }: RoomToolProps) {
   const { room, can } = useRoom();
@@ -60,14 +65,14 @@ export default function DatabasesTool({ close }: RoomToolProps) {
   });
   const manage = can("terminal.open");
   const byKind = new Map(list.data?.map((status) => [status.kind, status]));
-  const [openKind, setOpenKind] = useState<DatabaseKind | null>(() => lastOpened.get(room.id) ?? null);
-  const open = (kind: DatabaseKind | null) => {
-    if (kind) lastOpened.set(room.id, kind);
+  const [target, setTarget] = useState<ConsoleTarget | null>(() => lastOpened.get(room.id) ?? null);
+  const open = (next: ConsoleTarget | null) => {
+    if (next) lastOpened.set(room.id, next);
     else lastOpened.delete(room.id);
-    setOpenKind(kind);
+    setTarget(next);
   };
 
-  if (openKind) return <DatabaseConsole kind={openKind} onBack={() => open(null)} onClose={close} />;
+  if (target) return <DatabaseConsole target={target} onBack={() => open(null)} onClose={close} />;
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-chrome px-3">
@@ -103,11 +108,12 @@ export default function DatabasesTool({ close }: RoomToolProps) {
                   manage={manage}
                   busy={change.isPending && change.variables?.kind === kind}
                   onChange={(to) => change.mutate({ kind, to })}
-                  onOpen={() => open(kind)}
+                  onOpen={() => open({ kind })}
                 />
               ))}
             </ul>
           )}
+          <DatabaseFiles onOpen={open} />
           {!can("code.run") && (
             <p className="mt-3 text-xs text-muted-foreground">
               People who can run code in this room see how to connect.
@@ -116,6 +122,96 @@ export default function DatabasesTool({ close }: RoomToolProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The room's database files, found in its sandbox: SQLite's (Django's db.sqlite3, an
+ * app's own) and DuckDB's by their headers, and its CSV, Parquet and JSON files, which
+ * DuckDB queries by path.
+ */
+function DatabaseFiles({ onOpen }: { onOpen: (target: ConsoleTarget) => void }) {
+  const { room } = useRoom();
+  // Looking means walking the sandbox's files: on opening the tool, and when asked.
+  const sqlite = useQuery({
+    queryKey: ["sqlite-files", room.id],
+    queryFn: () => api<SqliteFile[]>(`/api/rooms/${room.id}/sqlite`),
+    staleTime: 30_000,
+  });
+  const duckdb = useQuery({
+    queryKey: ["duckdb-files", room.id],
+    queryFn: () => api<DuckdbListing>(`/api/rooms/${room.id}/duckdb`),
+    staleTime: 30_000,
+  });
+  const files = [
+    ...(sqlite.data ?? []).map((file) => ({ ...file, engine: "sqlite" as const })),
+    ...(duckdb.data?.files ?? []).map((file) => ({ ...file, engine: "duckdb" as const })),
+  ].sort((a, b) => a.path.localeCompare(b.path));
+  const error = sqlite.error ?? duckdb.error;
+  const data = duckdb.data?.data.length ?? 0;
+  return (
+    <section className="mt-6" aria-label="Database files">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="text-sm font-medium">Database files</h3>
+        <span className="text-xs text-muted-foreground">No server needed: opened as they are in the sandbox.</span>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="ml-auto"
+          aria-label="Look for database files again"
+          onClick={() => {
+            void sqlite.refetch();
+            void duckdb.refetch();
+          }}
+        >
+          <RefreshCw className={cn((sqlite.isFetching || duckdb.isFetching) && "animate-spin")} />
+        </Button>
+      </div>
+      {sqlite.isPending || duckdb.isPending ? (
+        <p className="text-xs text-muted-foreground">Looking in the sandbox…</p>
+      ) : error ? (
+        <p className="text-xs text-destructive">
+          {error instanceof ApiError ? error.detail : "Couldn't look for them."}
+        </p>
+      ) : (
+        <ul className="divide-y rounded-md border text-sm">
+          <li className="flex items-center gap-3 px-3 py-2" aria-label="The room's data files">
+            <Sheet className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate text-xs">
+              CSV, Parquet and JSON files, queried with DuckDB
+            </span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {data} {data === 1 ? "file" : "files"}
+            </span>
+            <Button size="xs" variant="outline" onClick={() => onOpen({ duckdb: null })}>
+              <Table2 /> Open
+            </Button>
+          </li>
+          {files.map((file) => (
+            <li key={file.path} className="flex items-center gap-3 px-3 py-2" aria-label={file.path}>
+              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate font-mono text-xs">{file.path}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {file.engine === "sqlite" ? "SQLite" : "DuckDB"} · {formatBytes(file.bytes)}
+              </span>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => onOpen(file.engine === "sqlite" ? { sqlite: file.path } : { duckdb: file.path })}
+              >
+                <Table2 /> Open
+              </Button>
+            </li>
+          ))}
+          {files.length === 0 && (
+            <li className="px-3 py-2 text-xs text-muted-foreground">
+              No SQLite or DuckDB files yet. An app makes one when it first saves (Django&apos;s db.sqlite3, for
+              one).
+            </li>
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 

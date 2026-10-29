@@ -19,7 +19,7 @@ import {
 import { liveEditors, modelOwner } from "./file-models";
 import { attachRemoteCursors } from "./remote-cursors";
 import { applyPendingReveal } from "./reveal";
-import { useEditorUi, toggleFilePreview } from "./ui-store";
+import { bindEditorChords } from "./shortcuts";
 
 type Editor = monaco.editor.IStandaloneCodeEditor;
 
@@ -27,7 +27,7 @@ type Editor = monaco.editor.IStandaloneCodeEditor;
  * What every Monaco editor in the room shares, whichever pane it sits in:
  * tell others which file and selection you are in (only from the pane you
  * last used), draw their carets and scrollbar marks, feed the status bar and
- * register the zen-mode chord, and show the room's breakpoints. Returns a refresh for
+ * register our chords (Ctrl+K Z…), and show the room's breakpoints. Returns a refresh for
  * after theme changes.
  */
 export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusProvider) {
@@ -78,26 +78,8 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
     editor.onDidChangeModelLanguage(refreshInfo),
   ];
 
-  // A Markdown, CSV or SVG file's preview beside the code, or on its own, as in VS Code (Monaco owns Ctrl+K chords in here).
-  editor.addAction({
-    id: "cc.previewSide",
-    label: "Open preview to the side",
-    keybindings: [monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyCode.KeyV)],
-    run: () => toggleFilePreview("side"),
-  });
-  editor.addAction({
-    id: "cc.previewFull",
-    label: "Open preview",
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyV],
-    run: () => toggleFilePreview("full"),
-  });
-
-  editor.addAction({
-    id: "cc.zen",
-    label: "Toggle zen mode",
-    keybindings: [monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyCode.KeyZ)],
-    run: () => useEditorUi.getState().setZen(!useEditorUi.getState().zen),
-  });
+  // Our chords (Ctrl+K Z, Ctrl+K V…), kept up with your shortcuts: Monaco owns chords in here.
+  listeners.push(bindEditorChords(editor));
 
   return {
     refreshMarks: cursors.refresh,

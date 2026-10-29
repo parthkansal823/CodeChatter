@@ -1,7 +1,8 @@
 // The Problems tab (roadmap §14 A): a TypeScript type error and an unused-variable warning in an open file
 // show in the status bar's counts and in the tab, grouped by file; the filter and the switches narrow it; a
-// click puts the cursor on the problem; fixing the code empties the list. The test's file has a stamp in its
-// name and is deleted at the end.
+// click puts the cursor on the problem; fixing the code empties the list. Check all files finds a problem in a
+// Python file nobody has open (written from a terminal) and says what ran. The test's files have a stamp in their
+// names and are deleted at the end.
 //   node test/problems.e2e.mjs        (from apps/web, with the dev stack running)
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,10 @@ import { check, finish, launch } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
 const name = `pr_${stamp}.ts`;
+const unopened = `pr_${stamp}.py`;
+// The terminal is shared and keeps earlier runs' lines: this run's markers are its own numbers.
+const marker = Date.now() % 100000;
+let madeUnopened = false;
 const ok = (promise) =>
   promise.then(
     () => true,
@@ -63,11 +68,35 @@ try {
   await a.keyboard.insertText("export const ok = 1;\n");
   check("fixedEmpties", await ok(panel.getByText("No problems in the open files.").waitFor({ timeout: 30_000 })) && (await counts.getAttribute("aria-label")) === "Problems: 0 errors, 0 warnings");
   await a.screenshot({ path: join(process.env.SHOT_DIR ?? tmpdir(), "problems.png") });
+
+  // A file nobody has open, written from a terminal: only Check all files finds its problem. (The shell works the
+  // marker out, so only its output has it.)
+  await a.keyboard.press("Control+`");
+  await a.locator(".xterm").last().click();
+  await a.keyboard.type(`printf 'count: int = "three"\\n' > ${unopened} && echo made-$((${marker}+1))\n`);
+  await a.locator(".xterm-rows").last().getByText(`made-${marker + 1}`, { exact: true }).waitFor({ timeout: 30_000 });
+  madeUnopened = true;
+  await counts.click();
+  await panel.getByRole("button", { name: "Check all files" }).click();
+  check("checkFindsUnopenedFile", await ok(list.getByRole("button", { name: new RegExp(escape(unopened)) }).waitFor({ timeout: 90_000 })), await list.innerText().catch(() => ""));
+  check("checkSaysWhatRan", await ok(panel.getByRole("status", { name: "Last check" }).getByText(/Every file checked with Pyright/).waitFor({ timeout: 5_000 })));
+  check("checkedProblemIsPyrights", await ok(list.getByRole("button", { name: /Literal\['three'\]/ }).first().waitFor({ timeout: 5_000 })));
 } catch (error) {
   const shot = join(tmpdir(), "problems-failed.png");
   await a.screenshot({ path: shot }).catch(() => {});
   check("flowCompletes", false, `${error instanceof Error ? error.message.split("\n")[0] : String(error)} (screenshot: ${shot})`);
 } finally {
+  if (madeUnopened) {
+    try {
+      // Back to the terminal, which the Problems tab hid.
+      await panel.getByRole("tab", { name: /^Terminal/ }).first().click();
+      await a.locator(".xterm").last().click();
+      await a.keyboard.type(`rm -f ${unopened} && echo gone-$((${marker}+2))\n`);
+      check("unopenedFileDeleted", await ok(a.locator(".xterm-rows").last().getByText(`gone-${marker + 2}`, { exact: true }).waitFor({ timeout: 15_000 })));
+    } catch (error) {
+      check("unopenedFileDeleted", false, error instanceof Error ? error.message.split("\n")[0] : String(error));
+    }
+  }
   if (created) {
     try {
       const row = a.getByRole("tree", { name: "Files" }).getByRole("treeitem", { name: new RegExp(`^${escape(name)}`) });

@@ -10,6 +10,16 @@ const TIMEOUT_SECONDS = 20;
 export type FormatOptions = { tabSize: number; insertSpaces: boolean };
 type Formatter = { name: string; command: (path: string, options: FormatOptions) => string[] };
 
+/** The nearest installed Prettier above the file, up to the room's folder; "missing" as the others say it. */
+const PRETTIER = `dir=$(dirname "$1")
+while :; do
+  if [ -x "$dir/node_modules/.bin/prettier" ]; then exec "$dir/node_modules/.bin/prettier" --stdin-filepath "$1"; fi
+  if [ "$dir" = /workspace ] || [ "$dir" = / ]; then break; fi
+  dir=$(dirname "$dir")
+done
+echo "cc-format: missing" >&2
+exit 127`;
+
 /**
  * The editor's Format document for languages the browser can't format itself (it does
  * JavaScript, TypeScript, JSON, CSS and HTML): a formatter in the room's sandbox, inside
@@ -24,6 +34,10 @@ const FORMATTERS: Record<string, Formatter> = {
   shell: { name: "shfmt", command: (path, o) => ["shfmt", "--filename", path, ...(o.insertSpaces ? ["-i", String(o.tabSize)] : [])] },
   go: { name: "gofmt", command: () => ["gofmt"] },
   rust: { name: "rustfmt", command: () => ["rustfmt", "--emit", "stdout", "--edition", "2021", "--quiet"] },
+  java: { name: "google-java-format", command: () => ["google-java-format", "-"] },
+  // The project's own Prettier, for a room with a Prettier config (the editor asks only then):
+  // the nearest node_modules/.bin/prettier above the file, which finds the config from the path.
+  prettier: { name: "Prettier", command: (path) => ["sh", "-c", PRETTIER, "cc-prettier", path] },
 };
 
 export const formatterFor = (language: string): Formatter | null => FORMATTERS[language] ?? null;
@@ -54,7 +68,8 @@ export async function formatText(sandbox: RoomSandbox, language: string, path: s
   handle.stream.destroy();
   const problem = stderr.text().trim();
   if (code === 127 && problem.includes("cc-format: missing")) {
-    throw new FormatError(`${formatter.name} isn't in this room's sandbox${language === "go" || language === "rust" ? " (it comes with the full image)" : ""}.`);
+    if (language === "prettier") throw new FormatError("This project's Prettier isn't installed yet: run npm install (it's in its node_modules).");
+    throw new FormatError(`${formatter.name} isn't in this room's sandbox${["go", "rust", "java"].includes(language) ? " (it comes with the full image)" : ""}.`);
   }
   if (code === 124) throw new FormatError(`${formatter.name} took longer than ${TIMEOUT_SECONDS} seconds and was stopped.`);
   if (code !== 0) throw new FormatError(firstLines(problem, 4) || `${formatter.name} couldn't format it (exit code ${code}).`);

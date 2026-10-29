@@ -1,6 +1,6 @@
 "use client";
 
-import type { PublishResult } from "@codechatter/contracts";
+import type { PublishResult, SecretFinding } from "@codechatter/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useId, useState } from "react";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
 
 import { markSynced, roomTexts } from "./room-files";
+import { SecretsFound } from "./secrets-found";
 import { repoKey } from "./use-repo";
 
 /** A repository name from the room's: lower case, words joined by dashes. */
@@ -36,17 +37,20 @@ export function PublishSection() {
   const [isPrivate, setPrivate] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [secrets, setSecrets] = useState<{ message: string; found: SecretFinding[] } | null>(null);
   const nameId = useId();
 
-  async function publish() {
+  /** Publish; with `allowSecrets`, after the secret scan's findings were shown. */
+  async function publish(allowSecrets = false) {
     const files = [...roomTexts(doc)].map(([path, content]) => ({ path, content }));
     if (!files.length) return setError("The room has no files to publish.");
     setBusy(true);
     setError(null);
+    setSecrets(null);
     try {
       const result = await api<PublishResult>(`/api/rooms/${room.id}/repo/publish`, {
         method: "POST",
-        json: { name: name.trim(), private: isPrivate, description, files },
+        json: { name: name.trim(), private: isPrivate, description, files, allowSecrets },
       });
       markSynced(doc, { branch: result.branch, commit: result.commit });
       await client.invalidateQueries({ queryKey: repoKey(room.id) });
@@ -54,7 +58,8 @@ export function PublishSection() {
         action: { label: "Open", onClick: () => window.open(result.url, "_blank", "noreferrer") },
       });
     } catch (e) {
-      setError(e instanceof ApiError ? (e.errors?.[0]?.message ?? e.detail) : "Couldn't publish. Try again.");
+      if (e instanceof ApiError && e.secrets?.length) setSecrets({ message: e.detail, found: e.secrets });
+      else setError(e instanceof ApiError ? (e.errors?.[0]?.message ?? e.detail) : "Couldn't publish. Try again.");
     } finally {
       setBusy(false);
     }
@@ -104,6 +109,16 @@ export function PublishSection() {
         <p role="alert" className="text-destructive">
           {error}
         </p>
+      )}
+      {secrets && (
+        <SecretsFound
+          message={secrets.message}
+          secrets={secrets.found}
+          action="Publish anyway"
+          busy={busy}
+          onGoAhead={() => void publish(true)}
+          onCancel={() => setSecrets(null)}
+        />
       )}
       <Button type="submit" size="sm" disabled={busy || !name.trim()}>
         {busy ? "Publishing…" : "Publish to GitHub"}

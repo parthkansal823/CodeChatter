@@ -99,6 +99,8 @@ export const CommitInput = z.object({
   newBranch: z.string().regex(REF, "That isn't a branch name.").optional(),
   /** Each changed file's new text, or null when it was deleted. */
   changes: z.array(z.object({ path: RepoPath, content: z.string().max(1_000_000).nullable() })).min(1, "There's nothing to commit.").max(3000),
+  /** Send it even though the secret scan found keys or passwords in it (it's refused with the findings otherwise). */
+  allowSecrets: z.boolean().default(false),
 });
 export type CommitInput = z.infer<typeof CommitInput>;
 
@@ -184,6 +186,8 @@ export const PublishInput = z.object({
   private: z.boolean().default(true),
   description: z.string().trim().max(350).default(""),
   files: z.array(z.object({ path: RepoPath, content: z.string().max(1_000_000) })).min(1, "The room has no files to publish.").max(3000),
+  /** Send it even though the secret scan found keys or passwords in it (it's refused with the findings otherwise). */
+  allowSecrets: z.boolean().default(false),
 });
 export type PublishInput = z.infer<typeof PublishInput>;
 export type PublishResult = { repo: string; url: string; branch: string; commit: string };
@@ -194,5 +198,13 @@ export const GistInput = z.object({
   content: z.string().min(1, "The file is empty.").max(1_000_000),
   description: z.string().trim().max(1000).default(""),
   public: z.boolean().default(false),
+  /** Send it even though the secret scan found keys or passwords in it (it's refused with the findings otherwise). */
+  allowSecrets: z.boolean().default(false),
 });
 export type GistInput = z.infer<typeof GistInput>;
+
+/**
+ * A key or password the secret scan found in a file about to go to GitHub. The API refuses
+ * the commit, publish or gist with status 422 and these in the problem's `secrets`.
+ */
+export type SecretFinding = { path: string; line: number; kind: string; preview: string };

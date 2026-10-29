@@ -7,6 +7,7 @@ import type * as Y from "yjs";
 
 import { monacoOptions } from "@/components/room/editor/settings";
 import { currentSettings, useSettingsValues } from "@/components/room/editor/settings-store";
+import { bindEditorChords } from "@/components/room/editor/shortcuts";
 import { editorThemeId } from "@/components/room/editor/themes";
 import { ensureMonaco, monaco, registerWorkspaceFile } from "@/components/room/monaco-setup";
 
@@ -116,6 +117,8 @@ export function CellEditor({ address, source, language, readOnly, focusToken, ke
             }
           }
         }),
+        // The IDE's chords (Ctrl+K Z…), as in every code editor: Monaco owns chords in here.
+        bindEditorChords(editor),
       ];
       const observer = new ResizeObserver(resize);
       observer.observe(host.current);

@@ -47,6 +47,12 @@ export class RoomsRepository {
     });
   }
 
+  /** One of the room's settings (null removes it), leaving the others. */
+  async setSetting(roomId: string, key: string, value: unknown): Promise<void> {
+    const patch = value === null ? sql`${schema.rooms.settings} - ${key}` : sql`${schema.rooms.settings} || ${JSON.stringify({ [key]: value })}::jsonb`;
+    await this.db.update(schema.rooms).set({ settings: patch }).where(eq(schema.rooms.id, roomId));
+  }
+
   async addMember(roomId: string, userId: string, role: RoomRole, status: "active" | "pending"): Promise<void> {
     await this.db.insert(schema.roomMembers).values({ roomId, userId, role, status }).onConflictDoNothing();
   }

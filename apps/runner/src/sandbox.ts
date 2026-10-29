@@ -1,11 +1,12 @@
 import type { AgentEvent } from "@codechatter/contracts";
 import type Docker from "dockerode";
-import type { Duplex, Writable } from "node:stream";
+import { PassThrough, type Duplex, type Writable } from "node:stream";
 
 import { AgentChannel } from "./agent-channel.js";
 import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { freeSubnets } from "./subnets.js";
+import { WARM_MOUNT, warmVolume } from "./warm-cache.js";
 
 export const LABEL_ROOM = "codechatter.room";
 export const LABEL_MANAGED = "codechatter.managed";
@@ -129,6 +130,8 @@ export class Sandbox implements RoomSandbox {
     private readonly env: Env,
     /** The room's own settings for every terminal and Run: its database connections (databases.ts). */
     private readonly roomEnv: string[] = [],
+    /** The image to run: the room's owner can pick (room-session.ts). */
+    private readonly image: () => string = () => env.SANDBOX_IMAGE,
   ) {
     const id = roomId.toLowerCase();
     this.name = `cc-${env.SANDBOX_NAMESPACE}-room-${id}`;
@@ -223,11 +226,12 @@ export class Sandbox implements RoomSandbox {
   }
 
   private async start(): Promise<void> {
+    const imageName = this.image();
     const image = await this.docker
-      .getImage(this.env.SANDBOX_IMAGE)
+      .getImage(imageName)
       .inspect()
       .catch(() => {
-        throw new SandboxUnavailableError(`The sandbox image ${this.env.SANDBOX_IMAGE} is missing. Build it with: pnpm sandbox:build`);
+        throw new SandboxUnavailableError(`The sandbox image ${imageName} is missing. Build it with: pnpm sandbox:build`);
       });
 
     const networkId = await this.ensureNetwork();
@@ -327,7 +331,7 @@ export class Sandbox implements RoomSandbox {
     const mb = this.env.SANDBOX_MEMORY_MB * 1024 * 1024;
     return this.docker.createContainer({
       name: this.name,
-      Image: this.env.SANDBOX_IMAGE,
+      Image: this.image(),
       User: AGENT_USER,
       Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "LANG=C.UTF-8"],
       WorkingDir: "/workspace",
@@ -360,6 +364,8 @@ export class Sandbox implements RoomSandbox {
         Mounts: [
           { Type: "volume", Source: this.volume, Target: "/workspace" },
           { Type: "volume", Source: this.home, Target: "/home/ccuser" },
+          // Pre-warmed template installs (warm-cache.ts), shared by every room and read-only.
+          { Type: "volume", Source: warmVolume(this.env.SANDBOX_NAMESPACE), Target: WARM_MOUNT, ReadOnly: true },
         ],
       },
     });
@@ -367,6 +373,27 @@ export class Sandbox implements RoomSandbox {
 }
 
 /** For Docker inspects: null when the object doesn't exist. */
+/** The warm volume's archive names (warm-cache.ts), read by a throwaway container of the sandbox image with no network. */
+export async function listWarm(docker: Docker, env: Env): Promise<string[]> {
+  let out = "";
+  const stdout = new PassThrough().on("data", (chunk: Buffer) => (out += chunk.toString()));
+  const [result, container] = (await docker.run(env.SANDBOX_IMAGE, [], [stdout, new PassThrough().resume()], {
+    Entrypoint: ["ls", "-1", WARM_MOUNT],
+    User: USER,
+    // dockerode's run gives the container a terminal unless told not to, which ends lines in \r\n.
+    Tty: false,
+    // Ours, so the sweep removes one left behind if the runner stops mid-listing.
+    Labels: { [LABEL_MANAGED]: "1", [LABEL_NAMESPACE]: env.SANDBOX_NAMESPACE },
+    HostConfig: {
+      Mounts: [{ Type: "volume", Source: warmVolume(env.SANDBOX_NAMESPACE), Target: WARM_MOUNT, ReadOnly: true }],
+      NetworkMode: "none",
+    },
+  })) as [{ StatusCode: number }, Docker.Container];
+  await container.remove({ force: true }).catch(() => {});
+  if (result.StatusCode !== 0) throw new Error(`Listing the warm volume failed (${result.StatusCode}).`);
+  return out.split(/\s+/).filter((name) => name.endsWith(".tar"));
+}
+
 function missingAsNull(error: { statusCode?: number }): null {
   if (error.statusCode === 404) return null;
   throw error;

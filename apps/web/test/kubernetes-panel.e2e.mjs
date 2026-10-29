@@ -1,5 +1,6 @@
 // The Kubernetes panel (roadmap §14 F), as a person uses it, on the playground in the E2ETST room's sandbox (full
-// image): open Kubernetes from the Apps, start the playground if it's down, apply the open manifest in one click,
+// image): open Kubernetes from the Apps, check the open manifest against the schemas (no cluster needed), start the
+// playground if it's down, apply the open manifest in one click,
 // then find its Deployment (2/2 ready) in its namespace, read its YAML and description, see its pods, its Service
 // and its events, and delete it. The test's manifest file and namespace are removed, and a playground that was
 // down is stopped again.
@@ -56,6 +57,14 @@ try {
   await a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Kubernetes" }).click();
   const tool = a.locator("h2", { hasText: "Kubernetes" });
   check("toolOpens", await ok(tool.waitFor({ timeout: 15_000 })));
+
+  // Check needs no cluster: the manifest matches the schemas of the playground's Kubernetes.
+  await a.getByRole("button", { name: "Check", exact: true }).click();
+  const results = a.getByRole("region", { name: "Check results" });
+  const matched = await ok(results.getByText(/all 3 match the schemas/).waitFor({ timeout: 30_000 }));
+  check("checksTheManifest", matched, matched ? "" : await results.innerText().catch(() => "(no results)"));
+  await results.getByRole("button", { name: "Close the check" }).click();
+
   if (!wasRunning) await a.getByRole("button", { name: "Start" }).click();
   check("running", await ok(a.getByText("Playground running").waitFor({ timeout: 120_000 })));
 

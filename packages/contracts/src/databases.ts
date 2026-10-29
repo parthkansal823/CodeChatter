@@ -69,3 +69,29 @@ export type DatabaseTable = { name: string; schema?: string; detail?: string };
 /** SQL for the SQL databases, one mongosh expression for MongoDB, one command per line for Redis. */
 export const QueryInput = z.object({ query: z.string().trim().min(1, "Write a query first.").max(100_000) });
 export const TablePreviewInput = z.object({ name: z.string().min(1).max(512), schema: z.string().max(512).optional() });
+
+/**
+ * A SQLite database in the room (runner: sqlite.ts): a file in the sandbox, found by
+ * its header, as an app makes it (Django's db.sqlite3, a Flask app's). It needs no
+ * server, so the Databases tool opens it as it is.
+ */
+export type SqliteFile = { path: string; bytes: number };
+const SqlitePath = z
+  .string()
+  .min(1)
+  .max(1024)
+  .refine((path) => !path.startsWith("/") && !path.split("/").includes(".."), "That isn't a file in the room.");
+export const SqliteTarget = z.object({ path: SqlitePath });
+export const SqliteQueryInput = QueryInput.extend({ path: SqlitePath });
+export const SqlitePreviewInput = z.object({ path: SqlitePath, name: z.string().min(1).max(512) });
+
+/**
+ * DuckDB in the Databases tool (runner: duckdb.ts): the room's DuckDB files, and SQL
+ * over its CSV, Parquet and JSON files ("data"), which a request without a path
+ * opens: an empty DuckDB in the room's folder, where `select * from 'sales.csv'` works.
+ */
+export type DuckdbListing = { files: SqliteFile[]; data: SqliteFile[] };
+export const DuckdbTarget = z.object({ path: SqlitePath.optional() });
+export const DuckdbQueryInput = QueryInput.extend({ path: SqlitePath.optional() });
+/** A table of a DuckDB file, or (without a path) one of the room's data files by its path. */
+export const DuckdbPreviewInput = z.object({ path: SqlitePath.optional(), name: z.string().min(1).max(1024) });

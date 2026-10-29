@@ -1,5 +1,7 @@
 import type * as monaco from "monaco-editor";
 
+import { sanitizeOverrides, type KeyOverrides } from "./keybindings";
+
 export const LINE_NUMBERS = ["on", "relative", "off"] as const;
 export const WHITESPACE = ["none", "selection", "boundary", "trailing", "all"] as const;
 export const CURSOR_STYLES = [
@@ -41,6 +43,8 @@ export type EditorSettings = {
   keymap: (typeof KEYMAPS)[number];
   /** "auto" follows the app's light or dark; else a built-in Monaco theme or an imported one (themes.ts). */
   editorTheme: string;
+  /** Your keyboard shortcuts, by command (keybindings.ts): replacing that command's defaults. */
+  keybindings: KeyOverrides;
 };
 
 export const FONT_SIZE = { min: 10, max: 32, default: 14 } as const;
@@ -66,6 +70,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   aiCompletions: true,
   keymap: "standard",
   editorTheme: "auto",
+  keybindings: {},
 };
 
 export const clampFontSize = (size: number) =>
@@ -98,6 +103,7 @@ export function sanitizeSettings(raw: unknown): EditorSettings {
     else if (key === "cursorBlinking" && CURSOR_BLINKING.includes(value as never)) out[key] = value;
     else if (key === "keymap" && KEYMAPS.includes(value as never)) out[key] = value;
     else if (key === "editorTheme" && typeof value === "string" && /^(auto|vs|vs-dark|hc-black|hc-light|custom-[a-z0-9]{1,40})$/.test(value)) out[key] = value;
+    else if (key === "keybindings") out[key] = sanitizeOverrides(value);
   }
   return out as EditorSettings;
 }

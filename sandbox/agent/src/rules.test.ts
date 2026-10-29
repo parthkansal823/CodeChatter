@@ -9,8 +9,15 @@ describe("isIgnored", () => {
     }
   });
 
+  it("skips what framework dev servers generate", () => {
+    for (const path of [".svelte-kit/generated/client/app.js", ".nuxt/nuxt.d.ts", ".output/server/index.mjs", ".angular/cache/x", ".astro/types.d.ts", "apps/web/.next/trace"]) {
+      expect(isIgnored(path), path).toBe(true);
+    }
+    expect(isIgnored("src/astro-notes.md")).toBe(false);
+  });
+
   it("skips dependencies, caches, build output and our temp files", () => {
-    for (const path of ["node_modules/x/index.js", "app/__pycache__/m.cpython-313.pyc", ".venv/bin/python", ".git/HEAD", "target/classes/A.class", "src/.cc-tmp-12-3", "lib/a.o"]) {
+    for (const path of ["node_modules/x/index.js", "app/__pycache__/m.cpython-313.pyc", ".venv/bin/python", ".git/HEAD", "target/classes/A.class", "vendor/laravel/framework/composer.json", "src/.cc-tmp-12-3", "lib/a.o"]) {
       expect(isIgnored(path), path).toBe(true);
     }
   });

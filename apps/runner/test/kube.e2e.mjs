@@ -65,6 +65,23 @@ let wasRunning = true;
 try {
   const status = await kube({ op: "status" });
   check("available", status.status === 200 && status.json?.available === true, JSON.stringify(status.json));
+
+  // Checks need no cluster: a good manifest, misspelt and mistyped fields, a custom resource, and text that isn't YAML.
+  const good = await kube({
+    op: "check",
+    text: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 2\n  selector:\n    matchLabels: {app: web}\n  template:\n    metadata:\n      labels: {app: web}\n    spec:\n      containers:\n        - name: web\n          image: nginx:1.27\n          resources:\n            limits: {cpu: 500m, memory: 128Mi}\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: web\nspec:\n  ports:\n    - port: 80\n      targetPort: http\n",
+  });
+  check("checkGood", good.status === 200 && good.json?.objects?.length === 2 && good.json.objects.every((o) => o.status === "valid"), JSON.stringify(good.json));
+  const typo = await kube({
+    op: "check",
+    text: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replica: 2\n  selector:\n    matchLabels: {app: web}\n  template:\n    spec:\n      containers:\n        - name: web\n          image: nginx\n          ports:\n            - containerPort: eighty\n",
+  });
+  const bad = typo.json?.objects?.[0];
+  check("checkFindsMistakes", bad?.status === "invalid" && bad.errors.some((e) => e.path === "/spec" && /replica/.test(e.message)) && bad.errors.some((e) => e.path.endsWith("/containerPort")), JSON.stringify(bad));
+  const custom = await kube({ op: "check", text: "apiVersion: example.com/v1\nkind: Widget\nmetadata:\n  name: w\n" });
+  check("checkSkipsCustomResources", custom.json?.objects?.[0]?.status === "skipped", JSON.stringify(custom.json));
+  const garbage = await kube({ op: "check", text: "this: [is not\n" });
+  check("checkSaysNotYaml", garbage.json?.objects?.[0]?.status === "error", JSON.stringify(garbage.json));
   wasRunning = Boolean(status.json?.running);
   const up = await kube({ op: "up" });
   check("up", up.status === 200 && /Up\.|already up/.test(up.json?.output ?? ""), up.json?.output ?? up.json?.error);

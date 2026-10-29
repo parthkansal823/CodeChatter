@@ -7,11 +7,13 @@ import {
   RegisteredFileSystemProvider,
   RegisteredMemoryFile,
 } from "@codingame/monaco-vscode-files-service-override";
+import { ILanguageStatusService } from "@codingame/monaco-vscode-api/vscode/vs/workbench/services/languageStatus/common/languageStatusService.service";
 import { emmetCSS, emmetHTML } from "emmet-monaco-es";
 import * as monaco from "monaco-editor";
 import "@codingame/monaco-vscode-standalone-languages";
 import { typescriptDefaults } from "@codingame/monaco-vscode-standalone-typescript-language-features";
 import { MonacoVscodeApiWrapper } from "monaco-languageclient/vscodeApiWrapper";
+import { configureMonacoYaml } from "monaco-yaml";
 
 import { openFromWorkbench, registerEditorOpenerOnce } from "@/components/room/editor/editor-opener";
 import { registerInlineCompletions } from "@/components/room/editor/inline-completions";
@@ -19,6 +21,36 @@ import { registerSandboxFormatters } from "@/components/room/editor/sandbox-form
 import { registerSnippets } from "@/components/room/editor/snippet-provider";
 
 export { monaco };
+
+/** VS Code's language status service, keeping what's added and showing none of it. */
+class QuietLanguageStatus {
+  declare readonly _serviceBrand: undefined;
+  private readonly statuses = new Set<unknown>();
+  readonly onDidChange = () => ({ dispose() {} });
+  addStatus(status: unknown) {
+    this.statuses.add(status);
+    return { dispose: () => void this.statuses.delete(status) };
+  }
+  getLanguageStatus(): never[] {
+    return [];
+  }
+}
+
+/**
+ * monaco-yaml asks for its worker the older way ({ label, moduleId, createData }); this
+ * Monaco takes the worker itself, and its settings as the worker's second message (as its
+ * own TypeScript worker gets them). So monaco-yaml gets a Monaco that makes it that way.
+ */
+function yamlMonaco(): typeof monaco {
+  type Older = { createData?: unknown; host?: Record<string, (...args: unknown[]) => unknown>; keepIdleModels?: boolean };
+  const createWebWorker = (options: Older) => {
+    const worker = new Worker(new URL("monaco-yaml/yaml.worker", import.meta.url), { type: "module" });
+    worker.postMessage("ignore");
+    worker.postMessage(options.createData);
+    return monaco.editor.createWebWorker({ worker, host: options.host, keepIdleModels: options.keepIdleModels });
+  };
+  return { ...monaco, editor: { ...monaco.editor, createWebWorker } } as unknown as typeof monaco;
+}
 
 let ready: Promise<void> | null = null;
 let workspaceFiles: RegisteredFileSystemProvider | null = null;
@@ -58,6 +90,9 @@ export function ensureMonaco(): Promise<void> {
     };
     await new MonacoVscodeApiWrapper({
       $type: "classic",
+      // Language statuses (a language server's "ready", JDT LS's among them) are kept but not
+      // shown: the room says how its servers are doing itself. Without this, adding one throws.
+      serviceOverrides: { [ILanguageStatusService.toString()]: new QuietLanguageStatus() },
       // Another file's definition (the language client) opens as the room's own tab.
       viewsConfig: { $type: "EditorService", openEditorFunc: openFromWorkbench },
       monacoWorkerFactory: () => {},
@@ -73,6 +108,13 @@ export function ensureMonaco(): Promise<void> {
       allowNonTsExtensions: true,
     });
     defineThemes();
+    // YAML: completions, hover and checks, and for Kubernetes manifests the schemas of the
+    // playground's Kubernetes (scripts/kubernetes-schema.mjs). A kind's schema applies only
+    // to a document whose apiVersion and kind name it, so other YAML just gets the syntax.
+    configureMonacoYaml(yamlMonaco(), {
+      enableSchemaRequest: true,
+      schemas: [{ uri: new URL("/schemas/kubernetes.json", window.location.origin).href, fileMatch: ["**/*.yaml", "**/*.yml"] }],
+    });
     registerInlineCompletions();
     registerSnippets();
     registerSandboxFormatters();
@@ -82,10 +124,15 @@ export function ensureMonaco(): Promise<void> {
     registerEditorOpenerOnce();
     // VS Code's own code leaves a cancelled wait unhandled now and then (Tab accepting an inline
     // suggestion cancels one). VS Code ignores its CancellationError ("Canceled"); so do we.
+    // So is the language client's own failure to dispose a client that never started, when its
+    // connection drops (a sandbox still starting): it's replacing that client anyway.
     // Every other unhandled rejection still reaches the console.
     window.addEventListener("unhandledrejection", (event) => {
       const reason: unknown = event.reason;
       if (reason instanceof Error && reason.name === "Canceled" && reason.message === "Canceled") event.preventDefault();
+      if (reason instanceof Error && /^languageClientWrapper \(.*\): Disposing the monaco-languageclient/.test(reason.message)) {
+        event.preventDefault();
+      }
     });
   })();
   return ready;

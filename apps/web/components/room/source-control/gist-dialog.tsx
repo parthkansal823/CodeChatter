@@ -1,7 +1,8 @@
 "use client";
 
+import type { SecretFinding } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
-import { textOf } from "@codechatter/workspace-model";
+import { pathOf, textOf } from "@codechatter/workspace-model";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -20,6 +21,8 @@ import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
+
+import { SecretsFound } from "./secrets-found";
 
 /**
  * Share the open file as a GitHub gist of yours (the palette's "Share the file as a
@@ -47,23 +50,32 @@ function GistForm({ file }: { file: TreeNode }) {
   const [isPublic, setPublic] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [secrets, setSecrets] = useState<{ message: string; found: SecretFinding[] } | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  async function create() {
+  /** Make the gist; with `allowSecrets`, after the secret scan's findings were shown. */
+  async function create(allowSecrets = false) {
     setBusy(true);
     setError(null);
+    setSecrets(null);
     try {
       const content = textOf(doc, file.id)?.toString() ?? "";
       const made = await api<{ url: string }>(`/api/rooms/${room.id}/repo/gist`, {
         method: "POST",
-        json: { name: file.name, content, description, public: isPublic },
+        json: { name: file.name, content, description, public: isPublic, allowSecrets },
       });
       setUrl(made.url);
     } catch (e) {
-      setError(
-        e instanceof ApiError ? (e.errors?.[0]?.message ?? e.detail) : "Couldn't make the gist. Try again.",
-      );
+      if (e instanceof ApiError && e.secrets?.length) {
+        // The gist knows the file by its name; the findings open it by its path in the room.
+        const path = pathOf(doc, file.id) ?? file.name;
+        setSecrets({ message: e.detail, found: e.secrets.map((found) => ({ ...found, path })) });
+      } else {
+        setError(
+          e instanceof ApiError ? (e.errors?.[0]?.message ?? e.detail) : "Couldn't make the gist. Try again.",
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -138,6 +150,16 @@ function GistForm({ file }: { file: TreeNode }) {
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
+          )}
+          {secrets && (
+            <SecretsFound
+              message={secrets.message}
+              secrets={secrets.found}
+              action="Make it anyway"
+              busy={busy}
+              onGoAhead={() => void create(true)}
+              onCancel={() => setSecrets(null)}
+            />
           )}
           <DialogFooter>
             <Button type="submit" disabled={busy}>

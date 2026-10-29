@@ -1,5 +1,5 @@
 import type { AuthSession } from "@codechatter/auth";
-import { INSTALLS_MINUTES, RoomCode, type DevServerStatus, type SandboxStatus } from "@codechatter/contracts";
+import { INSTALLS_MINUTES, RoomCode, SandboxImageInput, type DevServerStatus, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Req, ServiceUnavailableException } from "@nestjs/common";
 import type { Request } from "express";
 import { z } from "zod";
@@ -16,7 +16,7 @@ import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js
 const PreviewInput = z.object({ port: z.number().int().min(1).max(65535) });
 const FormatInput = z.object({
   path: z.string().min(1).max(1024),
-  language: z.enum(["python", "c", "cpp", "shell", "go", "rust"]),
+  language: z.enum(["python", "c", "cpp", "shell", "go", "rust", "java", "prettier"]),
   // The API takes JSON bodies up to 1 MB; the editor sends files up to 512 KB.
   text: z.string().max(600_000),
   tabSize: z.number().int().min(1).max(8),
@@ -40,7 +40,7 @@ export class SandboxController {
     await this.rooms.require(room, session.user.id, "room.view");
     const status = await this.runner
       .status(room, session.user)
-      .catch((): SandboxStatus => ({ running: false, ports: [], cpuPercent: null, memory: null, processes: null, installs: null }));
+      .catch((): SandboxStatus => ({ running: false, ports: [], cpuPercent: null, memory: null, processes: null, installs: null, image: { choice: null, offered: false } }));
     return { ...status, previews: this.hosts.enabled };
   }
 
@@ -54,6 +54,20 @@ export class SandboxController {
     const installs = await this.runner.allowInstalls(room.id, session.user, INSTALLS_MINUTES);
     await this.audit.record({ orgId: room.orgId, actorId: session.user.id, action: "sandbox.installs.allow", targetType: "room", targetId: room.id, data: installs }, request);
     return installs;
+  }
+
+  /**
+   * The room's sandbox image (base or full, when this server has both), the owner's to pick:
+   * its sandbox restarts into it at once, files kept.
+   */
+  @Put("sandbox/image")
+  @HttpCode(200)
+  async setImage(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Body(new ZodPipe(SandboxImageInput)) input: z.infer<typeof SandboxImageInput>, @Req() request: Request) {
+    const { room } = await this.rooms.require(this.room(roomId), session.user.id, "room.manage");
+    await this.rooms.setSandboxImage(room.id, input.image);
+    await this.audit.record({ orgId: room.orgId, actorId: session.user.id, action: "sandbox.image", targetType: "room", targetId: room.id, data: { image: input.image } }, request);
+    await this.runner.restart(room.id, session.user);
+    return { ok: true };
   }
 
   @Delete("sandbox/installs")
@@ -116,6 +130,23 @@ export class SandboxController {
     await this.rooms.require(room, session.user.id, "files.edit");
     try {
       return await this.runner.format(room, session.user, input);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Check every file (apps/runner/src/check.ts), for the Problems tab's files nobody has open:
+   * the project-wide checkers run the room's code's tools in the sandbox, so it needs Run rights.
+   */
+  @Post("check")
+  @HttpCode(200)
+  async check(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string): Promise<RoomCheck> {
+    const room = this.room(roomId);
+    await this.rooms.require(room, session.user.id, "code.run");
+    try {
+      return await this.runner.check(room, session.user);
     } catch (error) {
       if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
       throw error;

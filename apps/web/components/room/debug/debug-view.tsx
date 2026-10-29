@@ -116,7 +116,7 @@ export function DebugView({ activeFile }: { activeFile: TreeNode | null }) {
           <div className="grid gap-2">
             <Launch activeFile={activeFile} />
             <p className="text-muted-foreground">
-              Python, C and C++. Click left of a line number (or F9) for a breakpoint; everyone in the room
+              Python, C, C++, Go, Java, JavaScript and TypeScript. Click left of a line number (or F9) for a breakpoint; everyone in the room
               shares them, and the session.
             </p>
           </div>

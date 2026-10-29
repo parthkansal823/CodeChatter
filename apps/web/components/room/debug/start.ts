@@ -57,7 +57,7 @@ export function startPicked(doc: Y.Doc, activePath: string | null): boolean {
   return false;
 }
 
-/** Make .vscode/launch.json with a configuration for Python and one for C and C++, unless it's there. */
+/** Make .vscode/launch.json with a configuration for Python, C and C++, Node, Java and Go, unless it's there. */
 export function addLaunchFile(doc: Y.Doc, userId: string): void {
   if (!findByPath(doc, LAUNCH_PATH)) createFileAtPath(doc, LAUNCH_PATH, STARTER_LAUNCH, userId);
 }

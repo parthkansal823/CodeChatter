@@ -5,7 +5,7 @@ import { LanguageClientWrapper, LcWebSocket } from "monaco-languageclient/lcwrap
 import { ensureMonaco } from "@/components/room/monaco-setup";
 
 /** Languages with a language server in the room's sandbox (apps/runner/src/lsp.ts). */
-export const LSP_LANGUAGES = ["python", "c", "cpp", "go", "rust"] as const;
+export const LSP_LANGUAGES = ["python", "c", "cpp", "go", "rust", "java"] as const;
 export type LspLanguage = (typeof LSP_LANGUAGES)[number];
 
 type Running = { roomId: string; wrapper: LanguageClientWrapper; starting: Promise<void> };

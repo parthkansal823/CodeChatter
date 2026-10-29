@@ -22,6 +22,8 @@ export interface ServiceClaims {
   /** The person the call is made for, when there is one. */
   uid?: string;
   name?: string;
+  /** Runner: the sandbox image the room's owner picked ("default" is the server's). */
+  img?: "base" | "full" | "default";
 }
 
 const PREFIX = "svc.";

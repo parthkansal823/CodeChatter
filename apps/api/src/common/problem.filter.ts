@@ -18,15 +18,18 @@ export class ProblemFilter implements ExceptionFilter {
     let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
     let detail = "Something went wrong on our side.";
     let errors: unknown;
+    let secrets: unknown;
 
     if (error instanceof HttpException) {
       status = error.getStatus();
       const body = error.getResponse();
       if (typeof body === "string") detail = body;
       else if (body && typeof body === "object") {
-        const b = body as { message?: unknown; errors?: unknown };
+        const b = body as { message?: unknown; errors?: unknown; secrets?: unknown };
         detail = Array.isArray(b.message) ? b.message.join("; ") : String(b.message ?? error.message);
         errors = b.errors;
+        // The secret scan's findings (github/secret-scan.ts), for the browser to show.
+        secrets = b.secrets;
       }
     } else {
       this.logger.error(error instanceof Error ? error.stack : String(error));
@@ -42,6 +45,7 @@ export class ProblemFilter implements ExceptionFilter {
         detail,
         instance: request.originalUrl,
         ...(errors !== undefined && { errors }),
+        ...(secrets !== undefined && { secrets }),
       });
   }
 }

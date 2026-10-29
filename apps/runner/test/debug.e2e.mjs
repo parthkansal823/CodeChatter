@@ -2,7 +2,12 @@
 // Python (debugpy): breakpoints set in the files document stop the program for both; stack, variables and evaluate;
 // Ben can look but not step or start; a step; a breakpoint added while it runs is sent at once and hit; output and
 // the end reach Ben. C (gdb): compiled with debug information, stopped at a breakpoint, a variable read, run to the
-// end. A compile error is explained, and a second session waits for the first. The test's files are removed.
+// end. A compile error is explained, and a second session waits for the first. JavaScript and TypeScript (js-debug,
+// through the bridge that makes its child session one): stopped at a breakpoint with a variable and a watch, output
+// from console.log and stdout; a .ts file as it is; stop on entry with arguments. Go (Delve, full image only): a
+// module's package built with the other file in it, stopped at a breakpoint, a variable and a watch, its output; a
+// file on its own with arguments, stopping at main.main; a package by its folder; a compile error. The sandbox is
+// restarted first, so it runs the image as built now. The test's files are removed.
 //   node --env-file=../../.env test/debug.e2e.mjs        (from apps/runner, with the dev stack running)
 import { signServiceToken } from "@codechatter/auth/service-token";
 import { createFileAtPath, filesDocName, findByPath, toggleBreakpoint, trash, clearBreakpoints } from "@codechatter/workspace-model";
@@ -15,6 +20,8 @@ const RUNNER = (process.env.RUNNER_URL ?? "http://127.0.0.1:4200").replace(/^htt
 const COLLAB = process.env.COLLAB_INTERNAL_URL ?? "ws://127.0.0.1:4100";
 const SECRET = process.env.SERVICE_SECRET;
 if (!SECRET) throw new Error("SERVICE_SECRET missing (run with --env-file=../../.env)");
+// Go and Delve come with the full image only.
+const GO = (process.env.SANDBOX_IMAGE ?? "").endsWith(":full");
 
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -32,6 +39,13 @@ await new Promise((resolve, reject) => {
   setTimeout(() => reject(new Error("collab sync timed out")), 15000);
 });
 const stateVector = () => Buffer.from(Y.encodeStateVector(doc)).toString("base64");
+
+// A sandbox from an older image is only replaced when it restarts.
+const restarted = await fetch(`${RUNNER.replace(/^ws/, "http")}/rooms/${ROOM}/sandbox/restart`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${signServiceToken(SECRET, { aud: "runner", sub: ROOM, uid: "e2e-Ana", name: "Ana" })}` },
+});
+if (!restarted.ok) throw new Error(`restarting the sandbox failed: ${restarted.status}`);
 
 /** One person's connection: everything they receive, and a way to wait for the next thing that matches. */
 function connect(name, mode) {
@@ -75,6 +89,19 @@ doc.transact(() => {
   ids.init = createFileAtPath(doc, `${dir}/pkg/__init__.py`, "");
   ids.hello = createFileAtPath(doc, `${dir}/pkg/hello.py`, 'print("module ok")\n');
   ids.argv = createFileAtPath(doc, `${dir}/argv.c`, ["#include <stdio.h>", "int main(int argc, char **argv) {", '  printf("argc %d %s\\n", argc, argv[1]);', "  return 0;", "}", ""].join("\n"));
+  ids.js = createFileAtPath(doc, `${dir}/prog.js`, ["const x = 1;", "const y = x + 1;", 'console.log("js y is", y);', 'process.stdout.write("js done\\n");', ""].join("\n"));
+  ids.ts = createFileAtPath(doc, `${dir}/prog.ts`, ["const n: number = 20;", "const total: number = n * 2 + 2;", 'console.log("ts total", total);', ""].join("\n"));
+  ids.jsArgs = createFileAtPath(doc, `${dir}/args.js`, ['console.log("js args", process.argv[2], process.env.MODE);', ""].join("\n"));
+  if (GO) {
+    ids.goMod = createFileAtPath(doc, `${dir}/gomod/go.mod`, "module example.com/dbg\n\ngo 1.24\n");
+    ids.goMain = createFileAtPath(doc, `${dir}/gomod/main.go`, ["package main", "", 'import "fmt"', "", "func main() {", "\tx := 1", "\ty := double(x)", '\tfmt.Println("go y is", y)', "}", ""].join("\n"));
+    ids.goUtil = createFileAtPath(doc, `${dir}/gomod/util.go`, ["package main", "", "func double(n int) int { return n * 2 }", ""].join("\n"));
+    ids.goLone = createFileAtPath(doc, `${dir}/lone/args.go`, ["package main", "", 'import (\n\t"fmt"\n\t"os"\n)', "", "func main() {", '\tfmt.Println("go args", os.Args[1], os.Getenv("MODE"))', "}", ""].join("\n"));
+    ids.goBad = createFileAtPath(doc, `${dir}/gobad/bad.go`, ["package main", "", "func main() { nope() }", ""].join("\n"));
+    ids.javaMain = createFileAtPath(doc, `${dir}/java/app/Main.java`, ["package app;", "", "public class Main {", "    public static void main(String[] args) {", "        int x = 20;", "        int y = Helper.twice(x) + 2;", '        System.out.println("java y is " + y);', "    }", "}", ""].join("\n"));
+    ids.javaHelper = createFileAtPath(doc, `${dir}/java/app/Helper.java`, ["package app;", "", "public class Helper {", "    static int twice(int n) { return n * 2; }", "}", ""].join("\n"));
+    ids.javaBad = createFileAtPath(doc, `${dir}/javabad/Bad.java`, ["public class Bad {", "    public static void main(String[] args) { nope(); }", "}", ""].join("\n"));
+  }
 });
 toggleBreakpoint(doc, ids.py, 2);
 toggleBreakpoint(doc, ids.c, 4);
@@ -83,7 +110,7 @@ const ana = connect("Ana", "drive");
 const ben = connect("Ben", "watch");
 try {
   await Promise.all([ana.open, ben.open]);
-  check("nothingAtFirst", ana.seen.some(isSession((s) => s === null)));
+  check("nothingAtFirst", ana.seen.some(isSession((s) => s === null)), JSON.stringify(ana.seen.find(isSession(() => true))?.body ?? null));
 
   // Python: both see it stop at the breakpoint.
   const anaStopped = ana.next(isEvent("stopped", (b) => b.reason === "breakpoint"));
@@ -184,6 +211,119 @@ try {
   await ana.request("continue", { threadId: cEntryStop.body.threadId });
   await cArgsEnded;
   check("cArgs", ana.seen.some(isEvent("output", (b) => (b.output ?? "").includes("argc 2 first"))));
+
+  // JavaScript, with js-debug: its child session (the Node process) is the one that stops.
+  toggleBreakpoint(doc, ids.js, 3);
+  const jsStopped = ana.next(isEvent("stopped", (b) => b.reason === "breakpoint"), 60_000);
+  ana.cc("start", { path: `${dir}/prog.js`, stateVector: stateVector() });
+  const jsStop = await jsStopped;
+  const jsTop = (await ana.request("stackTrace", { threadId: jsStop.body.threadId })).body?.stackFrames?.[0];
+  check("jsStoppedOnLine3", jsTop?.line === 3 && jsTop.source?.path === `/workspace/${dir}/prog.js`, JSON.stringify(jsTop));
+  const jsScopes = await ana.request("scopes", { frameId: jsTop.id });
+  const jsLocals = await ana.request("variables", { variablesReference: jsScopes.body.scopes[0].variablesReference });
+  check("jsVariables", jsLocals.body?.variables?.some((v) => v.name === "y" && v.value === "2"), JSON.stringify(jsLocals.body?.variables?.slice(0, 8)));
+  const jsWatch = await ana.request("evaluate", { expression: "x + 41", frameId: jsTop.id, context: "watch" });
+  check("jsWatch", jsWatch.body?.result === "42", JSON.stringify(jsWatch.body ?? jsWatch));
+  const jsEnded = ana.next(isSession((s) => s === null), 60_000);
+  await ana.request("continue", { threadId: jsStop.body.threadId });
+  await jsEnded;
+  const jsOut = ana.seen.filter(isEvent("output")).map((m) => m.body.output ?? "").join("");
+  check("jsOutput", jsOut.includes("js y is 2") && jsOut.includes("js done"), jsOut.slice(-200));
+
+  // TypeScript, as it is: Node strips the types and keeps the lines.
+  toggleBreakpoint(doc, ids.ts, 3);
+  const tsStopped = ana.next(isEvent("stopped", (b) => b.reason === "breakpoint"), 60_000);
+  ana.cc("start", { path: `${dir}/prog.ts`, stateVector: stateVector() });
+  const tsStop = await tsStopped;
+  const tsTop = (await ana.request("stackTrace", { threadId: tsStop.body.threadId })).body?.stackFrames?.[0];
+  check("tsStoppedOnLine3", tsTop?.line === 3 && tsTop.source?.path === `/workspace/${dir}/prog.ts`, JSON.stringify(tsTop));
+  const tsTotal = await ana.request("evaluate", { expression: "total", frameId: tsTop.id, context: "watch" });
+  check("tsWatch", tsTotal.body?.result === "42", JSON.stringify(tsTotal.body ?? tsTotal));
+  const tsEnded = ana.next(isSession((s) => s === null), 60_000);
+  await ana.request("continue", { threadId: tsStop.body.threadId });
+  await tsEnded;
+  check("tsOutput", ana.seen.some(isEvent("output", (b) => (b.output ?? "").includes("ts total 42"))));
+
+  // Stop on entry, with arguments and environment.
+  const jsEntry = ana.next(isEvent("stopped"), 60_000);
+  ana.cc("start", { path: `${dir}/args.js`, args: ["first"], env: { MODE: "dev" }, stopOnEntry: true, stateVector: stateVector() });
+  const jsEntryStop = await jsEntry.catch(() => null);
+  check("jsStopOnEntry", jsEntryStop !== null, jsEntryStop ? jsEntryStop.body.reason : "");
+  const jsArgsEnded = ana.next(isSession((s) => s === null), 60_000);
+  await ana.request("continue", { threadId: jsEntryStop?.body.threadId ?? 0 });
+  await jsArgsEnded;
+  check("jsArgs", ana.seen.some(isEvent("output", (b) => (b.output ?? "").includes("js args first dev"))));
+
+  if (GO) {
+    // Go, with Delve: main.go is built with util.go (its module's package).
+    toggleBreakpoint(doc, ids.goMain, 8);
+    const goStopped = ana.next(isEvent("stopped", (b) => b.reason === "breakpoint"), 300_000);
+    ana.cc("start", { path: `${dir}/gomod/main.go`, stateVector: stateVector() });
+    const goStop = await goStopped;
+    const goTop = (await ana.request("stackTrace", { threadId: goStop.body.threadId })).body?.stackFrames?.[0];
+    check("goStoppedOnLine8", goTop?.line === 8 && goTop.name === "main.main" && goTop.source?.path === `/workspace/${dir}/gomod/main.go`, JSON.stringify(goTop));
+    const goScopes = await ana.request("scopes", { frameId: goTop.id });
+    const goLocals = await ana.request("variables", { variablesReference: goScopes.body.scopes[0].variablesReference });
+    check("goVariables", goLocals.body?.variables?.some((v) => v.name === "y" && v.value === "2"), JSON.stringify(goLocals.body?.variables));
+    const goWatch = await ana.request("evaluate", { expression: "x + 41", frameId: goTop.id, context: "watch" });
+    check("goWatch", goWatch.body?.result === "42", JSON.stringify(goWatch.body ?? goWatch));
+    const goEnded = ana.next(isSession((s) => s === null), 60_000);
+    await ana.request("continue", { threadId: goStop.body.threadId });
+    await goEnded;
+    check("goOutput", ana.seen.some(isEvent("output", (b) => (b.output ?? "").includes("go y is 2"))));
+
+    // A file with no module: built on its own, arguments and environment, stopping at main.main.
+    const goEntry = ana.next(isEvent("stopped"), 120_000);
+    ana.cc("start", { path: `${dir}/lone/args.go`, args: ["first"], env: { MODE: "dev" }, stopOnEntry: true, stateVector: stateVector() });
+    const goEntryStop = await goEntry;
+    const goEntryTop = (await ana.request("stackTrace", { threadId: goEntryStop.body.threadId })).body?.stackFrames?.[0];
+    check("goStopOnEntry", goEntryTop?.name === "main.main", JSON.stringify(goEntryTop));
+    const goArgsEnded = ana.next(isSession((s) => s === null), 60_000);
+    await ana.request("continue", { threadId: goEntryStop.body.threadId });
+    await goArgsEnded;
+    check("goArgs", ana.seen.some(isEvent("output", (b) => (b.output ?? "").includes("go args first dev"))));
+
+    // A package by its folder (launch.json's ${fileDirname}), run to the end.
+    clearBreakpoints(doc, ids.goMain);
+    const goFolderEnded = ana.next(isSession((s) => s === null), 120_000);
+    const goFolderSession = ana.next(isSession((s) => s?.path === `${dir}/gomod` && s.language === "go"));
+    const before = ana.seen.length;
+    ana.cc("start", { path: `${dir}/gomod`, stateVector: stateVector() });
+    await goFolderEnded;
+    const folderOut = ana.seen.slice(before).filter(isEvent("output")).map((m) => m.body.output ?? "").join("");
+    check("goPackageFolder", (await goFolderSession.then(() => true, () => false)) && folderOut.includes("go y is 2"), folderOut.slice(-160));
+
+    const goBad = ana.next(isEvent("output", (b) => (b.output ?? "").includes("It didn't compile")), 120_000);
+    const goBadEnded = ana.next(isSession((s) => s === null), 120_000);
+    ana.cc("start", { path: `${dir}/gobad/bad.go`, stateVector: stateVector() });
+    const goBadMessage = await goBad.then((m) => m.body.output, () => "");
+    await goBadEnded.catch(() => {});
+    check("goCompileErrorExplained", /undefined: nope/.test(goBadMessage), goBadMessage);
+
+    // Java, with java-debug inside JDT LS: Main.java built with the Helper beside it (its package's sources).
+    toggleBreakpoint(doc, ids.javaMain, 7);
+    const javaStopped = ana.next(isEvent("stopped", (b) => b.reason === "breakpoint"), 300_000);
+    ana.cc("start", { path: `${dir}/java/app/Main.java`, stateVector: stateVector() });
+    const javaStop = await javaStopped;
+    const javaTop = (await ana.request("stackTrace", { threadId: javaStop.body.threadId })).body?.stackFrames?.[0];
+    check("javaStoppedOnLine7", javaTop?.line === 7 && /main/.test(javaTop.name) && javaTop.source?.path?.endsWith(`${dir}/java/app/Main.java`), JSON.stringify(javaTop));
+    const javaScopes = await ana.request("scopes", { frameId: javaTop.id });
+    const javaLocals = await ana.request("variables", { variablesReference: javaScopes.body.scopes[0].variablesReference });
+    check("javaVariables", javaLocals.body?.variables?.some((v) => v.name === "y" && v.value === "42"), JSON.stringify(javaLocals.body?.variables));
+    const javaWatch = await ana.request("evaluate", { expression: "x + 22", frameId: javaTop.id, context: "watch" });
+    check("javaWatch", javaWatch.body?.result === "42", JSON.stringify(javaWatch.body ?? javaWatch));
+    const javaEnded = ana.next(isSession((s) => s === null), 60_000);
+    await ana.request("continue", { threadId: javaStop.body.threadId });
+    await javaEnded;
+    check("javaOutput", ana.seen.some(isEvent("output", (b) => (b.output ?? "").includes("java y is 42"))));
+
+    const javaBad = ana.next(isEvent("output", (b) => (b.output ?? "").includes("It didn't compile")), 120_000);
+    const javaBadEnded = ana.next(isSession((s) => s === null), 120_000);
+    ana.cc("start", { path: `${dir}/javabad/Bad.java`, stateVector: stateVector() });
+    const javaBadMessage = await javaBad.then((m) => m.body.output, () => "");
+    await javaBadEnded.catch(() => {});
+    check("javaCompileErrorExplained", /cannot find symbol/.test(javaBadMessage), javaBadMessage);
+  }
 
   ana.cc("start", { path: "../etc/passwd" });
   check("outsideRefused", (await ana.next((m) => m.type === "cc" && m.event === "error")).body.message.startsWith("That can't be debugged"));

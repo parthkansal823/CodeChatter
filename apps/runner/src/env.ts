@@ -13,6 +13,12 @@ const Env = z.object({
   COLLAB_INTERNAL_URL: z.string().startsWith("ws").default("ws://127.0.0.1:4100"),
   SANDBOX_IMAGE: z.string().default("codechatter-sandbox:dev"),
   /**
+   * The base and full images a room's owner can pick between (Ports panel), when both are
+   * set; a room that hasn't picked runs SANDBOX_IMAGE.
+   */
+  SANDBOX_IMAGE_BASE: z.string().optional(),
+  SANDBOX_IMAGE_FULL: z.string().optional(),
+  /**
    * Separates sandboxes of different deployments on one Docker host (dev and a
    * local production test, or staging and prod): in container names, volume
    * names and labels. Each runner only manages its own namespace.

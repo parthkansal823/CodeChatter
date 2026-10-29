@@ -1,4 +1,4 @@
-import { request, type IncomingMessage, type ServerResponse } from "node:http";
+import { Agent, request, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 
 import { log } from "./log.js";
@@ -29,6 +29,23 @@ function notListening(res: ServerResponse, port: number, reason: string): void {
 <p style="font-size:13px;color:#888">${reason.replace(/[<>&]/g, "")}</p></div></body>`);
 }
 
+/**
+ * The HTTP agent for one request: it hands out that request's own tunnel and never keeps
+ * it. Node's global agent keeps sockets for reuse (keep-alive, since Node 19) under one
+ * name for every room ("localhost:80"), so a later request, perhaps for another room's
+ * preview, could be sent down an earlier request's tunnel while its own tunnel leaked;
+ * with a page's dozens of module requests at once (SvelteKit's), some never came back.
+ */
+class TunnelAgent extends Agent {
+  constructor(private readonly tunnel: Duplex) {
+    super({ keepAlive: false, maxSockets: 1 });
+  }
+
+  override createConnection(): Duplex {
+    return this.tunnel;
+  }
+}
+
 /** HTTP request to a dev server inside the sandbox, over the agent tunnel. */
 export async function proxyPreviewHttp(session: RoomSession, port: number, path: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   await session.ready();
@@ -39,13 +56,11 @@ export async function proxyPreviewHttp(session: RoomSession, port: number, path:
   } catch (error) {
     return notListening(res, port, error instanceof Error ? error.message : "");
   }
-  // No `agent` option: with agent: false Node ignores createConnection and
-  // opens a real TCP connection to localhost:80 instead of using the tunnel.
   const upstream = request({
     method: req.method,
     path,
     headers: forwardHeaders(req, port),
-    createConnection: () => tunnel as never,
+    agent: new TunnelAgent(tunnel),
   });
   upstream.on("response", (answer) => {
     res.writeHead(answer.statusCode ?? 502, answer.headers);

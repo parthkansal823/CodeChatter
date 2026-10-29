@@ -11,7 +11,8 @@
     "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
     "start": "node --enable-source-maps --env-file-if-exists=../../.env dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "warm": "tsx --env-file-if-exists=../../.env scripts/warm.ts"
   },
   "dependencies": {
     "@codechatter/auth": "workspace:*",

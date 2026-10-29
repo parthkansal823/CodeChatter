@@ -31,6 +31,8 @@ import { RunnerClient } from "./runner/runner.client.js";
 import { DatabasesController } from "./sandbox/databases.controller.js";
 import { RoomJanitor } from "./rooms/room-janitor.js";
 import { KubernetesController } from "./sandbox/kubernetes.controller.js";
+import { SqliteController } from "./sandbox/sqlite.controller.js";
+import { DuckdbController } from "./sandbox/duckdb.controller.js";
 import { NotebooksController } from "./sandbox/notebooks.controller.js";
 import { SandboxController } from "./sandbox/sandbox.controller.js";
 
@@ -49,7 +51,7 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, NotebooksController, KubernetesController, SourceControlController, WebhookController, AiController, JudgeController, HttpStudioController, DemoController],
+  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, AiController, JudgeController, HttpStudioController, DemoController],
   providers: [
     AiService,
     AuditService,

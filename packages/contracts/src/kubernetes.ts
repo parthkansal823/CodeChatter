@@ -24,6 +24,8 @@ export const KubeRequest = z.discriminatedUnion("op", [
   /** A manifest's text (the open file), applied as it is in the editor. */
   z.object({ op: z.literal("apply"), text: z.string().min(1, "The file is empty.").max(1024 * 1024) }),
   z.object({ op: z.literal("delete"), ref: KubeRef }),
+  /** Check a manifest against the Kubernetes schemas, without a cluster (kubeconform). */
+  z.object({ op: z.literal("check"), text: z.string().min(1, "The file is empty.").max(1024 * 1024) }),
 ]);
 export type KubeRequest = z.infer<typeof KubeRequest>;
 
@@ -56,5 +58,20 @@ export type KubeEvent = {
 
 export type KubeResources = { items: KubeItem[]; events: KubeEvent[] };
 
+/**
+ * A manifest's check: each object in it, in order, and whether it matches the schema of
+ * its kind. "skipped" has no schema to check against (a custom resource); "error" couldn't
+ * be read (not YAML, or no kind). Errors say where, as a path into the object (/spec/replicas).
+ */
+export type KubeCheck = {
+  objects: Array<{
+    kind: string;
+    name: string;
+    status: "valid" | "invalid" | "error" | "skipped";
+    message: string | null;
+    errors: Array<{ path: string; message: string }>;
+  }>;
+};
+
 /** The answer to each request: `output` is what kubectl said (up, down, apply, delete) or the YAML or description. */
-export type KubeResponse = KubeStatus | KubeResources | { output: string };
+export type KubeResponse = KubeStatus | KubeResources | KubeCheck | { output: string };

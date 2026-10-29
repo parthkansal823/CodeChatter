@@ -1,6 +1,9 @@
 import { verifyServiceToken, type ServiceClaims } from "@codechatter/auth/service-token";
 import {
   DATABASE_KINDS,
+  DuckdbPreviewInput,
+  DuckdbQueryInput,
+  DuckdbTarget,
   INSTALLS_MINUTES,
   JudgeInput,
   KubeRequest,
@@ -8,6 +11,9 @@ import {
   RoomCode,
   RunInput,
   RunStartInput,
+  SqlitePreviewInput,
+  SqliteQueryInput,
+  SqliteTarget,
   TablePreviewInput,
   type JudgeEvent,
   type RunnerEvent,
@@ -21,7 +27,9 @@ import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
 
+import { checkRoom } from "./check.js";
 import { devStatus, startDev, stopDev } from "./dev-server.js";
+import { duckdbFiles, duckdbPreview, duckdbQuery, duckdbTables } from "./duckdb.js";
 import type { Env } from "./env.js";
 import { judge } from "./judge.js";
 import { log, messageOf } from "./log.js";
@@ -29,10 +37,11 @@ import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.j
 import type { RoomRegistry } from "./room-session.js";
 import { RunError } from "./runs.js";
 import { FormatError, formatText, MAX_FORMAT_BYTES } from "./format.js";
-import { KubeError, kubeApply, kubeDelete, kubeObject, kubePower, kubeResources, kubeStatus } from "./kube.js";
+import { KubeError, kubeApply, kubeCheck, kubeDelete, kubeObject, kubePower, kubeResources, kubeStatus } from "./kube.js";
 import { LANGUAGE_SERVERS, MAX_LSP_MESSAGE, openLanguageServer } from "./lsp.js";
 import { NotebookError } from "./notebooks.js";
 import { SandboxUnavailableError } from "./sandbox.js";
+import { FileDatabaseError, loadIntoSqlite, openSqliteDump, sqliteFiles, sqlitePreview, sqliteQuery, sqliteTables } from "./sqlite.js";
 import { openTerminal } from "./terminal.js";
 
 /**
@@ -67,7 +76,14 @@ import { openTerminal } from "./terminal.js";
  *   POST /rooms/:id/notebooks/:fileId/run   { cellIds, stateVector? } run cells in the notebook's kernel (outputs go into the room's files document)
  *   POST /rooms/:id/notebooks/:fileId/interrupt|restart|shutdown
  *   POST /rooms/:id/format                { path, language, text, tabSize, insertSpaces } the text through the language's formatter (format.ts)
- *   POST /rooms/:id/kube                  { op, … } the Kubernetes playground: status, up, down, resources, object, apply, delete (kube.ts)
+ *   POST /rooms/:id/kube                  { op, … } the Kubernetes playground: status, up, down, resources, object, apply, delete, and check (kubeconform, no cluster needed) (kube.ts)
+ *   GET  /rooms/:id/sqlite                SqliteFile[]: the SQLite files in the sandbox (sqlite.ts)
+ *   POST /rooms/:id/sqlite/tables|query|preview   { path, … } one file's tables, a query, a table's first rows
+ *   GET  /rooms/:id/sqlite/dump?path=     a backup as SQL, streamed
+ *   POST /rooms/:id/sqlite/load?path=     SQL (the body, or &file= one of the room's) run into it
+ *   POST /rooms/:id/check                 RoomCheck: the project-wide checkers over the room's files (check.ts)
+ *   GET  /rooms/:id/duckdb                DuckdbListing: DuckDB files and data files (CSV, Parquet, JSON) in the sandbox (duckdb.ts)
+ *   POST /rooms/:id/duckdb/tables|query|preview   { path?, … } as for SQLite; without a path, DuckDB over the room's data files
  *   ANY  /rooms/:id/preview/:port/* dev-server preview (HTTP and WebSocket)
  *   WS   /rooms/:id/terminal?session=&cols=&rows=
  *   WS   /rooms/:id/lsp?language=           a language server for one editor (lsp.ts)
@@ -83,7 +99,10 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
   const authorize = (req: IncomingMessage, roomId: string): ServiceClaims | null => {
     const header = req.headers.authorization ?? "";
     const claims = verifyServiceToken(env.SERVICE_SECRET, header.replace(/^Bearer /, ""), "runner");
-    return claims && claims.sub === roomId && claims.uid ? claims : null;
+    if (!claims || claims.sub !== roomId || !claims.uid) return null;
+    // The API names the room's image with every call; the sandbox runs it from its next start.
+    deps.rooms.noteImage(roomId, claims.img);
+    return claims;
   };
 
   const server = createServer((req, res) => {
@@ -135,6 +154,12 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (format && req.method === "POST") return handleFormat(req, res, format[1]!);
     const kube = /^\/rooms\/([A-Z0-9]{6})\/kube$/.exec(url.pathname);
     if (kube && req.method === "POST") return handleKube(req, res, kube[1]!);
+    const sqlite = /^\/rooms\/([A-Z0-9]{6})\/sqlite(?:\/(tables|query|preview|dump|load))?$/.exec(url.pathname);
+    if (sqlite) return handleSqlite(req, res, url, sqlite[1]!, sqlite[2]);
+    const check = /^\/rooms\/([A-Z0-9]{6})\/check$/.exec(url.pathname);
+    if (check && req.method === "POST") return handleCheck(req, res, check[1]!);
+    const duckdb = /^\/rooms\/([A-Z0-9]{6})\/duckdb(?:\/(tables|query|preview))?$/.exec(url.pathname);
+    if (duckdb) return handleDuckdb(req, res, duckdb[1]!, duckdb[2]);
 
     const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|judge|dev)$/.exec(url.pathname);
     if (!match || !RoomCode.safeParse(match[1]).success) return json(res, 404, { error: "Not found." });
@@ -171,7 +196,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (route === "GET sandbox") {
       const session = rooms.peek(roomId);
       const status = session ? await session.status() : { running: false, ports: [], cpuPercent: null, memory: null, processes: null };
-      return json(res, 200, { ...status, installs: await rooms.egress.status(roomId) } satisfies SandboxStatus);
+      return json(res, 200, { ...status, installs: await rooms.egress.status(roomId), image: rooms.imageInfo(roomId) } satisfies SandboxStatus);
     }
     // The API has checked that the caller may switch the room's network (the owner).
     if (route === "PUT sandbox/installs") {
@@ -185,17 +210,17 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       }
     }
     // The dev server from room.json (dev-server.ts). The API has checked who may start and stop it.
-    if (route === "GET dev") return json(res, 200, await devStatus(rooms.get(roomId)));
+    if (route === "GET dev") return json(res, 200, await devStatus(rooms.get(roomId), rooms.warm));
     if (route === "POST dev") {
       const session = rooms.get(roomId);
       session.touch();
       const failed = await startDev(session, rooms.databases);
-      return failed ? json(res, 409, failed) : json(res, 200, await devStatus(session));
+      return failed ? json(res, 409, failed) : json(res, 200, await devStatus(session, rooms.warm));
     }
     if (route === "DELETE dev") {
       const session = rooms.get(roomId);
       await stopDev(session);
-      return json(res, 200, await devStatus(session));
+      return json(res, 200, await devStatus(session, rooms.warm));
     }
     if (route === "DELETE sandbox/installs") {
       await rooms.egress.stop(roomId);
@@ -382,9 +407,123 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
           return json(res, 200, { output: await kubeApply(sandbox, request.text) });
         case "delete":
           return json(res, 200, { output: await kubeDelete(sandbox, request.ref) });
+        case "check":
+          return json(res, 200, await kubeCheck(sandbox, request.text));
       }
     } catch (error) {
       if (error instanceof KubeError || error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** The room's SQLite files, read in its sandbox (sqlite.ts). The API has checked who may look and who may query. */
+  /** A check of the whole room with the project-wide checkers in its sandbox (check.ts), for the Problems tab. */
+  async function handleCheck(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      return json(res, 200, await checkRoom(session));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** DuckDB files, and SQL over the room's data files, in its sandbox (duckdb.ts). The API has checked who may look and who may query. */
+  async function handleDuckdb(req: IncomingMessage, res: ServerResponse, roomId: string, action: string | undefined): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const route = `${req.method} ${action ?? "files"}`;
+    const schema = { "POST tables": DuckdbTarget, "POST query": DuckdbQueryInput, "POST preview": DuckdbPreviewInput }[route];
+    if (route !== "GET files" && !schema) return json(res, 404, { error: "Not found." });
+    const parsed = schema?.safeParse(await readJson(req, 512 * 1024));
+    if (parsed && !parsed.success) return json(res, 400, { error: parsed.error.issues[0]?.message ?? "Invalid request." });
+    const body = (parsed?.data ?? {}) as { path?: string; query?: string; name?: string };
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      const { sandbox } = session;
+      if (route === "GET files") return json(res, 200, await duckdbFiles(sandbox));
+      if (route === "POST tables") return json(res, 200, await duckdbTables(sandbox, body.path));
+      if (route === "POST query") return json(res, 200, await duckdbQuery(sandbox, body.path, body.query!));
+      return json(res, 200, await duckdbPreview(sandbox, body.path, body.name!));
+    } catch (error) {
+      if (error instanceof FileDatabaseError || error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
+  async function handleSqlite(req: IncomingMessage, res: ServerResponse, url: URL, roomId: string, action: string | undefined): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const route = `${req.method} ${action ?? "files"}`;
+    const parse = async <T extends z.ZodType>(schema: T) => {
+      const body = schema.safeParse(await readJson(req, 512 * 1024));
+      if (!body.success) json(res, 400, { error: body.error.issues[0]?.message ?? "Invalid request." });
+      return body.success ? (body.data as z.infer<T>) : null;
+    };
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      if (route === "GET files") {
+        await session.ready();
+        return json(res, 200, await sqliteFiles(session.sandbox));
+      }
+      if (route === "POST tables") {
+        const body = await parse(SqliteTarget);
+        if (!body) return;
+        await session.ready();
+        return json(res, 200, await sqliteTables(session.sandbox, body.path));
+      }
+      if (route === "POST query") {
+        const body = await parse(SqliteQueryInput);
+        if (!body) return;
+        await session.ready();
+        return json(res, 200, await sqliteQuery(session.sandbox, body.path, body.query));
+      }
+      if (route === "POST preview") {
+        const body = await parse(SqlitePreviewInput);
+        if (!body) return;
+        await session.ready();
+        return json(res, 200, await sqlitePreview(session.sandbox, body.path, body.name));
+      }
+      // Backups and loads name the file in the query string: their bodies are SQL.
+      const target = SqliteTarget.safeParse({ path: url.searchParams.get("path") ?? "" });
+      if (route === "GET dump") {
+        if (!target.success) return json(res, 400, { error: "Say which file." });
+        await session.ready();
+        const dump = await openSqliteDump(session.sandbox, target.data.path);
+        res.writeHead(200, { "content-type": "application/sql", "content-disposition": `attachment; filename="${dump.file.replace(/[^\w.-]/g, "_")}"`, "cache-control": "no-store" });
+        dump.body.pipe(res, { end: false });
+        const { exitCode, stderr } = await dump.done;
+        if (!dump.body.readableEnded) await once(dump.body, "end");
+        // The headers are long gone, so a dump that stopped early says so in a comment.
+        if (exitCode !== 0) res.write(`\n-- CodeChatter: the backup stopped early: ${stderr.split("\n").at(-1)?.replace(/\s+/g, " ") ?? ""}\n`);
+        return void res.end();
+      }
+      if (route === "POST load") {
+        if (!target.success) return json(res, 400, { error: "Say which file to load into." });
+        const file = url.searchParams.get("file");
+        if (file) {
+          // A file from the room, as everyone sees it now.
+          await session.sync.synced();
+          const node = findByPath(session.sync.doc, file);
+          const text = node?.kind === "file" ? textOf(session.sync.doc, node.id)?.toString() : undefined;
+          if (text === undefined) return json(res, 404, { error: `${file} isn't a file in this room.` });
+          const bytes = Buffer.from(text);
+          await session.ready();
+          return json(res, 200, await loadIntoSqlite(session.sandbox, target.data.path, Readable.from([bytes]), bytes.length));
+        }
+        const length = Number(url.searchParams.get("bytes") ?? req.headers["content-length"]);
+        if (!Number.isInteger(length) || length <= 0) return json(res, 411, { error: "Send the file with its length." });
+        if (length > MAX_LOAD_BYTES) return json(res, 413, { error: `Files up to ${MAX_LOAD_BYTES / 1024 / 1024} MB can be loaded.` });
+        await session.ready();
+        return json(res, 200, await loadIntoSqlite(session.sandbox, target.data.path, req, length));
+      }
+      return json(res, 404, { error: "Not found." });
+    } catch (error) {
+      if (error instanceof FileDatabaseError || error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
       throw error;
     }
   }

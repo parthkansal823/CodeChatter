@@ -9,7 +9,7 @@ import type { RoomsService } from "../rooms/rooms.service.js";
 import type { RunnerClient } from "../runner/runner.client.js";
 
 /** Languages with a language server in the sandbox image (the runner's lsp.ts has the same list). */
-export const LSP_LANGUAGES = new Set(["python", "c", "cpp", "go", "rust"]);
+export const LSP_LANGUAGES = new Set(["python", "c", "cpp", "go", "rust", "java"]);
 /** Biggest message either way: a whole file's text, a long completion list. */
 const MAX_MESSAGE = 8 * 1024 * 1024;
 

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven's settings for every room (/etc/maven/settings.xml, the full image). Maven doesn't read
+  HTTPS_PROXY as other package managers do, so this points it at the room's package proxy,
+  the agent's relay (ADR 0007): Maven Central opens while the room's owner allows installs.
+  A project's own ~/.m2/settings.xml still adds to it.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <proxies>
+    <proxy>
+      <id>room-https</id>
+      <active>true</active>
+      <protocol>https</protocol>
+      <host>127.0.0.1</host>
+      <port>3128</port>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+    <proxy>
+      <id>room-http</id>
+      <active>true</active>
+      <protocol>http</protocol>
+      <host>127.0.0.1</host>
+      <port>3128</port>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+  </proxies>
+</settings>

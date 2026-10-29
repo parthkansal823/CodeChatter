@@ -346,4 +346,4 @@ export async function step(command: "continue" | "next" | "stepIn" | "stepOut" |
 }
 
 /** Files the debugger takes (the runner's debug.ts says the same). */
-export const isDebuggable = (path: string) => /\.(py|c|cc|cpp|cxx)$/i.test(path);
+export const isDebuggable = (path: string) => /\.(py|c|cc|cpp|cxx|go|java|[mc]?js|[mc]?ts)$/i.test(path);

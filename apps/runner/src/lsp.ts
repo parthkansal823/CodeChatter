@@ -35,6 +35,15 @@ export const LANGUAGE_SERVERS: Record<string, LanguageServer> = {
     initializationOptions: { cargo: { extraEnv: { CARGO_NET_OFFLINE: "true" }, sysrootQueryMetadata: "none" } },
     fullImage: true,
   },
+  // Eclipse JDT LS (sandbox/image/jdtls): a .java file outside a Maven or Gradle project is
+  // still understood, as the folder's own project. It takes several seconds to start. It runs
+  // on Java 25, but rooms compile with Java 21, so that's the library it completes from.
+  java: {
+    name: "Eclipse JDT LS",
+    command: ["jdtls"],
+    initializationOptions: { settings: { java: { configuration: { runtimes: [{ name: "JavaSE-21", path: "/usr/lib/jvm/java-21-openjdk-amd64", default: true }] } } } },
+    fullImage: true,
+  },
 };
 
 /** Biggest message either way (a file's whole text, a long completion list). */

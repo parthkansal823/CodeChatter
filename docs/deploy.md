@@ -47,7 +47,11 @@ Start with **2 vCPU, 4 GB RAM, 40 GB disk, Ubuntu 24.04**. It builds the images 
    curl https://code.yourname.dev/api/readyz
    ```
    The first build takes about 5–10 minutes. Then open `https://<DOMAIN>` and sign up. The verification email uses your SMTP settings.
-6. **Sign-in providers (optional).** Add these redirect URLs, then set the client id and secret in `.env.production` and run `dc up -d`:
+6. **Warm the templates (optional).** Rooms made from a framework template then start in seconds, with nothing to download and no "Allow installs" step. It installs each template's packages once, in a clean container, into a volume every sandbox reads (never writes). It needs Node 24 and pnpm on the server; run it again after rebuilding the sandbox image:
+   ```bash
+   pnpm --filter @codechatter/runner exec tsx --env-file=../../infra/.env.production scripts/warm.ts
+   ```
+7. **Sign-in providers (optional).** Add these redirect URLs, then set the client id and secret in `.env.production` and run `dc up -d`:
    - Google Cloud Console → Credentials → your OAuth client: `https://<DOMAIN>/api/auth/callback/google`
    - GitHub → Settings → Developer settings → OAuth Apps: `https://<DOMAIN>/api/auth/callback/github`
 

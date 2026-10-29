@@ -2,9 +2,11 @@
 
 import type { TreeNode } from "@codechatter/workspace-model";
 
-import { CommandPalette, type PaletteCommand } from "./command-palette";
+import { CommandPalette, useEditorCommands, type PaletteCommand } from "./command-palette";
 import { FilePicker } from "./file-picker";
+import { KeyboardShortcuts } from "./keyboard-shortcuts";
 import { SettingsDialog } from "./settings-dialog";
+import { useKeyCommands } from "./shortcuts";
 import { useEditorUi } from "./ui-store";
 
 type Props = {
@@ -14,7 +16,10 @@ type Props = {
   commands: PaletteCommand[];
 };
 
-/** Whichever editor dialog is open: the command palette, settings, Quick Open, or a file picker for another command. */
+/**
+ * Whichever editor dialog is open: the command palette, settings, keyboard shortcuts, Quick
+ * Open, or a file picker for another command. The palette's commands are keys' commands too.
+ */
 export function EditorOverlays({ openFile, activeFile, commands }: Props) {
   const overlay = useEditorUi((state) => state.overlay);
   const close = useEditorUi((state) => state.close);
@@ -31,16 +36,20 @@ export function EditorOverlays({ openFile, activeFile, commands }: Props) {
       onPick: (file) => ui.setDiff({ leftId: activeFile.id, rightId: file.id }),
     });
   };
+  const editorCommands = useEditorCommands(activeFile, compare);
+  useKeyCommands("editor", editorCommands.map((command) => ({ ...command, group: "Editor" })));
+  useKeyCommands("room", commands.map((command) => ({ ...command, group: "Room" })));
 
   return (
     <>
       <SettingsDialog open={overlay?.kind === "settings"} onOpenChange={onOpenChange} />
+      <KeyboardShortcuts open={overlay?.kind === "shortcuts"} onOpenChange={onOpenChange} />
       {overlay?.kind === "palette" && (
         <CommandPalette
           page={overlay.page}
           activeFile={activeFile}
+          editor={editorCommands}
           extra={commands}
-          onCompare={compare}
           onClose={close}
         />
       )}

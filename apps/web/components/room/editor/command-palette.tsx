@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command";
 
 import { getActiveEditor } from "./active-editor";
+import { keyLabel, keysFor } from "./keybindings";
 import { formatDocument } from "./format";
 import { PaletteDialog } from "./palette-dialog";
 import { useEditorSettings } from "./settings-store";
@@ -25,6 +26,7 @@ import {
   openPalette,
   openQuickOpen,
   openSettings,
+  openShortcuts,
   toggleFilePreview,
   closeSplits,
   splitDown,
@@ -34,26 +36,27 @@ import {
   type PalettePage,
 } from "./ui-store";
 
-/** A command the room adds (Run, terminals, panels); the palette brings the editor's own. */
-export type PaletteCommand = { id: string; label: string; shortcut?: string; run: () => void };
+/** A command the room adds (Run, terminals, panels); the palette brings the editor's own. Its keys are the registry's (keybindings.ts). */
+export type PaletteCommand = { id: string; label: string; run: () => boolean | void };
 
 type ActiveFile = { id: string; name: string } | null;
 type Props = {
   page: PalettePage;
   activeFile: ActiveFile;
+  /** The editor's commands (useEditorCommands). */
+  editor: PaletteCommand[];
   extra: PaletteCommand[];
-  onCompare: () => void;
   onClose: () => void;
 };
 
 /** Ctrl+Shift+P: every command. Its other pages: go to a line (Ctrl+G), a symbol, a language mode, or a person to follow. */
-export function CommandPalette({ page, activeFile, extra, onCompare, onClose }: Props) {
+export function CommandPalette({ page, activeFile, editor, extra, onClose }: Props) {
   if (page === "line") return <GoToLine onClose={onClose} />;
   if (page === "symbols") return <GoToSymbol onClose={onClose} />;
   if (page === "language") return <ChangeLanguage fileId={activeFile?.id ?? null} onClose={onClose} />;
   if (page === "people") return <FollowPerson onClose={onClose} />;
   if (page === "snippets") return <InsertSnippet onClose={onClose} />;
-  return <Commands activeFile={activeFile} extra={extra} onCompare={onCompare} onClose={onClose} />;
+  return <Commands editor={editor} extra={extra} onClose={onClose} />;
 }
 
 const dialogProps = (onClose: () => void) => ({
@@ -61,25 +64,24 @@ const dialogProps = (onClose: () => void) => ({
   onOpenChange: (open: boolean) => !open && onClose(),
 });
 
-function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">) {
+/** The editor's commands for the palette, and for keys (registered by EditorOverlays while the room is open). */
+export function useEditorCommands(activeFile: ActiveFile, onCompare: () => void): PaletteCommand[] {
   const settings = useEditorSettings();
   const preview = activeFile ? previewKindOf(activeFile.name) : null;
-  const editorCommands: PaletteCommand[] = [
-    { id: "quick-open", label: "Go to file…", shortcut: "Ctrl P", run: openQuickOpen },
-    { id: "go-line", label: "Go to line…", shortcut: "Ctrl G", run: () => openPalette("line") },
+  return [
+    { id: "quick-open", label: "Go to file…", run: openQuickOpen },
+    { id: "go-line", label: "Go to line…", run: () => openPalette("line") },
     {
       id: "go-symbol",
       label: "Go to symbol in file…",
-      shortcut: "Ctrl Shift O",
       run: () => openPalette("symbols"),
     },
     { id: "language", label: "Change language mode…", run: () => openPalette("language") },
     { id: "snippet", label: "Insert snippet…", run: () => openPalette("snippets") },
-    { id: "format", label: "Format document", shortcut: "Shift Alt F", run: () => void formatDocument() },
+    { id: "format", label: "Format document", run: () => void formatDocument() },
     {
       id: "split",
       label: "Split editor",
-      shortcut: "Ctrl \\",
       run: () => toggleSplit(activeFile?.id ?? null),
     },
     { id: "split-down", label: "Split editor down", run: () => splitDown(activeFile?.id ?? null) },
@@ -90,18 +92,16 @@ function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">
           {
             id: "preview-side",
             label: `Open ${PREVIEW_LABEL[preview]} to the side`,
-            shortcut: "Ctrl K V",
             run: () => toggleFilePreview("side"),
           },
           {
             id: "preview-full",
             label: `Open ${PREVIEW_LABEL[preview]}`,
-            shortcut: "Ctrl Shift V",
             run: () => toggleFilePreview("full"),
           },
         ]
       : []),
-    { id: "zen", label: "Toggle Zen mode", shortcut: "Ctrl K Z", run: toggleZen },
+    { id: "zen", label: "Toggle Zen mode", run: toggleZen },
     { id: "follow", label: "Follow someone…", run: () => openPalette("people") },
     {
       id: "vim",
@@ -126,26 +126,29 @@ function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">
     {
       id: "zoom-in",
       label: "Zoom in",
-      shortcut: "Ctrl =",
       run: () => settings.update({ fontSize: settings.fontSize + 1 }),
     },
     {
       id: "zoom-out",
       label: "Zoom out",
-      shortcut: "Ctrl -",
       run: () => settings.update({ fontSize: settings.fontSize - 1 }),
     },
-    { id: "settings", label: "Open settings", shortcut: "Ctrl ,", run: openSettings },
+    { id: "settings", label: "Open settings", run: openSettings },
+    { id: "shortcuts", label: "Keyboard shortcuts", run: openShortcuts },
   ];
+}
+
+function Commands({ editor, extra, onClose }: { editor: PaletteCommand[]; extra: PaletteCommand[]; onClose: () => void }) {
   // Monaco's own actions (comment lines, fold, sort, change case…), as VS Code lists them.
   const builtIn = useMemo(() => {
-    const editor = getActiveEditor();
-    return (editor?.getSupportedActions() ?? [])
-      .filter((action) => action.label)
+    const active = getActiveEditor();
+    return (active?.getSupportedActions() ?? [])
+      // Our chords are on the editor as actions too ("<editor id>:cc.chord…", shortcuts.ts); they're listed as themselves.
+      .filter((action) => action.label && !action.id.includes(":cc.chord."))
       .map((action) => ({
         id: action.id,
         label: action.label,
-        run: () => (editor?.focus(), void action.run()),
+        run: () => (active?.focus(), void action.run()),
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, []);
@@ -167,7 +170,7 @@ function Commands({ activeFile, extra, onCompare, onClose }: Omit<Props, "page">
           </CommandGroup>
         )}
         <CommandGroup heading="Editor">
-          {editorCommands.map((command) => (
+          {editor.map((command) => (
             <Row key={command.id} command={command} onChoose={choose} />
           ))}
         </CommandGroup>
@@ -190,6 +193,7 @@ function Row({
   command: PaletteCommand;
   onChoose: (command: PaletteCommand) => void;
 }) {
+  const shortcut = useEditorSettings((state) => keysFor(command.id, state.keybindings)[0]);
   return (
     <CommandItem
       value={`${command.label} ${command.id}`}
@@ -197,7 +201,7 @@ function Row({
       className="py-1.5"
     >
       {command.label}
-      {command.shortcut && <CommandShortcut>{command.shortcut}</CommandShortcut>}
+      {shortcut && <CommandShortcut>{keyLabel(shortcut)}</CommandShortcut>}
     </CommandItem>
   );
 }

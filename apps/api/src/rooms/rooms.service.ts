@@ -16,6 +16,7 @@ import { gzipSync } from "node:zlib";
 
 import { GithubService } from "../github/github.service.js";
 import { DB } from "../infra/tokens.js";
+import { RunnerClient } from "../runner/runner.client.js";
 import { RoomsRepository } from "./rooms.repository.js";
 
 type RoomRow = NonNullable<Awaited<ReturnType<RoomsRepository["findById"]>>>;
@@ -28,12 +29,19 @@ function newRoomCode(): string {
   return code;
 }
 
+/** The image a room's settings name ("default" when they don't). */
+export function sandboxImageOf(room: { settings: Record<string, unknown> }): "base" | "full" | "default" {
+  const image = room.settings.sandboxImage;
+  return image === "base" || image === "full" ? image : "default";
+}
+
 @Injectable()
 export class RoomsService {
   constructor(
     private readonly rooms: RoomsRepository,
     private readonly github: GithubService,
     @Inject(DB) private readonly handle: DbHandle,
+    private readonly runner: RunnerClient,
   ) {}
 
   /** The caller's role in a room, or null. Private rooms 404 for outsiders. */
@@ -52,7 +60,15 @@ export class RoomsService {
     // Visitors to public rooms act as viewers without being members.
     const effective = found.role ?? (found.room.visibility === "public" ? "viewer" : null);
     if (!can(effective, action)) throw new ForbiddenException("You don't have access to do that in this room.");
+    // Whatever the caller does next with the runner goes with the room's image.
+    this.runner.noteImage(found.room.id, sandboxImageOf(found.room));
     return { ...found, role: effective as RoomRole };
+  }
+
+  /** The owner picks the room's sandbox image (base or full), or goes back to the server's default. */
+  async setSandboxImage(roomId: string, image: "base" | "full" | "default"): Promise<void> {
+    await this.rooms.setSetting(roomId, "sandboxImage", image === "default" ? null : image);
+    this.runner.noteImage(roomId, image);
   }
 
   async list(userId: string): Promise<RoomSummary[]> {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import type { RoomCheck } from "@codechatter/contracts";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { ensureMonaco, monaco } from "@/components/room/monaco-setup";
 
@@ -51,24 +52,61 @@ export function readProblems(): Problem[] {
   return out.sort((a, b) => a.path.localeCompare(b.path) || RANK[a.severity] - RANK[b.severity] || a.line - b.line || a.column - b.column);
 }
 
+/** The last check of the whole room (Check all files), kept while the room is open. */
+let lastCheck: { roomId: string; check: RoomCheck } | null = null;
+const checkListeners = new Set<() => void>();
+
+export function setRoomCheck(roomId: string, check: RoomCheck | null): void {
+  lastCheck = check ? { roomId, check } : null;
+  for (const listener of checkListeners) listener();
+}
+
+/** The room's last whole check, or null. */
+export function useRoomCheck(roomId: string): RoomCheck | null {
+  return useSyncExternalStore(
+    (listener) => {
+      checkListeners.add(listener);
+      return () => void checkListeners.delete(listener);
+    },
+    () => (lastCheck?.roomId === roomId ? lastCheck.check : null),
+    () => null,
+  );
+}
+
+/** The room files open in an editor now: theirs are the live problems, whatever a check said. */
+function openPaths(): Set<string> {
+  const paths = new Set<string>();
+  for (const model of monaco.editor.getModels()) {
+    if (model.uri.scheme === "file" && model.uri.path.startsWith("/workspace/")) paths.add(decodeURIComponent(model.uri.path.slice("/workspace/".length)));
+  }
+  return paths;
+}
+
 /**
- * The problems in the room's open files, live: what the language servers in the sandbox
- * (and TypeScript in the browser) report, as Monaco's markers.
+ * The room's problems: in open files, live, what the language servers in the sandbox (and
+ * TypeScript in the browser) report as Monaco's markers; in the rest, what the last check of
+ * the whole room found (Check all files in the Problems tab).
  */
-export function useProblems(): Problem[] {
-  const [problems, setProblems] = useState<Problem[]>([]);
+export function useProblems(roomId: string): Problem[] {
+  const [live, setLive] = useState<{ problems: Problem[]; open: Set<string> }>({ problems: [], open: new Set() });
+  const check = useRoomCheck(roomId);
   useEffect(() => {
-    let live = true;
-    let listener: { dispose(): void } | null = null;
+    let alive = true;
+    const listeners: Array<{ dispose(): void }> = [];
     void ensureMonaco().then(() => {
-      if (!live) return;
-      setProblems(readProblems());
-      listener = monaco.editor.onDidChangeMarkers(() => setProblems(readProblems()));
+      if (!alive) return;
+      const read = () => setLive({ problems: readProblems(), open: openPaths() });
+      read();
+      listeners.push(monaco.editor.onDidChangeMarkers(read), monaco.editor.onDidCreateModel(read), monaco.editor.onWillDisposeModel(() => queueMicrotask(read)));
     });
     return () => {
-      live = false;
-      listener?.dispose();
+      alive = false;
+      for (const listener of listeners) listener.dispose();
     };
   }, []);
-  return problems;
+  return useMemo(() => {
+    if (!check) return live.problems;
+    const checked: Problem[] = check.problems.filter((p) => !live.open.has(p.path));
+    return [...live.problems, ...checked].sort((a, b) => a.path.localeCompare(b.path) || RANK[a.severity] - RANK[b.severity] || a.line - b.line || a.column - b.column);
+  }, [check, live]);
 }

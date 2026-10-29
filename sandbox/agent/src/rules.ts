@@ -13,12 +13,22 @@ const IGNORED_DIRS = new Set([
   ".pytest_cache",
   ".ruff_cache",
   ".next",
+  // What the frameworks generate when their dev servers start (the templates' among them).
+  ".svelte-kit",
+  ".nuxt",
+  ".output",
+  ".angular",
+  ".astro",
+  ".turbo",
+  ".vercel",
   ".cache",
   ".npm",
   ".gradle",
   "dist",
   "build",
   "target",
+  // Composer's packages (and Go's, vendored).
+  "vendor",
 ]);
 
 const IGNORED_SUFFIXES = [".pyc", ".class", ".o", ".so", ".swp"];

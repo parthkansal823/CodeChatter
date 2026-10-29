@@ -189,7 +189,7 @@ int main() {
   record("cppCompletes", cppItems.includes("push_back"), `${cppItems.length} items: ${cppItems.slice(0, 6).join(", ")}`);
   cpp.ws.close();
 
-  // Go and Rust come with the full image; the base image says so when asked.
+  // Go, Rust and Java come with the full image; the base image says so when asked.
   const FULL = (process.env.SANDBOX_IMAGE ?? "").includes("full");
   for (const [language, file, text, line, character, expected] of [
     ["go", "hello/main.go", `package main
@@ -206,6 +206,14 @@ func main() {
     s.
 }
 `, 2, 6, "len"],
+    // A .java file in no Maven or Gradle project: JDT LS makes its folder the project.
+    ["java", "jv/Main.java", `public class Main {
+    public static void main(String[] args) {
+        String s = "hi";
+        s.
+    }
+}
+`, 3, 10, "length"],
   ]) {
     if (language === "rust") createFileAtPath(doc, `${dir}/Cargo.toml`, `[package]
 name = "crab"
@@ -231,12 +239,14 @@ go 1.22
     lsp.notify("initialized", {});
     lsp.notify("textDocument/didOpen", { textDocument: { uri: fileUri, languageId: language, version: 1, text } });
     let labels = [];
+    // A method as JDT LS offers it: "length()", a snippet's brackets after the name.
+    const found = () => labels.some((label) => label === expected || label.startsWith(`${expected}(`));
     // Servers that index a project first (rust-analyzer) answer with little until they're done.
-    for (const until = Date.now() + 120_000; Date.now() < until && !labels.includes(expected); await sleep(2000)) {
+    for (const until = Date.now() + 120_000; Date.now() < until && !found(); await sleep(2000)) {
       const result = await lsp.request("textDocument/completion", { textDocument: { uri: fileUri }, position: { line, character } }, 60_000).catch(() => null);
       labels = (Array.isArray(result?.result) ? result.result : (result?.result?.items ?? [])).map((i) => i.filterText ?? i.label.trim());
     }
-    record(`${language}Completes`, labels.includes(expected), `${labels.length} items: ${labels.slice(0, 6).join(", ")}`);
+    record(`${language}Completes`, found(), `${labels.length} items: ${labels.slice(0, 6).join(", ")}`);
     lsp.ws.close();
   }
 } catch (error) {

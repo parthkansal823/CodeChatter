@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { summarize, summarizeEvent, type K8sObject } from "./kube.js";
+import { errorsOf, summarize, summarizeEvent, type K8sObject } from "./kube.js";
 
 const object = (kind: string, rest: Partial<K8sObject> = {}): K8sObject => ({ kind, metadata: { name: "web", namespace: "demo", creationTimestamp: "2026-10-21T10:00:00Z" }, ...rest });
 
@@ -37,5 +37,22 @@ describe("summarizeEvent", () => {
       summarizeEvent({ metadata: { namespace: "demo" }, type: "Warning", reason: "BackOff", message: "Back-off restarting", count: 3, lastTimestamp: "2026-10-21T10:05:00Z", involvedObject: { kind: "Pod", name: "web-1" } }),
     ).toEqual({ namespace: "demo", type: "Warning", reason: "BackOff", message: "Back-off restarting", object: "pod/web-1", count: 3, lastSeen: "2026-10-21T10:05:00Z" });
     expect(summarizeEvent({ metadata: { creationTimestamp: "t0" }, eventTime: null, lastTimestamp: null }).lastSeen).toBe("t0");
+  });
+});
+
+describe("errorsOf", () => {
+  it("takes kubeconform's list when it names the mistakes", () => {
+    expect(errorsOf({ validationErrors: [{ path: "/spec", msg: "additional properties 'replica' not allowed" }] })).toEqual([
+      { path: "/spec", message: "additional properties 'replica' not allowed" },
+    ]);
+  });
+
+  it("reads every mistake from the message when the list has only the top of the tree", () => {
+    const msg =
+      "problem validating schema. Check JSON formatting: jsonschema validation failed with 'file:///s/deployment-apps-v1.json#' - at '/spec': validation failed   - at '/spec/template/spec/containers/0/ports/0/containerPort': got string, want null or integer   - at '/spec': additional properties 'replica' not allowed";
+    expect(errorsOf({ msg, validationErrors: [{ path: "", msg: "validation failed" }] })).toEqual([
+      { path: "/spec/template/spec/containers/0/ports/0/containerPort", message: "got string, want null or integer" },
+      { path: "/spec", message: "additional properties 'replica' not allowed" },
+    ]);
   });
 });

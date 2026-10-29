@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * The sandbox agent protocol: newline-delimited JSON over the room container's
  * attached stdin/stdout (sandbox/agent ↔ apps/runner). It works with the
@@ -46,7 +48,21 @@ export type SandboxStatus = {
   processes: { current: number; limit: number } | null;
   /** While the owner allows package installs: until when (ISO time), and who allowed them. */
   installs: { until: string; by: string } | null;
+  /**
+   * The sandbox image: which the room's owner picked (null is the server's default), and
+   * whether this server offers the choice (it has both a base and a full image).
+   */
+  image: { choice: SandboxImage | null; offered: boolean };
 };
+
+/**
+ * The two sandbox images (sandbox/image/Dockerfile): base (Python, JavaScript, TypeScript,
+ * C, C++, Java, Bash) and full (24 more languages, the Kubernetes playground, Java tooling).
+ */
+export const SANDBOX_IMAGES = ["base", "full"] as const;
+export type SandboxImage = (typeof SANDBOX_IMAGES)[number];
+/** The owner's pick for a room; "default" goes back to the server's. */
+export const SandboxImageInput = z.object({ image: z.enum(["base", "full", "default"]) });
 
 /**
  * What a room reaches while its owner allows package installs (ADR 0007): these
@@ -55,11 +71,13 @@ export type SandboxStatus = {
 export const PACKAGE_REGISTRIES = [
   { name: "npm", hosts: ["registry.npmjs.org", "registry.yarnpkg.com", "repo.yarnpkg.com"] },
   { name: "PyPI", hosts: ["pypi.org", "files.pythonhosted.org"] },
-  { name: "Go modules", hosts: ["proxy.golang.org", "sum.golang.org"] },
+  // The Go proxy sends larger modules' zips from its Cloud Storage bucket (signed links).
+  { name: "Go modules", hosts: ["proxy.golang.org", "sum.golang.org", "storage.googleapis.com"] },
   { name: "crates.io", hosts: ["index.crates.io", "static.crates.io", "crates.io"] },
   { name: "RubyGems", hosts: ["rubygems.org", "index.rubygems.org"] },
   { name: "Maven Central", hosts: ["repo.maven.apache.org", "repo1.maven.org", "repo.clojars.org"] },
-  { name: "Packagist", hosts: ["repo.packagist.org"] },
+  // Packagist points Composer at GitHub for the code (zipballs from its API, sent on to codeload).
+  { name: "Packagist", hosts: ["repo.packagist.org", "api.github.com", "codeload.github.com"] },
   { name: "NuGet", hosts: ["api.nuget.org"] },
   { name: "Hex", hosts: ["repo.hex.pm", "builds.hex.pm"] },
   { name: "CRAN", hosts: ["cloud.r-project.org"] },

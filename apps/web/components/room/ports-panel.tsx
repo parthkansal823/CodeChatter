@@ -1,6 +1,6 @@
 "use client";
 
-import { PACKAGE_REGISTRIES, type SandboxStatus } from "@codechatter/contracts";
+import { PACKAGE_REGISTRIES, SANDBOX_IMAGES, type SandboxImage, type SandboxStatus } from "@codechatter/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -26,8 +26,9 @@ const KNOWN: Record<number, string> = {
 
 /**
  * The room's sandbox at a glance: live CPU, memory and processes, package
- * installs, the ports servers listen on (each opens as a live preview on its
- * own origin), and Restart for a sandbox that's stuck.
+ * installs, its image (base or full, where the server offers both), the ports
+ * servers listen on (each opens as a live preview on its own origin), and
+ * Restart for a sandbox that's stuck.
  */
 export function PortsPanel({ visible }: { visible: boolean }) {
   const { room, can } = useRoom();
@@ -81,6 +82,7 @@ export function PortsPanel({ visible }: { visible: boolean }) {
       </div>
 
       <Installs roomId={room.id} installs={data?.installs ?? null} canSwitch={can("sandbox.network")} />
+      {data?.image.offered && <ImageChoice roomId={room.id} choice={data.image.choice} canPick={can("room.manage")} />}
 
       <h3 className="mt-5 mb-2 text-xs font-medium text-muted-foreground">Ports</h3>
       {!data?.running ? (
@@ -181,6 +183,61 @@ function Installs({
           !installs && (
             <span className="text-xs text-muted-foreground">The room&apos;s owner can turn them on.</span>
           )
+        )}
+      </div>
+    </section>
+  );
+}
+
+const IMAGES: Record<SandboxImage, { name: string; detail: string }> = {
+  base: { name: "Base", detail: "Python, JavaScript, TypeScript, C, C++, Java and Bash" },
+  full: { name: "Full", detail: "24 more languages, the Kubernetes playground, and Java's IntelliSense and debugger" },
+};
+
+/**
+ * The room's sandbox image, when this server has both: the owner picks, and the sandbox
+ * restarts into it, files kept. A room that hasn't picked runs the server's default.
+ */
+function ImageChoice({ roomId, choice, canPick }: { roomId: string; choice: SandboxImage | null; canPick: boolean }) {
+  const queryClient = useQueryClient();
+  const change = useMutation({
+    mutationFn: (image: SandboxImage) => api(`/api/rooms/${roomId}/sandbox/image`, { method: "PUT", json: { image } }),
+    onSuccess: (_, image) => {
+      toast.success(`The sandbox restarted with the ${IMAGES[image].name.toLowerCase()} image`);
+      void queryClient.invalidateQueries({ queryKey: ["sandbox", roomId] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.detail : "Couldn't change the sandbox image."),
+  });
+  return (
+    <section aria-label="Sandbox image">
+      <h3 className="mt-5 mb-2 text-xs font-medium text-muted-foreground">Sandbox image</h3>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <p>{choice ? `${IMAGES[choice].name}: ${IMAGES[choice].detail}.` : "The server's default."}</p>
+          {canPick && (
+            <p className="text-xs text-muted-foreground">Switching restarts the sandbox; files are kept.</p>
+          )}
+        </div>
+        {canPick && (
+          <div role="group" aria-label="Pick the image" className="flex gap-1">
+            {SANDBOX_IMAGES.map((image) => (
+              <Button
+                key={image}
+                size="xs"
+                variant={choice === image ? "secondary" : "outline"}
+                aria-pressed={choice === image}
+                title={IMAGES[image].detail}
+                disabled={change.isPending || choice === image}
+                onClick={() => {
+                  if (window.confirm(`Switch to the ${IMAGES[image].name.toLowerCase()} image? The sandbox restarts: running programs and terminals stop. Files are kept.`))
+                    change.mutate(image);
+                }}
+              >
+                {change.isPending && change.variables === image && <Loader2 className="animate-spin" />}
+                {IMAGES[image].name}
+              </Button>
+            ))}
+          </div>
         )}
       </div>
     </section>

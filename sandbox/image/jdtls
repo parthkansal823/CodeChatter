@@ -1,0 +1,29 @@
+#!/bin/sh
+# Eclipse JDT LS, Java's language server, on stdin and stdout (apps/runner/src/lsp.ts).
+# It writes to its configuration folder, so each version gets a copy in the room's home
+# (once); each server gets its own data folder (two editors, two servers) in /tmp, which
+# goes with the sandbox. It's heavy (about 650 MB each), so its heap is kept to 512 MB and
+# only the quick compiler runs.
+set -eu
+launcher=$(ls /usr/local/lib/jdtls/plugins/org.eclipse.equinox.launcher_*.jar | head -n 1)
+config="$HOME/.cache/jdtls/$(basename "$launcher" .jar)"
+if [ ! -d "$config" ]; then
+  mkdir -p "$HOME/.cache/jdtls"
+  copy="$config.$$"
+  cp -r /usr/local/lib/jdtls/config_linux "$copy"
+  mv -T "$copy" "$config" 2>/dev/null || rm -rf "$copy"
+fi
+# Data folders a server left (one each) are cleared once they're half a day old.
+find /tmp -maxdepth 1 -name 'jdtls-*' -type d -mmin +720 -exec rm -rf {} + 2>/dev/null || true
+data=$(mktemp -d /tmp/jdtls-XXXXXX)
+# It needs Java 25 to run; rooms' own java (21) is what it compiles against (lsp.ts).
+exec /usr/lib/jvm/java-25-openjdk-amd64/bin/java \
+  -Declipse.application=org.eclipse.jdt.ls.core.id1 \
+  -Dosgi.bundles.defaultStartLevel=4 \
+  -Declipse.product=org.eclipse.jdt.ls.core.product \
+  -Dlog.level=WARNING \
+  -Xms32m -Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 \
+  --add-modules=ALL-SYSTEM \
+  --add-opens java.base/java.util=ALL-UNNAMED \
+  --add-opens java.base/java.lang=ALL-UNNAMED \
+  -jar "$launcher" -configuration "$config" -data "$data" "$@"

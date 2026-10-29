@@ -1,5 +1,5 @@
 import type { AuthSession } from "@codechatter/auth";
-import { CommitInput, GistInput, OpenPullInput, PublishInput, PullCommentInput, PullInput, RoomCode } from "@codechatter/contracts";
+import { CommitInput, GistInput, OpenPullInput, PublishInput, PullCommentInput, PullInput, RoomCode, type SecretFinding } from "@codechatter/contracts";
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { z } from "zod";
@@ -9,9 +9,14 @@ import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { GithubService } from "./github.service.js";
+import { refuseSecrets } from "./secret-scan.js";
 import { SourceControlService } from "./source-control.service.js";
 
 const PullNumber = z.coerce.number().int().positive().max(10_000_000);
+
+/** For the audit log: what the secret scan found in something sent anyway (where and what kind, never the secret). */
+const secretsNote = (secrets: SecretFinding[]) =>
+  secrets.length ? { secretsAllowed: secrets.map(({ path, line, kind }) => ({ path, line, kind })) } : {};
 
 /**
  * A room's GitHub repository (web: the Source Control view). Anyone in the room can see
@@ -36,9 +41,17 @@ export class SourceControlController {
     @Req() request: Request,
   ) {
     const { room } = await this.rooms.require(roomId, session.user.id, "room.manage");
+    const secrets = refuseSecrets(input.files, input.allowSecrets, "repository");
     const result = await this.sourceControl.publish(roomId, session.user.id, input);
     await this.audit.record(
-      { orgId: room.orgId, actorId: session.user.id, action: "repo.publish", targetType: "room", targetId: roomId, data: { repo: result.repo, private: input.private, files: input.files.length } },
+      {
+        orgId: room.orgId,
+        actorId: session.user.id,
+        action: "repo.publish",
+        targetType: "room",
+        targetId: roomId,
+        data: { repo: result.repo, private: input.private, files: input.files.length, ...secretsNote(secrets) },
+      },
       request,
     );
     return result;
@@ -46,9 +59,23 @@ export class SourceControlController {
 
   /** One of the room's files as a gist of yours: anyone who can read the room can share what they read. */
   @Post("gist")
-  async gist(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string, @Body(new ZodPipe(GistInput)) input: GistInput) {
-    await this.rooms.require(roomId, session.user.id, "room.view");
-    return { url: await this.github.gist(session.user.id, input) };
+  async gist(
+    @CurrentSession() session: AuthSession,
+    @Param("roomId", new ZodPipe(RoomCode)) roomId: string,
+    @Body(new ZodPipe(GistInput)) input: GistInput,
+    @Req() request: Request,
+  ) {
+    const { room } = await this.rooms.require(roomId, session.user.id, "room.view");
+    const secrets = refuseSecrets([{ path: input.name, content: input.content }], input.allowSecrets, "gist");
+    const url = await this.github.gist(session.user.id, input);
+    // Recorded only when it went ahead despite the scan: who shared what that looked like a secret.
+    if (secrets.length) {
+      await this.audit.record(
+        { orgId: room.orgId, actorId: session.user.id, action: "repo.gist", targetType: "room", targetId: roomId, data: { url, public: input.public, ...secretsNote(secrets) } },
+        request,
+      );
+    }
+    return { url };
   }
 
   @Get()
@@ -82,9 +109,10 @@ export class SourceControlController {
     @Req() request: Request,
   ) {
     const { room } = await this.rooms.require(roomId, session.user.id, "files.edit");
+    const secrets = refuseSecrets(input.changes, input.allowSecrets, "commit");
     const result = await this.sourceControl.commit(roomId, session.user.id, input);
     await this.audit.record(
-      { orgId: room.orgId, actorId: session.user.id, action: "repo.commit", targetType: "room", targetId: roomId, data: { ...result, files: input.changes.length } },
+      { orgId: room.orgId, actorId: session.user.id, action: "repo.commit", targetType: "room", targetId: roomId, data: { ...result, files: input.changes.length, ...secretsNote(secrets) } },
       request,
     );
     return result;

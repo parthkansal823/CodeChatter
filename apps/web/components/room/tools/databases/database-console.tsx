@@ -73,44 +73,76 @@ const LOADS: Record<DatabaseKind, string> = {
 const drafts = new Map<string, string>();
 
 /**
+ * What the console opens: one of the room's database servers, one of its SQLite or
+ * DuckDB files, or (a DuckDB target without a file) DuckDB over the room's data files.
+ */
+export type ConsoleTarget = { kind: DatabaseKind } | { sqlite: string } | { duckdb: string | null };
+
+/**
  * One database's query console and table browser. Queries run through the API
- * and the runner, inside the database's own container; the browser never
- * connects to it. Anyone in the room can browse; writing queries needs
- * terminal rights, like the database's other changes.
+ * and the runner, inside the database's own container (or, for a SQLite or DuckDB
+ * file, in the room's sandbox); the browser never connects to it. Anyone in the
+ * room can browse; writing queries needs terminal rights, like the database's
+ * other changes. A SQLite file has backups and loading files too, but no reset
+ * (delete the file); DuckDB has the console and the table browser.
  */
 export function DatabaseConsole({
-  kind,
+  target,
   onBack,
   onClose,
 }: {
-  kind: DatabaseKind;
+  target: ConsoleTarget;
   onBack: () => void;
   onClose: () => void;
 }) {
   const { room, can } = useRoom();
   const queryClient = useQueryClient();
   const canQuery = can("terminal.open");
-  const draftKey = `${room.id}:${kind}`;
-  const [query, setQueryState] = useState(() => drafts.get(draftKey) ?? FIRST_QUERY[kind]);
+  const kind = "kind" in target ? target.kind : null;
+  const sqlite = "sqlite" in target ? target.sqlite : null;
+  // A file's engine and path (a DuckDB target without one is the room's data files).
+  const file =
+    "sqlite" in target
+      ? { engine: "sqlite" as const, path: target.sqlite }
+      : "duckdb" in target
+        ? { engine: "duckdb" as const, path: target.duckdb }
+        : null;
+  const dataFiles = file?.engine === "duckdb" && !file.path;
+  const id = kind ?? `${file!.engine}:${file!.path ?? ""}`;
+  const title = kind ? DATABASES[kind].name : (file!.path ?? "The room's data files");
+  const listName = kind ? LIST_NAME[kind] : dataFiles ? "Data files" : "Tables";
+  const draftKey = `${room.id}:${id}`;
+  const [query, setQueryState] = useState(
+    () =>
+      drafts.get(draftKey) ??
+      (kind ? FIRST_QUERY[kind] : sqlite ? "select sqlite_version();" : "select version();"),
+  );
   const [result, setResult] = useState<QueryResult | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const base = `/api/rooms/${room.id}/databases/${kind}` as const;
+  const fileBase = `/api/rooms/${room.id}/${file?.engine ?? "sqlite"}` as const;
+  const sqliteBase = `/api/rooms/${room.id}/sqlite` as const;
+  /** Which file a request is about: nothing for the servers, or DuckDB over the data files. */
+  const at = file?.path ? { path: file.path } : {};
 
   const setQuery = (text: string) => {
     drafts.set(draftKey, text);
     setQueryState(text);
   };
   const tables = useQuery({
-    queryKey: ["database-tables", room.id, kind],
+    queryKey: ["database-tables", room.id, id],
     // Code in the sandbox changes tables too: ask again each time the console opens.
     staleTime: 0,
-    queryFn: () => api<DatabaseTable[]>(`${base}/tables`),
+    queryFn: () =>
+      file
+        ? api<DatabaseTable[]>(`${fileBase}/tables`, { method: "POST", json: at })
+        : api<DatabaseTable[]>(`${base}/tables`),
   });
   const failed = (e: unknown) =>
     toast.error(e instanceof ApiError ? e.detail : "Couldn't reach the database.");
   const run = useMutation({
     mutationFn: (text: string) =>
-      api<QueryResult>(`${base}/query`, { method: "POST", json: { query: text } }),
+      api<QueryResult>(`${file ? fileBase : base}/query`, { method: "POST", json: { ...at, query: text } }),
     onSuccess: (answer) => {
       setResult(answer);
       setSelected(null);
@@ -120,10 +152,12 @@ export function DatabaseConsole({
   });
   const preview = useMutation({
     mutationFn: (table: DatabaseTable) =>
-      api<QueryResult>(`${base}/preview`, {
-        method: "POST",
-        json: { name: table.name, schema: table.schema },
-      }),
+      file
+        ? api<QueryResult>(`${fileBase}/preview`, { method: "POST", json: { ...at, name: table.name } })
+        : api<QueryResult>(`${base}/preview`, {
+            method: "POST",
+            json: { name: table.name, schema: table.schema },
+          }),
     onSuccess: (answer) => {
       setResult(answer);
       if (canQuery && answer.query) setQuery(answer.query);
@@ -133,11 +167,15 @@ export function DatabaseConsole({
   // Seeds and backups: one of the room's files, or one from this computer, run through the database's client.
   const [picking, setPicking] = useState(false);
   const upload = useRef<HTMLInputElement>(null);
+  // A SQLite file is named in the query string, and a room file to load goes by ?file= then.
+  const into: `/api/${string}` = sqlite ? `${sqliteBase}/load?path=${encodeURIComponent(sqlite)}` : `${base}/load`;
   const load = useMutation({
     mutationFn: (source: { path: string } | { file: File }) =>
       "path" in source
-        ? api<QueryResult>(`${base}/load?path=${encodeURIComponent(source.path)}`, { method: "POST" })
-        : api<QueryResult>(`${base}/load`, {
+        ? api<QueryResult>(`${into}${sqlite ? "&file=" : "?path="}${encodeURIComponent(source.path)}`, {
+            method: "POST",
+          })
+        : api<QueryResult>(into, {
             method: "POST",
             body: source.file,
             headers: { "content-type": "application/octet-stream" },
@@ -152,7 +190,7 @@ export function DatabaseConsole({
   const reset = useMutation({
     mutationFn: () => api(`${base}/reset`, { method: "POST" }),
     onSuccess: () => {
-      toast.success(`${DATABASES[kind].name} was reset. It's starting again, empty.`);
+      toast.success(`${title} was reset. It's starting again, empty.`);
       // What was in it is gone, and the list should say it is starting.
       queryClient.removeQueries({ queryKey: ["database-tables", room.id, kind] });
       void queryClient.invalidateQueries({ queryKey: ["databases", room.id] });
@@ -169,16 +207,21 @@ export function DatabaseConsole({
           <ArrowLeft />
         </Button>
         <Database className="size-4 text-muted-foreground" />
-        <h2 className="text-sm font-medium">{DATABASES[kind].name}</h2>
+        <h2 className={cn("truncate text-sm font-medium", file?.path && "font-mono")}>{title}</h2>
+        {file && (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {file.engine === "sqlite" ? "SQLite" : "DuckDB"}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-1">
-          {can("code.run") && (
+          {(kind || sqlite) && can("code.run") && (
             <Button asChild size="xs" variant="ghost">
-              <a href={`${base}/dump`} download>
+              <a href={sqlite ? `${sqliteBase}/dump?path=${encodeURIComponent(sqlite)}` : `${base}/dump`} download>
                 <Download /> Backup
               </a>
             </Button>
           )}
-          {canQuery && (
+          {(kind || sqlite) && canQuery && (
             <>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -195,27 +238,25 @@ export function DatabaseConsole({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button
-                size="xs"
-                variant="ghost"
-                disabled={reset.isPending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Reset ${DATABASES[kind].name}? All its data is deleted, and it starts again empty.`,
-                    )
-                  )
-                    reset.mutate();
-                }}
-              >
-                <RotateCcw /> Reset
-              </Button>
+              {kind && (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  disabled={reset.isPending}
+                  onClick={() => {
+                    if (window.confirm(`Reset ${title}? All its data is deleted, and it starts again empty.`))
+                      reset.mutate();
+                  }}
+                >
+                  <RotateCcw /> Reset
+                </Button>
+              )}
               <input
                 ref={upload}
                 type="file"
                 hidden
                 aria-label="File to load"
-                accept={LOADS[kind]}
+                accept={kind ? LOADS[kind] : ".sql,.txt"}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) load.mutate({ file });
@@ -232,18 +273,18 @@ export function DatabaseConsole({
       <FilePicker
         open={picking}
         onOpenChange={setPicking}
-        title={`Run a file in ${DATABASES[kind].name}`}
+        title={`Run a file in ${title}`}
         onPick={(file) => load.mutate({ path: file.path })}
       />
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-56 shrink-0 flex-col border-r" aria-label={LIST_NAME[kind]}>
+        <aside className="flex w-56 shrink-0 flex-col border-r" aria-label={listName}>
           <div className="flex h-8 shrink-0 items-center px-3 text-xs font-medium text-muted-foreground">
-            {LIST_NAME[kind]}
+            {listName}
             <Button
               variant="ghost"
               size="icon-xs"
               className="ml-auto"
-              aria-label={`Refresh ${LIST_NAME[kind].toLowerCase()}`}
+              aria-label={`Refresh ${listName.toLowerCase()}`}
               onClick={() => void tables.refetch()}
             >
               <RefreshCw className={cn(tables.isFetching && "animate-spin")} />
@@ -314,7 +355,14 @@ export function DatabaseConsole({
                 <Button size="xs" disabled={busy || !query.trim()} onClick={() => run.mutate(query)}>
                   {run.isPending ? <Loader2 className="animate-spin" /> : <Play />} Run
                 </Button>
-                <span className="truncate text-xs text-muted-foreground">Ctrl+Enter. {HINT[kind]}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  Ctrl+Enter.{" "}
+                  {kind
+                    ? HINT[kind]
+                    : dataFiles
+                      ? "SQL over the room's files by path, like select * from 'data/sales.csv'."
+                      : "SQL. Several statements run in order."}
+                </span>
               </div>
             </div>
           )}

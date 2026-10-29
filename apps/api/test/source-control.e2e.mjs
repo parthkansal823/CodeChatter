@@ -1,7 +1,7 @@
 // Source Control against a mock GitHub (test/mock-github.mjs, real git objects in memory): a room made from the
 // repository, its base files, commits pushed through the Git Data API (modes kept, deletions, a new branch), and
 // what's refused: no token, a token that can't push, a stale view, a branch that moved on GitHub, a branch name
-// that's taken. Then pull (and up to date), branches and switching back. Starts its own API on :4011 pointed at
+// that's taken, keys found by the secret scan (unless the sender goes ahead). Then pull (and up to date), branches and switching back. Starts its own API on :4011 pointed at
 // the mock, from the dev watcher's build (dist), so the shared stack is untouched. Signs in as test2; the room
 // and test2's GitHub token are removed at the end.
 //   node test/source-control.e2e.mjs        (from apps/api, with the dev stack running)
@@ -96,6 +96,19 @@ try {
 
   const writer = await call("/api/me/github", { method: "PUT", body: { token: `ghp_mockwriter${"w".repeat(26)}` } });
   check("writerTokenSaved", writer.json?.login === "cc-writer" && (await call(repo)).json?.login === "cc-writer", writer.text);
+
+  // The secret scan: a commit with a key in it is refused with where it is, and nothing reaches GitHub.
+  const awsKey = ["AKIA", "Z7QK2M4XW9PLR3TB"].join("");
+  const leaky = await call(`${repo}/commit`, {
+    method: "POST",
+    body: { since: first, message: "Oops", changes: [...changes, { path: "src/keys.py", content: `REGION = "eu"\nKEY = "${awsKey}"\n` }] },
+  });
+  const finding = leaky.json?.secrets?.[0];
+  check(
+    "secretRefused",
+    leaky.status === 422 && /has a key or password in it/.test(leaky.json?.detail) && finding?.path === "src/keys.py" && finding.line === 2 && finding.kind === "AWS access key ID" && finding.preview === "AKIA…R3TB" && !leaky.text.includes(awsKey) && github.refs.get("main") === first,
+    leaky.text,
+  );
 
   // A commit: on main, after the base; files changed, added and deleted; run.sh stays executable.
   const committed = await call(`${repo}/commit`, { method: "POST", body: { since: first, message: "Edit in the room", changes } });
@@ -216,6 +229,11 @@ try {
   const noTokenPublish = await call(`/api/rooms/${publishedRoom}/repo/publish`, { method: "POST", body: { name: repoName, files: publishFiles } });
   check("publishNeedsToken", noTokenPublish.status === 400 && /Add a GitHub token in Settings to publish/.test(noTokenPublish.json?.detail), noTokenPublish.text);
   await call("/api/me/github", { method: "PUT", body: { token: `ghp_mockwriter${"w".repeat(26)}` } });
+  const leakyPublish = await call(`/api/rooms/${publishedRoom}/repo/publish`, {
+    method: "POST",
+    body: { name: repoName, files: [...publishFiles, { path: ".env", content: "DB_PASSWORD=Zq8!vR2#mK9pL4\n" }] },
+  });
+  check("publishSecretRefused", leakyPublish.status === 422 && leakyPublish.json?.secrets?.[0]?.path === ".env" && !github.repos.has(`cc-writer/${repoName}`), leakyPublish.text);
   const published = await call(`/api/rooms/${publishedRoom}/repo/publish`, { method: "POST", body: { name: repoName, description: "From a room", files: publishFiles } });
   const onGithubNow = github.filesOf(`cc-writer/${repoName}`, "main");
   check(
@@ -234,6 +252,16 @@ try {
   const gist = await call(`/api/rooms/${roomId}/repo/gist`, { method: "POST", body: { name: "app.py", content: "print('gist')\n", description: "A snippet" } });
   const made = github.gists.at(-1);
   check("gist", gist.status === 201 && /^https:\/\/gist\.github\.com\//.test(gist.json?.url) && made?.files?.["app.py"]?.content === "print('gist')\n" && made.public === false, gist.text);
+  // A gist with a key: refused, then made when the sender goes ahead.
+  const keyGist = { name: "keys.py", content: `KEY = "${awsKey}"\n` };
+  const gistRefused = await call(`/api/rooms/${roomId}/repo/gist`, { method: "POST", body: keyGist });
+  const gistsBefore = github.gists.length;
+  const gistAnyway = await call(`/api/rooms/${roomId}/repo/gist`, { method: "POST", body: { ...keyGist, allowSecrets: true } });
+  check(
+    "gistSecretGoesAhead",
+    gistRefused.status === 422 && gistRefused.json?.secrets?.[0]?.path === "keys.py" && gistAnyway.status === 201 && github.gists.length === gistsBefore + 1,
+    `${gistRefused.status} ${gistAnyway.text}`,
+  );
   await call("/api/me/github", { method: "DELETE" });
   const noTokenGist = await call(`/api/rooms/${roomId}/repo/gist`, { method: "POST", body: { name: "a.py", content: "x" } });
   check("gistNeedsToken", noTokenGist.status === 400 && /to make gists/.test(noTokenGist.json?.detail), noTokenGist.text);

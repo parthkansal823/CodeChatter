@@ -1,6 +1,6 @@
 "use client";
 
-import type { CommitResult, PullResult, RoomRepo } from "@codechatter/contracts";
+import type { CommitResult, PullResult, RoomRepo, SecretFinding } from "@codechatter/contracts";
 import { findByPath, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownToLine, ExternalLink, FileText, GitBranch, Undo2 } from "lucide-react";
@@ -24,6 +24,7 @@ import { PublishSection } from "./publish-section";
 import { PullRequestsSection } from "./pull-requests-section";
 import { WebhookSection } from "./webhook-section";
 import { applyPlan, discardChange, hasConflictMarkers, markSynced, roomTexts } from "./room-files";
+import { SecretsFound } from "./secrets-found";
 import { baseKey, repoKey, useBaseFiles, useRoomRepo, useRoomTexts } from "./use-repo";
 
 const KIND_LETTER: Record<ChangeKind, string> = { added: "A", modified: "M", deleted: "D" };
@@ -75,6 +76,7 @@ function Linked({ repo, onOpen }: { repo: RoomRepo; onOpen: (node: TreeNode) => 
   const [newBranch, setNewBranch] = useState("");
   const [busy, setBusy] = useState<"commit" | "pull" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [secrets, setSecrets] = useState<{ message: string; found: SecretFinding[] } | null>(null);
   const [branchesWanted, setBranchesWanted] = useState(false);
   const branches = useQuery({
     queryKey: ["repo-branches", room.id],
@@ -101,7 +103,8 @@ function Linked({ repo, onOpen }: { repo: RoomRepo; onOpen: (node: TreeNode) => 
     void client.invalidateQueries({ queryKey: repoKey(room.id) });
   };
 
-  async function commit() {
+  /** Commit and push; with `allowSecrets`, after the secret scan's findings were shown. */
+  async function commit(allowSecrets = false) {
     if (!base || !changes?.length) return;
     const now = roomTexts(doc);
     const payload = changes.map((change) => ({
@@ -119,6 +122,7 @@ function Linked({ repo, onOpen }: { repo: RoomRepo; onOpen: (node: TreeNode) => 
     if (toNewBranch && !newBranch.trim()) return setError("Name the new branch.");
     setBusy("commit");
     setError(null);
+    setSecrets(null);
     try {
       const result = await api<CommitResult>(`/api/rooms/${room.id}/repo/commit`, {
         method: "POST",
@@ -127,6 +131,7 @@ function Linked({ repo, onOpen }: { repo: RoomRepo; onOpen: (node: TreeNode) => 
           message: message.trim(),
           ...(toNewBranch && { newBranch: newBranch.trim() }),
           changes: payload,
+          allowSecrets,
         },
       });
       const next = new Map(base);
@@ -141,7 +146,8 @@ function Linked({ repo, onOpen }: { repo: RoomRepo; onOpen: (node: TreeNode) => 
       setNewBranch("");
       toast.success(`Pushed ${result.commit.slice(0, 7)} to ${result.branch}`);
     } catch (e) {
-      setError(failure(e, "Couldn't commit. Try again."));
+      if (e instanceof ApiError && e.secrets?.length) setSecrets({ message: e.detail, found: e.secrets });
+      else setError(failure(e, "Couldn't commit. Try again."));
     } finally {
       setBusy(null);
     }
@@ -313,6 +319,16 @@ function Linked({ repo, onOpen }: { repo: RoomRepo; onOpen: (node: TreeNode) => 
           <p role="alert" className="text-xs text-destructive">
             {error}
           </p>
+        )}
+        {secrets && (
+          <SecretsFound
+            message={secrets.message}
+            secrets={secrets.found}
+            action="Commit anyway"
+            busy={busy !== null}
+            onGoAhead={() => void commit(true)}
+            onCancel={() => setSecrets(null)}
+          />
         )}
         {busy === "pull" && (
           <p role="status" className="text-xs text-muted-foreground">

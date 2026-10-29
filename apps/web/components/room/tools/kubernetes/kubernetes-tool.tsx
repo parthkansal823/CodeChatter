@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  KubeCheck,
   KubeEvent,
   KubeItem,
   KubeKind,
@@ -11,7 +12,7 @@ import type {
 } from "@codechatter/contracts";
 import { textOf } from "@codechatter/workspace-model";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Loader2, Play, RefreshCw, Square, Trash2, Upload, X } from "lucide-react";
+import { Boxes, CircleAlert, CircleCheck, ListChecks, Loader2, Play, RefreshCw, Square, Trash2, Upload, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -73,8 +74,9 @@ function ageOf(iso: string, now: number): string {
  * The room's Kubernetes panel (roadmap §14 F), like Lens or VS Code's Kubernetes view,
  * on the playground in the room's sandbox (`k8s up`): start and stop it, its workloads,
  * services, config, namespaces, nodes and events, any object's YAML and description,
- * delete, and apply the open manifest in one click. Pods are simulated, so there are no
- * logs or port-forwards yet.
+ * delete, and apply the open manifest in one click. Check tests the open manifest against
+ * the Kubernetes schemas without the playground running (kubeconform). Pods are simulated,
+ * so there are no logs or port-forwards yet.
  */
 export default function KubernetesTool({ activeFile, close }: RoomToolProps) {
   const { room, doc } = useRoom();
@@ -116,11 +118,23 @@ export default function KubernetesTool({ activeFile, close }: RoomToolProps) {
     },
     onError: (error) => toast.error(failure(error)),
   });
-  const applyOpenFile = () => {
-    if (!activeFile) return;
+  const openText = () => {
+    if (!activeFile) return null;
     const text = textOf(doc, activeFile.id)?.toString() ?? "";
-    if (!text.trim()) return void toast.error(`${activeFile.name} is empty.`);
-    apply.mutate(text);
+    if (!text.trim()) toast.error(`${activeFile.name} is empty.`);
+    return text.trim() ? text : null;
+  };
+  const applyOpenFile = () => {
+    const text = openText();
+    if (text) apply.mutate(text);
+  };
+  const check = useMutation({
+    mutationFn: ({ text }: { text: string; file: string }) => kube<KubeCheck>({ op: "check", text }),
+    onError: (error) => toast.error(failure(error)),
+  });
+  const checkOpenFile = () => {
+    const text = openText();
+    if (text && activeFile) check.mutate({ text, file: activeFile.name });
   };
 
   const items = useMemo(() => resources.data?.items ?? [], [resources.data]);
@@ -162,6 +176,17 @@ export default function KubernetesTool({ activeFile, close }: RoomToolProps) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {status.data?.available && activeFile && isManifest(activeFile.name) && (
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={check.isPending}
+              onClick={checkOpenFile}
+              title="Check it against the Kubernetes schemas, without a cluster"
+            >
+              {check.isPending ? <Loader2 className="animate-spin" /> : <ListChecks />} Check
+            </Button>
+          )}
           {running && activeFile && isManifest(activeFile.name) && (
             <Button
               size="xs"
@@ -209,6 +234,9 @@ export default function KubernetesTool({ activeFile, close }: RoomToolProps) {
           </Button>
         </div>
       </header>
+      {check.data && check.variables && (
+        <CheckResults result={check.data} file={check.variables.file} onClose={() => check.reset()} />
+      )}
 
       {status.isPending ? (
         <div className="grid gap-2 p-4">
@@ -571,6 +599,63 @@ function ObjectDetail({
           </pre>
         )}
       </div>
+    </section>
+  );
+}
+
+/** A manifest's check: a line for each object, with where each error is. */
+function CheckResults({ result, file, onClose }: { result: KubeCheck; file: string; onClose: () => void }) {
+  const bad = result.objects.filter((o) => o.status === "invalid" || o.status === "error").length;
+  return (
+    <section
+      aria-label="Check results"
+      className="max-h-[40%] shrink-0 overflow-y-auto border-b bg-panel px-3 py-2 text-xs"
+    >
+      <div className="mb-1 flex items-center gap-2">
+        <span className="font-medium">
+          {result.objects.length === 0
+            ? `${file}: no Kubernetes objects in it.`
+            : bad === 0
+              ? `${file}: ${result.objects.length === 1 ? "it matches" : `all ${result.objects.length} match`} the schemas.`
+              : `${file}: ${bad} of ${result.objects.length} ${result.objects.length === 1 ? "object has" : "objects have"} problems.`}
+        </span>
+        <Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="Close the check" onClick={onClose}>
+          <X />
+        </Button>
+      </div>
+      <ul className="grid gap-1">
+        {result.objects.map((object, i) => (
+          <li key={i}>
+            <div className="flex items-center gap-1.5">
+              {object.status === "valid" ? (
+                <CircleCheck className="size-3.5 text-success" />
+              ) : object.status === "skipped" ? (
+                <CircleCheck className="size-3.5 text-muted-foreground" />
+              ) : (
+                <CircleAlert className="size-3.5 text-destructive" />
+              )}
+              <span className="font-mono">
+                {object.kind || "?"}
+                {object.name ? `/${object.name}` : ""}
+              </span>
+              {object.status === "skipped" && (
+                <span className="text-muted-foreground">no schema (a custom resource?), not checked</span>
+              )}
+              {object.message && <span className="text-destructive">{object.message}</span>}
+            </div>
+            {object.errors.length > 0 && (
+              <ul className="mt-0.5 grid gap-0.5 pl-5">
+                {object.errors.map((error, j) => (
+                  <li key={j}>
+                    <span className="font-mono text-muted-foreground">{error.path}</span>{" "}
+                    <span className="text-destructive">{error.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

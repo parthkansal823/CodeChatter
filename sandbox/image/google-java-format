@@ -1,0 +1,11 @@
+#!/bin/sh
+# google-java-format (apps/runner/src/format.ts), the jar on the image's JDK. On JDK 16 and
+# later it needs the compiler's internals opened to it.
+exec java \
+  --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED \
+  --add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED \
+  --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED \
+  --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED \
+  --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED \
+  --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED \
+  -jar /usr/local/lib/google-java-format.jar "$@"

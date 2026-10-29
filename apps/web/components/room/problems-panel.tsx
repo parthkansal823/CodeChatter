@@ -1,11 +1,16 @@
 "use client";
 
-import { ChevronRight, CircleAlert, Info, TriangleAlert, X } from "lucide-react";
+import type { RoomCheck } from "@codechatter/contracts";
+import { useMutation } from "@tanstack/react-query";
+import { ChevronRight, CircleAlert, Info, ListChecks, Loader2, TriangleAlert, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { openRoomFile } from "@/components/room/editor/editor-opener";
-import { type Problem, type ProblemSeverity } from "@/components/room/editor/problems";
+import { setRoomCheck, useRoomCheck, type Problem, type ProblemSeverity } from "@/components/room/editor/problems";
+import { useRoom } from "@/components/room/room-context";
 import { Button } from "@/components/ui/button";
+import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const ICON = { error: CircleAlert, warning: TriangleAlert, info: Info } as const;
@@ -15,8 +20,17 @@ const LABEL = { error: "Errors", warning: "Warnings", info: "Info" } as const;
 /**
  * The Problems tab: what the language servers (and TypeScript) report in the room's
  * open files, grouped by file. A filter, a switch per kind, and a click to go there.
+ * Check all files (for people who can run code) runs the project-wide checkers in the
+ * sandbox, so files nobody has open have their problems listed too.
  */
 export function ProblemsPanel({ problems }: { problems: Problem[] }) {
+  const { room, can } = useRoom();
+  const lastCheck = useRoomCheck(room.id);
+  const checkAll = useMutation({
+    mutationFn: () => api<RoomCheck>(`/api/rooms/${room.id}/check`, { method: "POST" }),
+    onSuccess: (result) => setRoomCheck(room.id, result),
+    onError: (error) => toast.error(error instanceof ApiError ? `Couldn't check: ${error.detail}` : "Couldn't check: the sandbox didn't answer."),
+  });
   const [filter, setFilter] = useState("");
   const [shown, setShown] = useState<Record<ProblemSeverity, boolean>>({ error: true, warning: true, info: true });
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -63,6 +77,17 @@ export function ProblemsPanel({ problems }: { problems: Problem[] }) {
             </Button>
           )}
         </div>
+        {can("code.run") && (
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={checkAll.isPending}
+            onClick={() => checkAll.mutate()}
+            title="Run the project-wide checkers (Pyright, TypeScript, go vet, cargo check) in the sandbox"
+          >
+            {checkAll.isPending ? <Loader2 className="animate-spin" /> : <ListChecks />} Check all files
+          </Button>
+        )}
         <div role="group" aria-label="Show" className="flex gap-0.5">
           {(Object.keys(LABEL) as ProblemSeverity[]).map((severity) => {
             const Icon = ICON[severity];
@@ -81,10 +106,22 @@ export function ProblemsPanel({ problems }: { problems: Problem[] }) {
           })}
         </div>
       </div>
+      {lastCheck && (
+        <p role="status" aria-label="Last check" className="shrink-0 border-b px-3 py-1 text-xs text-muted-foreground">
+          {lastCheck.checked.length
+            ? `Every file checked with ${lastCheck.checked.join(", ")} (${Math.max(1, Math.round(lastCheck.ms / 1000))} s); open files stay live.`
+            : "Nothing here for the checkers (Python, TypeScript with a tsconfig.json, Go, Rust)."}
+          {lastCheck.notes.map((note) => (
+            <span key={note} className="block">
+              {note}
+            </span>
+          ))}
+        </p>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto py-1 text-xs">
         {groups.length === 0 ? (
           <p role="status" className="px-3 py-1 text-muted-foreground">
-            {problems.length === 0 ? "No problems in the open files." : "No problem matches the filter."}
+            {problems.length > 0 ? "No problem matches the filter." : lastCheck ? "No problems." : "No problems in the open files."}
           </p>
         ) : (
           <ul aria-label="Problems">

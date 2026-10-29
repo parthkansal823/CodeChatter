@@ -80,13 +80,103 @@ describe("readLaunch", () => {
     assert.match(skipped[0]!.reason, /set program to the .c or .cpp file/);
   });
 
+  it("reads Go configurations: a file, a package's folder, the room's top", () => {
+    const { configs, skipped } = readLaunch(
+      JSON.stringify({
+        configurations: [
+          { name: "File", type: "go", request: "launch", program: "${file}", args: ["-v"] },
+          { name: "Package", type: "go", request: "launch", program: "${fileDirname}", env: { MODE: "dev" } },
+          { name: "Top", type: "go", request: "launch", program: "${workspaceFolder}" },
+          { name: "Binary", type: "go", request: "launch", program: "bin/app.exe" },
+        ],
+      }),
+      { activePath: "cmd/app/main.go" },
+    );
+    assert.deepEqual(
+      configs.map((c) => [c.name, c.language, c.program]),
+      [
+        ["File", "go", "cmd/app/main.go"],
+        ["Package", "go", "cmd/app"],
+        ["Top", "go", "."],
+      ],
+    );
+    assert.deepEqual(configs[0]!.args, ["-v"]);
+    assert.deepEqual(configs[1]!.env, { MODE: "dev" });
+    assert.deepEqual(
+      skipped.map((s) => s.name),
+      ["Binary"],
+    );
+  });
+
+  it("reads Java configurations by their file, and says a class name alone isn't enough", () => {
+    const { configs, skipped } = readLaunch(
+      JSON.stringify({
+        configurations: [
+          { name: "Current", type: "java", request: "launch", mainClass: "${file}", args: ["a"] },
+          { name: "Named", type: "java", request: "launch", mainClass: "com.example.Main" },
+        ],
+      }),
+      { activePath: "src/app/Main.java" },
+    );
+    assert.deepEqual(
+      configs.map((c) => [c.name, c.language, c.program, c.args]),
+      [["Current", "java", "src/app/Main.java", ["a"]]],
+    );
+    assert.deepEqual(
+      skipped.map((s) => s.name),
+      ["Named"],
+    );
+    assert.match(skipped[0]!.reason, /mainClass to \$\{file\}/);
+  });
+
+  it("reads Node configurations: a .js or .ts program", () => {
+    const { configs, skipped } = readLaunch(
+      JSON.stringify({
+        configurations: [
+          { name: "Current", type: "node", request: "launch", program: "${file}", stopOnEntry: true },
+          { name: "Server", type: "pwa-node", request: "launch", program: "${workspaceFolder}/src/server.ts", args: ["--port", "3000"] },
+          { name: "Script", type: "node", request: "launch", runtimeExecutable: "npm", runtimeArgs: ["run", "dev"] },
+          { name: "Page", type: "node", request: "launch", program: "index.html" },
+        ],
+      }),
+      { activePath: "lib/app.mjs" },
+    );
+    assert.deepEqual(
+      configs.map((c) => [c.name, c.language, c.program, c.stopOnEntry]),
+      [
+        ["Current", "javascript", "lib/app.mjs", true],
+        ["Server", "javascript", "src/server.ts", false],
+      ],
+    );
+    assert.deepEqual(configs[1]!.args, ["--port", "3000"]);
+    assert.deepEqual(
+      skipped.map((s) => s.name),
+      ["Script", "Page"],
+    );
+    assert.match(skipped[0]!.reason, /\.js or \.ts file/);
+  });
+
   it("says when the file isn't JSON, and reads the starter file", () => {
     assert.deepEqual(readLaunch("{ nope", context).skipped[0]?.reason, "It isn't valid JSON.");
     const starter = readLaunch(STARTER_LAUNCH, { activePath: "prog.cpp" });
     assert.deepEqual(
       starter.configs.map((c) => [c.name, c.language, c.program]),
-      [["C/C++: current file", "cpp", "prog.cpp"]],
+      [
+        ["C/C++: current file", "cpp", "prog.cpp"],
+        ["Go: current package", "go", "."],
+      ],
     );
-    assert.equal(starter.skipped.length, 1);
+    assert.deepEqual(
+      readLaunch(STARTER_LAUNCH, { activePath: "web/app.ts" }).configs.map((c) => [c.name, c.program]),
+      [
+        ["Node: current file", "web/app.ts"],
+        ["Go: current package", "web"],
+      ],
+    );
+    // Python's and Node's, which a .cpp file isn't for.
+    assert.deepEqual(
+      starter.skipped.map((s) => s.name),
+      ["Python: current file", "Node: current file", "Java: current file"],
+    );
   });
 });

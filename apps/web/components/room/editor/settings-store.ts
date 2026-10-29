@@ -16,6 +16,7 @@ type State = EditorSettings & {
   update: (patch: Partial<EditorSettings>) => void;
   /** Ctrl/Cmd + = and Ctrl/Cmd + -; 0 puts the size back. */
   zoom: (delta: number | "reset") => void;
+  /** Every setting back to its default, but your keyboard shortcuts (the shortcuts sheet resets those). */
   reset: () => void;
 };
 
@@ -32,7 +33,7 @@ export const useEditorSettings = create<State>()(
       update: (patch) => set(sanitizeSettings({ ...pick(get()), ...patch })),
       zoom: (delta) =>
         set({ fontSize: delta === "reset" ? FONT_SIZE.default : clampFontSize(get().fontSize + delta) }),
-      reset: () => set(DEFAULT_SETTINGS),
+      reset: () => set({ ...DEFAULT_SETTINGS, keybindings: get().keybindings }),
     }),
     {
       name: "cc-editor-settings",

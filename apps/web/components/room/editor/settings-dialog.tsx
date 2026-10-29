@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { FONT_SIZE, TAB_SIZES, type EditorSettings } from "./settings";
 import { useEditorSettings, useSettingsValues } from "./settings-store";
 import { BUILT_IN_THEMES, importVsCodeTheme, useImportedThemes } from "./themes";
+import { openShortcuts } from "./ui-store";
 import { ThemeError } from "./vscode-theme";
 
 type Option<T extends string> = readonly [value: T, label: string];
@@ -253,6 +254,11 @@ export function SettingsDialog({
                 options={KEYMAP_OPTIONS}
                 onChange={(v) => update({ keymap: v })}
               />
+            </Row>
+            <Row label="Keyboard shortcuts" hint="Every command's keys: Ctrl+K Ctrl+S." htmlFor="set-shortcuts">
+              <Button id="set-shortcuts" variant="outline" size="sm" onClick={openShortcuts}>
+                Change shortcuts…
+              </Button>
             </Row>
           </Section>
 

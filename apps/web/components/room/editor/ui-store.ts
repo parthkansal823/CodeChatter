@@ -16,6 +16,7 @@ export type PalettePage = "commands" | "language" | "people" | "line" | "symbols
 /** The one dialog that can be open over the editor at a time. */
 export type Overlay =
   | { kind: "settings" }
+  | { kind: "shortcuts" }
   | { kind: "quickOpen" }
   | { kind: "palette"; page: PalettePage }
   | { kind: "pickFile"; title: string; exclude: string | null; onPick: (file: TreeNode) => void };
@@ -97,6 +98,7 @@ export const useEditorUi = create<State>()((set) => ({
 
 export const openSettings = () => useEditorUi.getState().open({ kind: "settings" });
 export const openQuickOpen = () => useEditorUi.getState().open({ kind: "quickOpen" });
+export const openShortcuts = () => useEditorUi.getState().open({ kind: "shortcuts" });
 export const openPalette = (page: PalettePage = "commands") =>
   useEditorUi.getState().open({ kind: "palette", page });
 

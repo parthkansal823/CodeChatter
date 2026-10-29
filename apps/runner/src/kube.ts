@@ -1,4 +1,4 @@
-import { KUBE_KINDS, type KubeEvent, type KubeItem, type KubeKind, type KubeRef, type KubeResources, type KubeStatus } from "@codechatter/contracts";
+import { KUBE_KINDS, type KubeCheck, type KubeEvent, type KubeItem, type KubeKind, type KubeRef, type KubeResources, type KubeStatus } from "@codechatter/contracts";
 
 import { Collector, ended } from "./databases.js";
 import { JAIL } from "./plans.js";
@@ -88,6 +88,52 @@ export async function kubeApply(sandbox: RoomSandbox, text: string): Promise<str
   const output = await run(sandbox, ["kubectl", "apply", "-f", "-"], { input: text, timeout: 30 });
   if (output.code !== 0) throw new KubeError(said(output, "kubectl couldn't apply the file."));
   return output.stdout.trim();
+}
+
+/** Where kubeconform finds the schemas made with the image (sandbox/image/k8s-schemas.py). */
+const SCHEMAS = "/usr/local/share/kubernetes-schemas/{{ .ResourceKind }}{{ .KindSuffix }}.json";
+
+type Verdict = { kind?: string; name?: string; status?: string; msg?: string; validationErrors?: Array<{ path?: string; msg?: string }> };
+
+/**
+ * Each mistake and where it is. With several, kubeconform's list has only the top of the
+ * tree ("validation failed"), but its message has every one, as "at '/spec': what".
+ */
+export function errorsOf(verdict: Verdict): Array<{ path: string; message: string }> {
+  const listed = (verdict.validationErrors ?? []).filter((error) => error.msg && error.msg !== "validation failed");
+  if (listed.length) return listed.map((error) => ({ path: error.path || "/", message: error.msg! }));
+  return [...(verdict.msg ?? "").matchAll(/at '([^']*)': (.*?)(?=\s+- at '|$)/g)]
+    .map((match) => ({ path: match[1] || "/", message: match[2]!.trim() }))
+    .filter((error) => error.message !== "validation failed");
+}
+
+/**
+ * A manifest checked against the schemas of the playground's Kubernetes version, offline
+ * and without the playground running: strict, so a misspelt field is an error; a kind with
+ * no schema (a custom resource) is skipped.
+ */
+export async function kubeCheck(sandbox: RoomSandbox, text: string): Promise<KubeCheck> {
+  const output = await run(sandbox, ["kubeconform", "-strict", "-verbose", "-output", "json", "-ignore-missing-schemas", "-schema-location", SCHEMAS, "-"], { input: text, timeout: 30 });
+  let verdicts: Verdict[];
+  try {
+    verdicts = (JSON.parse(output.stdout) as { resources?: Verdict[] }).resources ?? [];
+  } catch {
+    throw new KubeError(said(output, "kubeconform couldn't check the file."));
+  }
+  const statuses: Record<string, KubeCheck["objects"][number]["status"]> = { statusValid: "valid", statusInvalid: "invalid", statusError: "error", statusSkipped: "skipped" };
+  return {
+    objects: verdicts.map((verdict) => {
+      const errors = errorsOf(verdict);
+      return {
+        kind: verdict.kind ?? "",
+        name: verdict.name ?? "",
+        status: statuses[verdict.status ?? ""] ?? "error",
+        // The errors say it better than the summary that lists them.
+        message: errors.length ? null : verdict.msg || null,
+        errors,
+      };
+    }),
+  };
 }
 
 export async function kubeDelete(sandbox: RoomSandbox, ref: KubeRef): Promise<string> {

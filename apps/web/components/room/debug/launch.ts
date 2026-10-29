@@ -6,11 +6,13 @@ export const LAUNCH_PATH = ".vscode/launch.json";
 /**
  * A debug configuration, as the room's debugger takes it (runner: debug.ts). Paths are
  * the room's (no /workspace/); a C or C++ program is its source file, which the room
- * compiles with debug information.
+ * compiles with debug information; a Go program is a .go file or a package's folder
+ * ("." for the room's top), which the room builds; a Node program is a .js or .ts file
+ * (Node runs TypeScript as it is).
  */
 export type LaunchConfig = {
   name: string;
-  language: "python" | "c" | "cpp";
+  language: "python" | "c" | "cpp" | "go" | "javascript" | "java";
   program: string | null;
   /** Python's `-m` module, instead of a program. */
   module: string | null;
@@ -26,6 +28,10 @@ export type SkippedConfig = { name: string; reason: string };
 
 const PYTHON = new Set(["debugpy", "python"]);
 const NATIVE = new Set(["cppdbg", "gdb", "lldb", "cppvsdbg", "c", "cpp"]);
+const GO = new Set(["go", "dlv"]);
+const NODE = new Set(["node", "pwa-node"]);
+const JAVA = new Set(["java"]);
+const NODE_PROGRAM = /\.(m|c)?(js|ts)$/i;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** A path from launch.json ("${workspaceFolder}/app/main.py", "${file}", "src/x.py") as the room's, or null. */
@@ -54,14 +60,21 @@ function env(value: unknown, context: TaskContext): Record<string, string> {
   );
 }
 
+/** Whether a program from launch.json is the room's top folder ("${workspaceFolder}", "/workspace" or "."). */
+function isTop(value: unknown, context: TaskContext): boolean {
+  if (typeof value !== "string") return false;
+  return /^(\/workspace|\.)\/?$/.test(substitute(value.trim(), context));
+}
+
 const nativeLanguage = (path: string): "c" | "cpp" | null =>
   /\.c$/i.test(path) ? "c" : /\.(cc|cpp|cxx|c\+\+)$/i.test(path) ? "cpp" : null;
 
 /**
  * `.vscode/launch.json`'s configurations, as VS Code writes them (comments and trailing
  * commas fine), with `${file}`, `${workspaceFolder}` and the rest filled in for the open
- * file. Python (debugpy) by program or module, and C and C++ (cppdbg, gdb) by source
- * file; the rest are listed as skipped, with why.
+ * file. Python (debugpy) by program or module, C and C++ (cppdbg, gdb) by source file,
+ * Go by file or package folder, Node (node, pwa-node) by a .js or .ts file, and Java by its
+ * .java file (mainClass "${file}", or program); the rest are listed as skipped, with why.
  */
 export function readLaunch(
   text: string,
@@ -129,20 +142,53 @@ export function readLaunch(
         continue;
       }
       configs.push({ ...common, language, program, module: null, justMyCode: true });
+    } else if (GO.has(type)) {
+      // "${workspaceFolder}" (or ".") is the room's top folder.
+      const program = isTop(raw.program, context) ? "." : roomPath(raw.program, context);
+      if (!program || /\.(?!go$)[^./]+$/i.test(program)) {
+        skipped.push({
+          name,
+          reason: "Set program to a .go file or a package's folder (${file}, ${fileDirname} or ${workspaceFolder}).",
+        });
+        continue;
+      }
+      configs.push({ ...common, language: "go", program, module: null, justMyCode: true });
+    } else if (NODE.has(type)) {
+      const program = roomPath(raw.program, context);
+      if (!program || !NODE_PROGRAM.test(program)) {
+        skipped.push({
+          name,
+          reason: "Set program to a .js or .ts file of the room (or ${file}); npm scripts and runtimeExecutable aren't supported yet.",
+        });
+        continue;
+      }
+      configs.push({ ...common, language: "javascript", program, module: null, justMyCode: true });
+    } else if (JAVA.has(type)) {
+      // VS Code's Java configurations name a class; the room debugs a .java file, as "${file}" gives.
+      const program = roomPath(raw.program ?? raw.mainClass, context);
+      if (!program || !/\.java$/i.test(program)) {
+        skipped.push({
+          name,
+          reason: "Set mainClass to ${file} (or program to a .java file): the room builds the file it's given.",
+        });
+        continue;
+      }
+      configs.push({ ...common, language: "java", program, module: null, justMyCode: true });
     } else {
       skipped.push({
         name,
-        reason: `The room's debugger doesn't run "${type || "untyped"}" configurations yet (Python, C and C++ do).`,
+        reason: `The room's debugger doesn't run "${type || "untyped"}" configurations yet (Python, C, C++, Go, Node and Java do).`,
       });
     }
   }
   return { configs, skipped };
 }
 
-/** The launch.json the room starts you with: the open file, in Python and in C or C++. */
+/** The launch.json the room starts you with: the open file, in Python, in C or C++, in Node, in Java, and its Go package. */
 export const STARTER_LAUNCH = `{
   // Debug configurations for the room's debugger (Run and debug): F5 runs the one picked there.
   // \${file} is the open file. For C and C++, program is the source file: the room compiles it.
+  // For Go, it's a .go file or a package's folder: the room builds it. Node runs .js and .ts files.
   "version": "0.2.0",
   "configurations": [
     {
@@ -159,6 +205,29 @@ export const STARTER_LAUNCH = `{
       "request": "launch",
       "program": "\${file}",
       "args": []
+    },
+    {
+      "name": "Node: current file",
+      "type": "node",
+      "request": "launch",
+      "program": "\${file}",
+      "args": [],
+      "env": {}
+    },
+    {
+      "name": "Java: current file",
+      "type": "java",
+      "request": "launch",
+      "mainClass": "\${file}",
+      "args": []
+    },
+    {
+      "name": "Go: current package",
+      "type": "go",
+      "request": "launch",
+      "program": "\${fileDirname}",
+      "args": [],
+      "env": {}
     }
   ]
 }

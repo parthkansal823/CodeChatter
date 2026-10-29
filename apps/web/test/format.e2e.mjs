@@ -1,7 +1,8 @@
 // Format document for sandbox-formatted languages (roadmap §14 A), in the browser: Shift+Alt+F formats a
 // Python and a C file through the room's sandbox, the change reaches the other person, Undo puts it back,
-// and code with a syntax error leaves the file as it was and says why. The test's files have a stamp in
-// their names and are deleted at the end.
+// and code with a syntax error leaves the file as it was and says why. With a .prettierrc in the room, JavaScript
+// goes to the project's own Prettier instead of the browser's formatter. The test's files have a stamp in their
+// names (but .prettierrc) and are deleted at the end.
 //   node test/format.e2e.mjs        (from apps/web, with the dev stack running and the sandbox image built)
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -76,6 +77,14 @@ try {
   await a.keyboard.press("Shift+Alt+f");
   check("cFormatted", await eventually(async () => (await code(a)) === "int main() {\n  int x = 1;\n  return x;\n}"), JSON.stringify(await code(a)));
   await a.screenshot({ path: join(process.env.SHOT_DIR ?? tmpdir(), "format.png") });
+
+  // With a Prettier config in the room, JavaScript formats with the project's own Prettier in the sandbox, not the
+  // browser's formatter: this room has none installed, so it says to install it, and the file stays as it was.
+  await newFile(".prettierrc", "{}\n");
+  await newFile(`fm_${stamp}.js`, "let x=1\n");
+  await a.keyboard.press("Shift+Alt+f");
+  check("prettierTakesOver", await ok(a.getByText(/Couldn't format: This project's Prettier isn't installed yet/).waitFor({ timeout: 30_000 })));
+  check("jsUnchanged", (await code(a)) === "let x=1", JSON.stringify(await code(a)));
 } catch (error) {
   const shot = join(tmpdir(), "format-failed.png");
   await a.screenshot({ path: shot }).catch(() => {});

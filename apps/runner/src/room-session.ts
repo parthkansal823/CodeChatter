@@ -14,8 +14,9 @@ import { RunManager } from "./runs.js";
 import { KubeSandbox, roomNamespace, type Kube } from "./kube-sandbox.js";
 import { DebugHub } from "./debug.js";
 import { NotebookKernels } from "./notebooks.js";
-import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, Sandbox, type RoomSandbox } from "./sandbox.js";
+import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, listWarm, Sandbox, type RoomSandbox } from "./sandbox.js";
 import { TunnelHub } from "./tunnel.js";
+import { WarmIndex } from "./warm-cache.js";
 
 /**
  * Everything the runner holds for one room: the container, the live copy of
@@ -47,9 +48,11 @@ export class RoomSession {
     private readonly env: Env,
     private readonly databases: Databases,
     kube: Kube | null,
+    /** The image this room's sandbox runs now (the owner's pick, or the server's default). */
+    image: () => string = () => env.SANDBOX_IMAGE,
   ) {
     // Kubernetes takes the room's settings from its Secret (kube-sandbox.ts); Docker gets them with each exec.
-    this.sandbox = kube ? new KubeSandbox(kube, roomId, env) : new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)));
+    this.sandbox = kube ? new KubeSandbox(kube, roomId, env, image) : new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)), image);
     this.sync = new DocSync(roomId, { collabUrl: env.COLLAB_INTERNAL_URL, secret: env.SERVICE_SECRET });
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
     this.notebooks = new NotebookKernels(this.sandbox, this.sync.doc, this.sync.synced(60_000).catch(() => {}));
@@ -94,7 +97,7 @@ export class RoomSession {
   }
 
   /** Ports, CPU, memory and processes for the Ports and resources panel. */
-  async status(): Promise<Omit<SandboxStatus, "installs">> {
+  async status(): Promise<Omit<SandboxStatus, "installs" | "image">> {
     const stats = await this.sandbox.stats();
     if (!stats) return { running: false, ports: [], cpuPercent: null, memory: null, processes: null };
     // CPU% needs two samples; one-shot stats have no "previous", so keep our own.
@@ -147,7 +150,10 @@ export class RoomSession {
 export class RoomRegistry {
   readonly egress: PackageProxy;
   readonly databases: Databases;
+  /** The pre-warmed installs, for rooms whose sandbox isn't up to look (none on Kubernetes). */
+  readonly warm: WarmIndex;
   private readonly sessions = new Map<string, RoomSession>();
+  private readonly images = new Map<string, "base" | "full">();
   private readonly sweeper: NodeJS.Timeout;
 
   constructor(
@@ -158,13 +164,34 @@ export class RoomRegistry {
   ) {
     this.egress = kube ? new KubeEgress(kube, env) : new Egress(docker, env);
     this.databases = new Databases(kube ? new KubeDatabases(kube, env) : new DockerDatabases(docker, env), env);
+    this.warm = new WarmIndex(kube ? null : () => listWarm(docker, env));
     this.sweeper = setInterval(() => void this.sweep(), 60_000);
+  }
+
+  /**
+   * The image a room's owner picked, as the API says with each call (its service token's
+   * `img`); remembered while the runner runs, and a room no call has named runs the default.
+   */
+  noteImage(roomId: string, image: "base" | "full" | "default" | undefined): void {
+    if (image === "base" || image === "full") this.images.set(roomId, image);
+    else if (image === "default") this.images.delete(roomId);
+  }
+
+  /** The image for a room: its pick, when this server has that image, else SANDBOX_IMAGE. */
+  imageFor(roomId: string): string {
+    const choice = this.images.get(roomId);
+    return (choice === "base" ? this.env.SANDBOX_IMAGE_BASE : choice === "full" ? this.env.SANDBOX_IMAGE_FULL : undefined) ?? this.env.SANDBOX_IMAGE;
+  }
+
+  /** For the Ports panel: the room's pick, and whether this server offers one (it has both images). */
+  imageInfo(roomId: string): { choice: "base" | "full" | null; offered: boolean } {
+    return { choice: this.images.get(roomId) ?? null, offered: Boolean(this.env.SANDBOX_IMAGE_BASE && this.env.SANDBOX_IMAGE_FULL) };
   }
 
   get(roomId: string): RoomSession {
     let session = this.sessions.get(roomId);
     if (!session) {
-      session = new RoomSession(this.docker, roomId, this.env, this.databases, this.kube);
+      session = new RoomSession(this.docker, roomId, this.env, this.databases, this.kube, () => this.imageFor(roomId));
       this.sessions.set(roomId, session);
     }
     return session;

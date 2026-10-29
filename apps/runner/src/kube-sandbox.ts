@@ -102,6 +102,8 @@ export class KubeSandbox implements RoomSandbox {
     private readonly kube: Kube,
     readonly roomId: string,
     private readonly env: Env,
+    /** The image to run: the room's owner can pick (room-session.ts). */
+    private readonly image: () => string = () => env.SANDBOX_IMAGE,
   ) {
     this.namespace = roomNamespace(env.SANDBOX_NAMESPACE, roomId);
   }
@@ -225,7 +227,7 @@ export class KubeSandbox implements RoomSandbox {
     const aliases = await this.prepare();
     for (let attempt = 1; ; attempt++) {
       const pod = await this.readPod();
-      const replace = pod !== null && (pod.spec?.containers[0]?.image !== this.env.SANDBOX_IMAGE || pod.metadata?.labels?.[LABEL_CONFIG] !== POD_CONFIG || ended(pod));
+      const replace = pod !== null && (pod.spec?.containers[0]?.image !== this.image() || pod.metadata?.labels?.[LABEL_CONFIG] !== POD_CONFIG || ended(pod));
       if (replace) await this.deletePod(true);
       if (!pod || replace) await this.createPod(aliases);
       try {
@@ -384,7 +386,7 @@ export class KubeSandbox implements RoomSandbox {
           containers: [
             {
               name: POD,
-              image: this.env.SANDBOX_IMAGE,
+              image: this.image(),
               imagePullPolicy: this.env.SANDBOX_IMAGE_PULL,
               stdin: true,
               stdinOnce: false,
