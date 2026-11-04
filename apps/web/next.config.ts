@@ -28,16 +28,6 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: resolve(process.cwd(), "../.."),
   reactCompiler: true,
   typedRoutes: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        // VS Code adopts its own stylesheets, so its CSS imports must export text.
-        condition: { path: /node_modules\/(?:@codingame\/monaco-vscode[^/]*|monaco-editor|vscode)\// },
-        loaders: [resolve(process.cwd(), "loaders/vscode-css.cjs")],
-        as: "*.js",
-      },
-    },
-  },
   poweredByHeader: false,
   // In dev the app is reached through Caddy at localhost:8080, not :3000.
   allowedDevOrigins: ["localhost", "127.0.0.1", ...lanHosts, ...extraHosts],

@@ -1,0 +1,141 @@
+{{- /* One call server: signalling stays private; media and TURN bypass the edge. */ -}}
+{{- define "cc.livekitConfig" -}}
+port: 7880
+rtc:
+  tcp_port: {{ .Values.livekit.rtc.tcpPort }}
+  udp_port: {{ .Values.livekit.rtc.udpPort }}
+  use_external_ip: {{ .Values.livekit.rtc.useExternalIp }}
+  node_ip: {{ .Values.livekit.rtc.nodeIp | quote }}
+  enable_loopback_candidate: {{ .Values.livekit.rtc.enableLoopbackCandidate }}
+turn:
+  enabled: {{ .Values.livekit.turn.enabled }}
+  udp_port: {{ .Values.livekit.turn.udpPort }}
+  tls_port: 0
+  {{- with .Values.livekit.turn.allowRestrictedPeerCidrs }}
+  allow_restricted_peer_cidrs: {{- toYaml . | nindent 4 }}
+  {{- end }}
+logging:
+  level: info
+{{- end -}}
+{{- if .Values.livekit.enabled }}
+{{- $component := dict "root" . "component" "livekit" }}
+{{- $service := .Values.livekit.media.service }}
+{{- if not (has $service.type (list "LoadBalancer" "NodePort")) }}
+{{- fail "livekit.media.service.type must be LoadBalancer or NodePort so browsers can reach media" }}
+{{- end }}
+{{- if eq $service.type "NodePort" }}
+{{- if or (ne (int $service.nodePorts.tcp) (int .Values.livekit.rtc.tcpPort)) (ne (int $service.nodePorts.udp) (int .Values.livekit.rtc.udpPort)) }}
+{{- fail "NodePort calls require livekit.media.service.nodePorts.tcp/udp to equal livekit.rtc.tcpPort/udpPort; choose ports in your cluster's NodePort range" }}
+{{- end }}
+{{- if and .Values.livekit.turn.enabled (ne (int $service.nodePorts.turn) (int .Values.livekit.turn.udpPort)) }}
+{{- fail "NodePort TURN requires livekit.media.service.nodePorts.turn to equal livekit.turn.udpPort" }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-livekit
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+data:
+  livekit.yaml: |
+    {{- include "cc.livekitConfig" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-livekit
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  # No Redis cluster: rooms live on this one server. Replacing it interrupts calls.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "cc.selector" $component | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cc.componentLabels" $component | nindent 8 }}
+      annotations:
+        checksum/livekit: {{ include "cc.livekitConfig" . | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: {{- include "cc.podSecurity" (dict) | nindent 8 }}
+      containers:
+        - name: livekit
+          image: {{ .Values.livekit.image }}
+          imagePullPolicy: IfNotPresent
+          args: [--config, /etc/livekit/livekit.yaml]
+          ports:
+            - { name: http, containerPort: 7880 }
+            - { name: rtc-tcp, containerPort: {{ .Values.livekit.rtc.tcpPort }} }
+            - { name: rtc-udp, containerPort: {{ .Values.livekit.rtc.udpPort }}, protocol: UDP }
+            {{- if .Values.livekit.turn.enabled }}
+            - { name: turn-udp, containerPort: {{ .Values.livekit.turn.udpPort }}, protocol: UDP }
+            {{- end }}
+          env:
+            - name: LIVEKIT_KEYS
+              valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" . }}, key: LIVEKIT_KEYS } }
+          securityContext: {{- include "cc.containerSecurity" . | nindent 12 }}
+          resources: {{- toYaml .Values.livekit.resources | nindent 12 }}
+          {{- include "cc.probes" (dict "path" "/" "port" "http") | nindent 10 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/livekit, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: config
+          configMap: { name: {{ .Release.Name }}-livekit }
+        - name: tmp
+          emptyDir: {}
+---
+# Signalling is reachable only through Caddy's /livekit route.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-livekit
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - { name: http, port: 7880, targetPort: http }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-livekit-media
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+  {{- with $service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $service.type }}
+  externalTrafficPolicy: {{ $service.externalTrafficPolicy }}
+  {{- if and (eq $service.type "LoadBalancer") $service.loadBalancerIP }}
+  loadBalancerIP: {{ $service.loadBalancerIP | quote }}
+  {{- end }}
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - name: rtc-tcp
+      port: {{ .Values.livekit.rtc.tcpPort }}
+      targetPort: rtc-tcp
+      protocol: TCP
+      {{- with $service.nodePorts.tcp }}
+      nodePort: {{ . }}
+      {{- end }}
+    - name: rtc-udp
+      port: {{ .Values.livekit.rtc.udpPort }}
+      targetPort: rtc-udp
+      protocol: UDP
+      {{- with $service.nodePorts.udp }}
+      nodePort: {{ . }}
+      {{- end }}
+    {{- if .Values.livekit.turn.enabled }}
+    - name: turn-udp
+      port: {{ .Values.livekit.turn.udpPort }}
+      targetPort: turn-udp
+      protocol: UDP
+      {{- with $service.nodePorts.turn }}
+      nodePort: {{ . }}
+      {{- end }}
+    {{- end }}
+{{- end }}

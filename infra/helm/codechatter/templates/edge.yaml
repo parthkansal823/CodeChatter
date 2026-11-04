@@ -29,6 +29,12 @@
 	handle_path /collab* {
 		reverse_proxy {{ .Release.Name }}-collab:4100
 	}
+{{- if .Values.livekit.enabled }}
+	# LiveKit signalling (media and TURN bypass the edge).
+	handle_path /livekit* {
+		reverse_proxy {{ .Release.Name }}-livekit:7880
+	}
+{{- end }}
 {{- if .Values.mail.mailpit }}
 	# The demo's caught emails
 	handle /mail* {

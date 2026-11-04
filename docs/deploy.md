@@ -26,7 +26,7 @@ Start with **2 vCPU, 4 GB RAM, 40 GB disk, Ubuntu 24.04**. It builds the images 
 ## First deploy
 
 1. **Server and domain.** Create the VM. Add a DNS `A` record for your domain (for example `code.yourname.dev`) pointing at the server's IP. Wait until `ping code.yourname.dev` shows that IP.
-2. **Firewall.** Allow inbound TCP 22, 80 and 443, and UDP 443, both in the provider's firewall and in `ufw` if it is on. Caddy needs port 80 to get the certificate.
+2. **Firewall.** Allow inbound TCP 22, 80, 443 and 7881, and UDP 443, 7882 and 3478, both in the provider's firewall and in `ufw` if it is on. Caddy needs port 80 to get the certificate; calls need the direct media/TURN ports described below.
 3. **Docker.**
    ```bash
    curl -fsSL https://get.docker.com | sudo sh
@@ -36,14 +36,15 @@ Start with **2 vCPU, 4 GB RAM, 40 GB disk, Ubuntu 24.04**. It builds the images 
    ```bash
    git clone <your repo url> codechatter && cd codechatter
    cp infra/.env.production.example infra/.env.production
-   openssl rand -hex 32            # run twice: POSTGRES_PASSWORD, BETTER_AUTH_SECRET
+   openssl rand -hex 32            # use separate generated values for each secret
    nano infra/.env.production      # fill in every value
    ```
+   Add the LiveKit settings from **Calls (video and voice)** below; Compose requires its production key and secret too.
 5. **Start.**
    ```bash
    alias dc='docker compose --env-file infra/.env.production -f infra/compose.yaml'
    dc up -d --build
-   dc ps                           # all healthy; "migrate" exited 0
+   dc ps                           # app services healthy, LiveKit running; "migrate" exited 0
    curl https://code.yourname.dev/api/readyz
    ```
    The first build takes about 5–10 minutes. Then open `https://<DOMAIN>` and sign up. The verification email uses your SMTP settings.
@@ -54,6 +55,79 @@ Start with **2 vCPU, 4 GB RAM, 40 GB disk, Ubuntu 24.04**. It builds the images 
 7. **Sign-in providers (optional).** Add these redirect URLs, then set the client id and secret in `.env.production` and run `dc up -d`:
    - Google Cloud Console → Credentials → your OAuth client: `https://<DOMAIN>/api/auth/callback/google`
    - GitHub → Settings → Developer settings → OAuth Apps: `https://<DOMAIN>/api/auth/callback/github`
+
+## Calls (video and voice)
+
+Production Compose includes LiveKit `v1.13.11`. Caddy handles signalling at `/livekit`
+and strips that prefix; browsers send media directly to LiveKit. There is one LiveKit
+instance, without a separate Redis service for calls.
+
+Add these values to `infra/.env.production` before starting the stack:
+
+```dotenv
+LIVEKIT_URL=wss://code.example.com/livekit
+LIVEKIT_API_KEY=codechatter-production
+LIVEKIT_API_SECRET=replace-with-a-separate-generated-secret
+```
+
+Use your real domain. `LIVEKIT_URL` can be omitted in Compose, which defaults it to
+`wss://${DOMAIN}/livekit`. Generate the secret with `openssl rand -hex 32`; use a
+separate value from the app's other secrets and keep the key/secret on one line.
+Compose supplies the same pair to the API and to LiveKit through `LIVEKIT_KEYS`
+(`key: secret`). The checked-in LiveKit config contains no credentials. The key and
+secret are required by this Compose stack, so a missing value fails configuration
+instead of starting an unauthenticated or mismatched call service.
+
+Open these inbound ports on the server and its cloud firewall:
+
+| Port | Purpose |
+| --- | --- |
+| TCP 80 | Caddy certificate issuance and HTTPS redirects |
+| TCP 443 | HTTPS and WebSocket signalling, including `/livekit` |
+| UDP 443 | Caddy HTTP/3 |
+| TCP 7881 | Direct WebRTC TCP fallback |
+| UDP 7882 | Direct WebRTC media on one muxed port |
+| UDP 3478 | LiveKit's built-in TURN relay listener |
+
+Port 7880 stays inside Docker. Keep the mappings one-to-one if the host is behind
+NAT. LiveKit discovers the server's public IP (`rtc.use_external_ip: true`), which
+must be reachable on the published media/TURN ports. Caddy does not carry that
+traffic. The embedded TURN relay's allocation sockets stay inside the LiveKit
+network namespace; do not expose the default UDP 30000–40000 relay range publicly.
+
+This first version uses **TURN over UDP**, without sharing Caddy's certificate
+storage. It helps with NAT traversal but cannot serve a network that blocks UDP
+and only allows HTTPS. Direct TCP 7881 is another fallback when that port is
+allowed. For HTTPS-only networks, add TURN/TLS on a separate public TCP 443 address
+or a suitable layer-4 endpoint; an HTTP reverse proxy is insufficient. The pinned
+LiveKit version advertises TURN/TLS on 443, so opening only 5349 would not solve it.
+
+Check the setup after deployment:
+
+```bash
+docker compose --env-file infra/.env.production -f infra/compose.yaml config --quiet
+dc up -d --build
+curl --fail https://code.example.com/livekit/    # OK
+dc logs --tail=50 livekit
+```
+
+`config` without `--quiet` also validates the stack, but its output contains the
+resolved credentials. The `OK` response checks signalling, not media or TURN.
+In two browsers, sign in as room members and use **Call** in the room's title bar;
+check audio, video and screen sharing. Then repeat across different networks and
+inspect `chrome://webrtc-internals` or `edge://webrtc-internals`: a selected
+`relay` ICE candidate confirms TURN is actually carrying media. A direct local
+call alone does not prove the relay/NAT path. Docker bridge and cloud NAT rules
+must permit that path; test a forced-relay connection before relying on it.
+
+When any of the three LiveKit settings is missing from a production API, it does
+not issue call tokens. Clicking **Call** shows: “Calls aren't set up on this server
+(LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET).” Existing chat, editing and
+code execution keep working. Production Compose requires the credentials up
+front; the Helm chart can disable the call service explicitly.
+
+For Kubernetes media addresses, NodePorts and the Docker Desktop demo, follow the
+[chart's calls instructions](../infra/helm/codechatter/README.md).
 
 ## Updating
 
@@ -83,7 +157,7 @@ Copy backups off the server, for example with a nightly cron job to object stora
 - **The API refuses to start** if `APP_URL` is not `https://`. Production cookies are Secure, so over plain http nobody could stay signed in.
 - **The API also refuses to start** if `SMTP_HOST` points at a dev mail catcher.
 - **Compose stops with a clear message** if a required secret is empty.
-- **Only Caddy is exposed.** Postgres and Valkey have no public ports.
+- **Caddy exposes HTTP/HTTPS; LiveKit exposes only media and TURN.** Postgres and Valkey have no public ports, and LiveKit signalling stays behind Caddy.
 - **The app containers run as the unprivileged `node` user.**
 - **Images never contain `.env` files, v1 code, or spikes.** The Dockerfile has its own allow-list ignore file.
 

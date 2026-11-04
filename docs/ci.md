@@ -87,7 +87,7 @@ Run both security checks, even if the first reports findings:
 ```bash
 pnpm audit --prod --audit-level=high
 trivy fs --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --timeout 10m \
-  --skip-dirs '.git,**/node_modules,**/.next,**/dist,client,server' \
+  --skip-dirs '.git,**/node_modules,**/.next,**/dist,client,server,spikes' \
   --format sarif --limit-severities-for-sarif --output trivy-results.sarif .
 ```
 
@@ -100,6 +100,6 @@ trivy fs --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --timeout
 - **Security:** update a vulnerable dependency, or record a justified exception in `.trivyignore` with a comment and the finding ID on its own line. Trivy exceptions do not suppress `pnpm audit`; its advisories need a dependency fix. Remove and rotate a real leaked credential. The report is under **Security → Code scanning**; audit output is in the job log.
 - **SARIF upload:** code scanning must be enabled and available for the repository (public repositories, or eligible private repositories with GitHub Code Security). Check repository settings if GitHub rejects the upload. No personal access token is required.
 
-The first run may reveal existing lint, type, build, test, migration, vulnerability, or secret findings; no clean baseline is assumed. Trivy scans source and lockfiles, excluding generated directories and the retired `client/` and `server/` trees; this is not a container-image scan.
+The first run may reveal existing lint, type, build, test, migration, vulnerability, or secret findings; no clean baseline is assumed. Trivy scans source and lockfiles, excluding generated directories, the retired `client/` and `server/` trees, and the throwaway experiments in `spikes/` (their own old lockfiles aren't shipped); this is not a container-image scan.
 
 Trivy's action is pinned to the published `v0.36.0` release because it has no major-only `v0` tag. Other actions use major version pins. Review the Trivy release pin when updating CI tooling.

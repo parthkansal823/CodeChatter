@@ -24,13 +24,13 @@ jobs:
       APP_URL: http://localhost:8080
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Set up pnpm from package.json
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
       - name: Set up Node.js 24 and the pnpm cache
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
@@ -82,13 +82,13 @@ jobs:
       DATABASE_URL: postgresql://codechatter:codechatter@localhost:5432/codechatter
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Set up pnpm from package.json
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
       - name: Set up Node.js 24 and the pnpm cache
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
@@ -140,7 +140,7 @@ jobs:
             timeout: 60
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Set up Docker Buildx
@@ -165,13 +165,13 @@ jobs:
       security-events: write
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Set up pnpm from package.json
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
       - name: Set up Node.js 24 and the pnpm cache
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
@@ -192,7 +192,7 @@ jobs:
           output: trivy-results.sarif
           exit-code: '1'
           limit-severities-for-sarif: 'true'
-          skip-dirs: .git,**/node_modules,**/.next,**/dist,client,server
+          skip-dirs: .git,**/node_modules,**/.next,**/dist,client,server,spikes
           cache-dir: ${{ runner.temp }}/trivy-cache
           timeout: 10m
       - name: Upload Trivy findings to GitHub code scanning

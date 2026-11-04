@@ -52,6 +52,7 @@ function dateBound(value: string, end: boolean): string | null {
   // The next local midnight includes the whole chosen day even when daylight saving changes its length.
   if (end) {
     date.setDate(date.getDate() + 1);
+    date.setHours(0, 0, 0, 0);
     date.setMilliseconds(-1);
   }
   const iso = date.toISOString();
@@ -188,7 +189,7 @@ function OrganisationAudit({ org }: { org: { id: string; name: string } }) {
         {!filterError && events.isError && <div role="alert" className="flex flex-wrap items-center gap-2 text-xs"><p>{errorMessage(events.error, "Couldn't load the audit log. Try again.")}</p><Button size="xs" variant="outline" onClick={() => void events.refetch()}>Try again</Button></div>}
         {!filterError && (!events.isError || items.length > 0) && (
           <div className="overflow-hidden rounded-md border" aria-busy={events.isPending}>
-            <Table className="text-xs">
+            <Table className="min-w-3xl text-xs">
               <caption className="sr-only">Audit events in {org.name}</caption>
               <TableHeader><TableRow><TableHead className="h-8">When</TableHead><TableHead className="h-8">Who</TableHead><TableHead className="h-8">What</TableHead><TableHead className="h-8">Where</TableHead><TableHead className="h-8">Details</TableHead></TableRow></TableHeader>
               <TableBody>

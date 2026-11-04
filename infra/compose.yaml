@@ -4,8 +4,8 @@
 #
 #   docker compose --env-file infra/.env.production -f infra/compose.yaml up -d --build
 #
-# Only Caddy publishes ports. Postgres and Valkey are reachable from the app
-# containers alone.
+# Caddy publishes HTTP/HTTPS; LiveKit publishes media and TURN. Postgres and
+# Valkey are reachable from the app containers alone.
 name: codechatter
 
 x-build: &build
@@ -44,6 +44,7 @@ services:
       web: { condition: service_healthy }
       api: { condition: service_healthy }
       collab: { condition: service_healthy }
+      livekit: { condition: service_started }
 
   web:
     <<: *app
@@ -66,6 +67,9 @@ services:
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       RUNNER_URL: http://runner:4200
+      LIVEKIT_URL: ${LIVEKIT_URL:-wss://${DOMAIN}/livekit}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET}
     depends_on:
       migrate: { condition: service_completed_successfully }
       valkey: { condition: service_healthy }
@@ -78,6 +82,16 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       valkey: { condition: service_healthy }
+
+  # Signalling stays private behind Caddy. Media and TURN go straight to this host.
+  livekit:
+    <<: *app
+    image: livekit/livekit-server:v1.13.11
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET}"
+    ports: ["7881:7881/tcp", "7882:7882/udp", "3478:3478/udp"]
+    volumes: ["./livekit/livekit.yaml:/etc/livekit.yaml:ro"]
 
   # Run button and terminals: one sandbox container per room (ADR 0003). The
   # only service with the Docker socket; reachable only by the API.

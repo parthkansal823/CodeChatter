@@ -34,6 +34,11 @@
 		reverse_proxy collab:4100
 	}
 
+	# LiveKit signalling only; media and TURN use their own published ports.
+	handle_path /livekit* {
+		reverse_proxy livekit:7880
+	}
+
 	# Next.js
 	handle {
 		reverse_proxy web:3000

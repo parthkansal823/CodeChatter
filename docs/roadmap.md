@@ -245,7 +245,14 @@ Tests:
     - size, border, background (transparent, canvas or white), the grid
     - for PDF: fit to the drawing, or A4 or Letter in portrait or landscape
   - browser test 12/12, with Design
-- 🟡 **Flowchart:** Mermaid source edited together, with a live render. Handed to ChatGPT as `.mmd` files with a live preview: the brief is `docs/handoff/chatgpt-2-flowchart.md` (it needs the `mermaid` package).
+- ✅ **Flowchart:** Mermaid source edited together, with a live render. Written by ChatGPT:
+  - A room file named `*.mmd` or `*.mermaid` gets Mermaid colouring and a preview, beside the code (Ctrl+K V) or on its own (Ctrl+Shift+V). The preview redraws as anyone types.
+  - A mistake names its line ("Show in the code" jumps there), and the last good drawing stays up until it's fixed.
+  - It uses `mermaid` 11.17.2 in the web package.
+  - Files: `editor/mermaid-preview.tsx`, `mermaid-language.ts` and `preview-kind.ts`, and the `mmd` and `mermaid` languages in workspace-model.
+  - Tests:
+    - unit `preview-kind.test.ts` 6/6;
+    - browser `mermaid.e2e.mjs` 12/12 (two people, a live update, a mistake, the full preview).
 - ✅ **Notes:** shared notes, private notes, and a shared focus timer, in a Notes side panel (`tools/notes`) beside Chat and AI. The Docs tool keeps the pages that last; this is the scratchpad.
   - Room notes are rich text edited together, with carets. They live in `room:ID:notes`, which anyone who can chat may write, viewers included.
   - My notes are in `room:ID:mine:<your id>`, which collab opens for no one else. The AI's room activity leaves them out.
@@ -259,7 +266,7 @@ Tests:
     - **In the room:** the title bar's Call button says how many are in the call ("Join call (2)", from presence). The dock shows a tile per person (their camera, or their initial, with a ring while they speak) and a shared screen large. It has microphone, camera, screen and Leave, and any video can go picture-in-picture. Leaving the room leaves the call.
 
     Tests: unit 3/3 (the token), browser `call.e2e.mjs` 10/10 (two people with the browser's fake camera and microphone; video really flows).
-  - ⬜ **Production:** LiveKit and a TURN server in production compose and the Helm chart; a browser test of screen sharing.
+  - 🟡 **Production:** LiveKit and a TURN server in production compose and the Helm chart; a browser test of screen sharing. Compose and Helm are handed to ChatGPT: the brief is `docs/handoff/chatgpt-4-livekit-production.md`.
 - ✅ **GitHub:** import a repository, commit, push and open pull requests (done in section 14 E, through the GitHub API).
 - 🟡 **Files:** uploads (images and binaries in S3), zip import and export.
   - ✅ **Text files in and out** (`components/room/files-transfer.ts`, `lib/zip.ts`), from the Files view's menu (…).
@@ -357,24 +364,30 @@ Tests:
   - actions: run tests, AI agent, post to chat, email, Slack/Discord, HTTP request, checkpoint, GitHub PR
   - logic: conditions and delays
   - run history and retries
-- ⬜ **Outgoing webhooks:** signed with HMAC, with retries and a delivery log.
+- 🟡 **Outgoing webhooks:** signed with HMAC, with retries and a delivery log. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-6-webhooks.md`. It goes after the audit log, because both change `audit.service.ts`.
 - ⬜ **Public API** with personal access tokens, and a `cc` CLI that syncs a folder with a room.
 - ⬜ **CodeChatter MCP server:** Claude Code, Claude Desktop and Cursor can open rooms, read and edit files, and run code.
-- ⬜ **Dependency alerts (OSV)** and `devcontainer.json` support.
+- ⬜ **Dependency alerts (OSV)** and `devcontainer.json` support. The alerts are handed to ChatGPT: the brief is `docs/handoff/chatgpt-7-dependency-alerts.md`.
 
 ## 10. Hardening and launch ⬜
 
 - ⬜ **Sandbox and browser security:** gVisor runtime, CSP with nonces, and a separate origin for previews.
-- ⬜ **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups.
-- ⬜ **Load test:** k6, 50 rooms × 10 people, with 95% of updates delivered in under 150 ms.
+- ⬜ **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups. The metrics and dashboards are handed to ChatGPT: the brief is `docs/handoff/chatgpt-8-metrics.md`.
+- 🟡 **Load test:** 50 rooms × 10 people, with 95% of updates delivered in under 150 ms. It's a Node script with the real Hocuspocus client, because k6 can't speak Yjs. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-5-load-test.md`.
 - ⬜ **Accessibility:** an axe audit with zero violations. Lighthouse score of 90+ on marketing pages.
-- 🟡 **GitHub Actions CI:** lint, types, tests, e2e, image build, vulnerability scan. Written by ChatGPT from `docs/handoff/chatgpt-1-ci.md`: `.github/workflows/ci.yml`, `sandbox-full.yml` (a manual build of the full sandbox image), `docs/ci.md` and `.trivyignore`. Checked here before the first push:
+- 🟡 **GitHub Actions CI:** lint, types, tests, e2e, image build, vulnerability scan. Written by ChatGPT: `.github/workflows/ci.yml`, `sandbox-full.yml` (a manual build of the full sandbox image), `docs/ci.md` and `.trivyignore`. Checked here before the first push:
   - every action version it names exists;
   - `pnpm lint`, `pnpm typecheck` (15 tasks) and `pnpm test` (sandbox-agent 14, workspace-model 27, contracts 93, runner 57, auth 6, API 426) pass, as do the web's 200 and collab's 5 `node:test` tests;
   - all 7 migrations apply to an empty Postgres 18, and a second run changes nothing.
 
   - **Dependencies updated (2026-11-04)** so the security job passes: better-auth 1.7.16, Next 16.4.5 (two critical remote-code-execution fixes need 16.4.1 or later) and zod 4.6.7. `pnpm-workspace.yaml` overrides fix body-parser, multer, dompurify, undici, sharp and source-map-js within their majors. `pnpm audit --prod --audit-level=high` now finds no high or critical advisories (3 low and 10 moderate remain).
   - **Next 16.4** refuses the Monaco VS Code packages' `import * as css from "./x.css"`. A Turbopack rule (`next.config.ts`) sends their CSS through `scripts/monaco-css-loader.cjs`, which default-exports the text their `registerCss()` injects, with url()s (the icon font) kept as real assets. The editor test still passes 16/16.
+
+  - **First run on GitHub (2026-11-04) failed.** It's fixed here, waiting for the next push:
+    - **checks:** the committed `next.config.ts` had `turbopack:` twice, and TypeScript refuses a repeated key. The file now has one, the CSS-loader rule.
+    - **security:** Trivy found old Next and DOMPurify only in `spikes/s1-editor` and `spikes/s1b-next`, the throwaway experiments with their own lockfiles. `spikes` is now skipped, as `client` and `server` are. Trivy 0.70.0 (the action's version) over the committed files then passes, with no secrets found.
+    - **Node 20 warnings:** checkout, setup-node and pnpm/action-setup moved to `@v5`, which run on Node 24.
+    - **images** hadn't run yet (it waits for checks). The web image builds here as CI builds it (`next build` compiles in 42 s), and that build stage also makes the api, collab and runner outputs.
 
   Still to do:
   - end-to-end tests aren't in CI yet (they need the sandbox, so Docker and the dev stack).

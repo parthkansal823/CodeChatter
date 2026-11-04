@@ -1,4 +1,4 @@
-# Task for ChatGPT: the audit log page, with filters and CSV export, for CodeChatter
+# Task for ChatGPT: 
 
 You are helping build **CodeChatter v2**, a real-time collaborative IDE (shared code editor, a Docker sandbox per room, chat, room tools). Another AI is working on other parts of the codebase at the same time, so **only create or change the files listed under "Files you may touch"**.
 

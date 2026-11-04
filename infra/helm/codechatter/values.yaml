@@ -40,6 +40,39 @@ collab:
   replicas: 1
   resources: { requests: { cpu: 25m, memory: 128Mi }, limits: { memory: 512Mi } }
 
+# Calls: signalling goes through the edge; media and TURN go directly to this service.
+livekit:
+  enabled: true
+  image: livekit/livekit-server:v1.13.11
+  # Empty: url above, with ws:// or wss:// and /livekit appended.
+  url: ""
+  resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 512Mi } }
+  rtc:
+    tcpPort: 7881
+    udpPort: 7882
+    # Production: discover this node's public address. Behind a LoadBalancer, set false
+    # and nodeIp to its reachable IP; the advertised IP must deliver the ports below.
+    useExternalIp: true
+    nodeIp: ""
+    # Localhost-only demo: true, with nodeIp 127.0.0.1 and useExternalIp false.
+    enableLoopbackCandidate: false
+  turn:
+    enabled: true
+    # UDP only: networks blocking UDP need a separate TURN/TLS setup (README.md).
+    udpPort: 3478
+    # TURN normally denies private/loopback peers. Permit only the call server's
+    # exact IP/32 if it uses one of these addresses, never whole private networks.
+    allowRestrictedPeerCidrs: []
+  media:
+    service:
+      # Must support TCP and UDP. NodePort is an alternative; match its nodePorts
+      # to rtc.tcpPort, rtc.udpPort and turn.udpPort (README.md).
+      type: LoadBalancer
+      annotations: {}
+      externalTrafficPolicy: Local
+      loadBalancerIP: ""
+      nodePorts: { tcp: null, udp: null, turn: null }
+
 # Rooms' sandboxes, databases and package proxies, in namespaces cc-<namespace>-<room>.
 runner:
   namespace: demo
@@ -99,6 +132,8 @@ secrets:
   betterAuth: ""
   service: ""
   postgresPassword: ""
+  livekitApiKey: ""
+  livekitApiSecret: ""
 
 # For the Postgres and Valkey claims. Empty: the cluster's default.
 storageClass: ""
