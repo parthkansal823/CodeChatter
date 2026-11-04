@@ -245,22 +245,82 @@ Tests:
     - size, border, background (transparent, canvas or white), the grid
     - for PDF: fit to the drawing, or A4 or Letter in portrait or landscape
   - browser test 12/12, with Design
-- ⬜ **Flowchart:** Mermaid source edited together, with a live render.
-- ⬜ **Notes:** shared notes, private notes, and a shared focus timer.
-- ⬜ **Video and voice:** LiveKit (SFU with TURN), a dock and picture-in-picture, screen share.
+- 🟡 **Flowchart:** Mermaid source edited together, with a live render. Handed to ChatGPT as `.mmd` files with a live preview: the brief is `docs/handoff/chatgpt-2-flowchart.md` (it needs the `mermaid` package).
+- ✅ **Notes:** shared notes, private notes, and a shared focus timer, in a Notes side panel (`tools/notes`) beside Chat and AI. The Docs tool keeps the pages that last; this is the scratchpad.
+  - Room notes are rich text edited together, with carets. They live in `room:ID:notes`, which anyone who can chat may write, viewers included.
+  - My notes are in `room:ID:mine:<your id>`, which collab opens for no one else. The AI's room activity leaves them out.
+  - The focus timer (`focus-timer.ts`) is shared: a focus stretch (15, 25, 45 or 50 minutes), then a break (5, 10 or 15), and around again. Anyone who can chat can start, pause, skip or reset it, and everyone sees who started it. When a stretch ends, the first browser to notice moves it on, only once, and everyone gets a message.
+
+  Tests: timer 5/5, collab `notes-access.e2e.mjs` 4/4 (someone else's private notes are refused), browser `notes.e2e.mjs` 10/10 (two people).
+- 🟡 **Video and voice:** LiveKit (SFU with TURN), a dock and picture-in-picture, screen share.
+  - ✅ **Calls in development** (`components/room/call/`, `apps/api/src/calls/`).
+    - **Server:** the dev stack runs LiveKit 1.13.11 (`infra/livekit/livekit.dev.yaml`). Signalling goes through Caddy at `/livekit`; media goes straight to one muxed UDP port (7882), with TCP 7881 as a fallback.
+    - **Tokens:** `POST /api/rooms/:id/call` signs a 6-hour LiveKit token for anyone who can chat in the room. It's an HS256 JWT made with Node's crypto, no LiveKit server package; LiveKit validates it and rejects a forged one. In development it falls back to the dev key; production needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+    - **In the room:** the title bar's Call button says how many are in the call ("Join call (2)", from presence). The dock shows a tile per person (their camera, or their initial, with a ring while they speak) and a shared screen large. It has microphone, camera, screen and Leave, and any video can go picture-in-picture. Leaving the room leaves the call.
+
+    Tests: unit 3/3 (the token), browser `call.e2e.mjs` 10/10 (two people with the browser's fake camera and microphone; video really flows).
+  - ⬜ **Production:** LiveKit and a TURN server in production compose and the Helm chart; a browser test of screen sharing.
 - ✅ **GitHub:** import a repository, commit, push and open pull requests (done in section 14 E, through the GitHub API).
-- ⬜ **Files:** uploads (images and binaries in S3), zip import and export.
-- ⬜ **Notifications:** inbox with unread counts and an email digest, plus an activity feed per room.
-- ⬜ **Public rooms:** explore page, open read-only, fork into your own room.
+- 🟡 **Files:** uploads (images and binaries in S3), zip import and export.
+  - ✅ **Text files in and out** (`components/room/files-transfer.ts`, `lib/zip.ts`), from the Files view's menu (…).
+    - **Upload files, Upload a folder (keeping its paths), and Import a zip.** Dropping files or a zip from your computer works too, onto the list or onto a folder.
+    - **The zip reader needs no package:** it inflates with the browser's `DecompressionStream`, refuses paths that leave the folder, and stops at 5,000 entries or 100 MB unpacked whatever the headers claim.
+    - **What an import takes:** a zip whose files sit in one top folder (as GitHub's do) loses it. Binaries, files over 1 MB, and `.git` and `node_modules` are skipped, and the message says which and why.
+    - **Undo:** a History checkpoint of the files as they were comes first (kind `import`, "Before importing …"), so an import can be undone.
+    - **Download as zip** gives anyone who can see the room its code.
+
+    Tests: unit 10/10 (`lib/zip.test.ts`, `files-transfer.test.ts`), browser `files.e2e.mjs` 8/8.
+  - ⬜ **Binary files** (images, PDFs, fonts) stored in S3 (SeaweedFS in dev): the file tree needs a binary file kind, the sandbox agent needs to sync them, and the editor needs an image viewer.
+- ✅ **Notifications:** inbox with unread counts and an email digest, plus an activity feed per room (`apps/api/src/notifications`).
+  - **What notifies you:** being @mentioned by name in a room's chat ("@Ana", any case, names with spaces too). A reply on a code comment thread you're in, or a new comment that mentions you, with the file and line; your browser names who to tell, and the API only tells people in the room, with a rate limit. Someone joining a room you own, or asking to.
+  - **Delivery:** notifications go live to your own Socket.IO channel, wherever you're signed in, with a short message. The bell (room title bar and the app sidebar) counts the unread ones, lists them, and marks them read when opened or all at once.
+  - **Email digest:** whatever stays unread for an hour is emailed, at most once a day, and each notification only once. It can be turned off from the bell. Addresses that can't exist (test accounts) only go to a local mail catcher. The timings can be changed in env (`NOTIFICATION_DIGEST_*`, for tests). Migration `0006` adds `notifications.emailed_at` and `user_settings.email_digest`.
+  - **Activity** (a side tool) shows the last week: who edited what, by the hour (never anyone's private notes), commits, pull requests and publishing, saved and named checkpoints, who joined, and the repository's activity.
+  - A new route, `GET /rooms/:id/members`, lists the room's people (used for @mentions in comments).
+
+  Tests: unit 3/3 (mentions and wording), API `notifications.e2e.mjs` 13/13 (its own API on :4012, digest checked in Mailpit), browser `notifications.e2e.mjs` 10/10 (two people).
+- ✅ **Public rooms:** explore page, open read-only, fork into your own room.
+  - **Visibility:** people who manage a room switch it between private and public from the lock or globe beside its code in the title bar (`PATCH /api/rooms/:id`, which can also change the name, description and join policy; audited as `room.update`).
+  - **Explore** (`/explore`, `GET /api/rooms/explore?q=`) lists public rooms, most recently active first, searchable by name or description, with owner, members, and what each was forked from. Anyone signed in opens one read-only.
+  - **Fork** (title bar, for anyone who can see the room) makes a new private room of yours (`POST /api/rooms/:id/fork`). Your browser copies the code in as the files are now; docs, designs and chat stay in the original. The fork shows "forked from …" with a link.
+
+  Tests: browser `public-rooms.e2e.mjs` 10/10 (two people).
 
 ## 6. Pro editing 🟡
 
 - ✅ **Language servers in the sandbox:** Python (Pyright), Go, C/C++ (clangd), Rust. TypeScript runs in the browser. (Section 14 A.)
-- ⬜ **Time travel:** checkpoints (manual, automatic every 10 minutes, and before AI edits), a history slider, diff, and restore.
-- ⬜ **Inline comment threads** on code, anchored so they survive edits.
+- ✅ **Time travel:** checkpoints of the room's files in the `checkpoints` table, taken by collab from the live document (`apps/collab/src/extensions/checkpoints.ts`). They are made:
+  - automatically every 10 minutes while the files change, and when a room first loads;
+  - when someone saves one (by name or not);
+  - before a restore, and before every AI edit (agent steps, Replace file, and applying a proposed change).
+
+  A browser asks for one over its own connection (a Hocuspocus stateless message), so the checkpoint includes that browser's latest edits. Only people who can edit may ask, and everyone in the room hears when the list changes. Nothing is stored twice: an unchanged state returns the newest checkpoint. Old unnamed automatic ones are let go after 100 (50 for before-restore and before-AI ones); saved and named ones are kept.
+
+  The History view (activity bar, or the palette) has a slider from the oldest checkpoint to now and the files that differ from now. Each file opens as a diff (a shared `TextDiffView`, which source control now uses too). You can restore one file or all of them; a "Before restoring" checkpoint is saved first. You can also name or delete a checkpoint. The API (`/api/rooms/:id/checkpoints`) lists them, serves one's Yjs state for the browser to read, and handles naming and deleting.
+
+  Tests: unit 5/5 (`checkpoint-rules.test.ts`), collab `checkpoints.e2e.mjs` 10/10, browser `history.e2e.mjs` 14/14 (two people), and `source-control.e2e.mjs` still 19/19.
+- ✅ **Inline comment threads** on code, anchored so they survive edits. The threads are in a document of their own, `room:ID:comments`; collab lets anyone who can chat in the room write it, so viewers and runners can comment as well. The model is `packages/workspace-model/src/comments.ts`.
+
+  Each thread anchors to its code with Yjs relative positions into the files document. It moves with its code as people edit around it, says when that code has changed since the comment, and falls back to its line when the code is gone.
+
+  In the editor:
+  - Select code, then press Ctrl+Alt+M (a key in the shortcuts registry), right-click and choose Add a comment, or use the palette.
+  - The code is tinted, with a mark beside the line numbers that folds and unfolds the line's threads.
+  - Each open thread shows under its line. A view zone makes room, and the card sits over the editor, so typing in it never reaches the code. Ctrl+Enter sends a reply instead of running the file.
+  - You can reply, resolve and reopen; a reply reopens a resolved thread. You can edit and delete only your own messages, and deleting the last one takes the thread with it.
+
+  The Comments view (activity bar, with a count of open threads) lists every thread by file, open or resolved, and opens a thread at its code. Threads on deleted files are listed under Deleted files, where they can be removed.
+
+  Tests: model 7/7 (27/27 in the package), browser `code-comments.e2e.mjs` 19/19 (two people).
 - ✅ **Search and replace** across the workspace. (Section 14 A.)
 - ✅ **Split and diff editors**, up to a grid of four. (Section 14 A.)
-- 🟡 **Follow and Present mode:** see what a teammate sees. Follow is done (section 14 A); Present mode is not.
+- ✅ **Follow and Present mode:** see what a teammate sees (`editor/present.ts`).
+  - Following someone now keeps their scroll as well as their file. Each person's active editor publishes its first visible line as a Yjs relative position, so it holds while others edit above.
+  - Present (title bar or palette) puts a start time in your presence, and everyone else in the room follows you at once.
+  - The presenter's banner says who follows. A follower's banner offers Stop following; the same presentation then doesn't pull them back, and Follow rejoins.
+  - When the presentation ends, followers stop following. If two people present, the newest presentation wins.
+
+  Tests: browser `present.e2e.mjs` 13/13 (two people); `editor` 16/16 and `room-people` 7/7 still pass.
 - ✅ **Command palette and shortcuts:** one key registry (`editor/keybindings.ts`: every command's VS Code default and where it works) and one listener (`editor/shortcuts.ts`) for the editor's, the room's and the debugger's keys, which were three handlers before. Any command in the palette can be given keys, and so can Monaco's own editing commands. The shortcuts sheet (Ctrl+K Ctrl+S, the palette, or Settings) is searchable by name or key. You can add a key or a two-key chord, take one away, or reset one command or all. A key that another command had moves to the new one, with a note. Plain keys are refused, since they're for typing. Your keys are editor settings, so they follow your account. The palette and the title bar show your keys. Chords are registered in every code editor and notebook cell as well, because Monaco owns chords in there. Tests: unit 12/12, browser `shortcuts.e2e.mjs` 15/15; `editor`, `search`, `problems` and `debugger` still pass.
 - 🟡 **Source Control panel:** branch, diff, commit and push are done through the GitHub API (section 14 E); real git in the sandbox is not.
 - ✅ **Secret scanning** before a push (`apps/api/src/github/secret-scan.ts`). A commit, a publish or a gist with a key or password in it is refused with each finding: the file and line, what kind (AWS, GitHub, GitLab, Slack, Stripe, Google, OpenAI, Anthropic, npm and SendGrid keys, private keys, a password in a database URL, a secret in an `.env` file, a hard-coded secret). The preview shows only the key's ends. Source control and the gist dialog list the findings, and each one opens its file at that line. "Commit anyway" (or Publish, or Make it) sends it, and the audit log records where and what kind, never the secret. Placeholders, names, words, documentation values (`EXAMPLE`, `abcdefg…`), local database URLs and a line marked `gitleaks:allow` are let through; the repository's 692 files and every template scan clean. Tests: unit 11/11, the API's source-control e2e 55/55 (refused commit and publish, a gist sent anyway), browser `secret-scan.e2e.mjs` 8/8.
@@ -286,7 +346,7 @@ Tests:
   - profile
   - security: 2FA, active sessions
   - appearance, editor, notifications, connected accounts
-- ⬜ **Audit log:** filters and CSV export.
+- 🟡 **Audit log:** filters and CSV export. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-3-audit-log.md`.
 - ⬜ **Usage dashboard:** runs, AI tokens, sandbox minutes, with quotas.
 - ⬜ **Instance admin:** users, rooms, health.
 
@@ -308,7 +368,16 @@ Tests:
 - ⬜ **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups.
 - ⬜ **Load test:** k6, 50 rooms × 10 people, with 95% of updates delivered in under 150 ms.
 - ⬜ **Accessibility:** an axe audit with zero violations. Lighthouse score of 90+ on marketing pages.
-- ⬜ **GitHub Actions CI:** lint, types, tests, e2e, image build, vulnerability scan.
+- 🟡 **GitHub Actions CI:** lint, types, tests, e2e, image build, vulnerability scan. Written by ChatGPT from `docs/handoff/chatgpt-1-ci.md`: `.github/workflows/ci.yml`, `sandbox-full.yml` (a manual build of the full sandbox image), `docs/ci.md` and `.trivyignore`. Checked here before the first push:
+  - every action version it names exists;
+  - `pnpm lint`, `pnpm typecheck` (15 tasks) and `pnpm test` (sandbox-agent 14, workspace-model 27, contracts 93, runner 57, auth 6, API 426) pass, as do the web's 200 and collab's 5 `node:test` tests;
+  - all 7 migrations apply to an empty Postgres 18, and a second run changes nothing.
+
+  - **Dependencies updated (2026-11-04)** so the security job passes: better-auth 1.7.16, Next 16.4.5 (two critical remote-code-execution fixes need 16.4.1 or later) and zod 4.6.7. `pnpm-workspace.yaml` overrides fix body-parser, multer, dompurify, undici, sharp and source-map-js within their majors. `pnpm audit --prod --audit-level=high` now finds no high or critical advisories (3 low and 10 moderate remain).
+  - **Next 16.4** refuses the Monaco VS Code packages' `import * as css from "./x.css"`. A Turbopack rule (`next.config.ts`) sends their CSS through `scripts/monaco-css-loader.cjs`, which default-exports the text their `registerCss()` injects, with url()s (the icon font) kept as real assets. The editor test still passes 16/16.
+
+  Still to do:
+  - end-to-end tests aren't in CI yet (they need the sandbox, so Docker and the dev stack).
 - ⬜ **Cutover from v1:** move the data from MongoDB, then delete `client/` and `server/`.
 - ⬜ **Security review:** a final pass over everything above.
 

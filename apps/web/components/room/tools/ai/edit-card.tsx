@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { useRoom } from "@/components/room/room-context";
 import { Button } from "@/components/ui/button";
+import { checkpointBeforeAi } from "@/components/room/history/checkpoints";
 
 import { appliedToast, applyAiText, canUndoAi, fingerprint, matchTrailingNewline, resolveRange, undoAi } from "./ai-edit";
 import type { ChatEntry } from "./history";
@@ -21,7 +22,7 @@ type Props = {
 
 /** Under an Edit answer: review the proposed change as a side-by-side diff, then accept or reject it. */
 export function EditCard({ entry, code, setReview, patch }: Props) {
-  const { doc, can } = useRoom();
+  const { doc, can, provider, room } = useRoom();
   const target = entry.target;
   if (!target) return null;
 
@@ -45,7 +46,8 @@ export function EditCard({ entry, code, setReview, patch }: Props) {
       after,
       acceptLabel: "Accept change",
       ...(fingerprint(found.before) !== target.fingerprint && { warning: "This code changed after you asked, so the proposal was written for an older version." }),
-      onAccept: () => {
+      onAccept: async () => {
+        await checkpointBeforeAi(provider, room.id, `Before the AI changed ${target.path}`);
         const now = locate();
         if (!now || !applyAiText(doc, target.fileId, after, now.range)) return void toast.error("Couldn't apply: the code moved or was deleted.");
         patch({ edit: "applied" });

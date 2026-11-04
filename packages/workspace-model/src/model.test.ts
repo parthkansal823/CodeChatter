@@ -105,6 +105,10 @@ describe("workspace model", () => {
     expect(parseDocName("room:TEAM22:page:0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")).toEqual({ roomId: "TEAM22", kind: "page", id: "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" });
     expect(parseDocName("room:TEAM22:page:../../x")).toBeNull();
     expect(parseDocName("room:TEAM22:secrets")).toBeNull();
+    expect(parseDocName("room:TEAM22:notes")).toEqual({ roomId: "TEAM22", kind: "notes" });
+    expect(parseDocName("room:TEAM22:comments")).toEqual({ roomId: "TEAM22", kind: "comments" });
+    expect(parseDocName("room:TEAM22:mine:Ab3_xY9-Kq")).toEqual({ roomId: "TEAM22", kind: "mine", id: "Ab3_xY9-Kq" });
+    expect(parseDocName("room:TEAM22:mine:a.b/c:d")).toBeNull();
   });
 
   it("creates a file at a path, reusing folders that already exist", () => {

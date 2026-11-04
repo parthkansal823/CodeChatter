@@ -66,3 +66,23 @@ export function roomShareEmail(input: { inviterName: string; roomName: string; r
     </EmailLayout>,
   );
 }
+
+/** Unread notifications, at most once a day (api: notifications/digest). */
+export function notificationDigestEmail(input: { name: string; items: Array<{ text: string; url: string }>; more: number; inboxUrl: string }) {
+  const count = input.items.length + input.more;
+  return build(
+    count === 1 ? "1 thing you missed on CodeChatter" : `${count} things you missed on CodeChatter`,
+    <EmailLayout preview={input.items[0]?.text ?? "Your unread notifications"}>
+      <Heading>While you were away</Heading>
+      <Paragraph>Hi {input.name || "there"}, here’s what happened in your rooms.</Paragraph>
+      {input.items.map((item) => (
+        <Paragraph key={item.url + item.text}>
+          <a href={item.url}>{item.text}</a>
+        </Paragraph>
+      ))}
+      {input.more > 0 && <Paragraph>And {input.more} more.</Paragraph>}
+      <Action href={input.inboxUrl}>Open CodeChatter</Action>
+      <Paragraph>You get this when notifications stay unread for an hour. Turn it off from the bell in any room.</Paragraph>
+    </EmailLayout>,
+  );
+}

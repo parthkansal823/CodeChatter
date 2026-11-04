@@ -14,6 +14,12 @@ import { SourceControlController } from "./github/source-control.controller.js";
 import { SourceControlService } from "./github/source-control.service.js";
 import { WebhookController } from "./github/webhook.controller.js";
 import { HealthController } from "./health/health.controller.js";
+import { CallsController } from "./calls/calls.controller.js";
+import { CheckpointsController } from "./history/checkpoints.controller.js";
+import { ActivityService } from "./notifications/activity.service.js";
+import { NotificationsController } from "./notifications/notifications.controller.js";
+import { NotificationsService } from "./notifications/notifications.service.js";
+import { CheckpointsService } from "./history/checkpoints.service.js";
 import { HttpStudioController } from "./http-studio/http-studio.controller.js";
 import { HttpStudioService } from "./http-studio/http-studio.service.js";
 import { InfraModule } from "./infra/infra.module.js";
@@ -24,6 +30,7 @@ import { MessagesService } from "./messages/messages.service.js";
 import { EventsGateway } from "./realtime/events.gateway.js";
 import { MetaController } from "./meta/meta.controller.js";
 import { AuditService } from "./audit/audit.service.js";
+import { AuditController } from "./audit/audit.controller.js";
 import { RoomsController } from "./rooms/rooms.controller.js";
 import { RoomsRepository } from "./rooms/rooms.repository.js";
 import { RoomsService } from "./rooms/rooms.service.js";
@@ -51,10 +58,13 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, AiController, JudgeController, HttpStudioController, DemoController],
+  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController],
   providers: [
     AiService,
+    ActivityService,
     AuditService,
+    CheckpointsService,
+    NotificationsService,
     DemoService,
     GithubService,
     SourceControlService,

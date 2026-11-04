@@ -1,11 +1,15 @@
 "use client";
 
-import { ChevronRight, Link2, Lock, Globe2, Search, type LucideIcon } from "lucide-react";
+import { ChevronRight, Link2, Presentation, Search, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { LogoMark } from "@/components/brand/logo";
+import { NotificationsBell } from "@/components/notifications/notifications-bell";
+import { CallButton } from "@/components/room/call/call-dock";
+import { ForkButton } from "@/components/room/fork-dialog";
+import { VisibilityMenu } from "@/components/room/visibility-menu";
 import { PresenceAvatar } from "@/components/presence/presence";
 import { usePeers } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
@@ -13,7 +17,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { copyText } from "@/lib/clipboard";
 import { keyLabel, keysFor } from "@/components/room/editor/keybindings";
 import { useEditorSettings } from "@/components/room/editor/settings-store";
-import { openQuickOpen } from "@/components/room/editor/ui-store";
+import { openQuickOpen, useEditorUi } from "@/components/room/editor/ui-store";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -32,6 +36,7 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
   const peers = usePeers();
   // Go to file's key, as you've set it (keybindings.ts).
   const quickOpenKey = useEditorSettings((state) => keysFor("quick-open", state.keybindings)[0]);
+  const presenting = useEditorUi((state) => state.presenting !== null);
 
   async function copyCode() {
     if (await copyText(room.id)) toast.success(`Room code ${room.id} copied`);
@@ -60,10 +65,15 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
           </TooltipTrigger>
           <TooltipContent>Copy room code</TooltipContent>
         </Tooltip>
-        {room.visibility === "private" ? (
-          <Lock aria-label="Private room" className="size-3.5 text-muted-foreground" />
-        ) : (
-          <Globe2 aria-label="Public room" className="size-3.5 text-muted-foreground" />
+        <VisibilityMenu />
+        {room.forkedFrom && (
+          <Link
+            href={`/rooms/${room.forkedFrom.id}` as never}
+            className="hidden truncate text-xs text-muted-foreground hover:text-foreground lg:inline"
+            title="The room this one was forked from"
+          >
+            forked from {room.forkedFrom.name}
+          </Link>
         )}
       </nav>
 
@@ -135,9 +145,25 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
           </div>
         )}
         {actions}
+        <CallButton />
+        <ForkButton />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={presenting ? "secondary" : "ghost"}
+              size="sm"
+              aria-pressed={presenting}
+              onClick={() => useEditorUi.getState().setPresenting(!presenting)}
+            >
+              <Presentation /> {presenting ? "Presenting" : "Present"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{presenting ? "Stop presenting" : "Everyone in the room follows your file and scroll"}</TooltipContent>
+        </Tooltip>
         <Button variant="outline" size="sm" onClick={copyCode}>
           <Link2 /> Share
         </Button>
+        <NotificationsBell />
         <ThemeToggle />
       </div>
     </header>

@@ -43,6 +43,13 @@
       "when": 1792582180816,
       "tag": "0005_repo_webhook",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793329743479,
+      "tag": "0006_notification_digest",
+      "breakpoints": true
     }
   ]
 }

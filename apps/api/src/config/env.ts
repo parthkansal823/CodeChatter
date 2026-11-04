@@ -27,12 +27,25 @@ const Env = z.object({
   SMTP_USER: z.string().optional().default(""),
   SMTP_PASS: z.string().optional().default(""),
   MAIL_FROM: z.string().min(3),
+  /** How often the notification digest looks for unread notifications, and how long they wait first (tests shorten both). */
+  NOTIFICATION_DIGEST_CHECK_MS: z.coerce.number().int().min(1000).default(15 * 60_000),
+  NOTIFICATION_DIGEST_AFTER_MS: z.coerce.number().int().min(0).default(60 * 60_000),
+  /** At most one digest per person in this long. */
+  NOTIFICATION_DIGEST_EVERY_MS: z.coerce.number().int().min(0).default(20 * 60 * 60_000),
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GITHUB_CLIENT_ID: z.string().optional().default(""),
   GITHUB_CLIENT_SECRET: z.string().optional().default(""),
   /** Where repositories are imported from (github/github.service.ts); GitHub Enterprise has its own. */
   GITHUB_API_URL: z.url().default("https://api.github.com"),
+  /**
+   * Calls (LiveKit): the address browsers reach it at, and the API key and secret its
+   * tokens are signed with. In development they default to the dev stack's LiveKit
+   * (infra/livekit/livekit.dev.yaml); in production, calls are off until all three are set.
+   */
+  LIVEKIT_URL: z.string().trim().optional().default(""),
+  LIVEKIT_API_KEY: z.string().trim().optional().default(""),
+  LIVEKIT_API_SECRET: z.string().trim().optional().default(""),
   /** "Try the demo": one-click guest accounts (off unless set in production). */
   DEMO_ENABLED: z
     .enum(["true", "false", ""])

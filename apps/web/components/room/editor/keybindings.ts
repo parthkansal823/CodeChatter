@@ -27,6 +27,7 @@ export const DEFAULT_KEYS: Record<string, Default> = {
   "preview-side": { keys: ["Ctrl+K V"] },
   "preview-full": { keys: ["Ctrl+Shift+V"], where: "notInField" },
   zen: { keys: ["Ctrl+K Z"] },
+  "comment-add": { keys: ["Ctrl+Alt+M"], where: "notInField" },
   run: { keys: ["Ctrl+Enter"], where: "notOwnKey" },
   terminal: { keys: ["Ctrl+`"] },
   search: { keys: ["Ctrl+Shift+F"], where: "notOwnKey" },

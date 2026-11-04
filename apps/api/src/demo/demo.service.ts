@@ -9,8 +9,9 @@ import type { Env } from "../config/env.js";
 import { AUTH, DB, ENV, VALKEY } from "../infra/tokens.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 
-/** Every guest's email ends with this, which is how cleanup finds them. */
-export const GUEST_DOMAIN = "guest.codechatter.local";
+import { GUEST_DOMAIN } from "./guest-domain.js";
+
+export { GUEST_DOMAIN };
 
 const ANIMALS = ["Otter", "Falcon", "Lynx", "Heron", "Panda", "Koala", "Orca", "Fox", "Ibis", "Yak", "Gecko", "Puffin"];
 const GUEST_LIFETIME_MS = 24 * 60 * 60 * 1000;

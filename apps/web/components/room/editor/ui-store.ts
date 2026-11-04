@@ -36,12 +36,20 @@ type State = {
   diff: { leftId: string; rightId: string } | null;
   /** A path compared with the room's GitHub base (source-control/repo-diff-view.tsx), in place of the editor. */
   repoDiff: string | null;
+  /** A file as it was at a checkpoint beside the live file (the History view). */
+  historyDiff: { checkpointId: string; path: string } | null;
+  /** The checkpoint History compares with now (null: now), kept while the view is closed. */
+  historyCheckpoint: string | null;
   /** A pull request of the room's repository, reviewed in place of the editor (source-control/pull-request-view.tsx). */
   pullRequest: number | null;
   /** A Markdown, CSV or SVG file's preview (preview-kind.ts): off, beside the code (Ctrl+K V), or on its own (Ctrl+Shift+V). */
   filePreview: FilePreviewMode;
   /** User id of the person whose file and cursor this editor follows. */
   following: string | null;
+  /** When you started presenting (everyone follows you); null when you aren't. */
+  presenting: number | null;
+  /** A presentation you chose not to follow ("<user id>:<start>"), so it doesn't pull you back in. */
+  presentOptOut: string | null;
   /** Language modes picked by hand, by file id. They last until you leave the room. */
   languageOverrides: Record<string, string>;
   open: (overlay: Overlay) => void;
@@ -51,9 +59,13 @@ type State = {
   setSplitSlot: (slot: SplitSlot, fileId: string | null) => void;
   setDiff: (diff: State["diff"]) => void;
   setRepoDiff: (path: string | null) => void;
+  setHistoryDiff: (diff: { checkpointId: string; path: string } | null) => void;
+  setHistoryCheckpoint: (id: string | null) => void;
   setPullRequest: (number: number | null) => void;
   setFilePreview: (mode: FilePreviewMode) => void;
   follow: (userId: string | null) => void;
+  setPresenting: (on: boolean) => void;
+  setPresentOptOut: (key: string | null) => void;
   setLanguage: (fileId: string, language: string) => void;
   reset: () => void;
 };
@@ -66,9 +78,13 @@ const INITIAL = {
   splitBelowRightId: null,
   diff: null,
   repoDiff: null,
+  historyDiff: null,
+  historyCheckpoint: null,
   pullRequest: null,
   filePreview: "off" as FilePreviewMode,
   following: null,
+  presenting: null,
+  presentOptOut: null,
   languageOverrides: {},
 } satisfies Partial<State>;
 
@@ -87,10 +103,15 @@ export const useEditorUi = create<State>()((set) => ({
           : { splitBelowRightId: fileId },
     ),
   setDiff: (diff) => set({ diff }),
-  setRepoDiff: (repoDiff) => set({ repoDiff, pullRequest: null }),
-  setPullRequest: (pullRequest) => set({ pullRequest, repoDiff: null }),
+  setRepoDiff: (repoDiff) => set({ repoDiff, pullRequest: null, historyDiff: null }),
+  setHistoryDiff: (historyDiff) => set({ historyDiff, repoDiff: null, pullRequest: null }),
+  setHistoryCheckpoint: (historyCheckpoint) => set({ historyCheckpoint }),
+  setPullRequest: (pullRequest) => set({ pullRequest, repoDiff: null, historyDiff: null }),
   setFilePreview: (filePreview) => set({ filePreview }),
   follow: (following) => set({ following }),
+  // Presenting, you follow no one.
+  setPresenting: (on) => set(on ? { presenting: Date.now(), following: null } : { presenting: null }),
+  setPresentOptOut: (presentOptOut) => set({ presentOptOut }),
   setLanguage: (fileId, language) =>
     set((s) => ({ languageOverrides: { ...s.languageOverrides, [fileId]: language } })),
   reset: () => set(INITIAL),

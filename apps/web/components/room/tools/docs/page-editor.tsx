@@ -28,7 +28,7 @@ import { pendingContent } from "./templates";
 import "./docs.css";
 
 /** A remote caret: a 2px bar in the person's presence hue with their name flag, like the code editor's. */
-function renderCaret(user: Record<string, unknown>): HTMLElement {
+export function renderCaret(user: Record<string, unknown>): HTMLElement {
   const slot = asSlot(user.slot);
   const caret = document.createElement("span");
   caret.className = "cc-doc-caret";
@@ -41,7 +41,7 @@ function renderCaret(user: Record<string, unknown>): HTMLElement {
   return caret;
 }
 
-const renderSelection = (user: Record<string, unknown>) => ({
+export const renderSelection = (user: Record<string, unknown>) => ({
   nodeName: "span",
   class: "cc-doc-selection",
   style: `--caret: var(--p-${asSlot(user.slot)})`,

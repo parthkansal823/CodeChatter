@@ -7,6 +7,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 
 import { OrgSwitcher } from "@/components/app/org-switcher";
 import { UserMenu } from "@/components/app/user-menu";
+import { NotificationsBell } from "@/components/notifications/notifications-bell";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -37,6 +38,7 @@ function Sidebar({ me, onNavigate }: { me: Me; onNavigate?: () => void }) {
         <Link href="/dashboard" onClick={onNavigate} aria-label="CodeChatter home">
           <Logo />
         </Link>
+        <NotificationsBell className="ml-auto" />
       </div>
       <div className="px-3">
         <OrgSwitcher />

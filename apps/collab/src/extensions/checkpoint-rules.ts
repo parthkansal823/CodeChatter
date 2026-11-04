@@ -9,7 +9,7 @@ import type { CheckpointKind } from "@codechatter/contracts";
 export const AUTO_EVERY_MS = 10 * 60_000;
 
 /** Kept per room: the newest of each kind made by the system; named ones and saved ones are kept. */
-export const KEEP = { auto: 100, pre_restore: 50, pre_ai: 50 } as const;
+export const KEEP = { auto: 100, pre_restore: 50, pre_ai: 50, import: 50 } as const;
 
 type Latest = { kind: CheckpointKind; at: number } | null;
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { RoomCode } from "./rooms.js";
+import type { NotificationItem } from "./notifications.js";
 import type { RunExit, RunInfo, RunInput, RunSnapshot, RunStartInput } from "./run.js";
 
 export const MAX_MESSAGE_LENGTH = 4000;
@@ -32,6 +33,8 @@ export interface ServerToClientEvents {
   "run:started": (run: RunInfo) => void;
   "run:output": (event: { runId: string; data: string }) => void;
   "run:exit": (exit: RunExit) => void;
+  /** To one person, wherever they are signed in (their own channel). */
+  "notification:new": (notification: NotificationItem) => void;
 }
 
 export interface ClientToServerEvents {

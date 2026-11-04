@@ -53,6 +53,22 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
       head: at(selection.positionLineNumber, selection.positionColumn),
     });
   };
+  // The first line in view, for whoever follows you (present.ts): a position in the file's text, so it holds while others edit above.
+  let viewportTimer: ReturnType<typeof setTimeout> | undefined;
+  const publishViewport = () => {
+    clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(() => {
+      if (!isActiveEditor(editor)) return;
+      const model = editor.getModel();
+      const owner = modelOwner(model);
+      const line = editor.getVisibleRanges()[0]?.startLineNumber;
+      if (!model || !owner || !line) return;
+      awareness.setLocalStateField("viewport", {
+        fileId: owner.fileId,
+        top: Y.createRelativePositionFromTypeIndex(owner.ytext, model.getOffsetAt({ lineNumber: line, column: 1 })),
+      });
+    }, 80);
+  };
   const refreshInfo = () => {
     if (isActiveEditor(editor)) useEditorInfo.setState({ info: readInfo(editor) });
   };
@@ -62,10 +78,13 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
       setActiveEditor(editor);
       announceFile(editor);
       publishSelection();
+      publishViewport();
     }),
+    editor.onDidScrollChange(publishViewport),
     editor.onDidChangeModel(() => {
       if (isActiveEditor(editor)) announceFile(editor);
       publishSelection();
+      publishViewport();
       refreshInfo();
       // A search result opening this file: select the match once the file's saved place is restored.
       if (role === "primary") queueMicrotask(() => applyPendingReveal(editor));
@@ -85,6 +104,7 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
     refreshMarks: cursors.refresh,
     dispose: () => {
       const wasActive = getActiveEditor() === editor;
+      clearTimeout(viewportTimer);
       listeners.forEach((l) => l.dispose());
       cursors.dispose();
       breakpoints.dispose();

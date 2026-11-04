@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   customType,
   index,
   jsonb,
@@ -161,6 +162,8 @@ export const notifications = pgTable(
     roomId: text().references(() => rooms.id, { onDelete: "cascade" }),
     payload: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     readAt: timestamp({ withTimezone: true }),
+    /** When it went out in an email digest (api: notifications/notifications.service.ts); each goes once. */
+    emailedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index().on(t.userId, t.readAt, t.id.desc())],
@@ -194,6 +197,8 @@ export const userSettings = pgTable("user_settings", {
     .references(() => user.id, { onDelete: "cascade" }),
   editor: jsonb().$type<Record<string, unknown>>().notNull().default({}),
   themes: jsonb().$type<unknown[]>().notNull().default([]),
+  /** Email a digest of notifications left unread (on unless turned off). */
+  emailDigest: boolean().notNull().default(true),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -48,7 +48,41 @@ export type RoomSummary = {
   members: RoomMemberPreview[];
   updatedAt: string;
   lastActiveAt: string;
+  /** The room it was forked from (it may have been deleted since). */
+  forkedFrom?: { id: string; name: string } | null;
 };
+
+/** Change a room's name, description, who can see it, or how people join (owners and managers). */
+export const UpdateRoomInput = z
+  .object({
+    name: z.string().trim().min(1, "Give the room a name.").max(80, "Keep it under 80 characters.").optional(),
+    description: z.string().trim().max(280).optional(),
+    visibility: z.enum(["private", "public"]).optional(),
+    joinPolicy: z.enum(["invite", "approval", "open"]).optional(),
+  })
+  .refine((input) => Object.values(input).some((value) => value !== undefined), "Nothing to change.");
+export type UpdateRoomInput = z.infer<typeof UpdateRoomInput>;
+
+/** A public room, for the Explore page. */
+export type ExploreRoom = {
+  id: string;
+  name: string;
+  description: string;
+  templateId: string | null;
+  owner: string | null;
+  memberCount: number;
+  lastActiveAt: string;
+  forkedFrom: { id: string; name: string } | null;
+};
+
+/** Fork a room: a new room of yours, its code copied in by your browser (the room's own files document). */
+export const ForkRoomInput = z.object({
+  name: z.string().trim().min(1, "Give the room a name.").max(80, "Keep it under 80 characters."),
+});
+export type ForkRoomInput = z.infer<typeof ForkRoomInput>;
+
+/** A room's call: where LiveKit is, a token to join it with, and LiveKit's name for it. */
+export type CallJoin = { url: string; token: string; room: string };
 
 export type CreatedRoom = RoomSummary & { inviteToken: string; imported?: RepoImportSummary };
 

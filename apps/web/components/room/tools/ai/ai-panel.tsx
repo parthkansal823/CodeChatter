@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { checkpointBeforeAi } from "@/components/room/history/checkpoints";
 
 import { filesToAttach, isDecided, readPaths, resultsMessage, type ActionStep } from "./agent-runner";
 import { AgentReply } from "./agent-steps";
@@ -242,8 +243,9 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
       before,
       after,
       acceptLabel: "Replace file",
-      onAccept: () => {
+      onAccept: async () => {
         if (!can("files.edit")) return void toast.error("You can't edit files in this room.");
+        await checkpointBeforeAi(provider, room.id, `Before the AI replaced ${activeFile.path}`);
         if (applyAiText(doc, activeFile.id, after)) appliedToast(`Replaced ${activeFile.name}`, () => undoAi(doc, activeFile.id));
         else toast.error("That file no longer exists.");
       },

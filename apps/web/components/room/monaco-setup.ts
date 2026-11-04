@@ -17,6 +17,7 @@ import { configureMonacoYaml } from "monaco-yaml";
 
 import { openFromWorkbench, registerEditorOpenerOnce } from "@/components/room/editor/editor-opener";
 import { registerInlineCompletions } from "@/components/room/editor/inline-completions";
+import { registerMermaid } from "@/components/room/editor/mermaid-language";
 import { registerSandboxFormatters } from "@/components/room/editor/sandbox-format";
 import { registerSnippets } from "@/components/room/editor/snippet-provider";
 
@@ -117,6 +118,7 @@ export function ensureMonaco(): Promise<void> {
     });
     registerInlineCompletions();
     registerSnippets();
+    registerMermaid();
     registerSandboxFormatters();
     // Emmet abbreviations (ul>li*3, .card>h2+p) among the completions of HTML and CSS.
     emmetHTML(monaco, ["html"]);

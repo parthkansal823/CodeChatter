@@ -1,0 +1,39 @@
+/* Comment threads in Monaco (editor-comments.tsx): tokens only, so they follow the theme. */
+
+/* The code a thread is about. */
+.monaco-editor .cc-comment-range {
+  background: var(--brand-muted);
+}
+
+/* A thread's mark beside the line numbers: a small speech bubble; click to open or fold it. */
+.monaco-editor .cc-comment-glyph {
+  cursor: pointer;
+}
+
+.monaco-editor .cc-comment-glyph::before {
+  content: "";
+  display: block;
+  width: 9px;
+  height: 7px;
+  margin: 0.55em 0 0 3px;
+  border-radius: 2px;
+  background: var(--brand);
+}
+
+.monaco-editor .cc-comment-glyph::after {
+  content: "";
+  display: block;
+  width: 0;
+  height: 0;
+  margin-left: 4px;
+  border-top: 3px solid var(--brand);
+  border-right: 3px solid transparent;
+}
+
+.monaco-editor .cc-comment-glyph.cc-comment-resolved::before {
+  background: var(--muted-foreground);
+}
+
+.monaco-editor .cc-comment-glyph.cc-comment-resolved::after {
+  border-top-color: var(--muted-foreground);
+}

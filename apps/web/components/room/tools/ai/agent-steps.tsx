@@ -8,6 +8,7 @@ import { useRoom } from "@/components/room/room-context";
 import { useRun } from "@/components/room/run-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { checkpointBeforeAi } from "@/components/room/history/checkpoints";
 
 import { AiMarkdown } from "./ai-markdown";
 import { AI_ORIGIN, appliedToast, applyAiText, canUndoAi, matchTrailingNewline, undoAi } from "./ai-edit";
@@ -35,7 +36,7 @@ type Props = {
  * nothing until the person approves it. Edits open the diff review first.
  */
 export function AgentReply({ entry, segments, streaming, onStep, setReview }: Props) {
-  const { doc, room, me, can } = useRoom();
+  const { doc, room, me, can, provider } = useRoom();
   const run = useRun();
   const steps = entry.steps ?? {};
 
@@ -56,7 +57,9 @@ export function AgentReply({ entry, segments, streaming, onStep, setReview }: Pr
       before,
       after,
       acceptLabel: makesFile ? "Create file" : "Apply edit",
-      onAccept: () => {
+      onAccept: async () => {
+        // History can put the files back as they were before the AI changed them.
+        await checkpointBeforeAi(provider, room.id, `Before the AI changed ${action.path}`);
         let fileId = existingId;
         if (fileId) {
           if (!applyAiText(doc, fileId, after)) return onStep(index, { state: "failed", note: `${action.path} was deleted before the change could apply` });

@@ -21,8 +21,9 @@ export interface CollabContext {
  * The browser is same-origin (Caddy), so the Better Auth session cookie
  * arrives with the WebSocket upgrade: no token in the URL (v1 put the JWT in
  * the query string). The Origin header is checked so another site can't open
- * a socket with the user's cookie. Viewers get a read-only connection, which
- * Hocuspocus enforces server-side — their updates are rejected, not trusted.
+ * a socket with the user's cookie. Viewers get a read-only connection (but for
+ * the comments document, which they may write), which Hocuspocus enforces
+ * server-side — their updates are rejected, not trusted.
  */
 export function accessExtension(deps: { auth: Auth; db: Db; origins: OriginPolicy; serviceSecret: string }): Extension {
   return {
@@ -58,7 +59,12 @@ export function accessExtension(deps: { auth: Auth; db: Db; origins: OriginPolic
         member?.status === "active" ? member.role : room.visibility === "public" ? "viewer" : null;
       if (!can(role, "room.view")) throw new Error("no access");
 
-      connectionConfig.readOnly = !can(role, "files.edit");
+      // Private notes are their owner's alone.
+      if (parsed.kind === "mine" && parsed.id !== session.user.id) throw new Error("no access");
+      // Comment threads and the room's notes are a conversation: anyone who can chat may write them; private
+      // notes, their owner. Everything else is the room's work.
+      connectionConfig.readOnly =
+        parsed.kind === "mine" ? false : !can(role, parsed.kind === "comments" || parsed.kind === "notes" ? "room.chat" : "files.edit");
       return {
         userId: session.user.id,
         name: session.user.name,

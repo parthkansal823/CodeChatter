@@ -10,7 +10,7 @@ export const CHECKPOINT_KINDS = ["manual", "auto", "pre_restore", "pre_ai", "pre
 export type CheckpointKind = (typeof CHECKPOINT_KINDS)[number];
 
 /** The kinds a person (their browser) asks collab for; the rest are made by the system. */
-export const REQUESTED_CHECKPOINT_KINDS = ["manual", "pre_restore", "pre_ai"] as const;
+export const REQUESTED_CHECKPOINT_KINDS = ["manual", "pre_restore", "pre_ai", "import"] as const;
 export type RequestedCheckpointKind = (typeof REQUESTED_CHECKPOINT_KINDS)[number];
 
 export type CheckpointSummary = {

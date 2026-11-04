@@ -1,0 +1,16 @@
+# LiveKit (calls: video, voice, screen share) in development. Signalling reaches it through
+# Caddy at http://localhost:8080/livekit; media comes straight to this machine: one UDP port,
+# muxed (7882), with TCP 7881 for networks that block UDP. Browsers on this machine reach it
+# at 127.0.0.1, which is what it tells them.
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: false
+  node_ip: 127.0.0.1
+# The development key the API falls back to when .env names none (apps/api/src/calls). Never
+# use it anywhere real: production sets its own in the LiveKit config and LIVEKIT_* in .env.
+keys:
+  codechatter-dev: codechatter-dev-livekit-secret-not-for-production
+logging:
+  level: info

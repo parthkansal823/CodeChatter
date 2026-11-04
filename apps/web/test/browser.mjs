@@ -24,8 +24,9 @@ export function finish() {
   process.exit(passed === results.length ? 0 : 1);
 }
 
-export async function launch() {
-  const browser = await chromium.launch({ channel: "msedge", headless: process.env.HEADED !== "1" });
+/** `args`: extra browser switches (the call test's fake camera and microphone). */
+export async function launch({ args = [] } = {}) {
+  const browser = await chromium.launch({ channel: "msedge", headless: process.env.HEADED !== "1", args });
   const errors = [];
   return {
     browser,

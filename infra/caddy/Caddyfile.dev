@@ -26,6 +26,11 @@
 		reverse_proxy host.docker.internal:4000
 	}
 
+	# LiveKit's signalling for calls (path prefix stripped); media goes to it directly
+	handle_path /livekit* {
+		reverse_proxy livekit:7880
+	}
+
 	# Hocuspocus (path prefix stripped)
 	handle_path /collab* {
 		reverse_proxy host.docker.internal:4100

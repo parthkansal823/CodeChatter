@@ -33,6 +33,8 @@ const BY_EXTENSION: Record<string, string> = {
   scss: "scss",
   json: "json",
   md: "markdown",
+  mmd: "mermaid",
+  mermaid: "mermaid",
   yml: "yaml",
   yaml: "yaml",
   toml: "ini",

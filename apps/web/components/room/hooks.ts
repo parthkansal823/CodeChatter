@@ -52,7 +52,15 @@ export function usePeers(): Peer[] {
       const s = state as Partial<PresenceState>;
       // Not me, in this tab or any other; one person with two tabs shows once.
       if (clientId === awareness.clientID || !s.user || s.user.id === me.user.id) return;
-      if (!peers.has(s.user.id)) peers.set(s.user.id, { user: s.user, activeFileId: s.activeFileId ?? null, clientId });
+      if (!peers.has(s.user.id))
+        peers.set(s.user.id, {
+          user: s.user,
+          activeFileId: s.activeFileId ?? null,
+          presenting: s.presenting ?? null,
+          following: s.following ?? null,
+          inCall: s.inCall === true,
+          clientId,
+        });
     });
     return [...peers.values()];
     // eslint-disable-next-line react-hooks/exhaustive-deps

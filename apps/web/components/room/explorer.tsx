@@ -4,22 +4,49 @@ import {
   createFile,
   createFolder,
   move,
+  pathOf,
   rename,
   trash,
   validateName,
   type TreeNode,
 } from "@codechatter/workspace-model";
-import { ChevronRight, FilePlus2, FileText, Folder, FolderOpen, FolderPlus, Pencil, Trash2 } from "lucide-react";
-import { useState, type DragEvent } from "react";
+import {
+  ChevronRight,
+  Download,
+  FileArchive,
+  FilePlus2,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  FolderUp,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 import type * as Y from "yjs";
 
 import { Threads, type PresenceSlot } from "@/components/presence/presence";
+import { downloadZip, importSummary, planImport, readUpload } from "@/components/room/files-transfer";
+import { requestCheckpoint } from "@/components/room/history/checkpoints";
 import { useFileTree, usePeers } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
+import { roomTexts, writeFiles } from "@/components/room/source-control/room-files";
+import { safeName } from "@/components/room/tools/docs/zip";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { ZipError } from "@/lib/zip";
 
 type Draft = { kind: "file" | "folder"; parentId: string | null } | null;
 
@@ -44,8 +71,11 @@ type TreeCtx = {
 };
 
 export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null; onOpen: (node: TreeNode) => void }) {
-  const { doc, me, can } = useRoom();
+  const { doc, me, can, provider, room } = useRoom();
   const tree = useFileTree();
+  const pickFiles = useRef<HTMLInputElement>(null);
+  const pickFolder = useRef<HTMLInputElement>(null);
+  const pickZip = useRef<HTMLInputElement>(null);
   const peers = usePeers();
   const editable = can("files.edit");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(tree.filter((n) => n.kind === "folder").map((n) => n.id)));
@@ -54,6 +84,37 @@ export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null
   const [dropTarget, setDropTarget] = useState<string | "root" | null>(null);
 
   const expand = (id: string) => setExpanded((s) => new Set(s).add(id));
+
+  /**
+   * Files or a zip from your computer into the room (into a folder when dropped on one).
+   * A checkpoint comes first, so History can put the room back as it was.
+   */
+  async function importUpload(files: File[], folderId: string | null) {
+    if (!editable || !files.length) return;
+    const label = files.length === 1 ? files[0]!.name : `${files.length} files`;
+    const id = toast.loading(`Reading ${label}…`);
+    try {
+      const read = await readUpload(files);
+      const into = folderId ? (pathOf(doc, folderId) ?? "") : "";
+      const plan = planImport(read.entries, { into, existing: new Set(roomTexts(doc).keys()), fromZip: read.fromZip });
+      plan.skipped.unshift(...read.skipped);
+      if (!plan.files.size) {
+        const first = plan.skipped[0];
+        return void toast.error(first ? `Nothing to import: ${first.path} was skipped, because ${first.reason}.` : "Nothing to import.", { id });
+      }
+      await requestCheckpoint(provider, "import", `Before importing ${label}`.slice(0, 100)).catch(() => {});
+      writeFiles(doc, plan.files, me.user.id, "import");
+      if (folderId) expand(folderId);
+      toast.success(importSummary(plan), { id, duration: 8_000 });
+    } catch (error) {
+      toast.error(error instanceof ZipError ? error.message : "Couldn't import that. Try again.", { id });
+    }
+  }
+  const picked = (input: HTMLInputElement | null) => {
+    const files = [...(input?.files ?? [])];
+    if (input) input.value = "";
+    void importUpload(files, null);
+  };
 
   const ctx: TreeCtx = {
     doc,
@@ -97,6 +158,11 @@ export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null
     },
     drop: (event, folderId) => {
       event.preventDefault();
+      // Files from your computer, not a row being moved.
+      if (event.dataTransfer.files.length && !event.dataTransfer.getData("text/cc-node")) {
+        setDropTarget(null);
+        return void importUpload([...event.dataTransfer.files], folderId);
+      }
       setDropTarget(null);
       const id = event.dataTransfer.getData("text/cc-node");
       if (!id || id === folderId) return;
@@ -109,16 +175,66 @@ export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null
     <div className="flex h-full min-h-0 flex-col bg-panel">
       <div className="flex h-9 shrink-0 items-center gap-1 px-3">
         <span className="text-xs font-medium text-muted-foreground">Files</span>
-        {editable && (
-          <div className="ml-auto flex">
-            <Button variant="ghost" size="icon-xs" aria-label="New file" onClick={() => setDraft({ kind: "file", parentId: null })}>
-              <FilePlus2 />
-            </Button>
-            <Button variant="ghost" size="icon-xs" aria-label="New folder" onClick={() => setDraft({ kind: "folder", parentId: null })}>
-              <FolderPlus />
-            </Button>
-          </div>
-        )}
+        <div className="ml-auto flex">
+          {editable && (
+            <>
+              <Button variant="ghost" size="icon-xs" aria-label="New file" onClick={() => setDraft({ kind: "file", parentId: null })}>
+                <FilePlus2 />
+              </Button>
+              <Button variant="ghost" size="icon-xs" aria-label="New folder" onClick={() => setDraft({ kind: "folder", parentId: null })}>
+                <FolderPlus />
+              </Button>
+            </>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-xs" aria-label="More file actions">
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              {editable && (
+                <>
+                  <DropdownMenuItem onSelect={() => pickFiles.current?.click()}>
+                    <Upload className="size-4" /> Upload files…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => pickFolder.current?.click()}>
+                    <FolderUp className="size-4" /> Upload a folder…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => pickZip.current?.click()}>
+                    <FileArchive className="size-4" /> Import a zip…
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem
+                onSelect={() => {
+                  const count = downloadZip(doc, `${safeName(room.name, "room")}-${room.id}.zip`);
+                  toast.message(count === 1 ? "Downloading 1 file as a zip." : `Downloading ${count} files as a zip.`);
+                }}
+              >
+                <Download className="size-4" /> Download as zip
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {editable && (
+            <>
+              <input ref={pickFiles} type="file" multiple hidden aria-label="Files to upload" onChange={(e) => picked(e.currentTarget)} />
+              <input
+                ref={(input) => {
+                  pickFolder.current = input;
+                  // A folder picker keeps each file's path inside the folder.
+                  input?.setAttribute("webkitdirectory", "");
+                }}
+                type="file"
+                hidden
+                aria-label="Folder to upload"
+                onChange={(e) => picked(e.currentTarget)}
+              />
+              <input ref={pickZip} type="file" accept=".zip,application/zip" hidden aria-label="Zip to import" onChange={(e) => picked(e.currentTarget)} />
+            </>
+          )}
+        </div>
       </div>
       <div
         role="tree"

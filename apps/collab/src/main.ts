@@ -7,6 +7,7 @@ import { Redis } from "ioredis";
 
 import { loadEnv } from "./env.js";
 import { accessExtension } from "./extensions/access.js";
+import { checkpointsExtension } from "./extensions/checkpoints.js";
 import { persistenceExtension } from "./extensions/persistence.js";
 
 /**
@@ -51,6 +52,7 @@ const server = new Server({
     new RedisExtension({ createClient: () => new Redis(env.VALKEY_URL) }),
     accessExtension({ auth, db: handle.db, origins, serviceSecret: env.SERVICE_SECRET }),
     persistenceExtension(handle, instance),
+    checkpointsExtension(handle),
   ],
 });
 

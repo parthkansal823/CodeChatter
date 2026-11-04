@@ -47,6 +47,21 @@ function removeFile(doc: Y.Doc, path: string): void {
   if (node?.kind === "file") trash(doc, node.id);
 }
 
+/** Write these files (making any that aren't there), as one edit: an upload or a zip import. */
+export function writeFiles(doc: Y.Doc, files: FileMap, userId: string, origin: string): void {
+  doc.transact(() => {
+    for (const [path, text] of files) writeFile(doc, path, text, userId);
+  }, origin);
+}
+
+/** Make the room's files exactly these (a fork copies a room's code in this way), as one edit. */
+export function replaceFiles(doc: Y.Doc, files: FileMap, userId: string, origin: string): void {
+  doc.transact(() => {
+    for (const path of roomTexts(doc).keys()) if (!files.has(path)) removeFile(doc, path);
+    for (const [path, text] of files) writeFile(doc, path, text, userId);
+  }, origin);
+}
+
 /** A pull's merge, as one edit everyone sees, marked as the room's new sync. */
 export function applyPlan(doc: Y.Doc, plan: MergePlan, userId: string, sync: Omit<SyncMark, "at">): void {
   doc.transact(() => {
@@ -62,11 +77,21 @@ export function markSynced(doc: Y.Doc, sync: Omit<SyncMark, "at">): void {
 
 /** Put a changed file back as it is in the base: unedited, unmade or undeleted. */
 export function discardChange(doc: Y.Doc, change: Change, base: FileMap, userId: string): void {
+  putBack(doc, [change], base, userId, ORIGIN);
+}
+
+/**
+ * Put changed files back as they are in `base`, as one edit everyone sees (History's
+ * restore uses it with a checkpoint's files as the base).
+ */
+export function putBack(doc: Y.Doc, changes: readonly Change[], base: FileMap, userId: string, origin: string): void {
   doc.transact(() => {
-    const before = base.get(change.path);
-    if (before === undefined) removeFile(doc, change.path);
-    else writeFile(doc, change.path, before, userId);
-  }, ORIGIN);
+    for (const change of changes) {
+      const before = base.get(change.path);
+      if (before === undefined) removeFile(doc, change.path);
+      else writeFile(doc, change.path, before, userId);
+    }
+  }, origin);
 }
 
 /** Lines git would leave in a file it couldn't merge. */

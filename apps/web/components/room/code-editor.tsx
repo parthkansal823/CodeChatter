@@ -15,6 +15,7 @@ import { monacoOptions } from "@/components/room/editor/settings";
 import { currentSettings, useSettingsValues } from "@/components/room/editor/settings-store";
 import { useEditorUi } from "@/components/room/editor/ui-store";
 import { wireEditor } from "@/components/room/editor/wire-editor";
+import { EditorComments } from "@/components/room/code-comments/editor-comments";
 import { ensureMonaco, monaco } from "@/components/room/monaco-setup";
 import { useRoom } from "@/components/room/room-context";
 
@@ -159,6 +160,7 @@ export function CodeEditor({ file, role }: Props) {
       {file && settings.breadcrumbs && <Breadcrumbs editor={editor} file={file} onOpen={openHere} />}
       <div className="relative min-h-0 flex-1">
         <div ref={host} className="absolute inset-0" />
+        <EditorComments editor={editor} fileId={id} />
         {role === "primary" && <RemoteCursorStyles />}
         {!ready && <div className="absolute inset-0 animate-pulse bg-background" />}
       </div>

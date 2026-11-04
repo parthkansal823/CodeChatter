@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 import { CsvTable } from "./csv-table";
 import { MarkdownBody, useFileText } from "./markdown-preview";
+import { MermaidPreview } from "./mermaid-preview";
 import type { PreviewKind } from "./preview-kind";
 import { revealInFile } from "./reveal";
 import { SvgImage } from "./svg-image";
@@ -20,7 +21,7 @@ type Props = {
 
 /**
  * The open file's preview, live as people type: Markdown rendered, a CSV or TSV file as
- * a table, an SVG as an image. Beside the code (Ctrl+K V) or on its own (Ctrl+Shift+V).
+ * a table, an SVG as an image, or a Mermaid diagram. Beside the code (Ctrl+K V) or on its own (Ctrl+Shift+V).
  */
 export function FilePreview({ file, kind, mode, onMode }: Props) {
   const text = useFileText(file.id);
@@ -50,6 +51,8 @@ export function FilePreview({ file, kind, mode, onMode }: Props) {
         <MarkdownBody text={text} />
       ) : kind === "table" ? (
         <CsvTable text={text} name={file.name} onShowLine={showLine} />
+      ) : kind === "diagram" ? (
+        <MermaidPreview key={file.id} cacheKey={file.id} text={text} name={file.name} onShowLine={showLine} />
       ) : (
         <SvgImage text={text} name={file.name} />
       )}

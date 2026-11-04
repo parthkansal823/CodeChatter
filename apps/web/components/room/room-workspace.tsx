@@ -11,10 +11,12 @@ import {
   Image as ImageIcon,
   Bug,
   GitBranch,
+  History,
   ListTree,
   Rows2,
   SquareX,
   MessageSquare,
+  MessagesSquare,
   Search,
   SquareTerminal,
   Table2,
@@ -23,6 +25,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { usePanelRef } from "react-resizable-panels";
+import { toast } from "sonner";
 
 import { BottomPanel, MAX_TERMINALS, type PanelTab, type RunningTask } from "@/components/room/bottom-panel";
 import { ChatPanel } from "@/components/room/chat-panel";
@@ -75,6 +78,15 @@ import { PullRequestView } from "@/components/room/source-control/pull-request-v
 import { GistDialog } from "@/components/room/source-control/gist-dialog";
 import { RepoDiffView } from "@/components/room/source-control/repo-diff-view";
 import { SourceControlView } from "@/components/room/source-control/source-control-view";
+import { HistoryDiffView } from "@/components/room/history/history-diff-view";
+import { HistoryView } from "@/components/room/history/history-view";
+import { CommentsView, OpenCommentsCount } from "@/components/room/code-comments/comments-view";
+import { startCommentAt } from "@/components/room/code-comments/editor-comments";
+import { getActiveEditor } from "@/components/room/editor/active-editor";
+import { usePresentMode } from "@/components/room/editor/present";
+import { PresentBanner } from "@/components/room/present-banner";
+import { CallDock } from "@/components/room/call/call-dock";
+import { requestCheckpoint } from "@/components/room/history/checkpoints";
 import { useRoomRepo } from "@/components/room/source-control/use-repo";
 import { StatusBar } from "@/components/room/status-bar";
 import { TaskPicker } from "@/components/room/task-picker";
@@ -104,7 +116,7 @@ export default function RoomWorkspace({ room, me }: { room: RoomSummary; me: Me 
 type Right = string;
 
 function Workspace() {
-  const { room, doc, synced, can } = useRoom();
+  const { room, doc, provider, synced, can } = useRoom();
   useInlineCompletions();
   // Your editor settings and themes, from and to your account.
   useSettingsSync();
@@ -127,7 +139,7 @@ function Workspace() {
   const tabs = useRoomTabs(room.id);
   const { open, close, prune } = useTabs();
   // The left sidebar: the file list, Search, the Outline or Source control, or none. Clicking the open one's icon closes it.
-  const [sidebar, setSidebar] = useState<"files" | "search" | "outline" | "scm" | "debug" | null>("files");
+  const [sidebar, setSidebar] = useState<"files" | "search" | "outline" | "scm" | "history" | "comments" | "debug" | null>("files");
   // Source control: for a room on GitHub, and publishing one that isn't.
   const repo = useRoomRepo();
   const [gistOpen, setGistOpen] = useState(false);
@@ -378,11 +390,13 @@ function Workspace() {
       splitBelowRightId: state.splitBelowRightId,
       diff: state.diff,
       repoDiff: state.repoDiff,
+      historyDiff: state.historyDiff,
       pullRequest: state.pullRequest,
       setFilePreview: state.setFilePreview,
       setSplit: state.setSplit,
       setDiff: state.setDiff,
       setRepoDiff: state.setRepoDiff,
+      setHistoryDiff: state.setHistoryDiff,
       setPullRequest: state.setPullRequest,
       follow: state.follow,
     })),
@@ -403,8 +417,10 @@ function Workspace() {
   // Leaving the room leaves its editor layout behind.
   useEffect(() => () => useEditorUi.getState().reset(), [room.id]);
 
-  // Following someone: their file opens for you as they move between files.
+  // Following someone: their file opens for you as they move between files (and present.ts keeps their scroll).
   const followed = following ? peers.find((peer) => peer.user.id === following) : undefined;
+  const present = usePresentMode();
+  const presenting = useEditorUi((state) => state.presenting);
   useEffect(() => {
     const id = followed?.activeFileId;
     if (id && id !== tabs.active && files.has(id)) open(room.id, id);
@@ -436,6 +452,45 @@ function Workspace() {
       label: sidebar === "outline" ? "Hide the outline" : "Show the outline",
       run: () => setSidebar(sidebar === "outline" ? null : "outline"),
     },
+    {
+      id: "present",
+      label: presenting ? "Stop presenting" : "Present to the room",
+      run: () => useEditorUi.getState().setPresenting(!presenting),
+    },
+    {
+      id: "comments",
+      label: sidebar === "comments" ? "Hide comments" : "Show comments",
+      run: () => setSidebar(sidebar === "comments" ? null : "comments"),
+    },
+    ...(can("room.chat")
+      ? [
+          {
+            id: "comment-add",
+            label: "Add a comment on the selection",
+            run: () => {
+              if (!startCommentAt(getActiveEditor())) return void toast.error("Open a file first: a comment goes on its code.");
+            },
+          },
+        ]
+      : []),
+    {
+      id: "history",
+      label: sidebar === "history" ? "Hide history" : "Show history",
+      run: () => setSidebar(sidebar === "history" ? null : "history"),
+    },
+    ...(can("files.edit")
+      ? [
+          {
+            id: "checkpoint",
+            label: "Save a checkpoint of the files",
+            run: () =>
+              void requestCheckpoint(provider, "manual").then(
+                () => toast.success("Saved a checkpoint of the files. History has it."),
+                (error: unknown) => toast.error(error instanceof Error ? error.message : "Couldn't save the checkpoint."),
+              ),
+          },
+        ]
+      : []),
     {
       id: "source-control",
       label: repo === null ? "Publish the room to GitHub" : "Show source control",
@@ -475,6 +530,7 @@ function Workspace() {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
+      <CallDock />
       <TitleBar
         actions={<RunButton file={activeFile} onRun={runActive} onPreview={openPreview} />}
         side={{
@@ -520,6 +576,21 @@ function Workspace() {
               onClick={() => setSidebar(sidebar === "scm" ? null : "scm")}
             >
               <GitBranch className="size-[18px]" />
+            </ActivityButton>
+            <ActivityButton
+              label="History"
+              active={sidebar === "history"}
+              onClick={() => setSidebar(sidebar === "history" ? null : "history")}
+            >
+              <History className="size-[18px]" />
+            </ActivityButton>
+            <ActivityButton
+              label="Comments"
+              active={sidebar === "comments"}
+              onClick={() => setSidebar(sidebar === "comments" ? null : "comments")}
+            >
+              <MessagesSquare className="size-[18px]" />
+              {sidebar !== "comments" && <OpenCommentsCount />}
             </ActivityButton>
             <ActivityButton
               label="Run and debug"
@@ -574,6 +645,10 @@ function Workspace() {
                   <OutlineView />
                 ) : sidebar === "scm" ? (
                   <SourceControlView onOpen={openFile} />
+                ) : sidebar === "history" ? (
+                  <HistoryView />
+                ) : sidebar === "comments" ? (
+                  <CommentsView />
                 ) : sidebar === "debug" ? (
                   <DebugView activeFile={activeFile} />
                 ) : (
@@ -674,22 +749,12 @@ function Workspace() {
                             </>
                           }
                         />
-                        {followed && (
-                          <div
-                            role="status"
-                            className="flex h-7 shrink-0 items-center gap-2 border-b bg-brand-muted/40 px-3 text-xs"
-                          >
-                            <Eye className="size-3.5" /> Following {followed.user.name}: their file opens for
-                            you as they move.
-                            <button
-                              type="button"
-                              className="ml-auto font-medium underline-offset-2 hover:underline"
-                              onClick={() => editorUi.follow(null)}
-                            >
-                              Stop following
-                            </button>
-                          </div>
-                        )}
+                        <PresentBanner
+                          presenter={present.presenter}
+                          followers={present.followers}
+                          followed={followed}
+                          presentationKey={present.presentationKey}
+                        />
                         <div className="min-h-0 flex-1">
                           {editorUi.pullRequest ? (
                             <PullRequestView
@@ -700,6 +765,12 @@ function Workspace() {
                             <RepoDiffView
                               path={editorUi.repoDiff}
                               onClose={() => editorUi.setRepoDiff(null)}
+                            />
+                          ) : editorUi.historyDiff ? (
+                            <HistoryDiffView
+                              checkpointId={editorUi.historyDiff.checkpointId}
+                              path={editorUi.historyDiff.path}
+                              onClose={() => editorUi.setHistoryDiff(null)}
                             />
                           ) : diffFiles ? (
                             <DiffView

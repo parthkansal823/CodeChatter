@@ -1,4 +1,5 @@
 export * from "./ai.js";
+export * from "./audit.js";
 export * from "./chat.js";
 export * from "./check.js";
 export * from "./databases.js";
@@ -6,6 +7,7 @@ export * from "./github.js";
 export * from "./history.js";
 export * from "./http-studio.js";
 export * from "./kubernetes.js";
+export * from "./notifications.js";
 export * from "./permissions.js";
 export * from "./room-config.js";
 export * from "./rooms.js";

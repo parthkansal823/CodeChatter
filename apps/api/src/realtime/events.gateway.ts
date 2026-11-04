@@ -26,12 +26,14 @@ import type { Server, Socket } from "socket.io";
 
 import { AUTH, ORIGINS } from "../infra/tokens.js";
 import { MessagesService } from "../messages/messages.service.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js";
 
 type SocketData = { session: AuthSession };
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 const channel = (roomId: string) => `room:${roomId}`;
+const userChannel = (userId: string) => `user:${userId}`;
 
 /**
  * Room events over Socket.IO (chat now; notifications and run output next).
@@ -52,6 +54,7 @@ export class EventsGateway implements OnGatewayInit {
     private readonly rooms: RoomsService,
     private readonly messages: MessagesService,
     private readonly runner: RunnerClient,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -60,12 +63,15 @@ export class EventsGateway implements OnGatewayInit {
    * "room:join", which could arrive before the session was attached.)
    */
   afterInit(server: Server) {
+    this.notifications.setPush((userId, item) => this.server.to(userChannel(userId)).emit("notification:new", item));
     server.use(async (socket, next) => {
       try {
         if (!this.origins.isAllowed(socket.handshake.headers.origin)) return next(new Error("forbidden origin"));
         const session = await this.auth.api.getSession({ headers: fromNodeHeaders(socket.handshake.headers) });
         if (!session) return next(new Error("not signed in"));
         (socket as RoomSocket).data.session = session;
+        // Their own channel, for notifications wherever they're signed in.
+        void socket.join(userChannel(session.user.id));
         next();
       } catch (error) {
         this.logger.warn(`socket auth failed: ${String(error)}`);
@@ -110,6 +116,8 @@ export class EventsGateway implements OnGatewayInit {
       return { ok: false, error: "You can't post in this room." };
     }
     const message = await this.messages.create({ ...input.data, userId: session.user.id });
+    // People mentioned by name hear about it wherever they are.
+    void this.notifications.notifyMentions(input.data.roomId, session.user.id, message.body).catch((error) => this.logger.warn(`mentions: ${String(error)}`));
     // Everyone else gets it from the broadcast; the sender from the ack.
     socket.to(channel(input.data.roomId)).emit("chat:message", message);
     this.logger.debug(`chat ${input.data.roomId} ${message.id}`);

@@ -31,6 +31,14 @@ services:
     ports: ["8333:8333"]
     volumes: ["seaweed-data:/data", "./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro"]
 
+  # Calls in rooms (video, voice, screen share): LiveKit's media server. Signalling goes
+  # through Caddy (/livekit); media straight to 7882/udp, or 7881/tcp. See livekit/livekit.dev.yaml.
+  livekit:
+    image: livekit/livekit-server:v1.13.11
+    command: --config /etc/livekit.yaml
+    ports: ["7880:7880", "7881:7881", "7882:7882/udp"]
+    volumes: ["./livekit/livekit.dev.yaml:/etc/livekit.yaml:ro"]
+
   caddy:
     image: caddy:2.11-alpine
     ports: ["8080:8080"]

@@ -1,7 +1,7 @@
 import type { AiStatus, AiTokenCount, AiUsage } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { and, count, eq, gte, like, max, min } from "drizzle-orm";
+import { and, count, eq, gte, like, max, min, notLike } from "drizzle-orm";
 import type { Redis } from "ioredis";
 
 import type { Env } from "../config/env.js";
@@ -111,7 +111,8 @@ export class AiService {
       .from(docUpdates)
       .leftJoin(user, eq(docUpdates.userId, user.id))
       // Room codes are 6 letters and digits, so they can't carry LIKE wildcards.
-      .where(and(like(docUpdates.docName, `room:${roomId}:%`), gte(docUpdates.ts, since)))
+      // Someone's private notes (room:ID:mine:USER) aren't the room's activity.
+      .where(and(like(docUpdates.docName, `room:${roomId}:%`), notLike(docUpdates.docName, `room:${roomId}:mine:%`), gte(docUpdates.ts, since)))
       .groupBy(docUpdates.docName, user.name)
       .limit(200);
     return rows.flatMap((row) => (row.first && row.last ? [{ docName: row.docName, who: row.who, edits: row.edits, first: row.first, last: row.last }] : []));
