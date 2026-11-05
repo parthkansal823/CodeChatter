@@ -119,6 +119,16 @@ mail:
 # Production: false.
 seed: true
 
+# Rooms' binary files (images, PDFs, fonts) go to an S3-compatible bucket, which the API and the
+# runner both reach (docs/deploy.md "Binary files"). Empty endpoint: binary files are off.
+objectStore:
+  endpoint: ""
+  region: us-east-1
+  bucket: ""
+  # Kept in the app's Secret.
+  accessKey: ""
+  secretKey: ""
+
 ai:
   # none, ollama, anthropic, gemini or openai: apps/api/src/ai (and .env.example).
   provider: none

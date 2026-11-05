@@ -4,6 +4,7 @@ import {
   DuckdbPreviewInput,
   DuckdbQueryInput,
   DuckdbTarget,
+  GitRunnerRequest,
   INSTALLS_MINUTES,
   JudgeInput,
   KubeRequest,
@@ -29,6 +30,7 @@ import { z } from "zod";
 
 import { checkRoom } from "./check.js";
 import { devStatus, startDev, stopDev } from "./dev-server.js";
+import { GitError, runGit } from "./git.js";
 import { duckdbFiles, duckdbPreview, duckdbQuery, duckdbTables } from "./duckdb.js";
 import type { Env } from "./env.js";
 import { judge } from "./judge.js";
@@ -84,6 +86,7 @@ import { openTerminal } from "./terminal.js";
  *   GET  /rooms/:id/sqlite/dump?path=     a backup as SQL, streamed
  *   POST /rooms/:id/sqlite/load?path=     SQL (the body, or &file= one of the room's) run into it
  *   POST /rooms/:id/check                 RoomCheck: the project-wide checkers over the room's files (check.ts)
+ *   POST /rooms/:id/git                   { request, author? } git in the sandbox: status, init, stage, unstage, discard, commit, show, log, branches, checkout (git.ts)
  *   GET  /rooms/:id/duckdb                DuckdbListing: DuckDB files and data files (CSV, Parquet, JSON) in the sandbox (duckdb.ts)
  *   POST /rooms/:id/duckdb/tables|query|preview   { path?, … } as for SQLite; without a path, DuckDB over the room's data files
  *   ANY  /rooms/:id/preview/:port/* dev-server preview (HTTP and WebSocket)
@@ -161,6 +164,8 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (sqlite) return handleSqlite(req, res, url, sqlite[1]!, sqlite[2]);
     const check = /^\/rooms\/([A-Z0-9]{6})\/check$/.exec(url.pathname);
     if (check && req.method === "POST") return handleCheck(req, res, check[1]!);
+    const gitRoute = /^\/rooms\/([A-Z0-9]{6})\/git$/.exec(url.pathname);
+    if (gitRoute && req.method === "POST") return handleGit(req, res, gitRoute[1]!);
     const duckdb = /^\/rooms\/([A-Z0-9]{6})\/duckdb(?:\/(tables|query|preview))?$/.exec(url.pathname);
     if (duckdb) return handleDuckdb(req, res, duckdb[1]!, duckdb[2]);
 
@@ -430,6 +435,29 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       return json(res, 200, await checkRoom(session));
     } catch (error) {
       if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Git in the room's sandbox (git.ts). The API has checked the caller may run code (and
+   * edit, for changes) and added the author of a commit. The caller's edits reach the
+   * sandbox first, as for a Run.
+   */
+  async function handleGit(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const body = GitRunnerRequest.safeParse(await readJson(req, 64 * 1024));
+    if (!body.success) return json(res, 400, { error: body.error.issues[0]?.message ?? "Not a request the panel makes." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      const { request, author } = body.data;
+      if ("stateVector" in request && request.stateVector) await session.sync.waitFor(request.stateVector);
+      await session.sync.flush();
+      return json(res, 200, await runGit(session, request, author));
+    } catch (error) {
+      if (error instanceof GitError || error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
       throw error;
     }
   }

@@ -72,6 +72,7 @@ Set these in your values:
 - `images.registry` and a pinned `images.tag`; `runner.sandbox.image` pinned too, with `runner.sandbox.pull: IfNotPresent`.
 - `seed: false`, and `mail.mailpit: false` with your `mail.smtp`.
 - `postgres.externalUrl` (a managed database, or CloudNativePG) and `valkey.externalUrl`, or keep the bundled ones with a backup plan.
+- `objectStore` (endpoint, region, bucket, accessKey, secretKey): an S3-compatible bucket for rooms' binary files (images, PDFs, fonts), reached by the API and the runner. Without it, binary files are off and uploads say so (`docs/deploy.md`, Binary files).
 - Secrets: give `secrets.*`, or let the chart generate them on install. It keeps them on upgrades.
 - The cluster must enforce NetworkPolicies (Calico, Cilium, or kindnet with kube-network-policies, as on Docker Desktop).
 - The kubelet should set a pod process limit (`podPidsLimit`). The sandbox limits its own processes, but databases rely on the node's limit.

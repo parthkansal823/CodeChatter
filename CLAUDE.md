@@ -1,6 +1,6 @@
 # CodeChatter v2
 
-A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-room Docker sandbox, chat, and plug-in room tools. Status and plan: `docs/roadmap.md`. Deploy: `docs/deploy.md`.
+A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-room Docker sandbox, chat, and plug-in room tools. The pathway (stages and status): `docs/roadmap.md`; what's left, in order: `docs/pending.md`; how each piece was built: `docs/roadmap-details.md`. Deploy: `docs/deploy.md`.
 
 ## Rules (the owner insists)
 
@@ -16,7 +16,7 @@ A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-r
 - Read only what the task needs: grep first, then read the relevant lines. Don't open `client/`, `server/` (v1, being retired), `spikes/`, `node_modules`, or `dist`.
 - Pipe long output through `tail`/`grep`. Don't rerun slow commands to re-read output.
 - Work one piece at a time in the main session; no parallel subagents (they hit the usage limit together and leave half-built code). Never run agents on Sonnet.
-- After each finished piece, update its status in `docs/roadmap.md`.
+- After each finished piece, update both `docs/roadmap.md` (its line turns ✅) and `docs/pending.md` (it leaves; anything new that's left goes in), and add its write-up (what, where, tests) to `docs/roadmap-details.md`.
 - Keep messages short; report results, not process.
 
 ## Layout

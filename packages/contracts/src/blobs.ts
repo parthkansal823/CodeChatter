@@ -13,9 +13,14 @@ export const BlobRef = z.object({
 });
 export type BlobRef = z.infer<typeof BlobRef>;
 
+/** Where all of a room's blobs are (deleted with the room). */
+export function roomBlobPrefix(roomId: string): string {
+  return `rooms/${roomId}/`;
+}
+
 /** The object key for a room's blob. Rooms never share keys: a fork copies its blobs. */
 export function blobKey(roomId: string, sha256: string): string {
-  return `rooms/${roomId}/${sha256}`;
+  return `${roomBlobPrefix(roomId)}${sha256}`;
 }
 
 /** Largest file someone can upload into a room. */

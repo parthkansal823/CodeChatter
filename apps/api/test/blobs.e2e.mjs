@@ -7,7 +7,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import { objectStoreFromEnv } from "@codechatter/auth/s3";
-import { blobKey } from "@codechatter/contracts";
+import { blobKey, roomBlobPrefix } from "@codechatter/contracts";
 
 const BASE = process.env.APP_URL ?? "http://localhost:8080";
 const ROOM = "E2ETST";
@@ -122,6 +122,8 @@ try {
   if (other) {
     const gone = await owner(`/api/rooms/${other}`, { method: "DELETE" });
     check("delete the disposable room", gone.status === 204, gone.status);
+    const left = await store?.list(roomBlobPrefix(other));
+    check("deleting a room deletes its stored files", left?.keys.length === 0, JSON.stringify(left?.keys));
   }
   for (const key of stored) await store?.delete(key).catch(() => undefined);
   check("stored objects cleaned up", store !== null);

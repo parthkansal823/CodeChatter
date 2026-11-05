@@ -1,6 +1,6 @@
 # CodeChatter v2
 
-A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-room Docker sandbox, chat, and plug-in room tools. Status and plan: `docs/roadmap.md`. Deploy: `docs/deploy.md`.
+A real-time collaborative IDE: shared editor (Yjs), Run and terminals in a per-room Docker sandbox, chat, and plug-in room tools. The pathway (stages and status): `docs/roadmap.md`; what's left, in order: `docs/pending.md`; how each piece was built: `docs/roadmap-details.md`. Deploy: `docs/deploy.md`.
 
 ## Rules (the owner insists)
 

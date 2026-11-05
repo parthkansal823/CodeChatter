@@ -67,4 +67,4 @@ Browsers never reach the runner. Services call each other with service tokens (`
 | An HTTP route | The controller in `apps/api/src/<area>/` |
 | Anything inside a sandbox | `apps/runner/src` and `sandbox/agent/src` |
 | Tests | The "Tests" section of each map. The commands are in CLAUDE.md. |
-| Plans and decisions | `docs/roadmap.md` and `docs/adr/` |
+| Plans and decisions | `docs/roadmap.md` (the pathway), `docs/pending.md` (what's left), `docs/roadmap-details.md` (how each piece was built) and `docs/adr/` |

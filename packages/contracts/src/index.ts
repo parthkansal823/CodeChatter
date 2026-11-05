@@ -5,6 +5,7 @@ export * from "./chat.js";
 export * from "./check.js";
 export * from "./databases.js";
 export * from "./dependencies.js";
+export * from "./git.js";
 export * from "./github.js";
 export * from "./history.js";
 export * from "./http-studio.js";

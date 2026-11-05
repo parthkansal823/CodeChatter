@@ -1,12 +1,14 @@
 import type { AuthSession } from "@codechatter/auth";
-import { CreateRoomInput, ForkRoomInput, JoinRoomInput, RoomCode, UpdateRoomInput } from "@codechatter/contracts";
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import type { ObjectStore } from "@codechatter/auth/s3";
+import { CreateRoomInput, ForkRoomInput, JoinRoomInput, RoomCode, roomBlobPrefix, UpdateRoomInput } from "@codechatter/contracts";
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { z } from "zod";
 
 import { AuditService } from "../audit/audit.service.js";
 import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
+import { OBJECT_STORE } from "../infra/tokens.js";
 import { RunnerClient } from "../runner/runner.client.js";
 import { RoomsService } from "./rooms.service.js";
 
@@ -16,6 +18,7 @@ export class RoomsController {
     private readonly rooms: RoomsService,
     private readonly audit: AuditService,
     private readonly runner: RunnerClient,
+    @Inject(OBJECT_STORE) private readonly store: ObjectStore | null,
   ) {}
 
   @Get()
@@ -87,8 +90,12 @@ export class RoomsController {
     @Req() request: Request,
   ) {
     const room = await this.rooms.remove(id, session.user.id);
-    // Its sandbox, databases, volumes and network go too. If the runner is away, the janitor (room-janitor.ts) catches up.
-    await this.runner.destroyRoom(id, session.user).catch(() => {});
+    // Its sandbox, databases, volumes and network go too, and its binary files' bytes. If the runner or the
+    // object store is away, the janitor (room-janitor.ts) catches up.
+    await Promise.all([
+      this.runner.destroyRoom(id, session.user).catch(() => {}),
+      this.store?.deletePrefix(roomBlobPrefix(id)).catch(() => 0),
+    ]);
     await this.audit.record(
       { orgId: room.orgId, actorId: session.user.id, action: "room.delete", targetType: "room", targetId: id, data: { name: room.name } },
       request,

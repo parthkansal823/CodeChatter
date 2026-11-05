@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, DevServerStatus, JudgeInput, KubeRequest, KubeResponse, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import type { DatabaseKind, DatabaseStatus, DevServerStatus, GitResponse, GitRunnerRequest, JudgeInput, KubeRequest, KubeResponse, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
@@ -230,6 +230,17 @@ export class RunnerClient {
     if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error);
     if (!response.ok) throw new RunnerUnavailableError();
     return (await response.json()) as RoomCheck;
+  }
+
+  /** Git in the room's sandbox (runner: git.ts). */
+  async git(roomId: string, user: RunnerUser, body: GitRunnerRequest): Promise<GitResponse> {
+    const response = await this.call(`/rooms/${roomId}/git`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
+    if (response.status === 400 || response.status === 409) {
+      const message = ((await response.json().catch(() => ({}))) as { error?: string }).error;
+      throw response.status === 400 ? new BadRequestException(message) : new ConflictException(message);
+    }
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as GitResponse;
   }
 
   /** The Kubernetes panel's requests, to the playground in the room's sandbox (runner: kube.ts). */

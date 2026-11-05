@@ -105,6 +105,25 @@ capabilities: { drop: [ALL] }
 - name: {{ $name }}
   valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" $ }}, key: {{ $name }} } }
 {{- end }}
+{{ include "cc.objectStoreEnv" . }}
+{{- end }}
+
+{{/* The S3-compatible bucket for rooms' binary files, for the API and the runner (nothing when objectStore.endpoint is empty). */}}
+{{- define "cc.objectStoreEnv" -}}
+{{- with .Values.objectStore }}
+{{- if .endpoint }}
+- name: S3_ENDPOINT
+  value: {{ .endpoint | quote }}
+- name: S3_REGION
+  value: {{ .region | quote }}
+- name: S3_BUCKET
+  value: {{ required "objectStore.bucket is needed with objectStore.endpoint" .bucket | quote }}
+- name: S3_ACCESS_KEY
+  valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" $ }}, key: S3_ACCESS_KEY } }
+- name: S3_SECRET_KEY
+  valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" $ }}, key: S3_SECRET_KEY } }
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/* Applies the database's migrations before the API or collab starts (idempotent; retried until Postgres answers). */}}

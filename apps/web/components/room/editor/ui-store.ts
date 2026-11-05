@@ -36,6 +36,8 @@ type State = {
   diff: { leftId: string; rightId: string } | null;
   /** A path compared with the room's GitHub base (source-control/repo-diff-view.tsx), in place of the editor. */
   repoDiff: string | null;
+  /** A path compared with the sandbox repository's last commit (source-control/git-diff-view.tsx), in place of the editor. */
+  gitDiff: string | null;
   /** A file as it was at a checkpoint beside the live file (the History view). */
   historyDiff: { checkpointId: string; path: string } | null;
   /** The checkpoint History compares with now (null: now), kept while the view is closed. */
@@ -59,6 +61,7 @@ type State = {
   setSplitSlot: (slot: SplitSlot, fileId: string | null) => void;
   setDiff: (diff: State["diff"]) => void;
   setRepoDiff: (path: string | null) => void;
+  setGitDiff: (path: string | null) => void;
   setHistoryDiff: (diff: { checkpointId: string; path: string } | null) => void;
   setHistoryCheckpoint: (id: string | null) => void;
   setPullRequest: (number: number | null) => void;
@@ -78,6 +81,7 @@ const INITIAL = {
   splitBelowRightId: null,
   diff: null,
   repoDiff: null,
+  gitDiff: null,
   historyDiff: null,
   historyCheckpoint: null,
   pullRequest: null,
@@ -103,10 +107,11 @@ export const useEditorUi = create<State>()((set) => ({
           : { splitBelowRightId: fileId },
     ),
   setDiff: (diff) => set({ diff }),
-  setRepoDiff: (repoDiff) => set({ repoDiff, pullRequest: null, historyDiff: null }),
-  setHistoryDiff: (historyDiff) => set({ historyDiff, repoDiff: null, pullRequest: null }),
+  setRepoDiff: (repoDiff) => set({ repoDiff, gitDiff: null, pullRequest: null, historyDiff: null }),
+  setGitDiff: (gitDiff) => set({ gitDiff, repoDiff: null, pullRequest: null, historyDiff: null }),
+  setHistoryDiff: (historyDiff) => set({ historyDiff, gitDiff: null, repoDiff: null, pullRequest: null }),
   setHistoryCheckpoint: (historyCheckpoint) => set({ historyCheckpoint }),
-  setPullRequest: (pullRequest) => set({ pullRequest, repoDiff: null, historyDiff: null }),
+  setPullRequest: (pullRequest) => set({ pullRequest, gitDiff: null, repoDiff: null, historyDiff: null }),
   setFilePreview: (filePreview) => set({ filePreview }),
   follow: (following) => set({ following }),
   // Presenting, you follow no one.

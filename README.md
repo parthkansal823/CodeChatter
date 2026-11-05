@@ -131,7 +131,7 @@ Every feature has a test against the running app: real sandboxes, real databases
 
 ## Read more
 
-- [Roadmap](docs/roadmap.md): what's built, and what's next
+- [Roadmap](docs/roadmap.md): the pathway, stage by stage; [what's left](docs/pending.md); [how each piece was built](docs/roadmap-details.md)
 - [Decisions](docs/adr): why it's built this way, one decision per record
 - [Code map](docs/code-map/README.md): every file, what it does, and how the parts connect
 - [Deploying](docs/deploy.md): one server with Docker, or Kubernetes

@@ -447,6 +447,11 @@ export class Collector extends Writable {
   text(): string {
     return Buffer.concat(this.chunks).toString("utf8");
   }
+
+  /** What was kept, as bytes (for output that may not be text). */
+  bytes(): Buffer {
+    return Buffer.concat(this.chunks);
+  }
 }
 
 /** Resolves once an exec's stream is over, however it ends. */
