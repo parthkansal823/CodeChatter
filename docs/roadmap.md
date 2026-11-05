@@ -14,7 +14,8 @@ Both this page and pending.md are updated after every finished piece.
 
 - **Done:**
   - the foundations, the sandbox and most of a full IDE (steps 1–3);
-  - collaboration and pro editing, apart from one piece each (steps 6–7).
+  - pro editing, including real git in the sandbox (step 7);
+  - collaboration, apart from TURN over TLS (step 6).
 - **In progress:**
   - **hardening for launch** (step 10): metrics, backups, CI;
   - **teams** (step 8): members, invitations, account security;
@@ -22,7 +23,7 @@ Both this page and pending.md are updated after every finished piece.
 
   These are mostly with ChatGPT, through the prompts in `docs/handoff/`.
 - **Next:**
-  - real git in the sandbox (step 7);
+  - end-to-end tests in CI (step 10);
   - interview mode (step 11), then the recruiter kit's video (step 12).
 
 ```mermaid
@@ -32,7 +33,7 @@ flowchart TD
   S3 --> S4["4 · AI copilot and agent 🟡"]
   S4 --> S5["5 · Workspace suite 🟡"]
   S5 --> S6["6 · Collaboration tools 🟡"]
-  S6 --> S7["7 · Pro editing 🟡"]
+  S6 --> S7["7 · Pro editing ✅"]
   S7 --> S8["8 · Teams and admin 🟡"]
   S8 --> S9["9 · Automations and platform 🟡"]
   S9 --> S10["10 · Hardening and launch 🟡 ← now"]
@@ -122,14 +123,14 @@ flowchart TD
 - ✅ Notifications: inbox, email digest, room activity
 - ✅ Public rooms: explore, read-only visits, fork
 
-## Step 7 · Pro editing 🟡
+## Step 7 · Pro editing ✅
 
 *Goal: the tools professionals rely on.* Details: §6.
 
 - ✅ Language servers in the sandbox; time travel (checkpoints and restore); inline comment threads
 - ✅ Search and replace; split and diff editors; follow and present mode; palette and shortcuts
 - ✅ Secret scanning before a push
-- 🟡 Source control: the GitHub API way ✅; **real git in the sandbox** ⬜
+- ✅ Source control: the GitHub API way, and **real git in the sandbox** (stage, commit, branches, history; push to a remote ⬜)
 
 ## Step 8 · Teams and admin 🟡
 

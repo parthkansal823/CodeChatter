@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { changesOf, mergeFiles, type Change, type ChangeKind } from "./merge";
 import { PublishSection } from "./publish-section";
 import { PullRequestsSection } from "./pull-requests-section";
+import { SandboxGitSection } from "./sandbox-git-section";
 import { WebhookSection } from "./webhook-section";
 import { applyPlan, discardChange, hasConflictMarkers, markSynced, roomTexts } from "./room-files";
 import { SecretsFound } from "./secrets-found";
@@ -38,7 +39,8 @@ const failure = (error: unknown, fallback: string) =>
  * GitHub: the room's changes since it last synced, each opening as a diff; commit and push
  * them (to the room's branch or a new one); pull GitHub's newer commits, merged into
  * everyone's files; switch branches; pull requests; activity in chat. For a room that
- * isn't, publishing it as a new repository.
+ * isn't, publishing it as a new repository. Either way, "Git in the sandbox" below: a real
+ * git repository in the room's sandbox.
  */
 export function SourceControlView({ onOpen }: { onOpen: (node: TreeNode) => void }) {
   const repo = useRoomRepo();
@@ -47,6 +49,7 @@ export function SourceControlView({ onOpen }: { onOpen: (node: TreeNode) => void
     return (
       <Frame>
         <PublishSection />
+        <SandboxGitSection onGitHub={false} />
       </Frame>
     );
   }
@@ -364,6 +367,7 @@ function Linked({ repo, onOpen }: { repo: RoomRepo; onOpen: (node: TreeNode) => 
       </div>
       <PullRequestsSection repo={repo} />
       {can("room.manage") && <WebhookSection repo={repo} />}
+      <SandboxGitSection onGitHub />
     </Frame>
   );
 }

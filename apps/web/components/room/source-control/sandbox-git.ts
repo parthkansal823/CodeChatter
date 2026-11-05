@@ -37,14 +37,22 @@ export function useGitStatus(enabled: boolean) {
     queryFn: async () => (await gitRequest(room.id, doc, { op: "status" })).status,
     enabled,
     staleTime: 2000,
+    // Files may have changed while the view was closed (no listener then): ask again whenever it opens.
+    refetchOnMount: "always",
+    // git used from a terminal can change only .git, which never reaches the room's files.
+    refetchInterval: enabled ? 20_000 : false,
     retry: false,
   });
   useEffect(() => {
     if (!enabled) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // At most once every 1.5 s, starting from the first change: a busy room still gets fresh status.
     const onUpdate = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void client.invalidateQueries({ queryKey: gitKey(room.id, "status") }), 1500);
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void client.invalidateQueries({ queryKey: gitKey(room.id, "status") });
+      }, 1500);
     };
     doc.on("update", onUpdate);
     return () => {

@@ -77,6 +77,7 @@ import { SearchView } from "@/components/room/search/search-view";
 import { PullRequestView } from "@/components/room/source-control/pull-request-view";
 import { GistDialog } from "@/components/room/source-control/gist-dialog";
 import { RepoDiffView } from "@/components/room/source-control/repo-diff-view";
+import { GitDiffView } from "@/components/room/source-control/git-diff-view";
 import { SourceControlView } from "@/components/room/source-control/source-control-view";
 import { HistoryDiffView } from "@/components/room/history/history-diff-view";
 import { HistoryView } from "@/components/room/history/history-view";
@@ -395,12 +396,14 @@ function Workspace() {
       splitBelowRightId: state.splitBelowRightId,
       diff: state.diff,
       repoDiff: state.repoDiff,
+      gitDiff: state.gitDiff,
       historyDiff: state.historyDiff,
       pullRequest: state.pullRequest,
       setFilePreview: state.setFilePreview,
       setSplit: state.setSplit,
       setDiff: state.setDiff,
       setRepoDiff: state.setRepoDiff,
+      setGitDiff: state.setGitDiff,
       setHistoryDiff: state.setHistoryDiff,
       setPullRequest: state.setPullRequest,
       follow: state.follow,
@@ -771,6 +774,8 @@ function Workspace() {
                               path={editorUi.repoDiff}
                               onClose={() => editorUi.setRepoDiff(null)}
                             />
+                          ) : editorUi.gitDiff ? (
+                            <GitDiffView path={editorUi.gitDiff} onClose={() => editorUi.setGitDiff(null)} />
                           ) : editorUi.historyDiff ? (
                             <HistoryDiffView
                               checkpointId={editorUi.historyDiff.checkpointId}

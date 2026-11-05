@@ -78,7 +78,14 @@ temp/
 .trunk/plugins/
 .trunk/tmp/
 
-# Claude Code personal settings
-.claude/settings.local.json
+# AI assistants' working files, kept on this machine only:
+# Claude Code (its instructions, settings, hooks and agents)
+CLAUDE.md
+.claude/
+# ChatGPT (its coding agent's instructions, and the prompts handed to it)
+AGENTS.md
+docs/handoff/
+
+# Load test output (apps/collab/test/load.mjs)
 apps/collab/test/load-report.json
 apps/collab/load-*.log

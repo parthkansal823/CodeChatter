@@ -384,7 +384,36 @@ Tests:
 
   Tests: browser `present.e2e.mjs` 13/13 (two people); `editor` 16/16 and `room-people` 7/7 still pass.
 - ✅ **Command palette and shortcuts:** one key registry (`editor/keybindings.ts`: every command's VS Code default and where it works) and one listener (`editor/shortcuts.ts`) for the editor's, the room's and the debugger's keys, which were three handlers before. Any command in the palette can be given keys, and so can Monaco's own editing commands. The shortcuts sheet (Ctrl+K Ctrl+S, the palette, or Settings) is searchable by name or key. You can add a key or a two-key chord, take one away, or reset one command or all. A key that another command had moves to the new one, with a note. Plain keys are refused, since they're for typing. Your keys are editor settings, so they follow your account. The palette and the title bar show your keys. Chords are registered in every code editor and notebook cell as well, because Monaco owns chords in there. Tests: unit 12/12, browser `shortcuts.e2e.mjs` 15/15; `editor`, `search`, `problems` and `debugger` still pass.
-- 🟡 **Source Control panel:** branch, diff, commit and push are done through the GitHub API (section 14 E); real git in the sandbox is not.
+- ✅ **Source Control panel:** branch, diff, commit and push through the GitHub API (section 14 E), and (2026-11-05) **real git in the sandbox**.
+  - **What it is:** the Source Control view's **Git in the sandbox** section. It's open in a room that isn't on GitHub, and folded below GitHub's section in one that is.
+    - It works on a real repository at the room's top folder, kept in the sandbox's volume (`.git` never syncs into the room).
+    - Things git changes in the files, such as switching branch or discarding, reach everyone through the sandbox's file sync. Git used in a terminal shows up in the panel too.
+  - **What you can do:**
+    - Initialise a repository (`main`); its `.git/info/exclude` leaves out what the sync keeps in the sandbox (`node_modules`, `.venv`, build output).
+    - See Staged and Changes, with each file's letter. Stage, unstage and discard (a dialog first), one file or all.
+    - Commit, as the signed-in person: the API adds the author, and the browser can't. With nothing staged, it's **Commit all**.
+    - Open any file against the last commit, in the editor area. Switch branch, or make one from here. See the History (the last 15 commits).
+  - **Safety:**
+    - Only these operations exist (`packages/contracts/src/git.ts`), each a fixed argument list.
+    - They run inside the jail like a Run, with no shell, hooks and fsmonitor off, literal pathspecs, and paths checked to stay in the room.
+    - Every operation needs Run rights (a repository's config can run filters), and changes need edit rights too.
+  - **Code:**
+    - runner `git.ts` (porcelain v2 parsing), route `POST /rooms/:id/git`;
+    - API `sandbox/git.controller.ts`;
+    - web `source-control/sandbox-git-section.tsx`, `sandbox-git.ts`, `git-diff-view.tsx`.
+  - **Status stays fresh:** it reloads whenever the section opens, at most 1.5 s after any change to the room's files, and every 20 s while shown.
+  - **Fixed on the way:**
+    - the panel didn't reload status when reopened within 2 s of the last answer, so a new file took 20 s to appear; it now asks on every open (88 ms in the test);
+    - the branch picker was too wide and pushed the section sideways.
+  - **Tests:**
+    - unit: runner `git.test.ts` 4/4, contracts `git.test.ts` 3/3;
+    - runner `test/git.e2e.mjs` 20/20, in a disposable room: rights, init, stage, commit author, show, log, branches, a branch switch and a discard changing the room's files, and the errors;
+    - browser `sandbox-git.e2e.mjs` 10/10;
+    - `source-control` 19/19 and `history` 14/14 still pass.
+  - ⬜ **Next:**
+    - push and pull to a remote (the sandbox has no network to GitHub; it could go through the API, as today's GitHub commits do);
+    - merges and conflicts in the panel;
+    - repositories in subfolders.
 - ✅ **Secret scanning** before a push (`apps/api/src/github/secret-scan.ts`). A commit, a publish or a gist with a key or password in it is refused with each finding: the file and line, what kind (AWS, GitHub, GitLab, Slack, Stripe, Google, OpenAI, Anthropic, npm and SendGrid keys, private keys, a password in a database URL, a secret in an `.env` file, a hard-coded secret). The preview shows only the key's ends. Source control and the gist dialog list the findings, and each one opens its file at that line. "Commit anyway" (or Publish, or Make it) sends it, and the audit log records where and what kind, never the secret. Placeholders, names, words, documentation values (`EXAMPLE`, `abcdefg…`), local database URLs and a line marked `gitleaks:allow` are let through; the repository's 692 files and every template scan clean. Tests: unit 11/11, the API's source-control e2e 55/55 (refused commit and publish, a gist sent anyway), browser `secret-scan.e2e.mjs` 8/8.
 
 ## 7. Interview mode ⬜

@@ -14,16 +14,17 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - 🟡 **ChatGPT 8, metrics.**
   - Done: collab and runner `/metrics`, behind `METRICS_TOKEN`, not public; `prom-client` 15.1.3 is installed.
   - Still coming: the API's `/metrics`, the Grafana dashboards, and the docs.
-- ✅ Just finished by Claude: binary files, and deleting a room's stored files with the room.
+- ✅ Just finished by Claude:
+  - real git in the sandbox (step 7);
+  - binary files, and deleting a room's stored files with the room.
 
 ## Up next, in order
 
-1. **Claude:** real git in the sandbox (step 7). It's the last piece of pro editing.
-2. **ChatGPT**, one prompt at a time, each checked before the next: **13** (follow-ups) → **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
-3. **Claude:** end-to-end tests in CI (step 10), once CI's first run on GitHub is green.
-4. **Claude:** interview mode (step 11), with the interviewer and candidate room roles (step 8).
-5. **You:** record the README's GIF and 2-minute video (step 12).
-6. Then step 10's security and accessibility passes, and the cutover from v1, before launch.
+1. **ChatGPT**, one prompt at a time, each checked before the next: **13** (follow-ups) → **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
+2. **Claude:** end-to-end tests in CI (step 10), once CI's first run on GitHub is green.
+3. **Claude:** interview mode (step 11), with the interviewer and candidate room roles (step 8).
+4. **You:** record the README's GIF and 2-minute video (step 12).
+5. Then step 10's security and accessibility passes, and the cutover from v1, before launch.
 
 ## Your actions
 
@@ -33,7 +34,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - add the Google OAuth callback (`http://localhost:8080/api/auth/callback/google`);
   - choose hosting (`docs/deploy.md`).
 - **Record** the README's GIF and video. The script is in `docs/demo-script.md`.
-- **Later:** `prom-client` was deprecated in August 2026 in favour of `@prometheus-io/client`, so moving to it is a package change for you to approve.
+- **Later:** `prom-client` was deprecated in August 2026 in favour of `@prometheus-io/client`, so moving to it is a package change for you to approve. (Installing `prom-client` made pnpm keep two copies of drizzle; `@opentelemetry/api` at the root fixed that, with your OK.)
 
 ## Step 3 · A full IDE
 
@@ -115,7 +116,10 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Step 7 · Pro editing
 
-- ⬜ **Real git in the sandbox** (**Claude**, next): `git` commands and the Source Control panel on the sandbox's own repository, beside today's GitHub API flow
+- ⬜ Git in the sandbox, later:
+  - push and pull to a remote (through the API, since the sandbox can't reach GitHub);
+  - merges and conflicts in the panel;
+  - repositories in subfolders.
 
 ## Step 8 · Teams and admin
 

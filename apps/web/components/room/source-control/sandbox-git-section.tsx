@@ -3,7 +3,7 @@
 import type { GitChange, GitStatus } from "@codechatter/contracts";
 import { findByPath } from "@codechatter/workspace-model";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, FileText, GitBranch, Minus, Plus, Undo2 } from "lucide-react";
+import { ChevronRight, FileText, GitBranch, GitBranchPlus, Minus, Plus, Undo2 } from "lucide-react";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 
@@ -72,7 +72,11 @@ export function SandboxGitSection({ onGitHub }: { onGitHub: boolean }) {
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
         Git in the sandbox
       </button>
-      {open && <Body />}
+      {open && (
+        <div className="max-h-[55vh] overflow-x-hidden overflow-y-auto">
+          <Body />
+        </div>
+      )}
     </section>
   );
 }
@@ -192,8 +196,8 @@ function Repo({
     });
 
   return (
-    <div className="grid gap-2 px-3 pb-3 text-xs">
-      <div className="flex items-center gap-1">
+    <div className="grid min-w-0 gap-2 px-3 pb-3 text-xs">
+      <div className="flex min-w-0 items-center gap-1">
         <Select
           value={status.branch ?? ""}
           onOpenChange={(next) => next && setBranchesWanted(true)}
@@ -202,7 +206,9 @@ function Repo({
         >
           <SelectTrigger size="sm" aria-label="Sandbox branch" className="min-w-0 flex-1 text-xs data-[size=sm]:h-7" title="Switch branch">
             <GitBranch className="size-3.5" />
-            <SelectValue placeholder={status.head ? `Detached at ${status.head}` : "No commits yet"} />
+            <SelectValue placeholder={status.head ? `Detached at ${status.head}` : "No commits yet"}>
+              {status.branch && <span className="truncate">{status.branch}</span>}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {(branches.data?.branches ?? (status.branch ? [{ name: status.branch, short: status.head ?? "", current: true }] : [])).map((branch) => (
@@ -215,8 +221,16 @@ function Repo({
           </SelectContent>
         </Select>
         {editable && (
-          <Button variant="outline" size="xs" disabled={!idle || !status.head} title={status.head ? "Make a branch from here" : "Commit once first"} onClick={() => setNewBranch("")}>
-            New branch
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="New branch"
+            disabled={!idle || !status.head}
+            title={status.head ? "New branch from here" : "Commit once first"}
+            className="size-7 shrink-0"
+            onClick={() => setNewBranch("")}
+          >
+            <GitBranchPlus />
           </Button>
         )}
       </div>
@@ -329,7 +343,7 @@ function Repo({
               Discard {discarding?.length === 1 ? discarding[0]!.path : `${discarding?.length ?? 0} changes`}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Changed files go back to the last commit, and new ones are deleted, for everyone in the room. This can't be undone from here (History has the room&apos;s checkpoints).
+              Changed files go back to the last commit, and new ones are deleted, for everyone in the room. This can&apos;t be undone from here (History has the room&apos;s checkpoints).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
