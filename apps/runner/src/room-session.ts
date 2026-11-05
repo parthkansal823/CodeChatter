@@ -1,3 +1,4 @@
+import { objectStoreFromEnv } from "@codechatter/auth/s3";
 import type Docker from "dockerode";
 
 import type { SandboxStatus } from "@codechatter/contracts";
@@ -53,7 +54,7 @@ export class RoomSession {
   ) {
     // Kubernetes takes the room's settings from its Secret (kube-sandbox.ts); Docker gets them with each exec.
     this.sandbox = kube ? new KubeSandbox(kube, roomId, env, image) : new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)), image);
-    this.sync = new DocSync(roomId, { collabUrl: env.COLLAB_INTERNAL_URL, secret: env.SERVICE_SECRET });
+    this.sync = new DocSync(roomId, { collabUrl: env.COLLAB_INTERNAL_URL, secret: env.SERVICE_SECRET, store: objectStoreFromEnv(env) });
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
     this.notebooks = new NotebookKernels(this.sandbox, this.sync.doc, this.sync.synced(60_000).catch(() => {}));
     this.tunnels = new TunnelHub(() => this.sandbox.agent);

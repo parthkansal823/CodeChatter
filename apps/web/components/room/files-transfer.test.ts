@@ -22,7 +22,7 @@ describe("planImport", () => {
     assert.deepEqual([...mixed.files.keys()], ["a/x.txt", "b/y.txt"]);
   });
 
-  it("skips binaries, big files and folders no one means to import, saying why", () => {
+  it("takes binaries and text over 1 MB as binary files, and skips unwanted folders, saying why", () => {
     const plan = planImport(
       [
         entry("logo.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 13])),
@@ -32,19 +32,40 @@ describe("planImport", () => {
         entry(".git/config", "[core]"),
         entry("keep.md", "kept"),
       ],
-      { into: "", existing: new Set(), fromZip: false },
+      { into: "", existing: new Set(["logo.png"]), fromZip: false },
     );
     assert.deepEqual([...plan.files.keys()], ["keep.md"]);
+    assert.deepEqual([...plan.binaries.keys()], ["logo.png", "bad.txt", "huge.txt"]);
+    assert.deepEqual(plan.replaced, ["logo.png"]);
     assert.deepEqual(
       plan.skipped.map((s) => s.path),
-      ["logo.png", "bad.txt", "huge.txt", "node_modules/left-pad/index.js", ".git/config"],
+      ["node_modules/left-pad/index.js", ".git/config"],
     );
-    assert.match(plan.skipped[0]!.reason, /isn't text/);
-    assert.match(plan.skipped[2]!.reason, /over 1 MB/);
+  });
+
+  it("keeps known binary types binary even when they read as text, and SVG as text", () => {
+    const plan = planImport([entry("plain.pdf", "%PDF-1.1\n%%EOF\n"), entry("icon.svg", "<svg/>"), entry("notes.txt", "hi")], {
+      into: "",
+      existing: new Set(),
+      fromZip: false,
+    });
+    assert.deepEqual([...plan.binaries.keys()], ["plain.pdf"]);
+    assert.deepEqual([...plan.files.keys()], ["icon.svg", "notes.txt"]);
+  });
+
+  it("skips binaries when the server keeps none, and anything over 20 MB", () => {
+    const plan = planImport(
+      [entry("logo.png", new Uint8Array([0x89, 0, 1])), entry("huge.txt", "x".repeat(MAX_FILE_BYTES + 1)), entry("movie.mp4", new Uint8Array(20 * 1024 * 1024 + 1))],
+      { into: "", existing: new Set(), fromZip: false, binaries: false },
+    );
+    assert.equal(plan.binaries.size, 0);
+    assert.match(plan.skipped[0]!.reason, /isn't text, and this server doesn't keep binary files/);
+    assert.match(plan.skipped[1]!.reason, /over 1 MB, and/);
+    assert.match(plan.skipped[2]!.reason, /over 20 MB/);
   });
 
   it("sums it up in a sentence", () => {
-    const plan = planImport([entry("a.txt", "1"), entry("b.txt", "2"), entry("c.bin", new Uint8Array([0]))], { into: "", existing: new Set(["a.txt"]), fromZip: false });
-    assert.equal(importSummary(plan), "Imported 2 files (1 replaced). Skipped 1: c.bin, because it isn't text (images and other binary files can't be added to a room yet).");
+    const plan = planImport([entry("a.txt", "1"), entry("b.txt", "2"), entry(".git/HEAD", "ref")], { into: "", existing: new Set(["a.txt"]), fromZip: false });
+    assert.equal(importSummary(plan), "Imported 2 files (1 replaced). Skipped 1: .git/HEAD, because it's in a folder that isn't imported (.git, node_modules, build output).");
   });
 });

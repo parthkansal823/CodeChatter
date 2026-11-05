@@ -1,4 +1,7 @@
-/** Calculate CVSS v3 base scores locally so OSV vectors need no scoring dependency. */
+/**
+ * Calculate CVSS v3 base scores locally so OSV vectors need no scoring dependency.
+ * Formula and rounding: https://www.first.org/cvss/v3.1/specification-document
+ */
 import type { DependencySeverity } from "@codechatter/contracts";
 
 const WEIGHTS: Record<string, Record<string, number>> = {

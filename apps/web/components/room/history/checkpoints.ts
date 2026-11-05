@@ -8,7 +8,7 @@ import { useEffect } from "react";
 import * as Y from "yjs";
 
 import { useRoom } from "@/components/room/room-context";
-import { roomTexts } from "@/components/room/source-control/room-files";
+import { roomContents } from "@/components/room/source-control/room-files";
 import { api, ApiError } from "@/lib/api";
 
 /**
@@ -97,7 +97,7 @@ export function useCheckpointFiles(id: string | null): Map<string, string> | und
       if (!response.ok) throw new ApiError(response.status, "Couldn't load the checkpoint.");
       const doc = new Y.Doc();
       Y.applyUpdate(doc, new Uint8Array(await response.arrayBuffer()));
-      const files = roomTexts(doc);
+      const files = roomContents(doc);
       doc.destroy();
       return files;
     },

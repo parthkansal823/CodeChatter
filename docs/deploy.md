@@ -182,8 +182,23 @@ The same works as a container: build `infra/docker/app.Dockerfile` with `--targe
 
 The Helm chart [`infra/helm/codechatter`](../infra/helm/codechatter/README.md) runs the same app on a cluster, with one difference: each room's sandbox, databases and package proxy run on that cluster too, a namespace per room (`RUNNER_DRIVER=kubernetes`). Its defaults are a demo on Docker Desktop's built-in Kubernetes: `pnpm k8s:images`, `pnpm sandbox:build`, `helm install`, then http://localhost:8090. Its README lists what to change for production.
 
-## Not in production yet
+## Binary files (images, PDFs, fonts)
 
-- **File uploads and object storage** (Phase 3). They will use any S3-compatible bucket.
+Text files live in the room's document. Binary files (up to 20 MB from an upload, 5 MB from a program in the sandbox) are kept in an **S3-compatible bucket**: AWS S3, Cloudflare R2, Backblaze B2, MinIO or SeaweedFS. Without one, the app works as before: uploads of binary files are refused with a message, and binaries made in a sandbox stay there.
+
+1. Make a private bucket, and a key that can read, write and delete objects in it (nothing else).
+2. Set these in `.env.production` (the API and the runner both use them), then run `dc up -d`:
+   ```
+   S3_ENDPOINT=https://s3.eu-west-1.amazonaws.com   # or https://<account>.r2.cloudflarestorage.com, …
+   S3_REGION=eu-west-1                               # "auto" on R2
+   S3_BUCKET=codechatter-files
+   S3_ACCESS_KEY=…
+   S3_SECRET_KEY=…
+   ```
+3. Check it: upload an image in a room (Files view, More file actions, Upload files); it opens as an image for everyone, and `ls` in the room's terminal shows it.
+
+Objects are kept under `rooms/<room code>/<sha256>`, and are never served from the bucket directly: browsers get them from the API, which checks the room first. The bucket needs no public access and no CORS. Nothing deletes objects yet when a room or file is deleted (History can still restore them); see the roadmap.
+
+## Not in production yet
 - **Several collab instances behind the load balancer.** The Valkey extension already supports this; one instance is plenty to start.
 - **Prebuilt images from CI** (GitHub Actions to GHCR), so the server pulls images instead of building them.

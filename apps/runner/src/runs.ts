@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Duplex } from "node:stream";
 
 import { log } from "./log.js";
+import { recordRun } from "./metrics.js";
 import { commandFor, planFor } from "./plans.js";
 import type { ExecHandle, RoomSandbox } from "./sandbox.js";
 
@@ -164,6 +165,7 @@ export class RunManager {
       if (exhausted) await this.sandbox.reset().catch((e) => log.error("sandbox reset failed", e));
       if (this.last?.info.id === active.info.id) this.last.exit = exit;
       if (this.active === active) this.active = null;
+      recordRun(active.info.path, exit);
       emit({ type: "exit", exit });
       resolveDone(exit);
     };

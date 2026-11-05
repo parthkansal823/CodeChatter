@@ -21,7 +21,7 @@ const Affected = z.object({
   }).passthrough()).optional(),
 }).passthrough();
 const Advisory = z.object({
-  id: Id, aliases: z.array(z.string()).optional(), withdrawn: z.string().optional(),
+  id: Id, aliases: z.array(z.string()).optional(), withdrawn: z.iso.datetime({ offset: true }).optional(),
   summary: z.string().optional(), details: z.string().optional(),
   severity: z.array(Severity).optional(), database_specific: z.record(z.string(), z.unknown()).optional(),
   affected: z.array(Affected).optional(),

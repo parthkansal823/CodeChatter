@@ -4,9 +4,10 @@ import { posix } from "node:path";
 
 import type { AgentEvent } from "@codechatter/contracts";
 
-import { asText, isIgnored, SYNC_MAX_BYTES, TEMP_PREFIX } from "./rules.js";
+import { asText, BLOB_SYNC_MAX_BYTES, isIgnored, SYNC_MAX_BYTES, TEMP_PREFIX } from "./rules.js";
 
-const sha1 = (text: string) => createHash("sha1").update(text).digest("base64");
+/** A text file is hashed as its UTF-8 text, a binary one as its bytes. */
+const sha1 = (content: string | Uint8Array) => createHash("sha1").update(content).digest("base64");
 const slashes = (path: string) => path.replaceAll("\\", "/");
 
 /** What changed at one path, as seen on disk. */
@@ -37,21 +38,24 @@ export class Workspace {
     return posix.join(this.root, rel);
   }
 
-  async write(rel: string, content: string): Promise<void> {
+  /** Write a room file: text, or a binary file's bytes sent as base64. */
+  async write(rel: string, content: string, encoding?: "base64"): Promise<void> {
     const abs = this.resolve(rel);
-    this.known.set(rel, sha1(content));
+    const data: string | Buffer = encoding === "base64" ? Buffer.from(content, "base64") : content;
+    this.known.set(rel, sha1(data));
     this.reported.delete(rel);
     const current = await lstat(abs).catch(() => null);
-    if (current?.isFile() && current.size === Buffer.byteLength(content)) {
+    if (current?.isFile() && current.size === Buffer.byteLength(data)) {
       // Unchanged files are left alone, so restarts don't touch every mtime.
-      if ((await readFile(abs, "utf8").catch(() => null)) === content) return;
+      const onDisk = await readFile(abs).catch(() => null);
+      if (onDisk && onDisk.equals(typeof data === "string" ? Buffer.from(data, "utf8") : data)) return;
     }
     await this.ensureDir(posix.dirname(rel));
     if (current?.isDirectory()) await rm(abs, { recursive: true, force: true });
     // Write beside, then rename over: atomic for readers, and it works even
     // when the old file belongs to the sandbox user (the folder is shared).
     const tmp = posix.join(posix.dirname(abs), `${TEMP_PREFIX}${process.pid}-${++this.tmpCounter}`);
-    await writeFile(tmp, content, { mode: 0o664 });
+    await writeFile(tmp, data, { mode: 0o664 });
     await rename(tmp, abs);
   }
 
@@ -104,9 +108,19 @@ export class Workspace {
     if (stat.isDirectory()) return { events: [], isDir: true };
     if (!stat.isFile()) return { events: [], isDir: false }; // symlinks, sockets, fifos stay local
 
-    if (stat.size > SYNC_MAX_BYTES) return { events: this.reportOnce(rel, "too-large"), isDir: false };
-    const text = asText(await readFile(abs).catch(() => new Uint8Array()));
-    if (text === null) return { events: this.reportOnce(rel, "binary"), isDir: false };
+    if (stat.size > Math.max(SYNC_MAX_BYTES, BLOB_SYNC_MAX_BYTES)) return { events: this.reportOnce(rel, "too-large"), isDir: false };
+    const bytes = await readFile(abs).catch(() => Buffer.alloc(0));
+    const text = asText(bytes);
+    if (text === null) {
+      // A binary file: its bytes go to the room (the runner stores them), unless they're what the room sent.
+      if (bytes.byteLength > BLOB_SYNC_MAX_BYTES) return { events: this.reportOnce(rel, "too-large"), isDir: false };
+      const hash = sha1(bytes);
+      if (this.known.get(rel) === hash) return { events: [], isDir: false };
+      this.known.set(rel, hash);
+      this.reported.delete(rel);
+      return { events: [{ ev: "blob", path: rel, b64: bytes.toString("base64") }], isDir: false };
+    }
+    if (bytes.byteLength > SYNC_MAX_BYTES) return { events: this.reportOnce(rel, "too-large"), isDir: false };
 
     const hash = sha1(text);
     if (this.known.get(rel) === hash) return { events: [], isDir: false };

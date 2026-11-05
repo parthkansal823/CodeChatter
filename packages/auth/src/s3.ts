@@ -94,7 +94,9 @@ export function signRequest(input: SignInput): Record<string, string> {
 }
 
 /** The store from environment variables, or null when they aren't all set (binary files are then off). */
-export function objectStoreFromEnv(env: Record<string, string | undefined>): ObjectStore | null {
+export function objectStoreFromEnv(
+  env: Partial<Record<"S3_ENDPOINT" | "S3_REGION" | "S3_BUCKET" | "S3_ACCESS_KEY" | "S3_SECRET_KEY", string | undefined>>,
+): ObjectStore | null {
   const { S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY } = env;
   if (!S3_ENDPOINT || !S3_BUCKET || !S3_ACCESS_KEY || !S3_SECRET_KEY) return null;
   return new ObjectStore({ endpoint: S3_ENDPOINT, region: S3_REGION || "us-east-1", bucket: S3_BUCKET, accessKey: S3_ACCESS_KEY, secretKey: S3_SECRET_KEY });
@@ -161,6 +163,37 @@ export class ObjectStore {
     else await expectDone(response, `delete ${key}`);
   }
 
+  /**
+   * Keys under a prefix (ListObjectsV2, every page). With a delimiter, the next level's
+   * "folders" come back in `prefixes` instead (e.g. "rooms/" → "rooms/AB12CD/").
+   */
+  async list(prefix: string, delimiter?: string): Promise<{ keys: string[]; prefixes: string[] }> {
+    const keys: string[] = [];
+    const prefixes: string[] = [];
+    let token: string | undefined;
+    do {
+      const query = new URLSearchParams({ "list-type": "2", prefix, "max-keys": "1000" });
+      if (delimiter) query.set("delimiter", delimiter);
+      if (token) query.set("continuation-token", token);
+      const response = await this.request("GET", null, { query });
+      if (response.status === 404) return { keys, prefixes }; // no bucket yet: nothing stored
+      await expectOk(response, `list ${prefix}`);
+      const xml = await response.text();
+      for (const match of xml.matchAll(/<Contents>[\s\S]*?<Key>([^<]*)<\/Key>[\s\S]*?<\/Contents>/g)) keys.push(unescapeXml(match[1]!));
+      for (const match of xml.matchAll(/<CommonPrefixes>\s*<Prefix>([^<]*)<\/Prefix>\s*<\/CommonPrefixes>/g)) prefixes.push(unescapeXml(match[1]!));
+      token = /<IsTruncated>true<\/IsTruncated>/.test(xml) ? unescapeXml(/<NextContinuationToken>([^<]*)<\/NextContinuationToken>/.exec(xml)?.[1] ?? "") || undefined : undefined;
+    } while (token);
+    return { keys, prefixes };
+  }
+
+  /** Delete everything under a prefix, eight at a time. Returns how many objects went. */
+  async deletePrefix(prefix: string): Promise<number> {
+    if (!prefix.endsWith("/")) throw new Error("deletePrefix needs a prefix ending in '/'");
+    const { keys } = await this.list(prefix);
+    for (let at = 0; at < keys.length; at += 8) await Promise.all(keys.slice(at, at + 8).map((key) => this.delete(key)));
+    return keys.length;
+  }
+
   /** Make the bucket if it isn't there (development convenience; production buckets are made by the operator). */
   ensureBucket(): Promise<void> {
     this.bucketChecked ??= (async () => {
@@ -177,10 +210,16 @@ export class ObjectStore {
     return this.bucketChecked;
   }
 
-  private request(method: string, key: string | null, options: { body?: Uint8Array; headers?: Record<string, string> } = {}): Promise<Response> {
+  private request(
+    method: string,
+    key: string | null,
+    options: { body?: Uint8Array; headers?: Record<string, string>; query?: URLSearchParams } = {},
+  ): Promise<Response> {
     const base = this.config.endpoint.replace(/\/+$/, "");
     const path = key === null ? `/${encodeKey(this.config.bucket)}` : `/${encodeKey(this.config.bucket)}/${encodeKey(key)}`;
     const url = new URL(base + path);
+    // Encoded the way Signature V4 signs it, so the server sees exactly the signed query.
+    if (options.query) url.search = [...options.query].map(([name, value]) => `${encodeRfc3986(name)}=${encodeRfc3986(value)}`).join("&");
     const body = options.body;
     const headers = signRequest({
       method,
@@ -194,6 +233,10 @@ export class ObjectStore {
     delete headers.host; // fetch sets it, and refuses it as a header
     return fetch(url, { method, headers, body: body as BodyInit | undefined, signal: AbortSignal.timeout(this.timeoutMs) });
   }
+}
+
+function unescapeXml(text: string): string {
+  return text.replace(/&(lt|gt|quot|apos|amp);/g, (_, name: string) => ({ lt: "<", gt: ">", quot: '"', apos: "'", amp: "&" })[name]!);
 }
 
 /** Throw the store's own error for a failed response. A successful one is left unread for the caller. */

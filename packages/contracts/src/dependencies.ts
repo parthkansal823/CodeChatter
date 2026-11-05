@@ -192,14 +192,17 @@ function requirements(file: Source): ParsedDependency[] {
 function tomlLock(file: Source, ecosystem: "PyPI" | "crates.io"): ParsedDependency[] | null {
   let current: { name?: string; version?: string; line: number } | null = null;
   let found = false;
+  let root = true;
   const result: ParsedDependency[] = [];
   const flush = () => {
     if (current?.name) result.push({ ecosystem, name: current.name, version: current.version ?? null, path: file.path, line: current.line });
     current = null;
   };
   file.content.split(/\r?\n/).forEach((line, index) => {
-    if (/^\s*\[\[package\]\]\s*(?:#.*)?$/.test(line)) { flush(); current = { line: index + 1 }; found = true; return; }
-    if (/^\s*\[/.test(line)) { flush(); return; }
+    // Poetry writes an explicit empty root array when there are no packages.
+    if (root && /^\s*(?:package|"package"|'package')\s*=\s*\[\s*\]\s*(?:#.*)?$/.test(line)) { found = true; return; }
+    if (/^\s*\[\[package\]\]\s*(?:#.*)?$/.test(line)) { flush(); current = { line: index + 1 }; found = true; root = false; return; }
+    if (/^\s*\[/.test(line)) { root = false; flush(); return; }
     if (!current) return;
     const match = /^\s*(name|version)\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?$/.exec(line);
     if (!match) return;

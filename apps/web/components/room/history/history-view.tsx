@@ -57,7 +57,7 @@ export function HistoryView() {
   const selected = oldestFirst.find((c) => c.id === selectedId) ?? null;
   const position = selected ? oldestFirst.indexOf(selected) : oldestFirst.length;
   const files = useCheckpointFiles(selected?.id ?? null);
-  const texts = useRoomTexts();
+  const texts = useRoomTexts({ withBinaries: true });
   const changes = useMemo(() => (files ? changesOf(files, texts) : null), [files, texts]);
   const editable = can("files.edit");
   const [busy, setBusy] = useState(false);

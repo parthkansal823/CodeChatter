@@ -1,5 +1,6 @@
 "use client";
 
+import { blobView } from "@codechatter/contracts";
 import {
   createFile,
   createFolder,
@@ -13,9 +14,14 @@ import {
 import {
   ChevronRight,
   Download,
+  File as FileIcon,
   FileArchive,
+  FileAudio,
+  FileImage,
   FilePlus2,
   FileText,
+  FileType,
+  FileVideo,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -30,11 +36,11 @@ import { toast } from "sonner";
 import type * as Y from "yjs";
 
 import { Threads, type PresenceSlot } from "@/components/presence/presence";
-import { downloadZip, importSummary, planImport, readUpload } from "@/components/room/files-transfer";
+import { downloadZip, importSummary, planImport, readUpload, uploadBinaries } from "@/components/room/files-transfer";
 import { requestCheckpoint } from "@/components/room/history/checkpoints";
 import { useFileTree, usePeers } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
-import { roomTexts, writeFiles } from "@/components/room/source-control/room-files";
+import { roomContents, writeBlobs, writeFiles } from "@/components/room/source-control/room-files";
 import { safeName } from "@/components/room/tools/docs/zip";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -96,14 +102,22 @@ export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null
     try {
       const read = await readUpload(files);
       const into = folderId ? (pathOf(doc, folderId) ?? "") : "";
-      const plan = planImport(read.entries, { into, existing: new Set(roomTexts(doc).keys()), fromZip: read.fromZip });
+      const plan = planImport(read.entries, { into, existing: new Set(roomContents(doc).keys()), fromZip: read.fromZip });
       plan.skipped.unshift(...read.skipped);
-      if (!plan.files.size) {
+      const nothing = () => {
         const first = plan.skipped[0];
-        return void toast.error(first ? `Nothing to import: ${first.path} was skipped, because ${first.reason}.` : "Nothing to import.", { id });
-      }
+        toast.error(first ? `Nothing to import: ${first.path} was skipped, because ${first.reason}.` : "Nothing to import.", { id });
+      };
+      if (!plan.files.size && !plan.binaries.size) return nothing();
+      // Binary files' bytes go up first; the file tree only changes once they're stored.
+      if (plan.binaries.size) toast.loading(`Uploading ${plan.binaries.size === 1 ? "1 file" : `${plan.binaries.size} files`}…`, { id });
+      const blobs = await uploadBinaries(room.id, plan, (done, total) => toast.loading(`Uploading ${done} of ${total}…`, { id }));
+      if (!plan.files.size && !blobs.size) return nothing();
       await requestCheckpoint(provider, "import", `Before importing ${label}`.slice(0, 100)).catch(() => {});
-      writeFiles(doc, plan.files, me.user.id, "import");
+      doc.transact(() => {
+        writeFiles(doc, plan.files, me.user.id, "import");
+        writeBlobs(doc, blobs, me.user.id, "import");
+      }, "import");
       if (folderId) expand(folderId);
       toast.success(importSummary(plan), { id, duration: 8_000 });
     } catch (error) {
@@ -209,8 +223,14 @@ export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null
               )}
               <DropdownMenuItem
                 onSelect={() => {
-                  const count = downloadZip(doc, `${safeName(room.name, "room")}-${room.id}.zip`);
-                  toast.message(count === 1 ? "Downloading 1 file as a zip." : `Downloading ${count} files as a zip.`);
+                  const id = toast.loading("Making the zip…");
+                  void downloadZip(doc, room.id, `${safeName(room.name, "room")}-${room.id}.zip`)
+                    .then(({ files, missing }) => {
+                      const what = files === 1 ? "Downloading 1 file as a zip." : `Downloading ${files} files as a zip.`;
+                      if (missing.length) toast.warning(`${what} ${missing.length === 1 ? `${missing[0]} is` : `${missing.length} binary files are`} missing from it: their bytes couldn't be loaded.`, { id });
+                      else toast.success(what, { id });
+                    })
+                    .catch(() => toast.error("Couldn't make the zip. Try again.", { id }));
                 }}
               >
                 <Download className="size-4" /> Download as zip
@@ -307,7 +327,7 @@ function TreeRow({ node, depth, ctx }: { node: TreeNode; depth: number; ctx: Tre
           {open ? <FolderOpen className="size-3.5 shrink-0" /> : <Folder className="size-3.5 shrink-0" />}
         </>
       ) : (
-        <FileText className="ml-5 size-3.5 shrink-0" />
+        <FileKindIcon node={node} />
       )}
       {ctx.renaming === node.id ? (
         <InlineName initial={node.name} onDone={(name) => ctx.commitRename(node.id, name)} />
@@ -356,6 +376,20 @@ function TreeRow({ node, depth, ctx }: { node: TreeNode; depth: number; ctx: Tre
       )}
     </>
   );
+}
+
+/** A text file's icon, or one that says what a binary file is (image, sound, video, font, archive). */
+function FileKindIcon({ node }: { node: TreeNode }) {
+  const className = "ml-5 size-3.5 shrink-0";
+  if (!node.blob) return <FileText className={className} />;
+  const view = blobView(node.blob.type);
+  if (view === "image") return <FileImage className={className} />;
+  if (view === "audio") return <FileAudio className={className} />;
+  if (view === "video") return <FileVideo className={className} />;
+  if (view === "font") return <FileType className={className} />;
+  if (view === "pdf") return <FileText className={className} />;
+  if (/zip|gzip|tar|java-archive/.test(node.blob.type)) return <FileArchive className={className} />;
+  return <FileIcon className={className} />;
 }
 
 function DraftRow({ draft, depth, onDone }: { draft: NonNullable<Draft>; depth: number; onDone: (name: string | null) => void }) {

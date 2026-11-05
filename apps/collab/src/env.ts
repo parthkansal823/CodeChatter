@@ -5,6 +5,8 @@ const Env = z.object({
   APP_URL: z.url(),
   EXTRA_ORIGINS: z.string().optional().default(""),
   COLLAB_PORT: z.coerce.number().int().positive().default(4100),
+  /** Private Prometheus scrape credential; production requires it, development may use loopback without it. */
+  METRICS_TOKEN: z.string().optional().default(""),
   DATABASE_URL: z.string().startsWith("postgres"),
   VALKEY_URL: z.string().startsWith("redis"),
   BETTER_AUTH_SECRET: z.string().min(32),

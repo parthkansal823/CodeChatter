@@ -1,14 +1,18 @@
 import {
+  createBinaryFileAtPath,
   createFileAtPath,
   findByPath,
   flatten,
+  isBlobRef,
   isNotebookName,
   listTree,
   maps,
   notebooks,
-  setText,
+  setBlob,
+  setFileText,
   textOf,
   trash,
+  type BlobRef,
 } from "@codechatter/workspace-model";
 import type * as Y from "yjs";
 
@@ -20,26 +24,73 @@ export type SyncMark = { branch: string; commit: string; at: number };
 
 const ORIGIN = "source-control";
 
-/** The room's files now, by path. */
+/**
+ * A binary file, in maps of path → text (History, fork): a marker no text file can be,
+ * since a room's text never holds a NUL. Changed bytes make a different marker, so the
+ * same comparisons and restores work for both kinds.
+ */
+const BLOB_MARK = "\u0000codechatter-blob:";
+
+export function blobMarker(blob: BlobRef): string {
+  return `${BLOB_MARK}${JSON.stringify({ sha256: blob.sha256, size: blob.size, type: blob.type })}`;
+}
+
+/** The blob a marker stands for, or null for real text. */
+export function markedBlob(text: string | undefined): BlobRef | null {
+  if (!text?.startsWith(BLOB_MARK)) return null;
+  try {
+    const value: unknown = JSON.parse(text.slice(BLOB_MARK.length));
+    return isBlobRef(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The room's text files now, by path (binary files left out: this is what goes to GitHub). */
 export function roomTexts(doc: Y.Doc): Map<string, string> {
   return new Map(
     flatten(listTree(doc))
-      .filter((node) => node.kind === "file")
+      .filter((node) => node.kind === "file" && !node.blob)
       .map((node) => [node.path, textOf(doc, node.id)?.toString() ?? ""]),
   );
 }
 
-/** Write a file's text, making it (and its folders) when it isn't there. */
+/** Every file now, by path: text files' text, and a marker for each binary file. */
+export function roomContents(doc: Y.Doc): Map<string, string> {
+  return new Map(
+    flatten(listTree(doc))
+      .filter((node) => node.kind === "file")
+      .map((node) => [node.path, node.blob ? blobMarker(node.blob) : (textOf(doc, node.id)?.toString() ?? "")]),
+  );
+}
+
+/** The room's binary files, by path. */
+export function roomBlobs(doc: Y.Doc): Map<string, BlobRef> {
+  const out = new Map<string, BlobRef>();
+  for (const node of flatten(listTree(doc))) if (node.kind === "file" && node.blob) out.set(node.path, node.blob);
+  return out;
+}
+
+/** Write a file's text (or, for a marker, its blob), making it and its folders when it isn't there. */
 function writeFile(doc: Y.Doc, path: string, text: string, userId: string): void {
+  const blob = markedBlob(text);
   const node = findByPath(doc, path);
-  const ytext = node?.kind === "file" ? textOf(doc, node.id) : undefined;
-  if (!node || !ytext) {
-    createFileAtPath(doc, path, text, userId);
+  if (node?.kind !== "file") {
+    if (blob) createBinaryFileAtPath(doc, path, blob, userId);
+    else createFileAtPath(doc, path, text, userId);
     return;
   }
-  setText(ytext, text);
+  if (blob) setBlob(doc, node.id, blob);
+  else setFileText(doc, node.id, text);
   // A notebook is rebuilt from its new text the next time it's shown.
   if (isNotebookName(path)) notebooks(doc).delete(node.id);
+}
+
+/** Write binary files (already uploaded) at these paths, making any that aren't there, as one edit. */
+export function writeBlobs(doc: Y.Doc, blobs: ReadonlyMap<string, BlobRef>, userId: string, origin: string): void {
+  doc.transact(() => {
+    for (const [path, blob] of blobs) writeFile(doc, path, blobMarker(blob), userId);
+  }, origin);
 }
 
 function removeFile(doc: Y.Doc, path: string): void {
@@ -54,10 +105,10 @@ export function writeFiles(doc: Y.Doc, files: FileMap, userId: string, origin: s
   }, origin);
 }
 
-/** Make the room's files exactly these (a fork copies a room's code in this way), as one edit. */
+/** Make the room's files exactly these (a fork copies a room's files in this way, markers included), as one edit. */
 export function replaceFiles(doc: Y.Doc, files: FileMap, userId: string, origin: string): void {
   doc.transact(() => {
-    for (const path of roomTexts(doc).keys()) if (!files.has(path)) removeFile(doc, path);
+    for (const path of roomContents(doc).keys()) if (!files.has(path)) removeFile(doc, path);
     for (const [path, text] of files) writeFile(doc, path, text, userId);
   }, origin);
 }

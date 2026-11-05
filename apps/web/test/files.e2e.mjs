@@ -1,6 +1,6 @@
 // Files in and out of a room (roadmap §5), in E2ETST. Download as zip hands over the room's code (README.md in it).
-// Import a zip (deflated, its files in one top folder, a PNG among them) adds the text files where you'd expect, says
-// the PNG was skipped. Upload files adds a file, after a "Before importing" checkpoint of the files as they were;
+// Import a zip (deflated, its files in one top folder, a PNG among them) adds the files where you'd expect, the PNG as
+// a binary file. Upload files adds a file, after a "Before importing" checkpoint of the files as they were;
 // dropping a file from the computer on a folder puts it in that folder. Everything the test added is deleted.
 //   node test/files.e2e.mjs        (from apps/web, with the dev stack running)
 import { readFile } from "node:fs/promises";
@@ -72,7 +72,7 @@ const { browser, errors, signIn } = await launch();
 const { page: a } = await signIn("test1@codechatter.local");
 const tree = a.getByRole("tree", { name: "Files" });
 const row = (path) => tree.getByRole("treeitem", { name: new RegExp(`^${escape(path)}`) });
-const made = [`zipped_${stamp}.py`, `ziplib_${stamp}`, `up_${stamp}.txt`, `drop_${stamp}`];
+const made = [`zipped_${stamp}.py`, `ziplib_${stamp}`, `logo_${stamp}.png`, `up_${stamp}.txt`, `drop_${stamp}`];
 
 try {
   // Download as zip.
@@ -87,11 +87,11 @@ try {
   const archive = makeZip([
     { path: `proj/zipped_${stamp}.py`, data: `print("from a zip ${stamp}")\n` },
     { path: `proj/ziplib_${stamp}/helper.py`, data: "def helper():\n    return 1\n" },
-    { path: "proj/logo.png", data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 13, 0, 1, 2]) },
+    { path: `proj/logo_${stamp}.png`, data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 13, 0, 1, 2]) },
   ]);
   await a.getByLabel("Zip to import").setInputFiles({ name: "proj.zip", mimeType: "application/zip", buffer: archive });
   check("zipImported", await ok(row(`zipped_${stamp}.py`).waitFor({ timeout: 15_000 })) && (await ok(row(`ziplib_${stamp}`).waitFor({ timeout: 5_000 }))));
-  check("binarySkippedAndSaid", await ok(a.getByText(/Imported 2 files\. Skipped 1: logo\.png, because it isn't text/).waitFor({ timeout: 5_000 })));
+  check("binaryImportedToo", (await ok(a.getByText(/Imported 3 files\./).waitFor({ timeout: 10_000 }))) && (await ok(row(`logo_${stamp}.png`).waitFor({ timeout: 5_000 }))));
   await a.screenshot({ path: join(process.env.SHOT_DIR ?? tmpdir(), "files-import.png") });
 
   // Upload a file. The files changed (the zip), so a checkpoint of them comes first. (Had nothing changed since the

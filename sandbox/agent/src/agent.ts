@@ -45,7 +45,7 @@ const watcher = new TreeWatcher(workspace.root, async (paths) => {
 async function handle(op: AgentOp): Promise<void> {
   switch (op.op) {
     case "write":
-      return workspace.write(op.path, op.content);
+      return workspace.write(op.path, op.content, op.encoding);
     case "mkdir":
       return workspace.mkdir(op.path);
     case "delete":

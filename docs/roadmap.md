@@ -283,7 +283,7 @@ Tests:
     - **Not checked here:** a real call through a server or the Kubernetes demo (the demo isn't installed now).
   - 🟡 **TURN over TLS** on its own public TCP 443 address, for networks that only allow HTTPS (UDP TURN and TCP 7881 don't get through those). Also browser tests of a forced relay and of screen sharing. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-12-turn-tls.md`.
 - ✅ **GitHub:** import a repository, commit, push and open pull requests (done in section 14 E, through the GitHub API).
-- 🟡 **Files:** uploads (images and binaries in S3), zip import and export.
+- ✅ **Files:** uploads (images and binaries in S3), zip import and export.
   - ✅ **Text files in and out** (`components/room/files-transfer.ts`, `lib/zip.ts`), from the Files view's menu (…).
     - **Upload files, Upload a folder (keeping its paths), and Import a zip.** Dropping files or a zip from your computer works too, onto the list or onto a folder.
     - **The zip reader needs no package:** it inflates with the browser's `DecompressionStream`, refuses paths that leave the folder, and stops at 5,000 entries or 100 MB unpacked whatever the headers claim.
@@ -292,7 +292,43 @@ Tests:
     - **Download as zip** gives anyone who can see the room its code.
 
     Tests: unit 10/10 (`lib/zip.test.ts`, `files-transfer.test.ts`), browser `files.e2e.mjs` 8/8.
-  - ⬜ **Binary files** (images, PDFs, fonts) stored in S3 (SeaweedFS in dev): the file tree needs a binary file kind, the sandbox agent needs to sync them, and the editor needs an image viewer.
+  - ✅ **Binary files** (images, PDFs, fonts, audio, video, data files), kept in the S3-compatible object store (SeaweedFS in dev). See ADR 0009.
+    - **In the file tree:** a binary file is an ordinary file with a `blob` (SHA-256, size, type) and no text. Rename, move, delete and History work as for any file.
+    - **Storage:** the bytes are at `rooms/<room>/<sha256>`, so reading one needs only permission to see that room. Fork copies them on the server.
+    - **Coming in:**
+      - Upload files, Upload a folder, Import a zip and drops take them, up to 20 MB each.
+      - Text over 1 MB and anything not UTF-8 become binary files.
+      - So do known binary types (PNG, PDF, fonts, zips, office files…) whatever their bytes; SVG stays editable text.
+    - **In the editor:**
+      - an image fits or shows at actual size, with its pixel size;
+      - a PDF opens in the browser's viewer;
+      - a font shows a sample you can type, at five sizes;
+      - audio and video play, and can seek, since the API serves byte ranges;
+      - anything else gets a hex view of its first 512 bytes.
+      - Download is always there, and Replace for editors; a replace is live for everyone.
+    - **Download as zip** includes binary files.
+    - **API** (`apps/api/src/blobs`):
+      - Routes: `POST /rooms/:id/blobs` (raw bytes, hashed as they arrive), `GET /rooms/:id/blobs/:sha256` and `POST /rooms/:id/blobs/copy`.
+      - Downloads are never served as a page: only types the editor shows keep their type, with `nosniff` and a sandbox CSP. They're cached for good, and serve 304s and ranges.
+    - **Sandbox:**
+      - the runner writes binary files into the sandbox;
+      - a binary a program makes, up to 5 MB, comes back as a binary file, with its bytes stored;
+      - text written over a binary turns it back into text;
+      - bigger binaries stay in the sandbox.
+      - The agent is in both sandbox images, so `pnpm sandbox:build` and `sandbox:build:full`.
+    - **The S3 client** is `@codechatter/auth/s3`: Signature V4 with Node's crypto, no SDK. It's checked against AWS's published examples and against SeaweedFS, which refuses a wrong signature.
+    - **Production:** the `S3_*` settings for the API and the runner, in Compose; `docs/deploy.md` "Binary files". Without them binary files are off, and uploads say so.
+    - **Tests:**
+      - unit: S3 signing 5/5, workspace-model 34/34, contracts blobs 4/4, API headers and ranges 5/5, web `room-files` and `files-transfer` 11/11;
+      - API `blobs.e2e.mjs` 23/23: headers, 304, ranges, 413, no access from other rooms or outsiders, copy;
+      - runner `blobs.e2e.mjs` 7/7: bytes in byte for byte, replaced bytes, a program's binary back with its bytes stored, text over a binary, 6 MB staying in the sandbox;
+      - browser `binary-files.e2e.mjs` 11/11 (two people);
+      - `files` 8/8, `history` 14/14, `public-rooms` 10/10 and `editor` 16/16 still pass.
+    - ⬜ **Next:**
+      - delete a room's objects with the room, and collect ones no file or checkpoint uses;
+      - the Helm chart's `S3_*` settings;
+      - binary files in GitHub import and commits;
+      - a streaming download instead of buffering up to 20 MB.
 - ✅ **Notifications:** inbox with unread counts and an email digest, plus an activity feed per room (`apps/api/src/notifications`).
   - **What notifies you:** being @mentioned by name in a room's chat ("@Ana", any case, names with spaces too). A reply on a code comment thread you're in, or a new comment that mentions you, with the file and line; your browser names who to tell, and the API only tells people in the room, with a rate limit. Someone joining a room you own, or asking to.
   - **Delivery:** notifications go live to your own Socket.IO channel, wherever you're signed in, with a short message. The bell (room title bar and the app sidebar) counts the unread ones, lists them, and marks them read when opened or all at once.
@@ -413,7 +449,38 @@ Tests:
     - the page checked in a browser.
 - ⬜ **Public API** with personal access tokens, and a `cc` CLI that syncs a folder with a room.
 - ⬜ **CodeChatter MCP server:** Claude Code, Claude Desktop and Cursor can open rooms, read and edit files, and run code.
-- ⬜ **Dependency alerts (OSV)** and `devcontainer.json` support. The alerts are handed to ChatGPT: the brief is `docs/handoff/chatgpt-7-dependency-alerts.md`.
+- ✅ **Dependency alerts (OSV)**, written by ChatGPT: the **Dependencies** side tool.
+  - **Reading:** it reads the room's manifests in the browser (`parseManifests` in contracts):
+    - npm: `package-lock.json`, `pnpm-lock.yaml`, `package.json`;
+    - PyPI: `requirements*.txt`, `poetry.lock`;
+    - also `go.mod`, `Cargo.lock`, `composer.lock` and `pom.xml`.
+
+    Lock files are preferred over manifests, and `node_modules`, `vendor`, `.venv` and `target` are skipped.
+  - **Checking:** it asks the API (`POST /rooms/:id/dependencies/check`, room view), which queries OSV's batch API, then each advisory's details.
+    - Answers are validated, and redirects refused, with a 15-second timeout.
+    - Caches are bounded, for 6 hours; identical requests running at once are merged.
+    - At most 2 batch and 8 detail requests go out at once, across all rooms; withdrawn advisories are dropped.
+  - **Severity:** GitHub's rating when there is one, else computed from the CVSS v3 vector by a local calculator, with FIRST's rounding.
+  - **The fix:** the lowest fixed version, for that ecosystem's versioning (`versions.ts`).
+  - **The panel:**
+    - a summary line;
+    - groups by severity, critical first;
+    - each package's file and line (click to open it);
+    - links to osv.dev;
+    - "Not checked (no exact version)";
+    - Copy as Markdown.
+
+    It checks when opened and again 10 seconds after a manifest changes.
+  - **Tests:**
+    - contracts 121/121 (with `parseManifests`) and API 540/540 (CVSS, versions, the service);
+    - browser `dependencies.e2e.mjs` 12/12 against the real OSV (lodash 4.17.20's advisories; needs the internet).
+  - **Fixed here:**
+    - the side panel's tab row overflowed with six tools, cutting off Dependencies; it now scrolls sideways and keeps the chosen tab in view;
+    - the manifest path broke mid-word; it now wraps after a slash.
+  - **Next:**
+    - nothing yet shows that the tab row scrolls (a fade at the edge);
+    - no per-person rate limit on checks (the cache does most of the work).
+- ⬜ **`devcontainer.json` support.**
 
 ## 10. Hardening and launch ⬜
 

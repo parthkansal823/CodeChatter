@@ -1,4 +1,5 @@
 import { createAuth, createOriginPolicy, type Auth, type OriginPolicy } from "@codechatter/auth";
+import { objectStoreFromEnv, type ObjectStore } from "@codechatter/auth/s3";
 import { createDb, type DbHandle } from "@codechatter/db";
 import { Global, Inject, Module, type OnApplicationShutdown } from "@nestjs/common";
 import { Redis } from "ioredis";
@@ -6,7 +7,7 @@ import { Redis } from "ioredis";
 import { loadEnv, type Env } from "../config/env.js";
 import { MailService } from "../mail/mail.service.js";
 import { PreviewHosts } from "../preview/preview-proxy.js";
-import { AUTH, DB, ENV, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./tokens.js";
+import { AUTH, DB, ENV, OBJECT_STORE, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./tokens.js";
 
 @Global()
 @Module({
@@ -20,6 +21,7 @@ import { AUTH, DB, ENV, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./tokens.js";
     },
     MailService,
     { provide: PREVIEW_HOSTS, inject: [ENV], useFactory: (env: Env) => new PreviewHosts(env.PREVIEW_ORIGIN) },
+    { provide: OBJECT_STORE, inject: [ENV], useFactory: (env: Env): ObjectStore | null => objectStoreFromEnv(env) },
     {
       provide: ORIGINS,
       inject: [ENV],
@@ -50,7 +52,7 @@ import { AUTH, DB, ENV, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./tokens.js";
         }),
     },
   ],
-  exports: [ENV, DB, VALKEY, AUTH, ORIGINS, PREVIEW_HOSTS, MailService],
+  exports: [ENV, DB, VALKEY, AUTH, ORIGINS, PREVIEW_HOSTS, OBJECT_STORE, MailService],
 })
 export class InfraModule implements OnApplicationShutdown {
   constructor(

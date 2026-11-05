@@ -31,6 +31,7 @@ import { EventsGateway } from "./realtime/events.gateway.js";
 import { MetaController } from "./meta/meta.controller.js";
 import { AuditService } from "./audit/audit.service.js";
 import { AuditController } from "./audit/audit.controller.js";
+import { BlobsController } from "./blobs/blobs.controller.js";
 import { RoomsController } from "./rooms/rooms.controller.js";
 import { RoomsRepository } from "./rooms/rooms.repository.js";
 import { RoomsService } from "./rooms/rooms.service.js";
@@ -62,7 +63,7 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController],
+  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController],
   providers: [
     AiService,
     ActivityService,

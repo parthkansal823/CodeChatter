@@ -4,7 +4,7 @@
 import { parseManifests, type DependencyCheckResponse, type DependencyPackage, type DependencyResult, type DependencySeverity, type ParsedDependency } from "@codechatter/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Copy, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import type * as Y from "yjs";
 
@@ -55,13 +55,14 @@ function severityOf(pkg: DependencyResult): DependencySeverity {
 
 function summaryOf(data: DependencyCheckResponse): string {
   const affected = data.results.filter((pkg) => pkg.vulns.length);
+  const total = `${data.results.length} ${data.results.length === 1 ? "package" : "packages"}`;
   if (!data.results.length) return "No packages with a version to check.";
-  if (!affected.length) return `No known vulnerabilities in ${data.results.length} packages.`;
+  if (!affected.length) return `No known vulnerabilities in ${total}.`;
   const counts = SEVERITIES.map((severity) => {
     const count = affected.filter((pkg) => severityOf(pkg) === severity).length;
     return count ? `${count} ${severity === "unknown" ? "unknown severity" : severity}` : null;
   }).filter(Boolean).join(", ");
-  return `${data.results.length} packages, ${affected.length} with known vulnerabilities (${counts}).`;
+  return `${total}, ${affected.length} with known vulnerabilities (${counts}).`;
 }
 
 const markdown = (text: string) => text.replace(/[\r\n]+/g, " ").replace(/[\\`*_{}[\]()<>|]/g, "\\$&");
@@ -88,9 +89,11 @@ function reportOf(data: DependencyCheckResponse, locations: Map<string, ParsedDe
 
 function Source({ value }: { value: ParsedDependency | undefined }) {
   if (!value) return <span className="text-muted-foreground">Location unavailable</span>;
-  return <Button size="xs" variant="link" className="h-auto min-h-6 max-w-full justify-start p-0 text-left font-mono text-xs whitespace-normal break-all" aria-label={`Open ${value.path}:${value.line}`} onClick={() => {
+  // Long paths wrap after a slash, never in the middle of a name.
+  const parts = value.path.split("/");
+  return <Button size="xs" variant="link" className="h-auto min-h-6 max-w-full justify-start p-0 text-left font-mono text-xs whitespace-normal break-words" aria-label={`Open ${value.path}:${value.line}`} onClick={() => {
     if (!openRoomFile(value.path, { startLine: value.line, startColumn: 1, endLine: value.line, endColumn: 1 })) toast.error("That file is no longer available.");
-  }}>{value.path}:{value.line}</Button>;
+  }}>{parts.map((part, index) => <Fragment key={index}>{index > 0 && <>/<wbr /></>}{part}</Fragment>)}:{value.line}</Button>;
 }
 
 function PackageRow({ pkg, location }: { pkg: DependencyResult; location: ParsedDependency | undefined }) {
@@ -127,12 +130,12 @@ function DependenciesPanel({ roomId, doc, close }: { roomId: string; doc: Y.Doc;
   const affected = data?.results.filter((pkg) => pkg.vulns.length) ?? [];
   const clean = data?.results.filter((pkg) => !pkg.vulns.length) ?? [];
   return <section aria-label="Dependencies" aria-busy={query.isFetching} className="flex h-full min-h-0 min-w-0 flex-col bg-panel text-xs">
-    <div className="flex h-9 shrink-0 items-center gap-1 border-b px-3"><h2 className="mr-auto font-medium">Dependencies</h2><Button size="icon-xs" variant="ghost" aria-label="Close dependencies" onClick={close}><X /></Button></div>
-    <div className="flex shrink-0 flex-wrap gap-2 border-b p-3"><Button size="xs" disabled={!packages.length || tooMany || query.isFetching} onClick={() => { if (timer.current) clearTimeout(timer.current); first.current = false; void refetch(); }}><RefreshCw className={cn(query.isFetching && "animate-spin motion-reduce:animate-none")} />{query.isFetching ? "Checking..." : "Check"}</Button><Button size="xs" variant="outline" disabled={!data || !packages.length || tooMany} onClick={async () => { if (data && await copyText(reportOf(data, locations))) toast.success("Dependency report copied"); else toast.error("Couldn't copy the report. Try again."); }}><Copy />Copy as Markdown</Button></div>
+    <div className="flex h-9 shrink-0 items-center gap-1 border-b px-3"><h2 className="mr-auto min-w-0 truncate font-medium">Dependencies</h2><Button size="icon-xs" variant="ghost" className="shrink-0" aria-label="Close dependencies" onClick={close}><X /></Button></div>
+    <div className="flex shrink-0 flex-wrap gap-2 border-b p-3"><Button size="xs" className="h-auto min-h-6 min-w-0 max-w-full whitespace-normal" disabled={!packages.length || tooMany || query.isFetching} onClick={() => { if (timer.current) clearTimeout(timer.current); first.current = false; void refetch(); }}><RefreshCw className={cn(query.isFetching && "animate-spin motion-reduce:animate-none")} />{query.isFetching ? "Checking..." : "Check"}</Button><Button size="xs" variant="outline" className="h-auto min-h-6 min-w-0 max-w-full whitespace-normal" disabled={!data || !packages.length || tooMany} onClick={async () => { if (data && await copyText(reportOf(data, locations))) toast.success("Dependency report copied"); else toast.error("Couldn't copy the report. Try again."); }}><Copy />Copy as Markdown</Button></div>
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
       {!files.length ? <p className="p-3 text-muted-foreground">{EMPTY}</p> : !packages.length ? <p className="p-3 text-muted-foreground">No packages found in the dependency files. Check their format.</p> : tooMany ? <p role="alert" className="p-3">This room has {packages.length} dependencies. A check supports up to 5,000 packages.</p> : <>
         {query.isError && <p role="alert" className="border-b p-3 text-destructive">{query.error instanceof ApiError ? query.error.detail : "Couldn't check dependencies. Try again."}</p>}
-        <div aria-live="polite" className="grid gap-2 border-b p-3"><p className="font-medium">{data ? summaryOf(data) : query.isFetching ? "Checking the vulnerability database..." : "A dependency check will start shortly."}</p>{data && <p className="text-muted-foreground">Results from {new Date(query.dataUpdatedAt).toLocaleTimeString()}.</p>}<p className="text-muted-foreground">Lock files give exact versions. Simple manifest ranges use their lowest stated version; installed versions may differ.</p></div>
+        <div aria-live="polite" className="grid grid-cols-1 gap-2 border-b p-3 break-words"><p className="font-medium">{data ? summaryOf(data) : query.isFetching ? "Checking the vulnerability database..." : "A dependency check will start shortly."}</p>{data && <p className="text-muted-foreground">Results from {new Date(query.dataUpdatedAt).toLocaleTimeString()}.</p>}<p className="text-muted-foreground">Lock files give exact versions. Simple manifest ranges use their lowest stated version; installed versions may differ.</p></div>
         {SEVERITIES.map((severity) => {
           const items = affected.filter((pkg) => severityOf(pkg) === severity).sort((a, b) => a.name.localeCompare(b.name));
           return items.length ? <section key={severity} aria-label={`${LABELS[severity]} packages`}><h3 className="border-b bg-muted/30 px-3 py-2 font-medium">{LABELS[severity]} ({items.length})</h3>{items.map((pkg) => <PackageRow key={keyOf(pkg)} pkg={pkg} location={locations.get(keyOf(pkg))} />)}</section> : null;

@@ -116,6 +116,17 @@ describe("Python dependency files", () => {
     ]);
   });
 
+  it("treats an explicit empty Poetry package array as authoritative over requirements", () => {
+    const requirement = file("requirements.txt", "requests==2.0.0");
+    expect(parseManifests([
+      requirement, file("poetry.lock", 'package = []\n\n[metadata]\nlock-version = "2.1"'),
+    ])).toEqual([]);
+    // A similarly named key in metadata is not the root package array.
+    expect(parseManifests([
+      requirement, file("poetry.lock", '[metadata]\npackage = []'),
+    ])[0]).toMatchObject({ name: "requests", version: "2.0.0" });
+  });
+
   it("deduplicates normalized Python names while preserving different versions", () => {
     const result = parseManifests([file("requirements.txt", "Foo_Bar==1.2.3\nfoo.bar==1.2.3\nfoo-bar==2.0.0")]);
     expect(result.map(({ name, version }) => [name, version])).toEqual([["Foo_Bar", "1.2.3"], ["foo-bar", "2.0.0"]]);

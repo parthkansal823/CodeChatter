@@ -33,6 +33,7 @@ import { duckdbFiles, duckdbPreview, duckdbQuery, duckdbTables } from "./duckdb.
 import type { Env } from "./env.js";
 import { judge } from "./judge.js";
 import { log, messageOf } from "./log.js";
+import { configureRunnerCollectors, serveMetrics } from "./metrics.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
 import type { RoomRegistry } from "./room-session.js";
 import { RunError } from "./runs.js";
@@ -41,6 +42,7 @@ import { KubeError, kubeApply, kubeCheck, kubeDelete, kubeObject, kubePower, kub
 import { LANGUAGE_SERVERS, MAX_LSP_MESSAGE, openLanguageServer } from "./lsp.js";
 import { NotebookError } from "./notebooks.js";
 import { SandboxUnavailableError } from "./sandbox.js";
+import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM } from "./sandbox.js";
 import { FileDatabaseError, loadIntoSqlite, openSqliteDump, sqliteFiles, sqlitePreview, sqliteQuery, sqliteTables } from "./sqlite.js";
 import { openTerminal } from "./terminal.js";
 
@@ -115,6 +117,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://runner");
+    if (url.pathname === "/metrics") return serveMetrics(req, res, env);
     // Housekeeping from the API: the rooms that exist, so what's left of the others can go.
     if (req.method === "POST" && url.pathname === "/maintenance/prune") {
       const claims = verifyServiceToken(env.SERVICE_SECRET, (req.headers.authorization ?? "").replace(/^Bearer /, ""), "runner");
@@ -574,6 +577,17 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
   }
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+  configureRunnerCollectors({
+    terminals: () => wss.clients.size,
+    sandboxes: async () => {
+      if (rooms.kube) {
+        const pods = await rooms.kube.core.listPodForAllNamespaces({ labelSelector: `${LABEL_MANAGED}=1,${LABEL_NAMESPACE}=${env.SANDBOX_NAMESPACE},${LABEL_ROLE}=sandbox` });
+        return pods.items.filter((pod) => !pod.metadata?.deletionTimestamp && pod.status?.containerStatuses?.some((container) => container.name === "sandbox" && container.state?.running)).length;
+      }
+      const containers = await deps.docker.listContainers({ all: false, filters: { label: [`${LABEL_MANAGED}=1`, `${LABEL_NAMESPACE}=${env.SANDBOX_NAMESPACE}`] } });
+      return containers.filter((container) => container.State === "running" && !container.Labels[LABEL_ROLE] && Boolean(container.Labels[LABEL_ROOM])).length;
+    },
+  });
   // Language servers send and take whole files: their own server, with room for that.
   const lspWss = new WebSocketServer({ noServer: true, maxPayload: MAX_LSP_MESSAGE });
   server.on("upgrade", (req, socket, head) => {

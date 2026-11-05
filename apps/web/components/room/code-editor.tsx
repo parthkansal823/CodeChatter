@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useTabs } from "@/components/room/editor-store";
 import type { PaneRole } from "@/components/room/editor/active-editor";
+import { BinaryView } from "@/components/room/editor/binary-view";
 import { Breadcrumbs } from "@/components/room/editor/breadcrumbs";
 import { editorThemeId } from "@/components/room/editor/themes";
 import { attachVim } from "@/components/room/editor/vim-mode";
@@ -32,11 +33,22 @@ type Props = {
 };
 
 /**
+ * One file in an editor slot: a binary file (it has a blob and no text) gets the binary
+ * viewer, a text file Monaco. A file switches between the two if a program in the
+ * sandbox overwrites it with the other kind.
+ */
+export function CodeEditor(props: Props) {
+  const file = props.file;
+  if (file?.blob) return <BinaryView file={{ ...file, blob: file.blob }} />;
+  return <TextEditor {...props} />;
+}
+
+/**
  * One Monaco editor showing one file. The file's model is shared with every
  * other editor showing it and bound to its Y.Text with y-monaco (file-models.ts);
  * everyone else's carets are drawn from awareness (remote-cursors.tsx).
  */
-export function CodeEditor({ file, role }: Props) {
+function TextEditor({ file, role }: Props) {
   const { room, doc, provider, can } = useRoom();
   const { resolvedTheme } = useTheme();
   const settings = useSettingsValues();

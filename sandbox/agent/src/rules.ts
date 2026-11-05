@@ -36,8 +36,15 @@ const IGNORED_SUFFIXES = [".pyc", ".class", ".o", ".so", ".swp"];
 /** Our own temp files for atomic writes. */
 export const TEMP_PREFIX = ".cc-tmp-";
 
-/** Largest file that syncs from the sandbox back into the room; bigger ones stay in the sandbox. */
+/** Largest text file that syncs from the sandbox back into the room; bigger ones stay in the sandbox. */
 export const SYNC_MAX_BYTES = 256 * 1024;
+
+/**
+ * Largest binary file (an image a program drew, a zip) that syncs back; it travels to the
+ * runner as base64 and is stored in the room's object store. Same as contracts'
+ * SANDBOX_BLOB_MAX_BYTES (kept here so the agent's bundle doesn't pull in zod).
+ */
+export const BLOB_SYNC_MAX_BYTES = 5 * 1024 * 1024;
 
 /** True if a workspace-relative path (or anything under it) should not sync. */
 export function isIgnored(relPath: string): boolean {

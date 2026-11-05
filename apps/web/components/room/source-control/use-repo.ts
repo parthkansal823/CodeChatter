@@ -9,7 +9,7 @@ import type * as Y from "yjs";
 import { useRoom } from "@/components/room/room-context";
 import { api, ApiError } from "@/lib/api";
 
-import { roomTexts, SYNC_KEY } from "./room-files";
+import { roomContents, roomTexts, SYNC_KEY } from "./room-files";
 
 export const repoKey = (roomId: string) => ["room-repo", roomId] as const;
 export const baseKey = (roomId: string, commit: string) => ["repo-files", roomId, commit] as const;
@@ -57,8 +57,11 @@ export function useBaseFiles(commit: string | undefined): Map<string, string> | 
   }).data;
 }
 
-/** The room's files by path, read again a moment after each edit (not on every keystroke). */
-export function useRoomTexts(): Map<string, string> {
+/**
+ * The room's files by path, read again a moment after each edit (not on every keystroke).
+ * Text files only, unless `withBinaries`: then binary files are there as markers (History).
+ */
+export function useRoomTexts({ withBinaries = false }: { withBinaries?: boolean } = {}): Map<string, string> {
   const { doc } = useRoom();
   const version = useRef(0);
   const subscribe = useCallback(
@@ -86,5 +89,5 @@ export function useRoomTexts(): Map<string, string> {
     () => 0,
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => roomTexts(doc), [doc, tick]);
+  return useMemo(() => (withBinaries ? roomContents(doc) : roomTexts(doc)), [doc, tick, withBinaries]);
 }

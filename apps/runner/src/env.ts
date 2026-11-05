@@ -5,6 +5,8 @@ const production = process.env.NODE_ENV === "production";
 const Env = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   RUNNER_PORT: z.coerce.number().int().positive().default(4200),
+  /** Private Prometheus scrapes use this bearer token; unset is loopback-only outside production. */
+  METRICS_TOKEN: z.string().trim().optional().default(""),
   /** Only the API talks to the runner: localhost in dev, the private network in production. */
   RUNNER_HOST: z.string().default(production ? "0.0.0.0" : "127.0.0.1"),
   /** Shared by api, collab and runner to sign service tokens. */
@@ -58,6 +60,16 @@ const Env = z.object({
   /** Stop a room's container after this long with no run and no open terminal. */
   SANDBOX_IDLE_MINUTES: z.coerce.number().positive().default(15),
   RUN_TIMEOUT_MINUTES: z.coerce.number().positive().default(30),
+  /**
+   * The object store that holds rooms' binary files (the API's S3_* settings). The runner
+   * copies them into sandboxes and stores binaries that programs make; without it, binary
+   * files stay out of sandboxes.
+   */
+  S3_ENDPOINT: z.string().trim().optional().default(""),
+  S3_REGION: z.string().trim().optional().default("us-east-1"),
+  S3_BUCKET: z.string().trim().optional().default(""),
+  S3_ACCESS_KEY: z.string().trim().optional().default(""),
+  S3_SECRET_KEY: z.string().trim().optional().default(""),
 });
 export type Env = z.infer<typeof Env>;
 

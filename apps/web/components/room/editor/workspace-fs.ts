@@ -25,7 +25,7 @@ export function mirrorRoomFiles(doc: Y.Doc, files: TreeNode[]): void {
     provider = new RegisteredFileSystemProvider(true);
     registerFileSystemOverlay(0, provider);
   }
-  const wanted = new Map(files.filter((n) => n.kind === "file").map((n) => [uriFor(n.path), n]));
+  const wanted = new Map(files.filter((n) => n.kind === "file" && !n.blob).map((n) => [uriFor(n.path), n]));
   for (const [uri, entry] of registered) {
     if (wanted.get(uri)?.id !== entry.id) {
       entry.dispose();

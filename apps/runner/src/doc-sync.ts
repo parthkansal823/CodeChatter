@@ -1,6 +1,10 @@
+import { createHash } from "node:crypto";
+
+import type { ObjectStore } from "@codechatter/auth/s3";
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { AgentEvent } from "@codechatter/contracts";
+import { blobKey, SANDBOX_BLOB_MAX_BYTES, typeForName, type AgentEvent, type BlobRef } from "@codechatter/contracts";
 import {
+  createBinaryFileAtPath,
   createFileAtPath,
   filesDocName,
   findByPath,
@@ -8,7 +12,8 @@ import {
   isInitialised,
   listTree,
   maps,
-  setText,
+  setBlob,
+  setFileText,
   textOf,
   trash,
 } from "@codechatter/workspace-model";
@@ -30,24 +35,38 @@ const FROM_SANDBOX = "sandbox";
  * Up:   files that programs or the terminal change are written into the
  *       document, so they appear in everyone's editor.
  *
- * `written` mirrors the sandbox's files. Up-sync updates it too, so a change
- * that came from the sandbox never goes back into it.
+ * `written` mirrors the sandbox's text files and `writtenBlobs` its binary
+ * ones (by SHA-256). Up-sync updates them too, so a change that came from the
+ * sandbox never goes back into it.
+ *
+ * Binary files' bytes live in the object store (`blobKey`): going down they're
+ * fetched and sent base64; coming up they're stored and the file tree gets the
+ * blob. Without a store, binary files stay out of the sandbox.
  */
 export class DocSync {
   readonly doc = new Y.Doc();
   private readonly socket: HocuspocusProviderWebsocket;
   private readonly provider: HocuspocusProvider;
   private readonly syncedPromise: Promise<void>;
+  private readonly store: ObjectStore | null;
   private agent: AgentChannel | null = null;
   private written = new Map<string, string>();
+  private writtenBlobs = new Map<string, string>();
   private dirs = new Set<string>();
   private treeDirty = true;
   private readonly dirtyTexts = new Set<string>();
   private pathById = new Map<string, string>();
   private timer: NodeJS.Timeout | null = null;
   private pushing: Promise<void> = Promise.resolve();
+  /** Changes from the sandbox, applied in the order they came (storing a binary takes a moment). */
+  private incoming: Promise<void> = Promise.resolve();
+  private warnedNoStore = false;
 
-  constructor(roomId: string, options: { collabUrl: string; secret: string }) {
+  constructor(
+    private readonly roomId: string,
+    options: { collabUrl: string; secret: string; store?: ObjectStore | null },
+  ) {
+    this.store = options.store ?? null;
     const name = filesDocName(roomId);
     this.socket = new HocuspocusProviderWebsocket({ url: options.collabUrl, WebSocketPolyfill: WebSocket as never });
     this.provider = new HocuspocusProvider({
@@ -87,15 +106,17 @@ export class DocSync {
   async attach(agent: AgentChannel): Promise<void> {
     await this.synced();
     this.agent = agent;
-    const { files, dirs } = this.snapshot();
-    await agent.request({ op: "reconcile", files: [...files.keys()], dirs: [...dirs] }, 60_000);
+    const { files, blobs, dirs } = this.snapshot();
+    await agent.request({ op: "reconcile", files: [...files.keys(), ...blobs.keys()], dirs: [...dirs] }, 60_000);
+    this.written = files;
+    this.writtenBlobs = new Map([...blobs].map(([path, blob]) => [path, blob.sha256]));
+    this.dirs = dirs;
     // Sent back to back; the agent applies them in order.
     await Promise.all([
       ...[...dirs].sort().map((path) => agent.request({ op: "mkdir", path })),
       ...[...files].map(([path, content]) => agent.request({ op: "write", path, content })),
+      ...[...blobs].map(([path, blob]) => this.writeBlob(agent, path, blob)),
     ]);
-    this.written = files;
-    this.dirs = dirs;
     this.dirtyTexts.clear();
     this.treeDirty = false;
   }
@@ -148,21 +169,14 @@ export class DocSync {
 
   /** A change reported by the sandbox agent (a program or the terminal wrote a file). */
   applyFromSandbox(event: AgentEvent): void {
-    if (event.ev === "file") {
-      this.written.set(event.path, event.content);
-      this.doc.transact(() => {
-        const node = findByPath(this.doc, event.path);
-        if (node?.kind === "file") setText(textOf(this.doc, node.id)!, event.content);
-        else if (!node) createFileAtPath(this.doc, event.path, event.content, null);
-      }, FROM_SANDBOX);
-      for (let i = event.path.lastIndexOf("/"); i > 0; i = event.path.lastIndexOf("/", i - 1)) this.dirs.add(event.path.slice(0, i));
-    } else if (event.ev === "removed") {
-      this.written.delete(event.path);
-      const node = findByPath(this.doc, event.path);
-      if (node?.kind === "file") this.doc.transact(() => trash(this.doc, node.id), FROM_SANDBOX);
-    } else if (event.ev === "skipped") {
-      log.info(`${event.path} stays in the sandbox only (${event.reason})`);
-    }
+    this.incoming = this.incoming
+      .then(() => this.fromSandbox(event))
+      .catch((error) => log.error(`sync from sandbox failed for ${"path" in event ? event.path : event.ev}`, error));
+  }
+
+  /** Resolves when every change the sandbox has reported so far is in the document. */
+  settled(): Promise<void> {
+    return this.incoming;
   }
 
   destroy(): void {
@@ -172,23 +186,95 @@ export class DocSync {
     this.doc.destroy();
   }
 
+  private async fromSandbox(event: AgentEvent): Promise<void> {
+    if (event.ev === "file") {
+      this.written.set(event.path, event.content);
+      this.writtenBlobs.delete(event.path);
+      this.doc.transact(() => {
+        const node = findByPath(this.doc, event.path);
+        if (node?.kind === "file") setFileText(this.doc, node.id, event.content);
+        else if (!node) createFileAtPath(this.doc, event.path, event.content, null);
+      }, FROM_SANDBOX);
+      this.addParents(event.path);
+    } else if (event.ev === "blob") {
+      await this.blobFromSandbox(event.path, Buffer.from(event.b64, "base64"));
+    } else if (event.ev === "removed") {
+      this.written.delete(event.path);
+      this.writtenBlobs.delete(event.path);
+      const node = findByPath(this.doc, event.path);
+      if (node?.kind === "file") this.doc.transact(() => trash(this.doc, node.id), FROM_SANDBOX);
+    } else if (event.ev === "skipped") {
+      log.info(`${event.path} stays in the sandbox only (${event.reason})`);
+    }
+  }
+
+  /** A binary a program made: store its bytes, then point the file tree at them. */
+  private async blobFromSandbox(path: string, bytes: Buffer): Promise<void> {
+    if (!this.store) {
+      this.warnNoStore(path);
+      return;
+    }
+    if (bytes.byteLength > SANDBOX_BLOB_MAX_BYTES) return;
+    const blob: BlobRef = { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength, type: typeForName(path) };
+    const key = blobKey(this.roomId, blob.sha256);
+    if (!(await this.store.head(key))) await this.store.put(key, bytes, blob.type);
+    this.written.delete(path);
+    this.writtenBlobs.set(path, blob.sha256);
+    this.doc.transact(() => {
+      const node = findByPath(this.doc, path);
+      if (node?.kind === "file") setBlob(this.doc, node.id, blob);
+      else if (!node) createBinaryFileAtPath(this.doc, path, blob, null);
+    }, FROM_SANDBOX);
+    this.addParents(path);
+  }
+
+  private addParents(path: string): void {
+    for (let i = path.lastIndexOf("/"); i > 0; i = path.lastIndexOf("/", i - 1)) this.dirs.add(path.slice(0, i));
+  }
+
+  private warnNoStore(path: string): void {
+    if (this.warnedNoStore) return;
+    this.warnedNoStore = true;
+    log.warn(`room ${this.roomId}: binary files need an object store (S3_*); ${path} and others stay out of sync`);
+  }
+
+  /** Fetch a binary file's bytes and write them, unless the room has moved on by the time they arrive. */
+  private async writeBlob(agent: AgentChannel, path: string, blob: BlobRef): Promise<void> {
+    if (!this.store) {
+      this.warnNoStore(path);
+      return;
+    }
+    const object = await this.store.get(blobKey(this.roomId, blob.sha256)).catch((error: unknown) => {
+      log.error(`could not fetch ${path} for the sandbox`, error);
+      return null;
+    });
+    if (!object) {
+      log.warn(`room ${this.roomId}: ${path}'s bytes are missing from the object store`);
+      return;
+    }
+    if (this.writtenBlobs.get(path) !== blob.sha256 || !agent.alive) return;
+    await agent.request({ op: "write", path, content: object.body.toString("base64"), encoding: "base64" }, 60_000);
+  }
+
   private schedule(): void {
     if (!this.agent) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.flush(), 80);
   }
 
-  /** Every live file (path → text) and folder, as the room shows them. */
-  private snapshot(): { files: Map<string, string>; dirs: Set<string> } {
+  /** Every live text file (path → text), binary file (path → blob) and folder, as the room shows them. */
+  private snapshot(): { files: Map<string, string>; blobs: Map<string, BlobRef>; dirs: Set<string> } {
     const files = new Map<string, string>();
+    const blobs = new Map<string, BlobRef>();
     const dirs = new Set<string>();
     this.pathById = new Map();
     for (const node of flatten(listTree(this.doc))) {
       this.pathById.set(node.id, node.path);
       if (node.kind === "folder") dirs.add(node.path);
+      else if (node.blob) blobs.set(node.path, node.blob);
       else files.set(node.path, textOf(this.doc, node.id)?.toString() ?? "");
     }
-    return { files, dirs };
+    return { files, blobs, dirs };
   }
 
   private async push(): Promise<void> {
@@ -212,12 +298,18 @@ export class DocSync {
 
     this.treeDirty = false;
     this.dirtyTexts.clear();
-    const { files, dirs } = this.snapshot();
+    const { files, blobs, dirs } = this.snapshot();
     // Removals first (a folder renamed to a file name must be gone first), deepest paths first.
+    // A file that only switched between text and binary is overwritten, not removed.
     for (const path of [...this.written.keys()]) {
       if (files.has(path)) continue;
       this.written.delete(path);
-      ops.push(agent.request({ op: "delete", path }));
+      if (!blobs.has(path)) ops.push(agent.request({ op: "delete", path }));
+    }
+    for (const path of [...this.writtenBlobs.keys()]) {
+      if (blobs.has(path)) continue;
+      this.writtenBlobs.delete(path);
+      if (!files.has(path)) ops.push(agent.request({ op: "delete", path }));
     }
     for (const dir of [...this.dirs].sort().reverse()) {
       if (dirs.has(dir)) continue;
@@ -233,6 +325,11 @@ export class DocSync {
       if (this.written.get(path) === content) continue;
       this.written.set(path, content);
       ops.push(agent.request({ op: "write", path, content }));
+    }
+    for (const [path, blob] of blobs) {
+      if (this.writtenBlobs.get(path) === blob.sha256) continue;
+      this.writtenBlobs.set(path, blob.sha256);
+      ops.push(this.writeBlob(agent, path, blob));
     }
     await Promise.all(ops);
   }

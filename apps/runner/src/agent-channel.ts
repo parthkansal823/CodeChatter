@@ -89,6 +89,11 @@ export class AgentChannel {
   }
 
   private onData(chunk: string): void {
+    // A binary file is one long line (megabytes of base64): look for its end only in what's new.
+    if (!chunk.includes("\n")) {
+      this.buffer += chunk;
+      return;
+    }
     this.buffer += chunk;
     for (let newline = this.buffer.indexOf("\n"); newline !== -1; newline = this.buffer.indexOf("\n")) {
       const line = this.buffer.slice(0, newline);

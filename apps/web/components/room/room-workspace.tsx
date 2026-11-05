@@ -151,6 +151,11 @@ function Workspace() {
     startSearch(room.id, options);
   };
   const [right, setRight] = useSidePanel(room.id);
+  // The side panel's tabs scroll sideways when there are many; keep the chosen one in view.
+  const sideTabs = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    sideTabs.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [right]);
   const [unread, setUnread] = useState(0);
   const onUnread = useCallback((n: number) => setUnread(n), []);
   // Clicking the open panel's icon closes it; any other icon switches to it.
@@ -408,8 +413,8 @@ function Workspace() {
   const splitBelowRight = editorUi.splitBelowRightId ? (files.get(editorUi.splitBelowRightId) ?? null) : null;
   const anySplit = Boolean(splitFile || splitBelow || splitBelowRight);
   // Markdown, CSV and SVG files have a preview (beside the code, or on its own).
-  const previewKind = activeFile ? previewKindOf(activeFile.name) : null;
-  const isNotebook = activeFile ? isNotebookName(activeFile.name) : false;
+  const previewKind = activeFile && !activeFile.blob ? previewKindOf(activeFile.name) : null;
+  const isNotebook = activeFile && !activeFile.blob ? isNotebookName(activeFile.name) : false;
   const breadcrumbs = useEditorSettings((state) => state.breadcrumbs);
   const diffLeft = editorUi.diff ? files.get(editorUi.diff.leftId) : undefined;
   const diffRight = editorUi.diff ? files.get(editorUi.diff.rightId) : undefined;
@@ -865,9 +870,11 @@ function Workspace() {
               <ResizablePanel id="right" defaultSize={300} minSize={240} maxSize={460}>
                 <div className="flex h-full min-h-0 flex-col bg-panel">
                   <div
+                    ref={sideTabs}
                     role="tablist"
                     aria-label="Side panel"
-                    className="flex h-9 shrink-0 items-stretch gap-4 border-b px-3"
+                    // With many tools the tabs scroll sideways (no bar); the chosen one scrolls into view.
+                    className="flex h-9 shrink-0 items-stretch gap-4 overflow-x-auto border-b px-3 [scrollbar-width:none]"
                   >
                     {[
                       { id: "chat", label: "Chat" },
@@ -881,7 +888,7 @@ function Workspace() {
                         aria-selected={right === tab.id}
                         onClick={() => setRight(tab.id)}
                         className={cn(
-                          "relative text-xs font-medium whitespace-nowrap",
+                          "relative shrink-0 text-xs font-medium whitespace-nowrap",
                           right === tab.id
                             ? "text-foreground"
                             : "text-muted-foreground hover:text-foreground",

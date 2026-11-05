@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import * as Y from "yjs";
 
 import { collabUrl, useRoom } from "@/components/room/room-context";
-import { replaceFiles, roomTexts } from "@/components/room/source-control/room-files";
+import { replaceFiles, roomBlobs, roomContents } from "@/components/room/source-control/room-files";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -66,10 +66,21 @@ export function ForkButton() {
     setBusy(true);
     setError(null);
     try {
-      const files = roomTexts(doc);
+      // Text files and binary ones (as markers); the binaries' bytes are copied on the server first.
+      const files = roomContents(doc);
+      const hashes = [...new Set([...roomBlobs(doc).values()].map((blob) => blob.sha256))];
       const created = await api<CreatedRoom>(`/api/rooms/${room.id}/fork`, { method: "POST", json: { name: name.trim() } });
+      let missing = 0;
+      for (let at = 0; at < hashes.length; at += 1000) {
+        const copied = await api<{ copied: number; missing: string[] }>(`/api/rooms/${created.id}/blobs/copy`, {
+          method: "POST",
+          json: { from: room.id, sha256: hashes.slice(at, at + 1000) },
+        });
+        missing += copied.missing.length;
+      }
       await copyInto(created.id, files, me.user.id);
       toast.success(`Forked into ${created.name}`);
+      if (missing) toast.warning(`${missing === 1 ? "One binary file's" : `${missing} binary files'`} bytes were missing, so they won't open in the fork.`);
       setOpen(false);
       router.push(`/rooms/${created.id}` as never);
     } catch (e) {
