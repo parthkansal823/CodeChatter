@@ -8,7 +8,8 @@ import { z } from "zod";
 
 /** Runner → agent. Every op carries an id, answered by "ok" or "error". */
 export type AgentOp =
-  | { op: "write"; id: number; path: string; content: string }
+  /** A text file, or a binary one (`encoding: "base64"`, from the room's object store). */
+  | { op: "write"; id: number; path: string; content: string; encoding?: "base64" }
   | { op: "mkdir"; id: number; path: string }
   | { op: "delete"; id: number; path: string }
   /** Remove every file and folder not listed (ignored folders like node_modules are kept). */
@@ -31,6 +32,8 @@ export type AgentEvent =
   | { ev: "ok"; id: number }
   | { ev: "error"; id?: number; message: string }
   | { ev: "file"; path: string; content: string }
+  /** A binary file a program made or changed (up to SANDBOX_BLOB_MAX_BYTES), base64. */
+  | { ev: "blob"; path: string; b64: string }
   | { ev: "removed"; path: string }
   | { ev: "skipped"; path: string; reason: "binary" | "too-large" }
   /** Ports something in the sandbox is listening on (sent when the set changes). */

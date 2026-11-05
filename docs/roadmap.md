@@ -266,7 +266,22 @@ Tests:
     - **In the room:** the title bar's Call button says how many are in the call ("Join call (2)", from presence). The dock shows a tile per person (their camera, or their initial, with a ring while they speak) and a shared screen large. It has microphone, camera, screen and Leave, and any video can go picture-in-picture. Leaving the room leaves the call.
 
     Tests: unit 3/3 (the token), browser `call.e2e.mjs` 10/10 (two people with the browser's fake camera and microphone; video really flows).
-  - 🟡 **Production:** LiveKit and a TURN server in production compose and the Helm chart; a browser test of screen sharing. Compose and Helm are handed to ChatGPT: the brief is `docs/handoff/chatgpt-4-livekit-production.md`.
+  - ✅ **Production** (written by ChatGPT). LiveKit 1.13.11 runs in production Compose and in the Helm chart, with its built-in TURN on UDP 3478.
+    - **Compose:**
+      - `infra/livekit/livekit.yaml` holds no keys; `LIVEKIT_KEYS` comes from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`, which Compose now requires.
+      - Caddy routes `/livekit` to LiveKit, and the host publishes TCP 7881 and UDP 7882 and 3478.
+    - **Helm:**
+      - `templates/livekit.yaml` makes a ConfigMap, a Deployment, a private Service for signalling, and a media Service (`LoadBalancer` or `NodePort`; ports that don't match stop the install with a message).
+      - The keys are made once and kept across upgrades, and the edge routes `/livekit` only when calls are on.
+    - **Docs:** `docs/deploy.md` "Calls (video and voice)" covers the ports to open and the check (`/livekit/` answers `OK`). The chart README covers the media Service, and how to rotate keys.
+    - **Checked here:**
+      - `docker compose config` renders;
+      - `caddy validate` passes;
+      - `helm lint` passes, and `helm template` renders 28 resources;
+      - every chart guard fails as it should;
+      - LiveKit starts with the production config (TURN up on 3478, `/` answers `OK`).
+    - **Not checked here:** a real call through a server or the Kubernetes demo (the demo isn't installed now).
+  - 🟡 **TURN over TLS** on its own public TCP 443 address, for networks that only allow HTTPS (UDP TURN and TCP 7881 don't get through those). Also browser tests of a forced relay and of screen sharing. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-12-turn-tls.md`.
 - ✅ **GitHub:** import a repository, commit, push and open pull requests (done in section 14 E, through the GitHub API).
 - 🟡 **Files:** uploads (images and binaries in S3), zip import and export.
   - ✅ **Text files in and out** (`components/room/files-transfer.ts`, `lib/zip.ts`), from the Files view's menu (…).
@@ -344,16 +359,24 @@ Tests:
 
 ## 8. Teams and admin ⬜
 
-- ⬜ **Organisations:**
+- 🟡 **Organisations:** making a team (`/orgs/new`, which the switcher links to but doesn't exist), the members page, and the invitation page (`/invite/<id>`, which invitation emails already link to). Handed to ChatGPT: the brief is `docs/handoff/chatgpt-9-org-members.md`.
   - roles: owner, admin, member, guest
   - invitations, and auto-join by email domain
   - organisation templates and policies
 - ⬜ **Room roles:** owner, editor, runner, viewer, interviewer, candidate. One permission matrix (done) drives all of them.
-- ⬜ **Settings pages:**
+- 🟡 **Settings pages:** profile, password, two-factor sign-in (the sign-in step exists, but nothing turns it on) and active sessions. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-10-account-security.md`.
   - profile
   - security: 2FA, active sessions
   - appearance, editor, notifications, connected accounts
-- 🟡 **Audit log:** filters and CSV export. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-3-audit-log.md`.
+- ✅ **Audit log:** filters and CSV export. Written by ChatGPT:
+  - **The page:** `/settings/audit` (linked from Settings) shows the organisation's events, newest first. It filters by action, person, room code and dates, and pages with Load more. Download CSV gets up to 10,000 events with the same filters.
+  - **Who can see it:** only the organisation's owners and admins; anyone else gets 403.
+  - **CSV safety:** a cell that starts with `= + - @` is defused, so a spreadsheet won't run it as a formula, and the file starts with a BOM so Excel reads it as UTF-8.
+  - **Code:** `apps/api/src/audit/audit.controller.ts`, `audit-csv.ts`, contracts `audit.ts`, `components/settings/audit-log.tsx`.
+  - **Tests:**
+    - unit `audit-csv.test.ts`;
+    - API e2e `audit.e2e.mjs` 38/38: access, every filter, paging, the CSV, and 13 invalid queries;
+    - the page checked in a browser, light and dark and at phone width, where the table scrolls inside its frame.
 - ⬜ **Usage dashboard:** runs, AI tokens, sandbox minutes, with quotas.
 - ⬜ **Instance admin:** users, rooms, health.
 
@@ -364,7 +387,30 @@ Tests:
   - actions: run tests, AI agent, post to chat, email, Slack/Discord, HTTP request, checkpoint, GitHub PR
   - logic: conditions and delays
   - run history and retries
-- 🟡 **Outgoing webhooks:** signed with HMAC, with retries and a delivery log. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-6-webhooks.md`. It goes after the audit log, because both change `audit.service.ts`.
+- ✅ **Outgoing webhooks:** signed with HMAC, with retries and a delivery log. Written by ChatGPT:
+  - **Where they're managed:** `/settings/webhooks`, by an organisation's owners and admins.
+    - Add a receiver URL, choose events (or Everything), and its secret is shown once.
+    - Each webhook can send a test ping, rotate its secret, pause, or be deleted.
+    - Its delivery log shows each attempt with the status, response and next try, plus Redeliver.
+  - **What goes out:** every audit event of the organisation is queued after its audit row is written. A worker sends it every 5 seconds as a signed POST:
+    - `X-CodeChatter-Signature` is `sha256=` followed by the HMAC of `timestamp.body`;
+    - the other headers are `X-CodeChatter-Event`, `-Delivery` and `-Timestamp`.
+  - **Retries:** after 1 minute, 5, 30, then 2 and 6 hours; after six attempts it's marked failed. Instances lock rows with `skip locked`, so two API copies never send the same delivery.
+  - **Safety:**
+    - URLs are checked against private addresses when saved and before every delivery, and the connection goes to the address that was checked; production requires https.
+    - Secrets are stored encrypted (token-box).
+    - `WEBHOOKS_ALLOW_PRIVATE=1` (development only) lets a test API send to 127.0.0.1, and only that process ever delivers those test webhooks.
+  - **Database:** migration `0007` adds `webhooks` and `webhook_deliveries`.
+  - **Docs:** `docs/webhooks.md`, for people writing a receiver, with how to verify the signature.
+  - **Fixed here:** a webhook that couldn't be queued was logged as "audit write failed"; it now has its own message, and the audit row stays recorded.
+  - **Follow-ups handed to ChatGPT** (`docs/handoff/chatgpt-13-follow-ups.md`), found while checking:
+    - the worker should claim deliveries with a lease rather than hold one transaction across up to 20 sends; one failed update now rolls back the batch, and everything in it is sent again;
+    - old deliveries should be deleted after 30 days, and ones left pending while a webhook was paused should expire;
+    - also the audit CSV's silent 10,000-row cap, and a `WORKERS` option for the load test.
+  - **Tests:**
+    - unit tests for the signature and the service (API 482/482);
+    - `apps/api/test/webhooks-out.e2e.mjs` 35/35, with its own API on :4013 and its own receiver;
+    - the page checked in a browser.
 - ⬜ **Public API** with personal access tokens, and a `cc` CLI that syncs a folder with a room.
 - ⬜ **CodeChatter MCP server:** Claude Code, Claude Desktop and Cursor can open rooms, read and edit files, and run code.
 - ⬜ **Dependency alerts (OSV)** and `devcontainer.json` support. The alerts are handed to ChatGPT: the brief is `docs/handoff/chatgpt-7-dependency-alerts.md`.
@@ -372,8 +418,17 @@ Tests:
 ## 10. Hardening and launch ⬜
 
 - ⬜ **Sandbox and browser security:** gVisor runtime, CSP with nonces, and a separate origin for previews.
-- ⬜ **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups. The metrics and dashboards are handed to ChatGPT: the brief is `docs/handoff/chatgpt-8-metrics.md`.
-- 🟡 **Load test:** 50 rooms × 10 people, with 95% of updates delivered in under 150 ms. It's a Node script with the real Hocuspocus client, because k6 can't speak Yjs. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-5-load-test.md`.
+- ⬜ **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups. The metrics and dashboards are handed to ChatGPT (`docs/handoff/chatgpt-8-metrics.md`), and so are nightly backups with a restore drill (`docs/handoff/chatgpt-11-backups.md`).
+- ✅ **Load test:** 50 rooms × 10 people, with 95% of updates delivered in under 150 ms. Written by ChatGPT. It's `apps/collab/test/load.mjs`, a Node script with the real Hocuspocus client, because k6 can't speak Yjs.
+  - **What it does:**
+    - It makes its own rooms (never E2ETST or TEAM22).
+    - It connects the people gradually, then each one writes about 2 edits a second.
+    - It measures how long each edit takes to reach the others, and counts any lost updates.
+    - It deletes its rooms afterwards, also on failure or Ctrl+C.
+  - It also measures its own event-loop lag and warns when the client, not the server, is the limit. `docs/load-testing.md` covers running it, including from several machines.
+  - **Results on the dev stack (2026-11-05):**
+    - In one process it fails at p95 228 ms, but that process's own lag is 70 ms, so it's measuring the client.
+    - The same 500 connections split over five processes **pass**: p95 132–134 ms, all 538,227 updates delivered, no connections failed. The doc now shows how to split it.
 - ⬜ **Accessibility:** an axe audit with zero violations. Lighthouse score of 90+ on marketing pages.
 - 🟡 **GitHub Actions CI:** lint, types, tests, e2e, image build, vulnerability scan. Written by ChatGPT: `.github/workflows/ci.yml`, `sandbox-full.yml` (a manual build of the full sandbox image), `docs/ci.md` and `.trivyignore`. Checked here before the first push:
   - every action version it names exists;

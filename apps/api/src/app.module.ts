@@ -42,6 +42,10 @@ import { SqliteController } from "./sandbox/sqlite.controller.js";
 import { DuckdbController } from "./sandbox/duckdb.controller.js";
 import { NotebooksController } from "./sandbox/notebooks.controller.js";
 import { SandboxController } from "./sandbox/sandbox.controller.js";
+import { WebhooksController } from "./webhooks/webhooks.controller.js";
+import { WebhooksService } from "./webhooks/webhooks.service.js";
+import { DependenciesController } from "./dependencies/dependencies.controller.js";
+import { DependenciesService } from "./dependencies/dependencies.service.js";
 
 const dev = process.env.NODE_ENV !== "production";
 
@@ -58,11 +62,13 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController],
+  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController],
   providers: [
     AiService,
     ActivityService,
     AuditService,
+    WebhooksService,
+    DependenciesService,
     CheckpointsService,
     NotificationsService,
     DemoService,

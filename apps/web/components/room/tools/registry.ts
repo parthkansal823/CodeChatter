@@ -1,7 +1,7 @@
 import type { RoomAction } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import type { LucideIcon } from "lucide-react";
-import { Activity, Boxes, Database, NotebookPen, NotebookText, PenTool, Presentation, Send, Sparkles, Workflow } from "lucide-react";
+import { Activity, Boxes, Database, NotebookPen, NotebookText, PenTool, Presentation, Send, ShieldAlert, Sparkles, Workflow } from "lucide-react";
 import type { ComponentType } from "react";
 
 /** What every room tool receives from the workspace. */
@@ -38,6 +38,7 @@ export const ROOM_TOOLS: RoomTool[] = [
   { id: "ai", label: "AI", icon: Sparkles, placement: "side", load: () => import("./ai/ai-panel") },
   { id: "notes", label: "Notes", icon: NotebookPen, placement: "side", load: () => import("./notes/notes-tool") },
   { id: "activity", label: "Activity", icon: Activity, placement: "side", load: () => import("./activity/activity-tool") },
+  { id: "dependencies", label: "Dependencies", icon: ShieldAlert, placement: "side", load: () => import("./dependencies/dependencies-tool") },
   {
     id: "docs",
     label: "Docs",

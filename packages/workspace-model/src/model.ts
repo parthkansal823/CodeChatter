@@ -3,9 +3,13 @@ import * as Y from "yjs";
 /**
  * The shared file tree of a room, as one Yjs document (`room:{id}:files`).
  *
- *   nodes:    Y.Map<nodeId, Y.Map{ kind, name, parentId, createdBy, createdAt, trashedAt? }>
- *   contents: Y.Map<nodeId, Y.Text>          (files only)
+ *   nodes:    Y.Map<nodeId, Y.Map{ kind, name, parentId, createdBy, createdAt, trashedAt?, blob? }>
+ *   contents: Y.Map<nodeId, Y.Text>          (text files only)
  *   meta:     Y.Map{ schemaVersion, templateId }
+ *
+ * A binary file (an image, a PDF, a font) is a file node with a `blob` (its
+ * SHA-256, size and type) and no Y.Text: the bytes are in the object store,
+ * under the room. Replacing the bytes replaces the whole `blob` value.
  *
  * Rules that keep concurrent edits safe (ADR 0005, plan §4):
  *  - Paths are derived by walking parentId, never stored, so rename and move
@@ -19,6 +23,30 @@ export const SCHEMA_VERSION = 1;
 
 export type NodeKind = "file" | "folder";
 
+/** A binary file's bytes, by content: they live in the object store, not in the document. */
+export interface BlobRef {
+  /** Lowercase hex SHA-256 of the bytes. */
+  sha256: string;
+  size: number;
+  /** Media type, e.g. image/png; application/octet-stream when unknown. */
+  type: string;
+}
+
+export function isBlobRef(value: unknown): value is BlobRef {
+  if (!value || typeof value !== "object") return false;
+  const { sha256, size, type } = value as Record<string, unknown>;
+  return (
+    typeof sha256 === "string" &&
+    /^[0-9a-f]{64}$/.test(sha256) &&
+    typeof size === "number" &&
+    Number.isSafeInteger(size) &&
+    size >= 0 &&
+    typeof type === "string" &&
+    type.length > 0 &&
+    type.length <= 255
+  );
+}
+
 export interface NodeRecord {
   id: string;
   kind: NodeKind;
@@ -27,6 +55,8 @@ export interface NodeRecord {
   createdBy: string | null;
   createdAt: number;
   trashedAt: number | null;
+  /** Set for binary files; null for text files and folders. */
+  blob: BlobRef | null;
 }
 
 export interface TreeNode extends NodeRecord {
@@ -71,14 +101,17 @@ export function validateName(raw: string): string | null {
 }
 
 function read(id: string, entry: Y.Map<unknown>): NodeRecord {
+  const kind = entry.get("kind") as NodeKind;
+  const blob = entry.get("blob");
   return {
     id,
-    kind: entry.get("kind") as NodeKind,
+    kind,
     name: entry.get("name") as string,
     parentId: (entry.get("parentId") as string | null) ?? null,
     createdBy: (entry.get("createdBy") as string | null) ?? null,
     createdAt: (entry.get("createdAt") as number) ?? 0,
     trashedAt: (entry.get("trashedAt") as number | null) ?? null,
+    blob: kind === "file" && isBlobRef(blob) ? { sha256: blob.sha256, size: blob.size, type: blob.type } : null,
   };
 }
 
@@ -168,7 +201,14 @@ export function textOf(doc: Y.Doc, id: string): Y.Text | undefined {
   return maps(doc).contents.get(id);
 }
 
-function insertNode(doc: Y.Doc, record: Omit<NodeRecord, "id" | "createdAt" | "trashedAt">, content?: string): string {
+/** A binary file's blob, or null for a text file, a folder or a missing node. */
+export function blobOf(doc: Y.Doc, id: string): BlobRef | null {
+  return getNode(doc, id)?.blob ?? null;
+}
+
+type NewNode = Omit<NodeRecord, "id" | "createdAt" | "trashedAt" | "blob">;
+
+function insertNode(doc: Y.Doc, record: NewNode, content?: string | BlobRef): string {
   const id = newId();
   doc.transact(() => {
     const entry = new Y.Map<unknown>();
@@ -177,8 +217,9 @@ function insertNode(doc: Y.Doc, record: Omit<NodeRecord, "id" | "createdAt" | "t
     entry.set("parentId", record.parentId);
     entry.set("createdBy", record.createdBy);
     entry.set("createdAt", Date.now());
+    if (record.kind === "file" && typeof content === "object") entry.set("blob", { ...content });
     maps(doc).nodes.set(id, entry);
-    if (record.kind === "file") maps(doc).contents.set(id, new Y.Text(content ?? ""));
+    if (record.kind === "file" && typeof content !== "object") maps(doc).contents.set(id, new Y.Text(content ?? ""));
   }, "workspace-model");
   return id;
 }
@@ -187,8 +228,48 @@ export function createFile(doc: Y.Doc, input: { name: string; parentId?: string 
   return insertNode(doc, { kind: "file", name: input.name, parentId: input.parentId ?? null, createdBy: input.createdBy ?? null }, input.content);
 }
 
+/** A binary file whose bytes are already in the object store (see BlobRef). */
+export function createBinaryFile(doc: Y.Doc, input: { name: string; parentId?: string | null; blob: BlobRef; createdBy?: string | null }): string {
+  if (!isBlobRef(input.blob)) throw new Error("not a valid blob");
+  return insertNode(doc, { kind: "file", name: input.name, parentId: input.parentId ?? null, createdBy: input.createdBy ?? null }, input.blob);
+}
+
 export function createFolder(doc: Y.Doc, input: { name: string; parentId?: string | null; createdBy?: string | null }): string {
   return insertNode(doc, { kind: "folder", name: input.name, parentId: input.parentId ?? null, createdBy: input.createdBy ?? null });
+}
+
+/**
+ * Give a file new bytes. A text file becomes a binary one (its Y.Text goes),
+ * e.g. when a program in the sandbox writes an image over output.txt.
+ */
+export function setBlob(doc: Y.Doc, id: string, blob: BlobRef): void {
+  if (!isBlobRef(blob)) throw new Error("not a valid blob");
+  const entry = maps(doc).nodes.get(id);
+  if (!entry || entry.get("kind") !== "file") return;
+  const current = entry.get("blob");
+  if (isBlobRef(current) && current.sha256 === blob.sha256 && current.type === blob.type) return;
+  doc.transact(() => {
+    entry.set("blob", { ...blob });
+    maps(doc).contents.delete(id);
+  }, "workspace-model");
+}
+
+/**
+ * Give a file new text with the smallest edit (`setText`). A binary file
+ * becomes a text one, with a fresh Y.Text.
+ */
+export function setFileText(doc: Y.Doc, id: string, next: string): void {
+  const entry = maps(doc).nodes.get(id);
+  if (!entry || entry.get("kind") !== "file") return;
+  const text = textOf(doc, id);
+  if (text && !entry.has("blob")) {
+    setText(text, next);
+    return;
+  }
+  doc.transact(() => {
+    entry.delete("blob");
+    maps(doc).contents.set(id, new Y.Text(next));
+  }, "workspace-model");
 }
 
 export function rename(doc: Y.Doc, id: string, name: string): void {
@@ -220,6 +301,15 @@ export function restore(doc: Y.Doc, id: string): void {
  * sandbox, e.g. a program writes output.txt or `git clone` runs.
  */
 export function createFileAtPath(doc: Y.Doc, path: string, content: string, createdBy: string | null = null): string {
+  return createAtPath(doc, path, (name, parentId) => createFile(doc, { name, parentId, content, createdBy }), createdBy);
+}
+
+/** createFileAtPath for a binary file. */
+export function createBinaryFileAtPath(doc: Y.Doc, path: string, blob: BlobRef, createdBy: string | null = null): string {
+  return createAtPath(doc, path, (name, parentId) => createBinaryFile(doc, { name, parentId, blob, createdBy }), createdBy);
+}
+
+function createAtPath(doc: Y.Doc, path: string, make: (name: string, parentId: string | null) => string, createdBy: string | null): string {
   const parts = path.split("/");
   const name = parts.pop()!;
   let id = "";
@@ -231,7 +321,7 @@ export function createFileAtPath(doc: Y.Doc, path: string, content: string, crea
       const existing = findByPath(doc, prefix);
       parentId = existing?.kind === "folder" ? existing.id : createFolder(doc, { name: part, parentId, createdBy });
     }
-    id = createFile(doc, { name, parentId, content, createdBy });
+    id = make(name, parentId);
   }, "workspace-model");
   return id;
 }

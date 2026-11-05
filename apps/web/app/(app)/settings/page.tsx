@@ -24,6 +24,13 @@ export default function SettingsPage() {
             <div><Button variant="outline" size="sm" asChild><Link href="/settings/audit">Open audit log <ArrowRight /></Link></Button></div>
           </section>
         )}
+        {canReadAudit && (
+          <section className="grid gap-2 border-t pt-6">
+            <h2 className="font-medium">Webhooks</h2>
+            <p className="text-muted-foreground">Send signed events from {org?.name} to your services and inspect delivery attempts.</p>
+            <div><Button variant="outline" size="sm" asChild><Link href="/settings/webhooks">Open webhooks <ArrowRight /></Link></Button></div>
+          </section>
+        )}
       </div>
     </>
   );

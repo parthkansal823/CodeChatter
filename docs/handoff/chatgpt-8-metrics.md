@@ -85,3 +85,25 @@ Use **`prom-client`** (the standard library; the owner adds it: give the exact `
    - `curl -s localhost:4000/metrics | grep codechatter_` (and the same on 4100 and 4200), and the same request through Caddy (`localhost:8080/metrics`) must **not** return metrics;
    - start `infra/compose.metrics.yaml` and open Grafana on http://localhost:3300.
 4. Which metrics you left out and why.
+
+## Check your work before you answer
+
+Review your own answer before sending it, and put this review at the end, under **Self-check**. The owner's other AI checks every answer against the repository before it's used. Problems you find and fix yourself save a round trip; a "Done" that isn't true costs one.
+
+1. **The brief, point by point.** A table with one row for each requirement in "What to build":
+
+   | Requirement | Done, Partly or Not done | Where (file and function) | How you know |
+   |---|---|---|---|
+
+   Only write Done when the code in your answer does it. If something is Partly or Not done, say what's missing and why.
+2. **The rules.** Confirm each one, or say where you broke it and why:
+   - you changed only the files under "Files you may touch";
+   - no new packages, apart from any this brief allows (and then you gave the exact command);
+   - in `apps/api`, `apps/collab`, `apps/runner` and `packages/*`, relative imports end in `.js`;
+   - in web files, no hex, `rgb()` or `hsl()` colours, only token classes; copy is plain English;
+   - every new file starts with a doc comment saying what it is and why;
+   - nothing logs, prints or returns a secret.
+3. **What you assumed about existing code.** List every name you used but didn't see in this brief or in the files you read: a function, column, route, prop, environment variable or test helper. For each, say whether you read it in the repository or guessed it. Guesses are the first thing the owner checks.
+4. **Walk through the tests.** For each test or check you wrote, say which part of your code makes it pass. Then write down at least one way the feature could break that no test covers.
+5. **Edge cases.** The failure cases you handled (bad input, no permission, a network error, two people at once, a retry, a restart) and the ones you didn't.
+6. **Scope for improvement.** What you'd do next, and anything in the existing code you read that looks wrong or could be better. Keep it separate from this task: list it, don't build it.

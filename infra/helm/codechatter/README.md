@@ -33,7 +33,7 @@ The whole app on one cluster, and each room's sandbox, databases and package pro
 
 4. Open http://localhost:8090 and sign in as `test1@codechatter.local` (password `codechatter123`). Sign-up emails arrive at http://localhost:8090/mail/. Calls use `ws://localhost:8090/livekit`; the media LoadBalancer must also expose TCP 7881 and UDP 7882 and 3478 on localhost. The overrides above advertise localhost, enable loopback ICE, and allow TURN to relay to this one loopback address. They are for browsers on this computer only; a browser on another computer needs a reachable IP instead.
 
-   Check `kubectl get svc codechatter-livekit-media -n codechatter`. Docker Desktop must support a mixed TCP/UDP LoadBalancer; a pending service or TCP-only forwarding leaves signalling working while calls fail. `kubectl port-forward` carries TCP only and cannot replace these UDP ports. Close an existing Compose/dev LiveKit using these ports before deploying the Kubernetes copy, or configure different listener ports and matching public forwarding.
+   Check `kubectl get svc codechatter-livekit-media -n codechatter`. Docker Desktop must support a mixed TCP/UDP LoadBalancer; a pending service or TCP-only forwarding leaves signalling working while calls fail. `kubectl port-forward` carries TCP only and cannot replace these UDP ports. If an existing Compose/dev LiveKit uses these ports, configure different listener ports and matching public forwarding for the Kubernetes copy.
 
 Uninstall with `helm uninstall codechatter -n codechatter`, then delete the rooms' namespaces: `kubectl delete namespace -l codechatter.namespace=demo`.
 
@@ -79,6 +79,8 @@ Set these in your values:
 ## Calls and TURN
 
 `livekit.enabled: true` runs one pinned `livekit/livekit-server:v1.13.11` server. The existing chart Secret stores its API key and secret, generated on install and kept on Helm upgrades unless `secrets.livekitApiKey` or `secrets.livekitApiSecret` overrides them. Both the API and LiveKit read these same credentials; the ConfigMap contains no keys. A server replacement interrupts active calls; this chart does not configure a multi-node LiveKit cluster.
+
+When rotating either credential, update it through Helm and restart both Deployments (`kubectl rollout restart deployment/codechatter-livekit deployment/codechatter-api -n codechatter`, replacing the release name and namespace as needed). Secret-backed environment variables are read when a pod starts; changing the Secret alone does not update running API or LiveKit processes. LiveKit configuration changes do trigger its rollout through the ConfigMap checksum.
 
 The API's public `LIVEKIT_URL` defaults to `url` with `http` changed to `ws` and `/livekit` appended. An HTTPS `url` therefore becomes `wss://<host>/livekit`. `livekit.url` can override it; use an address browsers can reach, rather than a cluster service name. The private ClusterIP service exposes signalling on 7880 only to the edge. Set `livekit.enabled: false` to remove LiveKit, its edge route and the API's three LiveKit settings; the Call button then says calls are not configured.
 

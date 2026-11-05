@@ -9,6 +9,8 @@ const Env = z.object({
   /** Comma-separated extra browser origins to trust (e.g. a tunnel URL). */
   EXTRA_ORIGINS: z.string().optional().default(""),
   API_PORT: z.coerce.number().int().positive().default(4000),
+  /** Permit private receiver fixtures only in development; the worker also checks NODE_ENV. */
+  WEBHOOKS_ALLOW_PRIVATE: z.enum(["0", "1"]).default("0").transform((value) => value === "1"),
   DATABASE_URL: z.string().startsWith("postgres"),
   VALKEY_URL: z.string().startsWith("redis"),
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
@@ -46,6 +48,15 @@ const Env = z.object({
   LIVEKIT_URL: z.string().trim().optional().default(""),
   LIVEKIT_API_KEY: z.string().trim().optional().default(""),
   LIVEKIT_API_SECRET: z.string().trim().optional().default(""),
+  /**
+   * Binary room files (images, PDFs, fonts) are kept in this S3-compatible store (SeaweedFS
+   * in development). Binary files are off until the endpoint, bucket and keys are all set.
+   */
+  S3_ENDPOINT: z.string().trim().optional().default(""),
+  S3_REGION: z.string().trim().optional().default("us-east-1"),
+  S3_BUCKET: z.string().trim().optional().default(""),
+  S3_ACCESS_KEY: z.string().trim().optional().default(""),
+  S3_SECRET_KEY: z.string().trim().optional().default(""),
   /** "Try the demo": one-click guest accounts (off unless set in production). */
   DEMO_ENABLED: z
     .enum(["true", "false", ""])

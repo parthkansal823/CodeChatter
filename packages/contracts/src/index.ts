@@ -1,8 +1,10 @@
 export * from "./ai.js";
 export * from "./audit.js";
+export * from "./blobs.js";
 export * from "./chat.js";
 export * from "./check.js";
 export * from "./databases.js";
+export * from "./dependencies.js";
 export * from "./github.js";
 export * from "./history.js";
 export * from "./http-studio.js";
@@ -13,3 +15,4 @@ export * from "./room-config.js";
 export * from "./rooms.js";
 export * from "./run.js";
 export * from "./sandbox.js";
+export * from "./webhooks.js";

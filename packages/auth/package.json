@@ -14,6 +14,10 @@
     "./service-token": {
       "types": "./dist/service-token.d.ts",
       "default": "./dist/service-token.js"
+    },
+    "./s3": {
+      "types": "./dist/s3.d.ts",
+      "default": "./dist/s3.js"
     }
   },
   "scripts": {

@@ -80,3 +80,5 @@ temp/
 
 # Claude Code personal settings
 .claude/settings.local.json
+apps/collab/test/load-report.json
+apps/collab/load-*.log

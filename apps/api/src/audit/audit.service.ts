@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Request } from "express";
 
 import { DB } from "../infra/tokens.js";
+import { WebhooksService } from "../webhooks/webhooks.service.js";
 
 export interface AuditEntry {
   orgId: string | null;
@@ -22,17 +23,26 @@ export interface AuditEntry {
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
-  constructor(@Inject(DB) private readonly handle: DbHandle) {}
+  constructor(@Inject(DB) private readonly handle: DbHandle, private readonly webhooks: WebhooksService) {}
 
   async record(entry: AuditEntry, request?: Request): Promise<void> {
+    let written: { id: string; createdAt: Date } | undefined;
     try {
-      await this.handle.db.insert(schema.auditEvents).values({
+      [written] = await this.handle.db.insert(schema.auditEvents).values({
         ...entry,
         ip: request?.ip ?? null,
         userAgent: request?.get("user-agent")?.slice(0, 300) ?? null,
-      });
+      }).returning({ id: schema.auditEvents.id, createdAt: schema.auditEvents.createdAt });
     } catch (error) {
       this.logger.error(`audit write failed for ${entry.action}: ${String(error)}`);
+      return;
+    }
+    // The event is recorded either way; a webhook that can't be queued is logged on its own.
+    if (!written) return;
+    try {
+      await this.webhooks.queue({ ...entry, ...written });
+    } catch (error) {
+      this.logger.error(`webhook queue failed for ${entry.action}: ${String(error)}`);
     }
   }
 }

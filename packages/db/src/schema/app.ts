@@ -4,6 +4,7 @@ import {
   boolean,
   customType,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -185,6 +186,54 @@ export const auditEvents = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index().on(t.orgId, t.createdAt.desc()), index().on(t.targetId, t.createdAt.desc())],
+);
+
+/** Organisation-owned outgoing endpoints; signing secrets are encrypted by the API. */
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: uuidv7Pk(),
+    orgId: text().notNull().references(() => organization.id, { onDelete: "cascade" }),
+    url: text().notNull(),
+    secretSealed: text().notNull(),
+    /** Local E2E fixtures belong to one opted-in dev worker; ordinary workers must not claim them. */
+    privateTestOwner: text(),
+    events: text().array().notNull(),
+    active: boolean().notNull().default(true),
+    description: text().notNull().default(""),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [index().on(t.orgId, t.createdAt.desc())],
+);
+
+/** Durable retry queue and receiver-visible history, including every delivery attempt. */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuidv7Pk(),
+    webhookId: uuid().notNull().references(() => webhooks.id, { onDelete: "cascade" }),
+    event: text().notNull(),
+    payload: jsonb().$type<Record<string, unknown>>().notNull(),
+    status: text().$type<"pending" | "delivered" | "failed">().notNull().default("pending"),
+    attempts: integer().notNull().default(0),
+    nextAttemptAt: timestamp({ withTimezone: true }).defaultNow(),
+    lastStatusCode: integer(),
+    lastError: text(),
+    lastResponse: text(),
+    attemptLog: jsonb().$type<Array<{
+      attempt: number;
+      at: string;
+      statusCode: number | null;
+      error: string | null;
+      response: string | null;
+      durationMs: number;
+    }>>().notNull().default([]),
+    // Delivery cursors round-trip through JavaScript Date, which has millisecond precision.
+    createdAt: timestamp({ withTimezone: true, precision: 3 }).notNull().defaultNow(),
+    deliveredAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.status, t.nextAttemptAt), index().on(t.webhookId, t.createdAt.desc(), t.id.desc())],
 );
 
 /**
