@@ -187,7 +187,7 @@ try {
 
   // What's off during an interview.
   const chat = await candidate(`/rooms/${roomId}/ai/chat`, { method: "POST", json: { mode: "assistant", messages: [{ role: "user", content: "solve it" }], context: {} } });
-  check("AI chat is off for the candidate", chat.status === 403 && chat.text.includes("off during an interview"), `${chat.status} ${chat.text}`);
+  check("AI chat is off for the candidate", chat.status === 403 && chat.text.includes("off during this interview"), `${chat.status} ${chat.text}`);
   const complete = await candidate(`/rooms/${roomId}/ai/complete`, { method: "POST", json: { path: "main.py", prefix: "a = " } });
   check("AI completion is off too", complete.status === 403, complete.status);
   check("an interview room can't be forked", (await candidate(`/rooms/${roomId}/fork`, { method: "POST", json: { name: "copy" } })).status === 403);

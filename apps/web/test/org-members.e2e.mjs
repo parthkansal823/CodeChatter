@@ -82,8 +82,9 @@ async function refreshMembers(account) {
 
 async function copyInvitation(page, email) {
   await page.getByRole("button", { name: `Copy link for ${email}`, exact: true }).click();
-  let link = await page.evaluate(() => navigator.clipboard.readText()).catch(() => "");
-  if (!link.includes("/invite/")) link = await page.getByLabel("Invitation link", { exact: true }).inputValue();
+  await page.getByText(/Invitation link copied\.|Copy the invitation link below\./).last().waitFor();
+  const fallback = page.getByLabel("Invitation link", { exact: true });
+  const link = await fallback.isVisible() ? await fallback.inputValue() : await page.evaluate(() => navigator.clipboard.readText());
   const url = new URL(link);
   requireCheck("copied invitation uses the app origin and invitation route", url.origin === new URL(BASE).origin && /^\/invite\/[^/]+$/.test(url.pathname));
   return url.href;
@@ -310,7 +311,7 @@ try {
     check(`original workspace restored for ${account.email}`, restored?.status === 200, `HTTP ${restored?.status ?? "request failed"}`);
   }
   for (const context of contexts) await context.close().catch(() => {});
-  await browser?.close();
+  await browser?.close().catch(() => {});
 }
 check("no page errors", errors.length === 0, errors.join(" | "));
 finish();

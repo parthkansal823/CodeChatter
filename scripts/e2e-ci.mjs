@@ -37,6 +37,7 @@ const SUITES = [
     ["notes-access", "notes-access"],
     ["interview-rules", "interviews"],
     ["room-people-access", "room-people"],
+    ["interview-papers", "interview-papers"],
   ]),
   ...service("apps/api", [
     ["api-binary-files", "blobs"],
@@ -52,6 +53,7 @@ const SUITES = [
     "binary-files",
     "sandbox-git",
     "interviews",
+    "interview-modes",
     "csp",
     "history",
     "code-comments",

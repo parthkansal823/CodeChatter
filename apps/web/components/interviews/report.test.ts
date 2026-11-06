@@ -3,10 +3,19 @@ import { test } from "node:test";
 
 import type { InterviewerInterview } from "@codechatter/contracts";
 
-import { candidateLink, formatCountdown, isoFromLocalInput } from "./format";
+import { candidateLink, csvRow, formatCountdown, isoFromLocalInput } from "./format";
 import { interviewReport } from "./report";
 
 const interview = (over: Partial<InterviewerInterview> = {}): InterviewerInterview => ({
+  mode: "interview",
+  batchId: null,
+  paper: [],
+  answers: [],
+  score: { marks: 0, max: 0, unmarked: 0, byKind: { coding: { marks: 0, max: 0 }, mcq: { marks: 0, max: 0 }, short: { marks: 0, max: 0 }, design: { marks: 0, max: 0 } } },
+  integrity: { events: [], counts: {}, bigEdits: 0, level: "clear" },
+  fullscreen: false,
+  lockClipboard: false,
+  aiAllowed: false,
   id: "i1",
   roomId: "ABC234",
   title: "Two sum",
@@ -32,6 +41,7 @@ const interview = (over: Partial<InterviewerInterview> = {}): InterviewerIntervi
   runs: [
     {
       id: "r2",
+      questionId: null,
       at: "2026-11-06T10:40:00.000Z",
       path: "main.py",
       compileError: null,
@@ -42,7 +52,7 @@ const interview = (over: Partial<InterviewerInterview> = {}): InterviewerIntervi
       total: 2,
       by: "Ana",
     },
-    { id: "r1", at: "2026-11-06T10:20:00.000Z", path: "main.py", compileError: "bad", visible: [], hidden: { passed: 0, total: 1 }, hiddenCases: [], passed: 0, total: 2, by: "Ana" },
+    { id: "r1", questionId: null, at: "2026-11-06T10:20:00.000Z", path: "main.py", compileError: "bad", visible: [], hidden: { passed: 0, total: 1 }, hiddenCases: [], passed: 0, total: 2, by: "Ana" },
   ],
   ...over,
 });
@@ -76,6 +86,47 @@ test("reads sensibly with nothing filled in", () => {
   assert.doesNotMatch(report, /## Scores/);
   assert.doesNotMatch(report, /## Notes/);
   assert.doesNotMatch(report, /undefined|null/);
+});
+
+const question = (over: Partial<InterviewerInterview["paper"][number]>): InterviewerInterview["paper"][number] => ({
+  id: "q1", bankId: "b", kind: "mcq", title: "Which?", prompt: "", marks: 2, difficulty: "easy", choices: [], modelAnswer: "", file: "", tests: [], timeLimitMs: 2000, starterFiles: [], askedAt: "2026-11-06T10:00:00Z", ...over,
+});
+
+test("has the paper, what they answered and what it scored", () => {
+  const report = interviewReport(interview({
+    mode: "assessment",
+    paper: [
+      question({ choices: [{ id: "a", text: "Paris", correct: true }, { id: "b", text: "Rome", correct: false }] }),
+      question({ id: "q2", kind: "design", title: "Design a queue", marks: 20, askedAt: null }),
+    ],
+    answers: [{ questionId: "q1", choiceIds: ["b"], text: "", at: "", awarded: 0 }, { questionId: "q2", choiceIds: [], text: "Boxes | arrows", at: "", awarded: 15 }],
+    score: { marks: 15, max: 22, unmarked: 0, byKind: { coding: { marks: 0, max: 0 }, mcq: { marks: 0, max: 2 }, short: { marks: 0, max: 0 }, design: { marks: 15, max: 20 } } },
+  }));
+  assert.match(report, /^# Assessment report: Ana/);
+  assert.match(report, /\*\*15 of 22 marks\*\*/);
+  assert.match(report, /\| 1 \| Which\? \| Multiple choice \| 0 of 2 \| Rome \(wrong\) \|/);
+  assert.match(report, /\| 2 \| Design a queue \| System design \| 15 of 20 \| Boxes \\| arrows \|/);
+});
+
+test("leaves out what an interviewer never asked", () => {
+  const report = interviewReport(interview({ paper: [question({ title: "Never asked", askedAt: null })] }));
+  assert.doesNotMatch(report, /Never asked/);
+});
+
+test("has the record, as signs to weigh", () => {
+  const report = interviewReport(interview({ integrity: { events: [], counts: { "second-session": 1 }, bigEdits: 2, level: "concern" } }));
+  assert.match(report, /Signs to weigh, not proof/);
+  assert.match(report, /Open in a second tab or device: 1/);
+  assert.match(report, /Big edits at once: 2/);
+  assert.match(interviewReport(interview()), /Nothing was recorded/);
+});
+
+test("a CSV can't smuggle in a formula, or break its columns", () => {
+  assert.equal(csvRow(["Ana", 5]), "Ana,5");
+  assert.equal(csvRow(["=HYPERLINK(1)"]), "'=HYPERLINK(1)");
+  assert.equal(csvRow(["@cmd", "+1", "-1"]), "'@cmd,'+1,'-1");
+  assert.equal(csvRow(['a,"b"']), '"a,""b"""');
+  assert.equal(csvRow([-5]), "-5");
 });
 
 test("formats the countdown", () => {

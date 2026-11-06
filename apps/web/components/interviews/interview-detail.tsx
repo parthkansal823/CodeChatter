@@ -1,4 +1,4 @@
-/** One interview, for its interviewers: controls, the private scorecard, every test run, the replay and the report. */
+/** One sitting, for its interviewers: controls, the paper with its marks, the private scorecard, the integrity record, every test run, the replay and the report. */
 "use client";
 
 import type { InterviewerInterview, Scorecard } from "@codechatter/contracts";
@@ -18,8 +18,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 
-import { formatCountdown, STATUS_LABEL } from "./format";
+import { formatCountdown, MODE_LABEL, STATUS_LABEL } from "./format";
+import { IntegrityBadge, IntegrityRecord } from "./integrity-record";
 import { CandidateLinkDialog } from "./interviews-page";
+import { PaperReview } from "./paper-review";
 import { interviewReport } from "./report";
 import { ReplayView } from "./replay-view";
 import { RunList } from "./run-list";
@@ -108,9 +110,9 @@ export function InterviewDetail({ id }: { id: string }) {
         description={interview.title}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="ghost" asChild><Link href={"/interviews" as never}><ArrowLeft /> All interviews</Link></Button>
+            <Button size="sm" variant="ghost" asChild><Link href={(interview.batchId ? `/interviews/batches/${interview.batchId}` : "/interviews") as never}><ArrowLeft /> {interview.batchId ? "All candidates" : "All interviews"}</Link></Button>
             <Button size="sm" variant="outline" asChild><Link href={`/rooms/${interview.roomId}` as never}><ExternalLink /> Open the room</Link></Button>
-            {scheduled && <Button size="sm" variant="brand" disabled={busy} onClick={() => void act("start")}><Play /> Start</Button>}
+            {scheduled && interview.mode === "interview" && <Button size="sm" variant="brand" disabled={busy} onClick={() => void act("start")}><Play /> Start</Button>}
             {live && (
               <>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void act("extend", { minutes: 10 })}><Plus /> 10 minutes</Button>
@@ -129,6 +131,9 @@ export function InterviewDetail({ id }: { id: string }) {
       />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-6 py-2 sm:px-8">
         <Badge variant={live ? "default" : "outline"}>{STATUS_LABEL[interview.status]}</Badge>
+        {interview.mode === "assessment" && <span className="text-muted-foreground">{MODE_LABEL.assessment}</span>}
+        {interview.paper.length > 0 && <span className="tabular-nums">{interview.score.marks} of {interview.score.max} marks</span>}
+        {interview.status !== "scheduled" && <IntegrityBadge level={interview.integrity.level} />}
         <Countdown interview={interview} fetchedAt={query.dataUpdatedAt} />
         {scheduled && <span className="text-muted-foreground">{interview.candidateJoined ? `${interview.candidateName} is in the waiting room.` : "The candidate hasn't used their link yet."}</span>}
         {interview.candidateEmail && <span className="text-muted-foreground">{interview.candidateEmail}</span>}
@@ -164,13 +169,24 @@ export function InterviewDetail({ id }: { id: string }) {
         </div>
       </div>
 
-      <Tabs defaultValue="scorecard" className="px-6 py-4 sm:px-8">
-        <TabsList>
+      <Tabs defaultValue={interview.paper.length ? "answers" : "scorecard"} className="px-6 py-4 sm:px-8">
+        {/* Several tabs: on a phone they scroll sideways rather than push the page wider. */}
+        <TabsList className="max-w-full justify-start overflow-x-auto [scrollbar-width:none]">
+          {interview.paper.length > 0 && <TabsTrigger value="answers">Answers</TabsTrigger>}
           <TabsTrigger value="scorecard">Scorecard</TabsTrigger>
+          <TabsTrigger value="record">The record</TabsTrigger>
           <TabsTrigger value="runs">Test runs ({interview.runs.length})</TabsTrigger>
           <TabsTrigger value="replay">Replay</TabsTrigger>
           <TabsTrigger value="report">Report</TabsTrigger>
         </TabsList>
+        {interview.paper.length > 0 && (
+          <TabsContent value="answers" className="max-w-3xl pt-2">
+            <PaperReview interview={interview} onChanged={(next) => queryClient.setQueryData(key, next)} />
+          </TabsContent>
+        )}
+        <TabsContent value="record" className="max-w-3xl pt-2">
+          <IntegrityRecord integrity={interview.integrity} />
+        </TabsContent>
         <TabsContent value="scorecard" className="pt-2">
           <ScorecardForm key={interview.id} rubric={interview.rubric} scorecard={interview.scorecard} onSave={saveScorecard} />
         </TabsContent>

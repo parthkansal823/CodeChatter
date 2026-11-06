@@ -24,7 +24,7 @@ export type RoomTool = {
    */
   placement: "side" | "main";
   /** Hide the tool from roles that can't use it (default: everyone who can view the room). */
-  visible?: (can: (action: RoomAction) => boolean, room: Pick<RoomSummary, "kind" | "role">) => boolean;
+  visible?: (can: (action: RoomAction) => boolean, room: Pick<RoomSummary, "kind" | "role">, context: { candidateAiOff: boolean }) => boolean;
   /** Lazily loaded, so tools don't weigh down the room's first load. */
   load: () => Promise<{ default: ComponentType<RoomToolProps> }>;
 };
@@ -36,8 +36,8 @@ export type RoomTool = {
  */
 export const ROOM_TOOLS: RoomTool[] = [
   { id: "interview", label: "Interview", icon: ClipboardList, placement: "side", visible: (_can, room) => room.kind === "interview", load: () => import("./interview/interview-tool") },
-  // AI help is off for the candidate during an interview (the API refuses it, too).
-  { id: "ai", label: "AI", icon: Sparkles, placement: "side", visible: (_can, room) => room.role !== "candidate", load: () => import("./ai/ai-panel") },
+  // AI help is off for a candidate unless their interviewer allows it (the API refuses it, too).
+  { id: "ai", label: "AI", icon: Sparkles, placement: "side", visible: (_can, _room, { candidateAiOff }) => !candidateAiOff, load: () => import("./ai/ai-panel") },
   { id: "notes", label: "Notes", icon: NotebookPen, placement: "side", load: () => import("./notes/notes-tool") },
   { id: "activity", label: "Activity", icon: Activity, placement: "side", load: () => import("./activity/activity-tool") },
   { id: "dependencies", label: "Dependencies", icon: ShieldAlert, placement: "side", load: () => import("./dependencies/dependencies-tool") },

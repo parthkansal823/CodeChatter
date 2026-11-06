@@ -22,7 +22,7 @@ Both this page and pending.md are updated after every finished piece.
   - **platform** (step 9): follow-ups.
 
   These are mostly with ChatGPT, through the prompts in `docs/handoff/`.
-- **Just done:** interview mode (step 11).
+- **Just done:** interviews and assessments (step 11), and managing a room's people (step 8).
 - **Next:**
   - security, accessibility and the cutover from v1 (step 10);
   - the recruiter kit's video (step 12).
@@ -159,21 +159,24 @@ flowchart TD
 - ✅ Load test: 500 live connections, p95 under 150 ms, across several processes
 - 🟡 Operations: Prometheus metrics and Grafana ✅; nightly backups (ChatGPT, prompt 11); traces ⬜
 - 🟡 GitHub Actions CI: lint, types, tests, image builds, vulnerability scan. Failing on a test interview mode broke; fixed, and waiting for the next push
-- 🟡 End-to-end tests in CI: 37 suites. The first run on GitHub found three real problems, fixed; waiting for a green run
+- 🟡 End-to-end tests in CI: 39 suites. The first run on GitHub found three real problems, fixed; waiting for a green run
 - ✅ Browser security: a nonce-based security policy, previews in a sandboxed frame, access that really ends when a room goes private or is deleted
 - ⬜ Sandbox security (gVisor); accessibility (axe, Lighthouse)
 - ⬜ Cutover from v1; a final security review
 
-## Step 11 · Interview mode 🟡
+## Step 11 · Interviews and assessments ✅
 
-*Goal: a complete hiring flow.* Details: §7 and `docs/interviews.md`.
+*Goal: a complete hiring flow, live or unattended.* Details: §7 and `docs/interviews.md`.
 
 - ✅ Question bank with visible and hidden tests
 - ✅ Scheduling, interviewer and candidate roles, a single-use candidate link
 - ✅ Server-side timer that really takes the candidate's rights away
 - ✅ Hidden tests in a throwaway container; private rubric and scorecards
 - ✅ Replay, and a report
-- 🟡 Next version: many candidates at once, random questions from the bank, multiple choice, a record of suspicious behaviour, a results table
+- ✅ Live interviews on video: questions asked on the spot, from the bank or written by hand; the interviewer decides about the AI, and marks there and then
+- ✅ Assessments: many candidates at once, a random paper for each, a window to start in, a results table
+- ✅ Multiple choice marked by the server, short answers, and system design in the room's Diagrams and Board
+- ✅ A record of anything unusual (leaving the tab, pasting, a second device, the page going quiet), and comparing candidates' code
 
 ## Step 12 · Recruiter kit 🟡
 

@@ -107,7 +107,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
         <h1 className="font-wide text-2xl font-semibold tracking-[-0.02em]">{title}</h1>
         {description && <p className="mt-1 text-muted-foreground">{description}</p>}
       </div>
-      {actions && <div className="flex gap-2 sm:ml-auto">{actions}</div>}
+      {actions && <div className="flex flex-wrap gap-2 sm:ml-auto">{actions}</div>}
     </div>
   );
 }

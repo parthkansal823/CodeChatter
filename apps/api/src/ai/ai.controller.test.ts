@@ -18,9 +18,11 @@ type Options = {
   role?: RoomRole;
   complete?: ((signal: AbortSignal) => Promise<CompletionAnswer>) | null;
   allowed?: boolean;
+  /** What the interviewer decided, for a candidate. */
+  aiAllowed?: boolean;
 };
 
-function setup({ role = "editor", complete = async () => ({ text: "```python\nreturn a + b\n```", mode: "chat", truncated: false, usage: { inputTokens: 90, outputTokens: 7 } }), allowed = true }: Options = {}) {
+function setup({ role = "editor", complete = async () => ({ text: "```python\nreturn a + b\n```", mode: "chat", truncated: false, usage: { inputTokens: 90, outputTokens: 7 } }), allowed = true, aiAllowed = false }: Options = {}) {
   const rooms = {
     require: vi.fn(async (_roomId: string, _userId: string, action: RoomAction) => {
       if (!can(role, action)) throw new ForbiddenException("You don't have access to do that in this room.");
@@ -36,8 +38,9 @@ function setup({ role = "editor", complete = async () => ({ text: "```python\nre
     record: vi.fn(async () => {}),
   };
   const res = Object.assign(new EventEmitter(), { writableFinished: false, setHeader: vi.fn() });
-  const controller = new AiController(ai as never, rooms as never, {} as never);
-  return { ai, rooms, res, provider, call: (body = input) => controller.complete(session, "E2ETST", body, res as never) };
+  const interviews = { candidateMayUseAi: vi.fn(async () => aiAllowed), noteAiUse: vi.fn(async () => {}) };
+  const controller = new AiController(ai as never, rooms as never, {} as never, interviews as never);
+  return { ai, rooms, res, provider, interviews, call: (body = input) => controller.complete(session, "E2ETST", body, res as never) };
 }
 
 describe("AiController.complete", () => {
@@ -57,8 +60,14 @@ describe("AiController.complete", () => {
     }
     // A candidate can edit, but gets no help from the AI during an interview.
     const candidate = setup({ role: "candidate" });
-    await expect(candidate.call()).rejects.toMatchObject({ status: 403, message: "AI help is off during an interview." });
+    await expect(candidate.call()).rejects.toMatchObject({ status: 403, message: "AI help is off during this interview." });
     expect(candidate.provider!.complete).not.toHaveBeenCalled();
+  });
+
+  it("answers a candidate when the interviewer has allowed the AI", async () => {
+    const { call, interviews } = setup({ role: "candidate", aiAllowed: true });
+    await expect(call()).resolves.toEqual({ text: "return a + b" });
+    expect(interviews.candidateMayUseAi).toHaveBeenCalledWith("E2ETST");
   });
 
   it("says clearly when AI isn't set up", async () => {

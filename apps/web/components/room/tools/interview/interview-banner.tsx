@@ -10,6 +10,7 @@ import { useRoom } from "@/components/room/room-context";
 import { getSocket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 
+import { IntegrityGuard } from "./integrity-guard";
 import { interviewKey, useCountdown, useRoomInterview } from "./use-interview";
 
 const LAST_MINUTES = 5 * 60_000;
@@ -51,14 +52,20 @@ export function InterviewBanner({ onOpen }: { onOpen: () => void }) {
   }, [expired, room.id, queryClient]);
 
   if (!interview) return null;
+  const assessment = interview.mode === "assessment";
+  const what = assessment ? "assessment" : "interview";
   const message =
-    interview.status === "scheduled" ? "Not started. The candidate can't see this room yet."
-    : interview.status === "finished" ? (interview.role === "candidate" ? "This interview has finished. You can still read it, but not change it." : "This interview has finished. The room is read-only for the candidate.")
-    : interview.status === "cancelled" ? "This interview was cancelled."
+    interview.status === "scheduled" ? (assessment ? "Not started. The candidate starts it from their link." : "Not started. The candidate can't see this room yet.")
+    : interview.status === "finished" ? (interview.role === "candidate" ? `This ${what} has finished. You can still read it, but not change it.` : `This ${what} has finished. The room is read-only for the candidate.`)
+    : interview.status === "cancelled" ? `This ${what} was cancelled.`
+    : interview.status === "missed" ? "Nobody started this assessment in time."
+    : assessment ? (interview.role === "candidate" ? interview.title : `${interview.title}: ${interview.candidateName}`)
     : `Interview with ${interview.role === "candidate" ? (interview.interviewerName ?? "your interviewer") : interview.candidateName}`;
 
   return (
-    <button type="button" onClick={onOpen} className="flex h-7 w-full shrink-0 items-center gap-2 border-b bg-panel px-3 text-left text-xs hover:bg-accent" aria-label={`${message}. Open the interview panel.`}>
+    <>
+    {room.role === "candidate" && <IntegrityGuard interview={interview} />}
+    <button type="button" onClick={onOpen} className="flex h-7 w-full shrink-0 items-center gap-2 border-b bg-panel px-3 text-left text-xs hover:bg-accent" aria-label={`${message}. Open the ${what} panel.`}>
       <Timer className="size-3.5 shrink-0 text-brand" />
       <span className="min-w-0 truncate">{message}</span>
       {left !== null && (
@@ -67,5 +74,6 @@ export function InterviewBanner({ onOpen }: { onOpen: () => void }) {
         </span>
       )}
     </button>
+    </>
   );
 }

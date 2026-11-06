@@ -21,6 +21,13 @@ export function useRoomInterview() {
   });
 }
 
+/** Whether AI help is off for this person: a candidate, until their interviewer allows it (the API refuses it, too). */
+export function useCandidateAiOff(): boolean {
+  const { room } = useRoom();
+  const { data } = useRoomInterview();
+  return room.role === "candidate" && data?.aiAllowed !== true;
+}
+
 /**
  * Milliseconds left, or null when no clock is running. Counted from the server's `now`, so
  * a wrong clock on someone's computer doesn't show them the wrong time.

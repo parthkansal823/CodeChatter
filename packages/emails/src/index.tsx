@@ -53,7 +53,21 @@ export function orgInvitationEmail(input: { inviterName: string; orgName: string
   );
 }
 
-export function interviewInvitationEmail(input: { candidateName: string; interviewerName: string; minutes: number; when: string | null; url: string }) {
+export function interviewInvitationEmail(input: { candidateName: string; interviewerName: string; minutes: number; when: string | null; url: string; mode?: "interview" | "assessment"; title?: string }) {
+  if (input.mode === "assessment") {
+    return build(
+      `Your assessment on CodeChatter: ${input.title ?? "Assessment"}`,
+      <EmailLayout preview={`A ${input.minutes} minute assessment from ${input.interviewerName}`}>
+        <Heading>{input.title ?? "Your assessment"}</Heading>
+        <Paragraph>
+          Hi {input.candidateName}, {input.interviewerName} invited you to a {input.minutes} minute assessment on CodeChatter. You start it yourself{input.when ? `, ${input.when}` : ""}, and the time runs from when you do.
+        </Paragraph>
+        <Paragraph>This link is only for you and works for one person. You don’t need an account.</Paragraph>
+        <Action href={input.url}>Open your assessment</Action>
+        <FallbackLink href={input.url} />
+      </EmailLayout>,
+    );
+  }
   return build(
     `Your interview with ${input.interviewerName} on CodeChatter`,
     <EmailLayout preview={`A ${input.minutes} minute coding interview with ${input.interviewerName}`}>

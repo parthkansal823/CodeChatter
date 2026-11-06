@@ -433,6 +433,17 @@ How it works and what it guarantees: `docs/interviews.md`.
 
 Tests: `apps/api/src/interviews/views.test.ts` (6), `apps/web/components/interviews/{replay,report}.test.ts` (11), `apps/collab/src/extensions/revocation.test.ts` (2), `apps/runner/test/judge-isolated.e2e.mjs` (9), `apps/collab/test/interviews.e2e.mjs` (78, including the timer taking rights from an open editor), `apps/web/test/interviews.e2e.mjs` (32, the whole flow with a guest). All three end-to-end suites are in `scripts/e2e-ci.mjs`.
 
+- ✅ **Interviews and assessments, as two modes** (2026-11-06, `docs/interviews.md`):
+  - **An interview is live, on video.** It can start with no questions. The interviewer asks from the bank, at random, or writes one on the spot, and the candidate sees it at once (`InterviewsService.askQuestion`). Questions prepared beforehand stay hidden until asked, and so do their files. The AI is their call, with a switch in the panel (`setAi`), on the record along with each use. Answers appear live, and marks and the scorecard are in the panel.
+  - **An assessment has nobody watching.** Many candidates pasted in (`parseCandidates`), a paper drawn for each from rules like "5 hard multiple choice tagged sql" (`paper.ts`), a window to start in, self-start (`startAssessment`), handing in, and **Missed** for anyone who didn't start in time.
+  - **Question kinds:** coding, multiple choice marked by the server (`markChoices`), short answers, and system design in the room's Diagrams and Board, which a person marks. Bank questions have a difficulty, tags and marks, and can be imported in bulk from a pasted spreadsheet or JSON (`parseQuestionImport`), all or none.
+  - **The paper** is a snapshot on the sitting (`interviews.paper`), so edits to the bank don't change it. One coding question scheduled the old way still works as it did: its 111 checks kept passing throughout.
+  - **The record** (`interview_events`): the candidate's page reports leaving the tab or full screen and pasting (`integrity-guard.tsx`). The server notices what the page can't hide: two tabs or devices taking turns, a different network (a hash, not the address), the page going quiet, and big edits from the edit log. `integrityLevel` sums it up for a person to weigh. Candidates are told all this first.
+  - **Protection you can turn on:** ask for full screen; block pasting from outside and copying the questions. Both are in the browser, and said to be.
+  - **Results:** a table per batch with scores by kind, the record and verdicts, a CSV safe from formula injection, and **Compare their code** (`similarity.ts`, MOSS-style fingerprints of the code's shape, in the browser from the edit logs), which finds copies with every name changed and ignores starter code.
+  - **Fixed on the way:** the selected button in the scorecard went unreadable while the pointer was on it.
+  - **Tests:** `apps/api/src/interviews/paper.test.ts`, `views.test.ts`, `packages/contracts/src/interviews.test.ts`, `components/interviews/similarity.test.ts`, `report.test.ts`; `apps/collab/test/interview-papers.e2e.mjs` (112) and `apps/web/test/interview-modes.e2e.mjs` (63), both in CI.
+
 Found by those tests and fixed:
 
 - Hocuspocus's `closeConnections` detaches the document but leaves the socket open, so a candidate's editor would have gone silently stale. Revocation closes the socket.
@@ -441,6 +452,21 @@ Found by those tests and fixed:
 What's left is in `docs/pending.md` under step 11.
 
 ## 8. Teams and admin ⬜
+
+- ✅ **Managing a room's people** (`apps/api/src/rooms/room-people.service.ts`, `room-people.controller.ts`; web `components/room/people/`, `share-menu.tsx`):
+  - **Approving:** a room set to ask first used to strand people, as nothing could approve them. The owner sees who's waiting on the title bar's avatars and in People, with their email (names can be anything), chooses a role, and approves or declines. The waiting page opens the room by itself.
+  - **Roles and removing:** the owner can change a member's role or remove them, and members can leave. The owner can't be changed, and interview rooms stay out of it.
+  - **Removed stays removed:** a new `removed` status (migration `0010`) means the link they were given doesn't let them back. So does declining. The owner can let them back, which makes them a stranger again.
+  - **The invite link:** Share used to copy only the room code, so the link was lost once the new-room dialog closed. The token is now made from the server's secret (`RoomsService.inviteTokenOf`), so anyone who may invite can copy it again, and the database still holds only its hash. **Make a new link** kills the old one, and the owner can also choose who can join there.
+  - **Rights changing reaches what's open:** `RoomsService.accessChanged(roomId, userId)` closes that person's editor sockets only (collab), rechecks their chat listening, closes their terminals, language servers, debugger and hot reload (`realtime/live-sockets.ts`), and takes them out of the call on the server (`calls/calls.service.ts`, LiveKit's API). Their shells are killed too (`terminals/close` on the runner). Browsers read their role again on reconnecting, so the page changes without a reload.
+  - **Calls:** join tokens now last 10 minutes rather than 6 hours. LiveKit checks them only on connecting and refreshes them for people connected, so a removed person can't come back with an old one for long.
+  - **Fixed on the way:** an invite link to a public room never made you a member; someone watching a debug session kept watching after a room went private.
+  - **Left as it is:** a program someone started to outlive its terminal (`nohup`, a daemon) keeps going until the sandbox restarts, as everyone in a sandbox is the same user. The confirmation says so. Secrets they could read aren't changed, and in a public room someone removed can still look, like anyone.
+  - **Tests:** `apps/collab/test/room-people.e2e.mjs` (62), `apps/web/test/room-members.e2e.mjs` (32, including the server ending the call while the page ignores losing access), `apps/api/src/realtime/live-sockets.test.ts` (5), `apps/collab/src/extensions/revocation.test.ts` (3). Both end-to-end suites are in CI.
+- ✅ **What GitHub's first end-to-end run found** (2026-11-06), all fixed:
+  - **A cut-off copy of a large file:** if a program was still writing a binary file when the watcher looked, the room kept a piece under the limit, and no later version could replace it once the file passed 5 MB. Now the copy leaves the room (`sandbox/agent/src/workspace.ts`, `tooLarge`, with `workspace.test.ts`).
+  - **CI's unit tests:** a test still expected candidates to get AI help. Also, this Vitest no longer skips `dist/`, so the API's tests ran twice locally (`apps/api/vitest.config.ts`).
+  - **The PDF viewer's frame:** already fixed when the run started.
 
 - 🟡 **Organisations:** making a team (`/orgs/new`, which the switcher links to but doesn't exist), the members page, and the invitation page (`/invite/<id>`, which invitation emails already link to). Handed to ChatGPT: the brief is `docs/handoff/chatgpt-9-org-members.md`.
   - roles: owner, admin, member, guest
@@ -600,7 +626,7 @@ What's left is in `docs/pending.md` under step 11.
   - **Green on GitHub** since `47b3e71` (2026-11-05).
   - **End-to-end tests in CI** (2026-11-06): `.github/workflows/e2e.yml`, apart from CI so a flaky run can't hold it up. `docs/ci.md` covers it.
     - It starts the dev infrastructure on one runner, builds the sandbox's base image (sharing a cache with the `images` job), migrates and seeds, starts the dev servers, compiles the pages the tests open, and runs `scripts/e2e-ci.mjs`.
-    - **35 suites:** 16 for the runner, collab and the API, and 19 in the browser. They need neither the full image, nor a paid AI key, nor real GitHub. The first 29 passed together here, with no retries, in about 7 minutes. The 6 added since have only passed on their own so far.
+    - **39 suites:** 18 for the runner, collab and the API, and 21 in the browser. They need neither the full image, nor a paid AI key, nor real GitHub. The first 29 passed together here, with no retries, in about 7 minutes. The 10 added since have only passed on their own so far.
     - **Failures** become annotations on the run, with a table on its page; logs and screenshots are kept as artifacts.
     - **Found on the way:**
       - suites run back to back trip the 10-a-minute sign-in limit, so the script clears only those counters in the dev Valkey before each suite (the limit itself stays, and `auth-flow.e2e.mjs` checks it);

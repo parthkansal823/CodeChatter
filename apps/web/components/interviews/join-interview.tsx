@@ -1,4 +1,4 @@
-/** The candidate's link: join with or without an account, wait for the interviewer, then go to the room. Shows nothing of the question. */
+/** The candidate's link: join with or without an account, then wait for the interviewer, or start an assessment themselves. Shows nothing of the questions. */
 "use client";
 
 import type { InterviewInvitation, JoinedInterview } from "@codechatter/contracts";
@@ -23,6 +23,38 @@ function Page({ title, children }: { title: string; children: React.ReactNode })
         {children}
       </div>
     </main>
+  );
+}
+
+const COUNT_WORDS: Record<string, [string, string]> = { mcq: ["multiple choice", "multiple choice"], coding: ["coding question", "coding questions"], short: ["short answer", "short answers"], design: ["system design", "system designs"] };
+
+/** "5 multiple choice, 1 coding question". */
+function paperWords(questions: NonNullable<InterviewInvitation["questions"]>): string {
+  return Object.entries(questions)
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => `${count} ${COUNT_WORDS[kind]![count === 1 ? 0 : 1]}`)
+    .join(", ");
+}
+
+/** What's recorded and what's asked of them. They should know before they start. */
+function Rules({ invite }: { invite: InterviewInvitation }) {
+  const assessment = invite.mode === "assessment";
+  return (
+    <ul className="mx-auto max-w-sm list-disc pl-5 text-left text-muted-foreground">
+      {assessment ? (
+        <li>The timer runs on the server and starts when you press Start. It keeps running if you close the page.</li>
+      ) : (
+        <>
+          <li>It happens on video, in the room: have your camera and microphone ready.</li>
+          <li>The timer runs on the server and starts when your interviewer starts it.</li>
+        </>
+      )}
+      <li>{assessment ? "AI help is off, and the sandbox has no internet." : "AI help is off unless your interviewer turns it on. The sandbox has no internet."}</li>
+      <li>{assessment ? "Whoever marks it sees your answers, edits and test runs, and can replay them." : "Your interviewer sees your edits and test runs, and can replay them later."}</li>
+      <li>Leaving this tab, pasting from outside and opening it on a second device go on a record they can see.</li>
+      {invite.fullscreen && <li>It runs in full screen.</li>}
+      {invite.lockClipboard && <li>Pasting from outside and copying the questions are off.</li>}
+    </ul>
   );
 }
 
@@ -66,9 +98,9 @@ export function JoinInterview({ token }: { token: string }) {
     [router],
   );
   const refuse = useCallback((error: unknown) => setProblem(error instanceof ApiError ? error.detail : "That didn't work. Try again."), []);
-  const press = (path: "claim" | "guest") => {
+  const press = (path: "claim" | "guest" | "start") => {
     setBusy(true);
-    void request(path).then(accept, refuse).finally(() => setBusy(false));
+    void api<JoinedInterview>(`/api/interview-invites/${token}/${path}`, { method: "POST" }).then(accept, refuse).finally(() => setBusy(false));
   };
 
   // Coming back to a link you already used: carry on without asking. Once per page.
@@ -102,9 +134,25 @@ export function JoinInterview({ token }: { token: string }) {
 
   const invite = invitation.data;
   if (invite.status === "cancelled") return <Page title="This interview was cancelled"><p className="text-muted-foreground">Contact your interviewer if you think that&apos;s a mistake.</p></Page>;
-  if (invite.status === "finished") return <Page title="This interview has finished"><p className="text-muted-foreground">Thanks for taking part.</p></Page>;
+  if (invite.status === "finished") return <Page title={`This ${invite.mode} has finished`}><p className="text-muted-foreground">Thanks for taking part.</p></Page>;
+  if (invite.status === "missed") return <Page title="This assessment has closed"><p className="text-muted-foreground">It had to be started by {when(invite.closesAt)}. Contact whoever sent it if you think that&apos;s a mistake.</p></Page>;
 
-  const details = [`${invite.durationMinutes} minutes`, when(invite.scheduledAt)].filter(Boolean).join(" · ");
+  const assessment = invite.mode === "assessment";
+  const opensLater = Boolean(invite.opensAt && new Date(invite.opensAt) > new Date(invite.now));
+  const details = [`${invite.durationMinutes} minutes`, assessment ? null : when(invite.scheduledAt)].filter(Boolean).join(" · ");
+  const windowWords = assessment && (invite.opensAt || invite.closesAt) ? [invite.opensAt && `Opens ${when(invite.opensAt)}`, invite.closesAt && `start by ${when(invite.closesAt)}`].filter(Boolean).join(", ") : null;
+  if (joined?.waiting && assessment) {
+    return (
+      <Page title={invite.title}>
+        <p className="text-muted-foreground">Hi {invite.candidateName}. {invite.questions ? `${paperWords(invite.questions)}. ` : ""}You have {invite.durationMinutes} minutes from when you start.</p>
+        {windowWords && <p className="flex items-center justify-center gap-2 text-muted-foreground"><Clock className="size-4" /> {windowWords}</p>}
+        <Rules invite={invite} />
+        {problem && <p role="alert" className="text-destructive">{problem}</p>}
+        <Button disabled={busy || opensLater} onClick={() => press("start")}>{busy && <Loader2 className="animate-spin" />} {opensLater ? "It hasn't opened yet" : "I understand. Start the assessment"}</Button>
+        <p className="text-muted-foreground">You can&apos;t pause it once it starts.</p>
+      </Page>
+    );
+  }
   if (joined?.waiting) {
     return (
       <Page title="You're in the waiting room">
@@ -120,13 +168,11 @@ export function JoinInterview({ token }: { token: string }) {
 
   return (
     <Page title={invite.title}>
-      <p className="text-muted-foreground">Hi {invite.candidateName}. This is a coding interview in a shared editor, with a real terminal to run your code.</p>
-      <p className="flex items-center justify-center gap-2 text-muted-foreground"><Clock className="size-4" /> {details}</p>
-      <ul className="mx-auto max-w-sm list-disc pl-5 text-left text-muted-foreground">
-        <li>The timer runs on the server and starts when your interviewer starts it.</li>
-        <li>AI help is off during the interview.</li>
-        <li>Your interviewer sees your edits and test runs, and can replay them later.</li>
-      </ul>
+      <p className="text-muted-foreground">
+        Hi {invite.candidateName}. {assessment ? `This is an assessment you take by yourself${invite.questions ? `: ${paperWords(invite.questions)}` : ""}. Nothing starts until you press Start.` : "This is a live coding interview on video, in a shared editor, with a real terminal to run your code."}
+      </p>
+      <p className="flex items-center justify-center gap-2 text-muted-foreground"><Clock className="size-4" /> {windowWords ? `${details} · ${windowWords}` : details}</p>
+      <Rules invite={invite} />
       {problem && <p role="alert" className="text-destructive">{problem}</p>}
       {me.data ? (
         <div className="grid gap-2">

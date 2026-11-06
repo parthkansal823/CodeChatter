@@ -53,7 +53,7 @@ export class MailService implements AuthMail, OnApplicationBootstrap {
     await this.send(input.email, await orgInvitationEmail(input));
   }
 
-  async sendInterviewInvitation(input: { email: string; candidateName: string; interviewerName: string; minutes: number; when: string | null; url: string }) {
+  async sendInterviewInvitation(input: { email: string; candidateName: string; interviewerName: string; minutes: number; when: string | null; url: string; mode?: "interview" | "assessment"; title?: string }) {
     await this.send(input.email, await interviewInvitationEmail(input));
   }
 }

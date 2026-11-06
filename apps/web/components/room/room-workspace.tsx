@@ -88,6 +88,7 @@ import { getActiveEditor } from "@/components/room/editor/active-editor";
 import { usePresentMode } from "@/components/room/editor/present";
 import { PresentBanner } from "@/components/room/present-banner";
 import { InterviewBanner } from "@/components/room/tools/interview/interview-banner";
+import { useCandidateAiOff, useRoomInterview } from "@/components/room/tools/interview/use-interview";
 import { CallDock } from "@/components/room/call/call-dock";
 import { requestCheckpoint } from "@/components/room/history/checkpoints";
 import { useRoomRepo } from "@/components/room/source-control/use-repo";
@@ -172,8 +173,11 @@ function Workspace() {
   useOpenAiOnRequest(() => setRight(AI_TOOL_ID));
 
   // Plug-in tools (components/room/tools/registry.ts).
-  const tools = ROOM_TOOLS.filter((tool) => tool.visible?.(can, room) ?? true);
-  const sideTools = tools.filter((tool) => tool.placement === "side");
+  const candidateAiOff = useCandidateAiOff();
+  const tools = ROOM_TOOLS.filter((tool) => tool.visible?.(can, room, { candidateAiOff }) ?? true);
+  const assessment = useRoomInterview().data?.mode === "assessment";
+  // The same panel, called what it is.
+  const sideTools = tools.filter((tool) => tool.placement === "side").map((tool) => (tool.id === "interview" && assessment ? { ...tool, label: "Assessment" } : tool));
   const mainTools = tools.filter((tool) => tool.placement === "main");
   const [mainToolId, setMainToolId] = useState<string | null>(null);
   const mainTool = tools.find((tool) => tool.id === mainToolId && tool.placement === "main") ?? null;

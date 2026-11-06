@@ -11,10 +11,10 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## In progress (2026-11-06)
 
-- 🟡 **Claude:** interview mode, the next version (step 11).
 - 🟡 **ChatGPT:** prompt 9 (teams).
 - ✅ Checked: ChatGPT's prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
 - ✅ Just finished by Claude:
+  - interviews and assessments as two modes (step 11): live interviews on video with questions asked on the spot and the AI switch; assessments with a paper drawn for each candidate; multiple choice, short answers and system design; the integrity record; results tables; comparing code (`docs/interviews.md`);
   - managing a room's members (approve, decline, remove, change roles, leave), and the invite link from Share;
   - the browser security policy, checked against a production build (`docs/adr/0010-content-security-policy.md`);
   - access ending when a public room goes private or a room is deleted;
@@ -28,7 +28,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 ## Up next, in order
 
 1. **ChatGPT**, one prompt at a time, each checked before the next: **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
-2. **Claude:** interview mode's next version (step 11), then accessibility, gVisor, a final security review and the cutover from v1 (step 10), before launch.
+2. **Claude:** accessibility, gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **You:** record the README's GIF and 2-minute video (step 12).
 
 ## Your actions
@@ -167,16 +167,12 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Step 11 · Interview mode: after launch (**Claude**)
 
-The mode itself is done. Next (the owner's ideas, 2026-11-06, being built now):
+Interviews and assessments are done (`docs/interviews.md`). What's left:
 
-- 🟡 **Scheduling many candidates at once:** a pasted list, one link each, emailed together, with a page for the whole batch
-- 🟡 **A real question bank:** tags and difficulty, and random questions picked from it, so candidates don't all get the same paper
-- 🟡 **More kinds of question:** multiple choice marked automatically, then short answers, alongside coding
-- 🟡 **Harder to cheat, honestly stated:** a browser can't prevent cheating, so the record shows what happened (leaving the tab or fullscreen, pasting in, a second device), questions come in shuffled order, and the server keeps the time. Webcam proctoring is left out for now: it needs consent, storage and legal care.
-- 🟡 **A results table** to compare the candidates of a batch
-
-What else is left:
-
+- ⬜ **Webcam or screen recording for assessments:** a decision for the owner first, as it needs consent, storage and legal care for where candidates live
+- ⬜ Negative marking, and sections with a time each
+- ⬜ Showing Diagrams and Boards in the replay (files only now)
+- ⬜ An email reminder before an assessment closes
 - ⬜ Hidden tests on the Kubernetes driver (a one-off pod, as the Docker driver's throwaway container); **Run tests** refuses there until then
 - ⬜ A scorecard for each interviewer (one is shared now, and the last save wins)
 - ⬜ The report as a PDF (Markdown now)

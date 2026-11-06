@@ -31,6 +31,7 @@ import type { Response } from "express";
 
 import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
+import { InterviewsService } from "../interviews/interviews.service.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient } from "../runner/runner.client.js";
 import { AiService } from "./ai.service.js";
@@ -46,7 +47,7 @@ import { estimateUsage } from "./usage.js";
 // while a model thinks before its first word.
 const HEARTBEAT_MS = 15_000;
 
-const NO_AI_IN_INTERVIEWS = "AI help is off during an interview.";
+const NO_AI_IN_INTERVIEWS = "AI help is off during this interview.";
 
 @Controller()
 export class AiController {
@@ -56,6 +57,7 @@ export class AiController {
     private readonly ai: AiService,
     private readonly rooms: RoomsService,
     private readonly runner: RunnerClient,
+    private readonly interviews: InterviewsService,
   ) {}
 
   /** Whether AI is set up, for the panel to show the chat or the setup help. Never includes keys. */
@@ -79,7 +81,11 @@ export class AiController {
     @Res() res: Response,
   ): Promise<void> {
     const { role } = await this.rooms.require(roomId, session.user.id, "room.chat");
-    if (role === "candidate") throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
+    if (role === "candidate") {
+      // The interviewer decides, and sees when they used it.
+      if (!(await this.interviews.candidateMayUseAi(roomId))) throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
+      void this.interviews.noteAiUse(roomId).catch(() => {});
+    }
     const provider = this.ai.provider;
     if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");
     if (input.context.image && !provider.settings.vision) {
@@ -176,7 +182,7 @@ export class AiController {
   ): Promise<AiCompletion> {
     // A suggestion is typed into the file: it takes the right to edit as well as to use the AI.
     const { role } = await this.rooms.require(roomId, session.user.id, "files.edit");
-    if (role === "candidate") throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
+    if (role === "candidate" && !(await this.interviews.candidateMayUseAi(roomId))) throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
     if (!can(role, "room.chat")) throw new ForbiddenException("You don't have access to do that in this room.");
     const provider = this.ai.provider;
     if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");

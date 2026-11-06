@@ -2,7 +2,7 @@ import { schema, type Db } from "@codechatter/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import type { Redis } from "ioredis";
 
 import { uuidv7 } from "./ids.js";
@@ -33,7 +33,7 @@ function validateOrganisationIdentity(organisation: { slug?: string; metadata?: 
   }
 }
 
-/** Recheck last-owner changes in the same short transaction as the write, including the plugin's hookless leave route. */
+/** Serialise membership changes and invitation creation without a schema change or a long-lived database transaction. */
 function organisationSafeAdapter(db: Db): ReturnType<typeof drizzleAdapter> {
   return (options) => {
     const adapter = drizzleAdapter(db, { provider: "pg", schema })(options);
@@ -54,6 +54,31 @@ function organisationSafeAdapter(db: Db): ReturnType<typeof drizzleAdapter> {
     });
     const guarded: typeof adapter = {
       ...adapter,
+      create: async <T extends Record<string, unknown>, R = T>(data: Parameters<typeof adapter.create<T, R>>[0]): Promise<R> => {
+        if (data.model !== "member" && data.model !== "invitation") return adapter.create<T, R>(data);
+        const { organizationId, userId, email } = data.data;
+        if (typeof organizationId !== "string" || (data.model === "member" ? typeof userId !== "string" : typeof email !== "string")) {
+          throw new APIError("BAD_REQUEST", { message: "Choose a valid organisation and person." });
+        }
+        return db.transaction(async (tx) => {
+          const [organisation] = await tx.select().from(schema.organization).where(eq(schema.organization.id, organizationId)).for("update");
+          if (!organisation) throw new APIError("BAD_REQUEST", { message: "That organisation no longer exists." });
+          requireSharedOrganisation(organisation);
+          const existing = data.model === "member"
+            ? await tx.select({ id: schema.member.id }).from(schema.member).where(and(eq(schema.member.organizationId, organizationId), eq(schema.member.userId, userId as string))).limit(1)
+            : await tx.select({ id: schema.member.id }).from(schema.member).innerJoin(schema.user, eq(schema.member.userId, schema.user.id))
+              .where(and(eq(schema.member.organizationId, organizationId), eq(schema.user.email, (email as string).toLowerCase()))).limit(1);
+          if (existing.length) throw new APIError("BAD_REQUEST", { code: "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION", message: "That person is already a member of this organisation." });
+          if (data.model === "invitation") {
+            const pending = await tx.select({ id: schema.invitation.id }).from(schema.invitation).where(and(
+              eq(schema.invitation.organizationId, organizationId), eq(schema.invitation.email, (email as string).toLowerCase()),
+              eq(schema.invitation.status, "pending"), gt(schema.invitation.expiresAt, new Date()),
+            )).limit(1);
+            if (pending.length) throw new APIError("BAD_REQUEST", { code: "USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION", message: "That person has already been invited to this organisation." });
+          }
+          return drizzleAdapter(tx, { provider: "pg", schema })(options).create<T, R>(data);
+        });
+      },
       update: <T>(data: Parameters<typeof adapter.update>[0]) => data.model === "member" && Object.hasOwn(data.update, "role")
         ? protect(data, data.update.role, (scoped) => scoped.update<T>(data)) : adapter.update<T>(data),
       delete: (data) => data.model === "member" ? protect(data, undefined, (scoped) => scoped.delete(data)) : adapter.delete(data),

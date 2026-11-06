@@ -146,7 +146,7 @@ export class InterviewsController {
   @Post("rooms/:roomId/interview/run-tests")
   @HttpCode(200)
   runTests(@CurrentSession() session: AuthSession, @Param("roomId", Room) roomId: string, @Body(new ZodPipe(RunInterviewTestsInput)) input: z.output<typeof RunInterviewTestsInput>) {
-    return this.interviews.runTests(roomId, session, input.stateVector);
+    return this.interviews.runTests(roomId, session, input.stateVector, input.questionId);
   }
 
   /** A signed-in person uses the link. The next route is for people without an account. */

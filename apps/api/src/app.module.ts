@@ -35,6 +35,8 @@ import { AuditService } from "./audit/audit.service.js";
 import { AuditController } from "./audit/audit.controller.js";
 import { BlobsController } from "./blobs/blobs.controller.js";
 import { GitController } from "./sandbox/git.controller.js";
+import { InterviewTestsController } from "./interviews/interview-tests.controller.js";
+import { InterviewTestsService } from "./interviews/interview-tests.service.js";
 import { InterviewInvitesController, InterviewsController } from "./interviews/interviews.controller.js";
 import { InterviewsService } from "./interviews/interviews.service.js";
 import { RoomPeopleController } from "./rooms/room-people.controller.js";
@@ -70,10 +72,11 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController],
+  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController],
   providers: [
     AiService,
     InterviewsService,
+    InterviewTestsService,
     ActivityService,
     AuditService,
     WebhooksService,

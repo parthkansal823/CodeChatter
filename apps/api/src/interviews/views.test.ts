@@ -8,6 +8,17 @@ const row = (status: InterviewRow["status"] = "live"): InterviewRow => ({
   orgId: "o1",
   roomId: "AB12CD",
   questionId: "q1",
+  mode: "interview",
+  batchId: null,
+  paper: [],
+  aiAllowed: false,
+  opensAt: null,
+  closesAt: null,
+  fullscreen: false,
+  lockClipboard: false,
+  beatSession: null,
+  beatNetwork: null,
+  beatAt: null,
   question: {
     title: "SECRET-TITLE two sum",
     prompt: "SECRET-PROMPT add the numbers",
@@ -38,6 +49,7 @@ const row = (status: InterviewRow["status"] = "live"): InterviewRow => ({
 });
 const run: RunRow = {
   id: "r1",
+  questionId: null,
   interviewId: "i1",
   userId: "u2",
   path: "main.py",
@@ -51,6 +63,70 @@ const run: RunRow = {
   createdAt: NOW,
   byName: "Ana",
 };
+
+const secretPaper: InterviewRow["paper"] = [
+  {
+    id: "q1", bankId: "b1", kind: "mcq", title: "Which?", prompt: "Pick", marks: 2, difficulty: "easy",
+    choices: [{ id: "a", text: "Right one", correct: true }, { id: "b", text: "Wrong one", correct: false }],
+    modelAnswer: "MODEL-ANSWER", file: "", tests: [], timeLimitMs: 2000, starterFiles: [], askedAt: "2026-11-06T10:00:00Z",
+  },
+  {
+    id: "q2", bankId: "b2", kind: "coding", title: "NOT-ASKED-YET", prompt: "NOT-ASKED-PROMPT", marks: 5, difficulty: "hard",
+    choices: [], modelAnswer: "", file: "q2/main.py", tests: [{ id: "t", input: "PAPER-HIDDEN-INPUT", expected: "PAPER-HIDDEN-OUT", hidden: true }], timeLimitMs: 2000, starterFiles: [{ path: "q2/main.py", content: "NOT-ASKED-STARTER" }], askedAt: null,
+  },
+];
+
+describe("a paper, as a candidate sees it", () => {
+  const withPaper = (mode: InterviewRow["mode"], status: InterviewRow["status"] = "live") => ({ ...row(status), mode, paper: secretPaper });
+  const answer = { interviewId: "i1", questionId: "q1", choiceIds: ["a"], text: "", awarded: 2, createdAt: NOW, updatedAt: NOW };
+
+  it("never carries a right answer or a mark", () => {
+    const seen = JSON.stringify(candidateInterview(withPaper("interview"), [], "Bo", NOW, [answer]));
+    expect(seen).toContain("Right one");
+    expect(seen).not.toContain("correct");
+    expect(seen).not.toContain("awarded");
+    expect(seen).not.toContain("MODEL-ANSWER");
+  });
+
+  it("in an interview, shows only what's been asked, files included", () => {
+    const seen = JSON.stringify(candidateInterview(withPaper("interview"), [], "Bo", NOW));
+    expect(seen).not.toContain("NOT-ASKED");
+    expect(candidateInterview(withPaper("interview"), [], "Bo", NOW).paper.map((question) => question.id)).toEqual(["q1"]);
+  });
+
+  it("in an assessment, shows the whole paper once it's started, without hidden tests or starter files", () => {
+    const seen = candidateInterview(withPaper("assessment"), [], "Bo", NOW);
+    expect(seen.paper.map((question) => question.id)).toEqual(["q1", "q2"]);
+    expect(seen.paper[1]!.hiddenTestCount).toBe(1);
+    expect(JSON.stringify(seen)).not.toContain("PAPER-HIDDEN");
+    expect(JSON.stringify(seen)).not.toContain("NOT-ASKED-STARTER");
+  });
+
+  it("shows nothing of it before it starts, whichever mode", () => {
+    for (const mode of ["interview", "assessment"] as const) expect(candidateInterview(withPaper(mode, "scheduled"), [], "Bo", NOW).paper).toEqual([]);
+    expect(candidateInterview(withPaper("assessment", "missed"), [], "Bo", NOW).paper).toEqual([]);
+    expect(candidateInterview(withPaper("assessment", "scheduled"), [], "Bo", NOW).title).toBe("Assessment");
+  });
+
+  it("drops an answer to a question they can't see", () => {
+    expect(candidateInterview(withPaper("interview"), [], "Bo", NOW, [{ ...answer, questionId: "q2" }]).answers).toEqual([]);
+  });
+});
+
+describe("a paper, as an interviewer sees it", () => {
+  it("has everything: the unasked questions, right answers, marks and the record", () => {
+    const seen = interviewerInterview({ ...row(), paper: secretPaper }, [], "Bo", NOW, {
+      answers: [{ interviewId: "i1", questionId: "q1", choiceIds: ["a"], text: "", awarded: 2, createdAt: NOW, updatedAt: NOW }],
+      events: [{ id: "e1", interviewId: "i1", kind: "second-session", source: "server", detail: {}, at: NOW }],
+      bigEdits: 1,
+      runScores: [{ questionId: "q2", passed: 0, total: 1 }],
+    });
+    expect(seen.paper).toEqual(secretPaper);
+    expect(seen.answers[0]!.awarded).toBe(2);
+    expect(seen.score).toMatchObject({ marks: 2, max: 7 });
+    expect(seen.integrity).toMatchObject({ level: "concern", bigEdits: 1, counts: { "second-session": 1 } });
+  });
+});
 
 describe("what a candidate sees", () => {
   const seen = JSON.stringify(candidateInterview(row(), [run], "Bo", NOW));

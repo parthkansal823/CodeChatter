@@ -49,6 +49,8 @@ try {
 
   // Scheduling.
   await a.getByRole("button", { name: "Schedule an interview" }).first().click();
+  await a.getByRole("combobox", { name: "Question" }).click();
+  await a.getByRole("option", { name: TITLE, exact: true }).click();
   await a.getByLabel("Candidate's name").fill("Ana Candidate");
   await a.getByRole("button", { name: "Schedule", exact: true }).click();
   const linkField = a.getByRole("textbox", { name: "The candidate's link" });

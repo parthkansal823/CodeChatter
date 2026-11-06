@@ -7,6 +7,7 @@ import { Sparkles, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useRoom } from "@/components/room/room-context";
+import { useCandidateAiOff } from "@/components/room/tools/interview/use-interview";
 import { useRun } from "@/components/room/run-context";
 import { explainRunError, fixRunError } from "@/components/room/tools/ai/ai-requests";
 import { XtermView } from "@/components/room/xterm-view";
@@ -52,6 +53,7 @@ function footer(exit: RunExit): string {
  */
 export function RunOutput() {
   const { me, can, room } = useRoom();
+  const candidateAiOff = useCandidateAiOff();
   const run = useRun();
   const [empty, setEmpty] = useState(!run.run);
   const [failure, setFailure] = useState(false);
@@ -95,7 +97,7 @@ export function RunOutput() {
           </p>
         </div>
       )}
-      {failure && ai.data?.configured && can("room.chat") && room.role !== "candidate" && (
+      {failure && ai.data?.configured && can("room.chat") && !candidateAiOff && (
         <div role="group" aria-label="Ask the AI about this error" className="absolute top-2 right-3 flex gap-1">
           <Button size="xs" variant="outline" className="bg-background" onClick={explainRunError}>
             <Sparkles /> Explain error

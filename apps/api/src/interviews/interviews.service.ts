@@ -3,13 +3,17 @@ import type { ObjectStore } from "@codechatter/auth/s3";
 import {
   can,
   roomBlobPrefix,
+  type AskQuestionData,
+  type AskedQuestion,
   type InterviewInvitation,
   type InterviewListItem,
   type InterviewReplay,
   type InterviewerInterview,
   type JudgeEvent,
   type JoinedInterview,
+  type PaperQuestion,
   type QuestionData,
+  type QuestionKind,
   type QuestionItem,
   type QuestionListItem,
   type RoomInterview,
@@ -19,7 +23,7 @@ import {
 } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
 import { BadRequestException, ConflictException, ForbiddenException, GoneException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 
 import type { Env } from "../config/env.js";
@@ -29,7 +33,8 @@ import { EventsGateway } from "../realtime/events.gateway.js";
 import { RoomsRepository } from "../rooms/rooms.repository.js";
 import { newRoomCode, RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient, RunnerUnavailableError, type RunnerUser } from "../runner/runner.client.js";
-import { candidateInterview, candidateRun, interviewerInterview, interviewerRun, interviewListItem, type InterviewRow, type RunRow } from "./views.js";
+import { adhocPaperQuestion, askedOf, drawQuestions, nextQuestionId, PaperError, paperQuestion, secureRandom, sittingFrom, type BankQuestion } from "./paper.js";
+import { candidateInterview, candidateRun, interviewerInterview, interviewerRun, interviewListItem, testsOf, type InterviewRow, type RunRow } from "./views.js";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const SYSTEM: RunnerUser = { id: "interview-timer", name: "Interview timer" };
@@ -37,6 +42,25 @@ const SWEEP_MS = 10_000;
 const KEEP_OUTPUT = 16 * 1024;
 const RUNS_SHOWN = 20;
 const MOMENTS = 300;
+/** More text than a person types in one go: pasting, or a program writing a file. */
+const BIG_EDIT_BYTES = 1500;
+
+/** Everything one sitting starts with. */
+export type NewSitting = {
+  questionId: string | null;
+  snapshot: InterviewRow["question"];
+  paper: PaperQuestion[];
+  candidateName: string;
+  candidateEmail: string | null;
+  scheduledAt: Date | null;
+  durationMinutes: number;
+  mode: InterviewRow["mode"];
+  batchId: string | null;
+  opensAt: Date | null;
+  closesAt: Date | null;
+  fullscreen: boolean;
+  lockClipboard: boolean;
+};
 
 /**
  * Interview mode (roadmap step 11): an organisation's question bank, scheduling, the
@@ -80,7 +104,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return this.handle.db;
   }
 
-  private async orgOf(session: AuthSession): Promise<string> {
+  async orgOf(session: AuthSession): Promise<string> {
     const orgId = session.session.activeOrganizationId ?? (await ensurePersonalOrg(this.db, session.user));
     if (!(await this.repo.isOrgMember(orgId, session.user.id))) throw new ForbiddenException("You're not a member of that organisation.");
     return orgId;
@@ -97,14 +121,24 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .orderBy(desc(schema.interviewQuestions.updatedAt));
     return rows.map((row) => ({
       id: row.id,
+      kind: row.kind,
       title: row.title,
       file: row.file,
+      difficulty: row.difficulty,
+      tags: row.tags,
+      marks: row.marks,
       durationMinutes: row.durationMinutes,
       updatedAt: row.updatedAt.toISOString(),
       tests: row.tests.length,
       hiddenTests: row.tests.filter((test) => test.hidden).length,
       criteria: row.rubric.length,
+      choices: row.choices.length,
     }));
+  }
+
+  /** Everything in an organisation's bank, to draw from. */
+  bankOf(orgId: string): Promise<BankQuestion[]> {
+    return this.db.select().from(schema.interviewQuestions).where(and(eq(schema.interviewQuestions.orgId, orgId), isNull(schema.interviewQuestions.archivedAt)));
   }
 
   private async questionRow(session: AuthSession, id: string) {
@@ -121,8 +155,14 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   private questionItem(row: typeof schema.interviewQuestions.$inferSelect): QuestionItem {
     return {
       id: row.id,
+      kind: row.kind,
       title: row.title,
       prompt: row.prompt,
+      difficulty: row.difficulty,
+      tags: row.tags,
+      marks: row.marks,
+      choices: row.choices,
+      modelAnswer: row.modelAnswer,
       file: row.file,
       starterFiles: row.starterFiles,
       tests: row.tests,
@@ -145,6 +185,13 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return this.questionItem(row!);
   }
 
+  /** All of them or none: half a bank is harder to fix than a paste. */
+  async importQuestions(session: AuthSession, questions: QuestionData[]): Promise<{ imported: number }> {
+    const orgId = await this.orgOf(session);
+    const rows = await this.db.insert(schema.interviewQuestions).values(questions.map((question) => ({ ...question, orgId, createdBy: session.user.id }))).returning({ id: schema.interviewQuestions.id });
+    return { imported: rows.length };
+  }
+
   async updateQuestion(session: AuthSession, id: string, input: QuestionData): Promise<QuestionItem> {
     await this.questionRow(session, id);
     const [row] = await this.db.update(schema.interviewQuestions).set({ ...input, updatedAt: new Date() }).where(eq(schema.interviewQuestions.id, id)).returning();
@@ -159,7 +206,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
 
   // Interviews.
 
-  private async isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
+  async isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
     const [member] = await this.db
       .select({ role: schema.member.role })
       .from(schema.member)
@@ -188,11 +235,38 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return rows.map((row) => interviewListItem(row.interview, row.interviewerName));
   }
 
+  /**
+   * One live interview. A coding question goes straight in as it always did. Any other kind waits
+   * on the paper to be asked. With no question at all, the interviewer chooses as it runs.
+   */
   async schedule(session: AuthSession, input: ScheduleInterviewData): Promise<ScheduledInterview> {
-    const question = await this.questionRow(session, input.questionId);
+    const question = input.questionId ? await this.questionRow(session, input.questionId) : null;
     if (input.sendEmail && !input.candidateEmail) throw new BadRequestException("Add the candidate's email to send them the link.");
     const token = randomBytes(24).toString("base64url");
-    const row = await this.createRoomAndInterview(session, question, input, sha256(token));
+    const direct = question?.kind === "coding";
+    const sitting = sittingFrom(question && !direct ? [question] : [], secureRandom, "interview");
+    const row = await this.createSitting(
+      session,
+      question?.orgId ?? (await this.orgOf(session)),
+      {
+        questionId: question?.id ?? null,
+        snapshot: direct
+          ? { title: question.title, prompt: question.prompt, file: question.file, starterFiles: question.starterFiles, tests: question.tests, rubric: question.rubric, timeLimitMs: question.timeLimitMs }
+          : { title: question?.title ?? "Live interview", prompt: "", file: "", starterFiles: sitting.starterFiles, tests: [], rubric: sitting.rubric, timeLimitMs: 2000 },
+        paper: sitting.paper,
+        candidateName: input.candidateName,
+        candidateEmail: input.candidateEmail ?? null,
+        scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+        durationMinutes: input.durationMinutes ?? question?.durationMinutes ?? 60,
+        mode: "interview",
+        batchId: null,
+        opensAt: null,
+        closesAt: null,
+        fullscreen: false,
+        lockClipboard: false,
+      },
+      sha256(token),
+    );
     let emailed = false;
     if (input.sendEmail && input.candidateEmail) {
       try {
@@ -212,19 +286,15 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return { ...interviewListItem(row, session.user.name), candidateToken: token, emailed };
   }
 
-  private async createRoomAndInterview(
-    session: AuthSession,
-    question: typeof schema.interviewQuestions.$inferSelect,
-    input: { candidateName: string; candidateEmail?: string; scheduledAt?: string; durationMinutes?: number },
-    tokenHash: string,
-  ): Promise<InterviewRow> {
+  /** A room and its sitting, with whoever scheduled it as the interviewer. */
+  async createSitting(session: AuthSession, orgId: string, input: NewSitting, tokenHash: string): Promise<InterviewRow> {
     for (let attempt = 0; ; attempt++) {
       try {
         const room = await this.repo.createWithOwner(
           {
             id: newRoomCode(),
-            orgId: question.orgId,
-            name: `Interview: ${input.candidateName}`.slice(0, 80),
+            orgId,
+            name: `${input.mode === "assessment" ? "Assessment" : "Interview"}: ${input.candidateName}`.slice(0, 80),
             description: "",
             kind: "interview",
             templateId: "blank",
@@ -240,15 +310,22 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
         const [row] = await this.db
           .insert(schema.interviews)
           .values({
-            orgId: question.orgId,
+            orgId,
             roomId: room.id,
-            questionId: question.id,
-            question: { title: question.title, prompt: question.prompt, file: question.file, starterFiles: question.starterFiles, tests: question.tests, rubric: question.rubric, timeLimitMs: question.timeLimitMs },
+            questionId: input.questionId,
+            mode: input.mode,
+            batchId: input.batchId,
+            question: input.snapshot,
+            paper: input.paper,
             candidateName: input.candidateName,
-            candidateEmail: input.candidateEmail ?? null,
+            candidateEmail: input.candidateEmail,
             interviewerId: session.user.id,
-            scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
-            durationMinutes: input.durationMinutes ?? question.durationMinutes,
+            scheduledAt: input.scheduledAt,
+            durationMinutes: input.durationMinutes,
+            opensAt: input.opensAt,
+            closesAt: input.closesAt,
+            fullscreen: input.fullscreen,
+            lockClipboard: input.lockClipboard,
             candidateTokenHash: tokenHash,
           })
           .returning();
@@ -267,7 +344,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** The interview, for someone who may see its rubric: its interviewers, and the organisation's owners and admins. */
-  private async asInterviewer(id: string, userId: string): Promise<InterviewRow> {
+  async asInterviewer(id: string, userId: string): Promise<InterviewRow> {
     const row = await this.row(id);
     const member = await this.repo.findMember(row.roomId, userId);
     if (member?.status === "active" && can(member.role, "interview.rubric")) return row;
@@ -286,8 +363,32 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return rows.map((row) => ({ ...row.run, byName: row.byName }));
   }
 
+  /** How many big edits each room's files have had, the seed aside. The server counts these: a page can't hide them. */
+  async bigEditsByRoom(roomIds: string[]): Promise<Map<string, number>> {
+    if (!roomIds.length) return new Map();
+    const { docUpdates } = schema;
+    const rows = await this.db
+      .select({ docName: docUpdates.docName, n: count() })
+      .from(docUpdates)
+      .where(and(inArray(docUpdates.docName, roomIds.map((id) => `room:${id}:files`)), sql`octet_length(${docUpdates.update}) > ${BIG_EDIT_BYTES}`, sql`${docUpdates.origin} not like '%:seed'`))
+      .groupBy(docUpdates.docName);
+    return new Map(rows.map((row) => [row.docName.split(":")[1]!, row.n]));
+  }
+
   private async interviewerView(row: InterviewRow): Promise<InterviewerInterview> {
-    return interviewerInterview(row, await this.runRows(row.id), await this.interviewerName(row), new Date());
+    const [runs, name, answers, events, bigEdits, runScores] = await Promise.all([
+      this.runRows(row.id),
+      this.interviewerName(row),
+      this.db.select().from(schema.interviewAnswers).where(eq(schema.interviewAnswers.interviewId, row.id)),
+      this.db.select().from(schema.interviewEvents).where(eq(schema.interviewEvents.interviewId, row.id)).orderBy(asc(schema.interviewEvents.at)),
+      this.bigEditsByRoom([row.roomId]),
+      this.db.select({ questionId: schema.interviewRuns.questionId, passed: schema.interviewRuns.passed, total: schema.interviewRuns.total }).from(schema.interviewRuns).where(eq(schema.interviewRuns.interviewId, row.id)),
+    ]);
+    return interviewerInterview(row, runs, name, new Date(), { answers, events, bigEdits: bigEdits.get(row.roomId) ?? 0, runScores });
+  }
+
+  async viewFor(id: string): Promise<InterviewerInterview> {
+    return this.interviewerView(await this.row(id));
   }
 
   async get(id: string, userId: string): Promise<InterviewerInterview> {
@@ -300,7 +401,8 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     const [row] = await this.db.select().from(schema.interviews).where(eq(schema.interviews.roomId, roomId)).limit(1);
     if (!row) throw new NotFoundException("This room isn't an interview.");
     if (can(role, "interview.rubric")) return this.interviewerView(row);
-    return { ...candidateInterview(row, await this.runRows(row.id), await this.interviewerName(row), new Date()), role: "candidate" };
+    const answers = await this.db.select().from(schema.interviewAnswers).where(eq(schema.interviewAnswers.interviewId, row.id));
+    return { ...candidateInterview(row, await this.runRows(row.id), await this.interviewerName(row), new Date(), answers), role: "candidate" };
   }
 
   /** Tell collab to reconnect the room's editors with their new rights, and browsers to read the interview again. */
@@ -317,19 +419,134 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .onConflictDoUpdate({ target: [schema.roomMembers.roomId, schema.roomMembers.userId], set: { role, status: "active", updatedAt: new Date() } });
   }
 
-  async start(id: string, userId: string): Promise<InterviewerInterview> {
-    const row = await this.asInterviewer(id, userId);
+  /** The clock starts: the only code that does this. */
+  private async begin(row: InterviewRow): Promise<InterviewRow> {
     const now = new Date();
     const [started] = await this.db
       .update(schema.interviews)
       .set({ status: "live", startedAt: now, endsAt: new Date(now.getTime() + row.durationMinutes * 60_000), updatedAt: now })
-      .where(and(eq(schema.interviews.id, id), eq(schema.interviews.status, "scheduled")))
+      .where(and(eq(schema.interviews.id, row.id), eq(schema.interviews.status, "scheduled")))
       .returning();
     if (!started) throw new ConflictException(`This interview is ${row.status === "live" ? "already running" : row.status}.`);
     await this.setCandidateRole(started, "candidate");
     // Nobody's rights shrink, and the candidate had no connection to close.
     await this.announce(started, false);
-    return this.interviewerView(started);
+    return started;
+  }
+
+  async start(id: string, userId: string): Promise<InterviewerInterview> {
+    return this.interviewerView(await this.begin(await this.asInterviewer(id, userId)));
+  }
+
+  /** The candidate starts their assessment: once the link is theirs, and only inside its window. */
+  async startAssessment(token: string, userId: string): Promise<JoinedInterview> {
+    const row = await this.byToken(token);
+    this.assertOpen(row);
+    if (row.mode !== "assessment") throw new ConflictException("Your interviewer starts the interview.");
+    if (row.candidateUserId !== userId) throw new ForbiddenException("This link belongs to someone else.");
+    if (row.status === "live") {
+      await this.setCandidateRole(row, "candidate");
+      return { roomId: row.roomId, interviewId: row.id, waiting: false };
+    }
+    const now = new Date();
+    if (row.opensAt && row.opensAt > now) throw new ConflictException("This assessment hasn't opened yet.");
+    if (row.closesAt && row.closesAt <= now) throw new GoneException("This assessment has closed.");
+    const started = await this.begin(row);
+    return { roomId: started.roomId, interviewId: started.id, waiting: false };
+  }
+
+  // During a live interview.
+
+  private assertAskable(row: InterviewRow): void {
+    if (row.mode !== "interview") throw new ConflictException("An assessment's paper is fixed.");
+    if (row.status !== "live" && row.status !== "scheduled") throw new ConflictException(`This interview is ${row.status}.`);
+  }
+
+  /**
+   * A question for the candidate, now: from the bank, drawn at random, or made up on the spot.
+   * Before the interview starts it waits on the paper instead. Its files aren't in the room
+   * yet: the interviewer's browser adds them (the API doesn't touch live documents).
+   */
+  async askQuestion(id: string, userId: string, input: AskQuestionData): Promise<AskedQuestion> {
+    const row = await this.asInterviewer(id, userId);
+    this.assertAskable(row);
+    const questionId = nextQuestionId(row.paper);
+    let question: PaperQuestion;
+    let rubric: Array<{ id: string; label: string }> = [];
+    if ("adhoc" in input) {
+      question = adhocPaperQuestion(input.adhoc, questionId, secureRandom);
+    } else {
+      const bank = await this.bankOf(row.orgId);
+      let source: BankQuestion | undefined;
+      if ("bankId" in input) {
+        source = bank.find((item) => item.id === input.bankId);
+        if (!source) throw new NotFoundException("That question isn't in this organisation's bank.");
+      } else {
+        const onPaper = new Set(row.paper.map((item) => item.bankId));
+        try {
+          source = drawQuestions(bank.filter((item) => !onPaper.has(item.id)), { fixed: [], random: [{ ...input.random, count: 1 }] }, secureRandom)[0];
+        } catch (error) {
+          if (error instanceof PaperError) throw new BadRequestException(error.message);
+          throw error;
+        }
+      }
+      question = paperQuestion(source!, questionId, `${questionId}/`, secureRandom);
+      rubric = source!.rubric;
+    }
+    const now = new Date();
+    if (row.status === "live") question = { ...question, askedAt: now.toISOString() };
+    const known = new Set(row.question.rubric.map((criterion) => criterion.label));
+    const added = rubric.filter((criterion) => !known.has(criterion.label)).map((criterion) => ({ id: `${questionId}-${criterion.id}`.slice(0, 64), label: criterion.label }));
+    const [saved] = await this.db
+      .update(schema.interviews)
+      .set({
+        // Added to what's there, not the copy read above, so two interviewers asking at once both count.
+        paper: sql`${schema.interviews.paper} || ${JSON.stringify([question])}::jsonb`,
+        question: { ...row.question, rubric: [...row.question.rubric, ...added] },
+        updatedAt: now,
+      })
+      .where(eq(schema.interviews.id, id))
+      .returning();
+    await this.announce(saved!, false);
+    return { interview: await this.interviewerView(saved!), question };
+  }
+
+  /** Ask a question that's been waiting on the paper. */
+  async askPrepared(id: string, userId: string, questionId: string): Promise<AskedQuestion> {
+    const row = await this.asInterviewer(id, userId);
+    this.assertAskable(row);
+    if (row.status !== "live") throw new ConflictException("Start the interview first.");
+    const question = row.paper.find((item) => item.id === questionId);
+    if (!question) throw new NotFoundException("That question isn't on this paper.");
+    const asked = { ...question, askedAt: question.askedAt ?? new Date().toISOString() };
+    const [saved] = await this.db
+      .update(schema.interviews)
+      .set({ paper: row.paper.map((item) => (item.id === questionId ? asked : item)), updatedAt: new Date() })
+      .where(eq(schema.interviews.id, id))
+      .returning();
+    await this.announce(saved!, false);
+    return { interview: await this.interviewerView(saved!), question: asked };
+  }
+
+  /** The interviewer's call, and they can change it as it runs. It goes on the record. */
+  async setAi(id: string, userId: string, allowed: boolean): Promise<InterviewerInterview> {
+    const row = await this.asInterviewer(id, userId);
+    const [saved] = await this.db.update(schema.interviews).set({ aiAllowed: allowed, updatedAt: new Date() }).where(eq(schema.interviews.id, id)).returning();
+    if (row.aiAllowed !== allowed && row.status === "live") await this.db.insert(schema.interviewEvents).values({ interviewId: id, kind: allowed ? "ai-on" : "ai-off", source: "server" });
+    await this.announce(saved!, false);
+    return this.interviewerView(saved!);
+  }
+
+  /** Whether the room's candidate may use the AI right now. */
+  async candidateMayUseAi(roomId: string): Promise<boolean> {
+    const [row] = await this.db.select({ aiAllowed: schema.interviews.aiAllowed, status: schema.interviews.status }).from(schema.interviews).where(eq(schema.interviews.roomId, roomId)).limit(1);
+    return row?.status === "live" && row.aiAllowed;
+  }
+
+  /** The interviewer sees when they used it. */
+  async noteAiUse(roomId: string): Promise<void> {
+    const [row] = await this.db.select({ id: schema.interviews.id }).from(schema.interviews).where(eq(schema.interviews.roomId, roomId)).limit(1);
+    if (row) await this.db.insert(schema.interviewEvents).values({ interviewId: row.id, kind: "ai-used", source: "server" });
   }
 
   async extend(id: string, userId: string, minutes: number): Promise<InterviewerInterview> {
@@ -345,7 +562,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** End one: the only code that does. Whoever wins the conditional update does the rest. */
-  private async close(id: string, user: RunnerUser): Promise<InterviewRow | null> {
+  async closeSitting(id: string, user: RunnerUser): Promise<InterviewRow | null> {
     const now = new Date();
     const [row] = await this.db
       .update(schema.interviews)
@@ -362,19 +579,25 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
 
   async finish(id: string, session: AuthSession): Promise<InterviewerInterview> {
     const row = await this.asInterviewer(id, session.user.id);
-    const closed = await this.close(id, session.user);
+    const closed = await this.closeSitting(id, session.user);
     if (!closed && row.status !== "finished") throw new ConflictException(`This interview is ${row.status}, so it can't be finished.`);
     return this.interviewerView(closed ?? row);
   }
 
-  /** Close the interviews whose time is up. */
+  /** Close the interviews whose time is up, and the assessments nobody started in time. */
   async sweep(): Promise<number> {
+    const missed = await this.db
+      .update(schema.interviews)
+      .set({ status: "missed", updatedAt: new Date() })
+      .where(and(eq(schema.interviews.status, "scheduled"), eq(schema.interviews.mode, "assessment"), lte(schema.interviews.closesAt, new Date())))
+      .returning({ roomId: schema.interviews.roomId });
+    for (const { roomId } of missed) this.events.interviewChanged(roomId);
     const due = await this.db
       .select({ id: schema.interviews.id })
       .from(schema.interviews)
       .where(and(eq(schema.interviews.status, "live"), lte(schema.interviews.endsAt, new Date())));
     let closed = 0;
-    for (const { id } of due) if (await this.close(id, SYSTEM)) closed += 1;
+    for (const { id } of due) if (await this.closeSitting(id, SYSTEM)) closed += 1;
     return closed;
   }
 
@@ -404,11 +627,17 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async remove(id: string, session: AuthSession): Promise<void> {
-    const row = await this.asInterviewer(id, session.user.id);
+    await this.asInterviewer(id, session.user.id);
+    await this.removeSitting(id, session.user);
+  }
+
+  /** The sitting and everything of it: the caller has checked who's asking. */
+  async removeSitting(id: string, user: RunnerUser): Promise<void> {
+    const row = await this.row(id);
     await this.repo.deleteRoom(row.roomId); // The interview and its runs go with the room.
     await this.rooms.accessChanged(row.roomId);
     await Promise.all([
-      this.runner.destroyRoom(row.roomId, session.user).catch(() => {}),
+      this.runner.destroyRoom(row.roomId, user).catch(() => {}),
       this.store?.deletePrefix(roomBlobPrefix(row.roomId)).catch(() => 0),
     ]);
   }
@@ -433,8 +662,18 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   async invitation(token: string): Promise<InterviewInvitation> {
     const row = await this.byToken(token);
     const name = await this.interviewerName(row);
+    const questions: Record<QuestionKind, number> = { coding: 0, mcq: 0, short: 0, design: 0 };
+    for (const question of row.paper) questions[question.kind] += 1;
     return {
-      title: name ? `Interview with ${name}` : "Interview",
+      mode: row.mode,
+      title: row.mode === "assessment" ? row.question.title : name ? `Interview with ${name}` : "Interview",
+      // In a live interview, the questions are the interviewer's to reveal.
+      questions: row.mode === "assessment" && row.paper.length ? questions : null,
+      opensAt: row.opensAt?.toISOString() ?? null,
+      closesAt: row.closesAt?.toISOString() ?? null,
+      fullscreen: row.fullscreen,
+      lockClipboard: row.lockClipboard,
+      now: new Date().toISOString(),
       candidateName: row.candidateName,
       interviewerName: name,
       durationMinutes: row.durationMinutes,
@@ -455,6 +694,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   private assertOpen(row: InterviewRow): void {
     if (row.status === "cancelled") throw new GoneException("This interview was cancelled.");
     if (row.status === "finished") throw new GoneException("This interview has finished.");
+    if (row.status === "missed") throw new GoneException("This assessment has closed.");
   }
 
   /**
@@ -487,21 +727,25 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
    * leave nothing behind in the candidate's sandbox. They keep their output to the people
    * who may see it: the answer is shaped by who asked.
    */
-  async runTests(roomId: string, session: AuthSession, stateVector: string): Promise<{ run: ReturnType<typeof candidateRun> | ReturnType<typeof interviewerRun> }> {
+  async runTests(roomId: string, session: AuthSession, stateVector: string, questionId?: string): Promise<{ run: ReturnType<typeof candidateRun> | ReturnType<typeof interviewerRun> }> {
     const { role } = await this.rooms.require(roomId, session.user.id, "code.run");
     const [row] = await this.db.select().from(schema.interviews).where(eq(schema.interviews.roomId, roomId)).limit(1);
     if (!row) throw new NotFoundException("This room isn't an interview.");
     if (row.status !== "live" || (row.endsAt && row.endsAt <= new Date())) throw new ConflictException("The tests run while the interview is running.");
-    const tests = row.question.tests;
+    const onPaper = questionId ? row.paper.find((question) => question.id === questionId && question.kind === "coding") : undefined;
+    if (questionId && (!onPaper || (!can(role, "interview.rubric") && !askedOf(row.mode, onPaper)))) throw new NotFoundException("That isn't one of this interview's coding questions.");
+    const tests = testsOf(row, questionId);
+    const path = onPaper?.file ?? row.question.file;
+    const timeLimitMs = onPaper?.timeLimitMs ?? row.question.timeLimitMs;
     if (!tests.length) throw new ConflictException("This question has no tests.");
     if (this.testing.has(row.id)) throw new ConflictException("The tests are already running.");
     this.testing.add(row.id);
     try {
       const events = await this.judge(roomId, session.user, {
-        path: row.question.file,
+        path,
         stateVector,
         cases: tests.map(({ input, expected }) => ({ input, expected })),
-        timeLimitMs: row.question.timeLimitMs,
+        timeLimitMs,
         isolated: true,
       });
       const failed = events.find((event): event is Extract<JudgeEvent, { type: "error" }> => event.type === "error");
@@ -518,7 +762,8 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
         .values({
           interviewId: row.id,
           userId: session.user.id,
-          path: row.question.file,
+          questionId: questionId ?? null,
+          path,
           compileError: compile?.output.slice(0, KEEP_OUTPUT) ?? null,
           results,
           passed: results.filter((result) => result.verdict === "passed").length,

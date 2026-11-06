@@ -294,8 +294,9 @@ export const githubTokens = pgTable("github_tokens", {
 });
 
 /**
- * Interview questions, in an organisation's bank. `tests` holds hidden cases too, so
- * these rows never reach a candidate: they get a snapshot's visible part through the API.
+ * Questions, in an organisation's bank: coding, multiple choice, a short answer or a system design. `tests`
+ * holds hidden cases and `choices` the right answers, so these rows never reach a
+ * candidate: they get a snapshot's visible part through the API.
  */
 export const interviewQuestions = pgTable(
   "interview_questions",
@@ -305,9 +306,18 @@ export const interviewQuestions = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     title: text().notNull(),
+    kind: text().$type<"coding" | "mcq" | "short" | "design">().notNull().default("coding"),
+    difficulty: text().$type<"easy" | "medium" | "hard">().notNull().default("medium"),
+    tags: jsonb().$type<string[]>().notNull().default([]),
+    /** What it's worth in a paper. */
+    marks: integer().notNull().default(1),
+    /** Multiple choice: the options, and which are right. */
+    choices: jsonb().$type<Array<{ id: string; text: string; correct: boolean }>>().notNull().default([]),
+    /** Short answers and system designs: what a good one says, for whoever marks it. */
+    modelAnswer: text().notNull().default(""),
     /** Markdown, shown to the candidate. */
     prompt: text().notNull().default(""),
-    /** The file the tests run. */
+    /** The file the tests run (coding). */
     file: text().notNull(),
     starterFiles: jsonb().$type<Array<{ path: string; content: string }>>().notNull(),
     tests: jsonb().$type<Array<{ id: string; input: string; expected: string; hidden: boolean }>>().notNull().default([]),
@@ -322,9 +332,41 @@ export const interviewQuestions = pgTable(
 );
 
 /**
- * One interview: its room, a snapshot of the question (later edits to the bank don't
- * change it), the single-use candidate link, the server's timer and the private
- * scorecard. The room's own edit log (doc_updates) is the source for its replay.
+ * Interviews or an assessment scheduled together for many candidates, each with a paper of
+ * their own drawn from the bank.
+ */
+export const interviewBatches = pgTable(
+  "interview_batches",
+  {
+    id: uuidv7Pk(),
+    orgId: text()
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    mode: text().$type<"interview" | "assessment">().notNull(),
+    title: text().notNull(),
+    durationMinutes: integer().notNull(),
+    /** How each paper was drawn. */
+    paper: jsonb().$type<{ fixed: string[]; random: Array<{ count: number; kind?: string; difficulty?: string; tag?: string }> }>().notNull(),
+    opensAt: timestamp({ withTimezone: true }),
+    closesAt: timestamp({ withTimezone: true }),
+    fullscreen: boolean().notNull().default(false),
+    lockClipboard: boolean().notNull().default(false),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [index().on(t.orgId, t.createdAt.desc())],
+);
+
+/**
+ * One sitting for one candidate, an interview or an assessment: its room, a snapshot of the
+ * questions (later edits to the bank don't change it), the single-use candidate link, the
+ * server's timer and the private scorecard. The room's own edit log (doc_updates) is the
+ * source for its replay.
+ *
+ * An interview is live, on video: an interviewer starts it, asks questions as it goes (from
+ * the bank or made up on the spot) and decides whether AI is allowed. An assessment has
+ * nobody watching: the candidate starts it, between opensAt and closesAt, and the paper is
+ * fixed.
  */
 export const interviews = pgTable(
   "interviews",
@@ -337,7 +379,45 @@ export const interviews = pgTable(
       .notNull()
       .references(() => rooms.id, { onDelete: "cascade" }),
     questionId: uuid().references(() => interviewQuestions.id, { onDelete: "set null" }),
-    /** The question as it was when the interview was scheduled, hidden tests and rubric included. */
+    mode: text().$type<"interview" | "assessment">().notNull().default("interview"),
+    batchId: uuid().references(() => interviewBatches.id, { onDelete: "set null" }),
+    /** This candidate's questions, in their order, right answers included. Empty for one coding question (`question`). */
+    paper: jsonb()
+      .$type<
+        Array<{
+          id: string;
+          bankId: string | null;
+          kind: "coding" | "mcq" | "short" | "design";
+          title: string;
+          prompt: string;
+          marks: number;
+          difficulty: "easy" | "medium" | "hard";
+          choices: Array<{ id: string; text: string; correct: boolean }>;
+          modelAnswer: string;
+          file: string;
+          tests: Array<{ id: string; input: string; expected: string; hidden: boolean }>;
+          timeLimitMs: number;
+          /** Its files in the room, for a question asked during an interview. */
+          starterFiles: Array<{ path: string; content: string }>;
+          /** In an interview, the candidate sees a question from when it's asked. */
+          askedAt: string | null;
+        }>
+      >()
+      .notNull()
+      .default([]),
+    /** Whether the candidate may use the AI: the interviewer's call, and they can change it as it runs. */
+    aiAllowed: boolean().notNull().default(false),
+    /** An assessment can be started in this window. */
+    opensAt: timestamp({ withTimezone: true }),
+    closesAt: timestamp({ withTimezone: true }),
+    /** Ask for full screen, and block pasting in and copying the questions out. */
+    fullscreen: boolean().notNull().default(false),
+    lockClipboard: boolean().notNull().default(false),
+    /** The page reporting in: which browser tab, which network (a hash, not the address), when. */
+    beatSession: text(),
+    beatNetwork: text(),
+    beatAt: timestamp({ withTimezone: true }),
+    /** The questions as they were when it was scheduled, hidden tests and rubric included. */
     question: jsonb()
       .$type<{
         title: string;
@@ -352,7 +432,7 @@ export const interviews = pgTable(
     candidateName: text().notNull(),
     candidateEmail: text(),
     interviewerId: text().references(() => user.id, { onDelete: "set null" }),
-    status: text().$type<"scheduled" | "live" | "finished" | "cancelled">().notNull().default("scheduled"),
+    status: text().$type<"scheduled" | "live" | "finished" | "cancelled" | "missed">().notNull().default("scheduled"),
     scheduledAt: timestamp({ withTimezone: true }),
     durationMinutes: integer().notNull(),
     startedAt: timestamp({ withTimezone: true }),
@@ -376,7 +456,49 @@ export const interviews = pgTable(
     uniqueIndex().on(t.roomId),
     uniqueIndex().on(t.candidateTokenHash),
     index("interviews_due_idx").on(t.endsAt).where(sql`${t.status} = 'live'`),
+    index("interviews_closing_idx").on(t.closesAt).where(sql`${t.status} = 'scheduled'`),
+    index().on(t.batchId),
   ],
+);
+
+/**
+ * A candidate's answers to a paper's multiple choice, short and system design questions. `awarded` is worked
+ * out by the server for multiple choice and given by a person for the others (null until
+ * then). It never goes back to the candidate.
+ */
+export const interviewAnswers = pgTable(
+  "interview_answers",
+  {
+    interviewId: uuid()
+      .notNull()
+      .references(() => interviews.id, { onDelete: "cascade" }),
+    questionId: text().notNull(),
+    choiceIds: jsonb().$type<string[]>().notNull().default([]),
+    text: text().notNull().default(""),
+    awarded: integer(),
+    ...timestamps,
+  },
+  (t) => [primaryKey({ columns: [t.interviewId, t.questionId] })],
+);
+
+/**
+ * The integrity record: what happened during a sitting that someone should look at. "browser"
+ * events are the candidate's page reporting itself, so they can be suppressed; "server" ones
+ * can't. They're evidence for a person to weigh, never a verdict.
+ */
+export const interviewEvents = pgTable(
+  "interview_events",
+  {
+    id: uuidv7Pk(),
+    interviewId: uuid()
+      .notNull()
+      .references(() => interviews.id, { onDelete: "cascade" }),
+    kind: text().notNull(),
+    source: text().$type<"browser" | "server">().notNull(),
+    detail: jsonb().$type<{ length?: number; seconds?: number }>().notNull().default({}),
+    at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.interviewId, t.at)],
 );
 
 /** Each time the tests ran in an interview, with every case's result. Hidden cases' details stay with interviewers. */
@@ -388,6 +510,8 @@ export const interviewRuns = pgTable(
       .notNull()
       .references(() => interviews.id, { onDelete: "cascade" }),
     userId: text().references(() => user.id, { onDelete: "set null" }),
+    /** Which of the paper's coding questions; null for an interview of one question. */
+    questionId: text(),
     path: text().notNull(),
     /** Set when the program didn't compile. */
     compileError: text(),

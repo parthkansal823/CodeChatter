@@ -12,6 +12,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RECOMMENDATION_LABEL } from "./format";
 
 const SCORES = ["1", "2", "3", "4", "5"];
+/** Hover too: with the pointer still on what was just clicked, its text would otherwise turn the same colour as its background. */
+const CHOSEN = "data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary data-[state=on]:hover:text-primary-foreground";
 
 /** Its values alone: the database hands keys back in its own order. */
 const valuesOf = (card: Scorecard) => JSON.stringify([card.scores.map((row) => [row.id, row.score, row.note]), card.overall, card.recommendation, card.notes]);
@@ -19,7 +21,7 @@ const valuesOf = (card: Scorecard) => JSON.stringify([card.scores.map((row) => [
 function ScorePicker({ label, value, onChange }: { label: string; value: number | null; onChange: (score: number | null) => void }) {
   return (
     <ToggleGroup type="single" size="sm" variant="outline" aria-label={label} value={value === null ? "" : String(value)} onValueChange={(next) => onChange(next ? Number(next) : null)}>
-      {SCORES.map((score) => <ToggleGroupItem key={score} value={score} aria-label={`${score} out of 5`} className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{score}</ToggleGroupItem>)}
+      {SCORES.map((score) => <ToggleGroupItem key={score} value={score} aria-label={`${score} out of 5`} className={CHOSEN}>{score}</ToggleGroupItem>)}
     </ToggleGroup>
   );
 }
@@ -63,7 +65,7 @@ export function ScorecardForm({ rubric, scorecard, onSave }: { rubric: Interview
         <div className="flex items-center gap-2">
           <span className="font-medium">Recommend?</span>
           <ToggleGroup type="single" size="sm" variant="outline" aria-label="Recommendation" value={draft.recommendation ?? ""} onValueChange={(next) => setDraft((current) => ({ ...current, recommendation: (next || null) as Scorecard["recommendation"] }))}>
-            {(["yes", "maybe", "no"] as const).map((value) => <ToggleGroupItem key={value} value={value} className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{RECOMMENDATION_LABEL[value]}</ToggleGroupItem>)}
+            {(["yes", "maybe", "no"] as const).map((value) => <ToggleGroupItem key={value} value={value} className={CHOSEN}>{RECOMMENDATION_LABEL[value]}</ToggleGroupItem>)}
           </ToggleGroup>
         </div>
       </div>
