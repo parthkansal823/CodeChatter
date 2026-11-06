@@ -13,6 +13,19 @@ import { WorkspacePath } from "./run.js";
 /** The Valkey channel the API tells collab on, with a room's code, that someone's rights in it changed. */
 export const ROOM_ACCESS_CHANNEL = "codechatter:room-access";
 
+/** How a socket closes when its owner's rights changed. Clients that reconnect get what's left. */
+export const ROOM_ACCESS_CLOSE = { code: 4205, reason: "Your access to this room changed" } as const;
+
+/** Whose rights changed: one person's, or (no userId) anyone's in the room. */
+export type RoomAccessChange = { roomId: string; userId?: string };
+
+export const roomAccessMessage = ({ roomId, userId }: RoomAccessChange): string => (userId ? `${roomId}:${userId}` : roomId);
+
+export function parseRoomAccessMessage(message: string): RoomAccessChange {
+  const at = message.indexOf(":");
+  return at === -1 ? { roomId: message } : { roomId: message.slice(0, at), userId: message.slice(at + 1) };
+}
+
 export const InterviewTest = z.object({
   id: z.string().min(1).max(64),
   input: z.string().max(64 * 1024),

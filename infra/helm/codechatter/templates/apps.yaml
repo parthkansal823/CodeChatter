@@ -33,6 +33,11 @@ spec:
           ports: [{ name: http, containerPort: {{ $app.port }} }]
           env:
             {{- if eq $app.name "web" }}
+            {{- if $.Values.livekit.url }}
+            # So the security policy lets calls reach LiveKit when it isn't this site's /livekit.
+            - name: LIVEKIT_URL
+              value: {{ $.Values.livekit.url | quote }}
+            {{- end }}
             - name: API_INTERNAL_URL
               value: http://{{ $.Release.Name }}-api:4000
             {{- else }}

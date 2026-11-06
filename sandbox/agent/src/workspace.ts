@@ -25,6 +25,8 @@ export type Inspection = { events: AgentEvent[]; isDir: boolean };
 export class Workspace {
   private known = new Map<string, string>();
   private reported = new Set<string>();
+  /** Paths whose copy in the room came from here (a program wrote them), not from the room. */
+  private fromDisk = new Set<string>();
   private tmpCounter = 0;
   private rootReal: string | null = null;
 
@@ -44,6 +46,7 @@ export class Workspace {
     const data: string | Buffer = encoding === "base64" ? Buffer.from(content, "base64") : content;
     this.known.set(rel, sha1(data));
     this.reported.delete(rel);
+    this.fromDisk.delete(rel);
     const current = await lstat(abs).catch(() => null);
     if (current?.isFile() && current.size === Buffer.byteLength(data)) {
       // Unchanged files are left alone, so restarts don't touch every mtime.
@@ -108,25 +111,40 @@ export class Workspace {
     if (stat.isDirectory()) return { events: [], isDir: true };
     if (!stat.isFile()) return { events: [], isDir: false }; // symlinks, sockets, fifos stay local
 
-    if (stat.size > Math.max(SYNC_MAX_BYTES, BLOB_SYNC_MAX_BYTES)) return { events: this.reportOnce(rel, "too-large"), isDir: false };
+    if (stat.size > Math.max(SYNC_MAX_BYTES, BLOB_SYNC_MAX_BYTES)) return { events: this.tooLarge(rel), isDir: false };
     const bytes = await readFile(abs).catch(() => Buffer.alloc(0));
     const text = asText(bytes);
     if (text === null) {
       // A binary file: its bytes go to the room (the runner stores them), unless they're what the room sent.
-      if (bytes.byteLength > BLOB_SYNC_MAX_BYTES) return { events: this.reportOnce(rel, "too-large"), isDir: false };
+      if (bytes.byteLength > BLOB_SYNC_MAX_BYTES) return { events: this.tooLarge(rel), isDir: false };
       const hash = sha1(bytes);
       if (this.known.get(rel) === hash) return { events: [], isDir: false };
       this.known.set(rel, hash);
       this.reported.delete(rel);
+      this.fromDisk.add(rel);
       return { events: [{ ev: "blob", path: rel, b64: bytes.toString("base64") }], isDir: false };
     }
-    if (bytes.byteLength > SYNC_MAX_BYTES) return { events: this.reportOnce(rel, "too-large"), isDir: false };
+    if (bytes.byteLength > SYNC_MAX_BYTES) return { events: this.tooLarge(rel), isDir: false };
 
     const hash = sha1(text);
     if (this.known.get(rel) === hash) return { events: [], isDir: false };
     this.known.set(rel, hash);
     this.reported.delete(rel);
+    this.fromDisk.add(rel);
     return { events: [{ ev: "file", path: rel, content: text }], isDir: false };
+  }
+
+  /**
+   * A file over the limit stays in the sandbox. If a program was still writing it when we last
+   * looked (a download, a big export), the room holds a cut-off piece that looks whole, and no
+   * later version can replace it: take that copy out of the room. It comes back if the file
+   * shrinks under the limit. The file on disk is left alone.
+   */
+  private tooLarge(rel: string): AgentEvent[] {
+    const events = this.reportOnce(rel, "too-large");
+    if (!this.fromDisk.delete(rel)) return events;
+    this.known.delete(rel);
+    return [{ ev: "removed", path: rel }, ...events];
   }
 
   /** Every non-ignored file under a folder, for a folder that just appeared (mv, git clone, unzip). */
@@ -151,7 +169,10 @@ export class Workspace {
     for (const path of this.known.keys()) {
       if (path === rel || path.startsWith(`${rel}/`)) gone.push(path);
     }
-    for (const path of gone) this.known.delete(path);
+    for (const path of gone) {
+      this.known.delete(path);
+      this.fromDisk.delete(path);
+    }
     return gone;
   }
 

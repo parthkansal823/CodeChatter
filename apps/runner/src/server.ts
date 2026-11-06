@@ -46,7 +46,7 @@ import { NotebookError } from "./notebooks.js";
 import { SandboxUnavailableError } from "./sandbox.js";
 import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM } from "./sandbox.js";
 import { FileDatabaseError, loadIntoSqlite, openSqliteDump, sqliteFiles, sqlitePreview, sqliteQuery, sqliteTables } from "./sqlite.js";
-import { openTerminal } from "./terminal.js";
+import { closeTerminals, openTerminal } from "./terminal.js";
 
 /**
  * Internal HTTP API, called only by apps/api (never by browsers). Every call
@@ -64,6 +64,7 @@ import { openTerminal } from "./terminal.js";
  *   POST /rooms/:id/judge           run test cases against a file; streams NDJSON JudgeEvents
  *   GET  /rooms/:id/sandbox         SandboxStatus (ports, CPU, memory, processes, installs)
  *   POST /rooms/:id/sandbox/restart
+ *   POST /rooms/:id/terminals/close  { sessionPrefix }
  *   PUT  /rooms/:id/sandbox/installs  { minutes } allow package installs (ADR 0007)
  *   DELETE /rooms/:id/sandbox/installs
  *   GET|POST|DELETE /rooms/:id/dev  the dev server from .codechatter/room.json: status, (re)start, stop
@@ -169,7 +170,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     const duckdb = /^\/rooms\/([A-Z0-9]{6})\/duckdb(?:\/(tables|query|preview))?$/.exec(url.pathname);
     if (duckdb) return handleDuckdb(req, res, duckdb[1]!, duckdb[2]);
 
-    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|judge|dev)$/.exec(url.pathname);
+    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|terminals\/close|judge|dev)$/.exec(url.pathname);
     if (!match || !RoomCode.safeParse(match[1]).success) return json(res, 404, { error: "Not found." });
     const roomId = match[1]!;
     const claims = authorize(req, roomId);
@@ -232,6 +233,14 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     }
     if (route === "DELETE sandbox/installs") {
       await rooms.egress.stop(roomId);
+      return json(res, 200, { ok: true });
+    }
+    // Someone lost their terminal rights (the API has checked who's asking). A sandbox that isn't running has no shells to end.
+    if (route === "POST terminals/close") {
+      const body = z.object({ sessionPrefix: z.string().regex(/^u[a-zA-Z0-9]{1,40}$/) }).safeParse(await readJson(req));
+      if (!body.success) return json(res, 400, { error: "Invalid session prefix." });
+      const session = rooms.peek(roomId);
+      if (session?.sandbox.agent?.alive) await closeTerminals(session, body.data.sessionPrefix);
       return json(res, 200, { ok: true });
     }
     if (route === "POST sandbox/restart") {

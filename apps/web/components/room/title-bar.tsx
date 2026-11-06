@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Link2, Presentation, Search, type LucideIcon } from "lucide-react";
+import { ChevronRight, Presentation, Search, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
@@ -9,9 +9,11 @@ import { LogoMark } from "@/components/brand/logo";
 import { NotificationsBell } from "@/components/notifications/notifications-bell";
 import { CallButton } from "@/components/room/call/call-dock";
 import { ForkButton } from "@/components/room/fork-dialog";
+import { ShareMenu } from "@/components/room/share-menu";
 import { VisibilityMenu } from "@/components/room/visibility-menu";
 import { PresenceAvatar } from "@/components/presence/presence";
 import { usePeers } from "@/components/room/hooks";
+import { useRoomPeople } from "@/components/room/people/use-room-people";
 import { useRoom } from "@/components/room/room-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { copyText } from "@/lib/clipboard";
@@ -160,9 +162,7 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
           </TooltipTrigger>
           <TooltipContent>{presenting ? "Stop presenting" : "Everyone in the room follows your file and scroll"}</TooltipContent>
         </Tooltip>
-        <Button variant="outline" size="sm" onClick={copyCode}>
-          <Link2 /> Share
-        </Button>
+        <ShareMenu />
         <NotificationsBell />
         <ThemeToggle />
       </div>
@@ -170,18 +170,26 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
   );
 }
 
-/** Clicking the people in the room opens the People panel. */
+/** Clicking the people in the room opens the People panel. Its owner sees here that someone's waiting, with the panel closed. */
 function PeopleButton({ side, children }: { side?: SidePanel; children: ReactNode }) {
+  const waiting = useRoomPeople().people?.waiting.length ?? 0;
   if (!side) return <>{children}</>;
+  const title = waiting ? `${waiting} waiting to join` : "Who's here";
   return (
     <button
       type="button"
-      title="Who's here"
+      title={title}
+      aria-label={waiting ? title : undefined}
       aria-pressed={side.panel === "people"}
       onClick={() => side.toggle("people")}
-      className={cn("rounded-full p-0.5 hover:bg-accent", side.panel === "people" && "bg-accent")}
+      className={cn("relative rounded-full p-0.5 hover:bg-accent", side.panel === "people" && "bg-accent")}
     >
       {children}
+      {waiting > 0 && (
+        <span className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 text-[9px] leading-none font-semibold text-brand-foreground tabular-nums">
+          {waiting > 9 ? "9+" : waiting}
+        </span>
+      )}
     </button>
   );
 }

@@ -9,6 +9,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
 import { OBJECT_STORE } from "../infra/tokens.js";
+import { EventsGateway } from "../realtime/events.gateway.js";
 import { RunnerClient } from "../runner/runner.client.js";
 import { RoomsService } from "./rooms.service.js";
 
@@ -19,6 +20,7 @@ export class RoomsController {
     private readonly audit: AuditService,
     private readonly runner: RunnerClient,
     @Inject(OBJECT_STORE) private readonly store: ObjectStore | null,
+    private readonly events: EventsGateway,
   ) {}
 
   @Get()
@@ -44,8 +46,11 @@ export class RoomsController {
 
   @Post("join")
   @HttpCode(200)
-  join(@CurrentSession() session: AuthSession, @Body(new ZodPipe(JoinRoomInput)) input: JoinRoomInput) {
-    return this.rooms.join(session, input.code, input.inviteToken);
+  async join(@CurrentSession() session: AuthSession, @Body(new ZodPipe(JoinRoomInput)) input: JoinRoomInput) {
+    const result = await this.rooms.join(session, input.code, input.inviteToken);
+    // Whoever manages the room sees them on its People list at once.
+    if (result.status !== "refused") this.events.peopleChanged(input.code);
+    return result;
   }
 
   /** Public rooms, for the Explore page (before ":id", which would take "explore" for a room code). */

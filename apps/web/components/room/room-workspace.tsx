@@ -68,6 +68,7 @@ import { runAll } from "@/components/room/notebook/kernel";
 import { NotebookView } from "@/components/room/notebook/notebook-view";
 import { useFileTree, usePeers } from "@/components/room/hooks";
 import { PeoplePanel } from "@/components/room/people-panel";
+import { useRoomPeople } from "@/components/room/people/use-room-people";
 import { ensureMonaco } from "@/components/room/monaco-setup";
 import { RoomProvider, useRoom } from "@/components/room/room-context";
 import { RunButton } from "@/components/room/run-button";
@@ -138,6 +139,7 @@ function Workspace() {
     return () => setPrettier(false);
   }, [usesPrettier]);
   const peers = usePeers();
+  const waitingToJoin = useRoomPeople().people?.waiting.length ?? 0;
   const tabs = useRoomTabs(room.id);
   const { open, close, prune } = useTabs();
   // The left sidebar: the file list, Search, the Outline or Source control, or none. Clicking the open one's icon closes it.
@@ -887,16 +889,17 @@ function Workspace() {
                     // With many tools the tabs scroll sideways (no bar); the chosen one scrolls into view.
                     className="flex h-9 shrink-0 items-stretch gap-4 overflow-x-auto border-b px-3 [scrollbar-width:none]"
                   >
-                    {[
+                    {([
                       { id: "chat", label: "Chat" },
-                      { id: "people", label: "People" },
+                      { id: "people", label: "People", badge: waitingToJoin },
                       ...sideTools.map((tool) => ({ id: tool.id, label: tool.label })),
-                    ].map((tab) => (
+                    ] as Array<{ id: string; label: string; badge?: number }>).map((tab) => (
                       <button
                         key={tab.id}
                         role="tab"
                         type="button"
                         aria-selected={right === tab.id}
+                        aria-label={tab.badge ? `${tab.label}, ${tab.badge} waiting to join` : undefined}
                         onClick={() => setRight(tab.id)}
                         className={cn(
                           "relative shrink-0 text-xs font-medium whitespace-nowrap",
@@ -906,6 +909,9 @@ function Workspace() {
                         )}
                       >
                         {tab.label}
+                        {Boolean(tab.badge) && (
+                          <span className="ml-1 rounded-full bg-brand px-1 text-[9px] leading-none font-semibold text-brand-foreground tabular-nums">{tab.badge}</span>
+                        )}
                         {right === tab.id && (
                           <span aria-hidden className="absolute inset-x-0 -bottom-px h-[2px] bg-brand" />
                         )}

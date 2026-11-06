@@ -39,7 +39,8 @@ export const roomKind = pgEnum("room_kind", ["workspace", "interview"]);
 export const roomVisibility = pgEnum("room_visibility", ["private", "public"]);
 export const joinPolicy = pgEnum("join_policy", ["invite", "approval", "open"]);
 export const roomRole = pgEnum("room_role", ["owner", "editor", "runner", "viewer", "interviewer", "candidate"]);
-export const memberStatus = pgEnum("member_status", ["active", "pending"]);
+/** "removed": the owner removed them or declined their request, and their invite link no longer lets them in. */
+export const memberStatus = pgEnum("member_status", ["active", "pending", "removed"]);
 
 export const rooms = pgTable(
   "rooms",

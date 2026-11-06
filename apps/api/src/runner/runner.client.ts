@@ -84,6 +84,11 @@ export class RunnerClient {
     return response.ok;
   }
 
+  /** End someone's terminal sessions in the room's sandbox, if it's running. */
+  async closeTerminals(roomId: string, user: RunnerUser, sessionPrefix: string): Promise<void> {
+    await this.call(`/rooms/${roomId}/terminals/close`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify({ sessionPrefix }) });
+  }
+
   async snapshot(roomId: string, user: RunnerUser): Promise<RunSnapshot> {
     const response = await this.call(`/rooms/${roomId}/runs/current`, { headers: this.headers(roomId, user) });
     if (!response.ok) throw new RunnerUnavailableError();

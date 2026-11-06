@@ -1,25 +1,30 @@
 import { ensurePersonalOrg, type AuthSession } from "@codechatter/auth";
 import {
+  ROOM_ACCESS_CHANNEL,
   ROOM_CODE_ALPHABET,
   can,
+  roomAccessMessage,
   type CreateRoomInput,
   type CreatedRoom,
   type ExploreRoom,
   type ForkRoomInput,
   type JoinResult,
   type RoomAction,
+  type RoomInviteLink,
   type RoomRole,
   type RoomSummary,
   type UpdateRoomInput,
 } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, ilike, isNull, lt, or, sql } from "drizzle-orm";
-import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import type { Redis } from "ioredis";
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { gzipSync } from "node:zlib";
 
+import type { Env } from "../config/env.js";
 import { GithubService } from "../github/github.service.js";
-import { DB } from "../infra/tokens.js";
+import { DB, ENV, VALKEY } from "../infra/tokens.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { RunnerClient } from "../runner/runner.client.js";
 import { RoomsRepository } from "./rooms.repository.js";
@@ -42,13 +47,58 @@ export function sandboxImageOf(room: { settings: Record<string, unknown> }): "ba
 
 @Injectable()
 export class RoomsService {
+  private readonly logger = new Logger(RoomsService.name);
+
   constructor(
     private readonly rooms: RoomsRepository,
     private readonly github: GithubService,
     @Inject(DB) private readonly handle: DbHandle,
+    @Inject(VALKEY) private readonly valkey: Redis,
     private readonly runner: RunnerClient,
     private readonly notifications: NotificationsService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
+
+  /**
+   * Rights in this room changed: one person's, or (no userId) anyone's. Rights are checked
+   * when a connection opens, so tell every collab instance to close the sockets concerned
+   * (they reconnect with what's left: extensions/revocation.ts) and every API instance to
+   * recheck what it has open (EventsGateway). Call it after the database has changed.
+   */
+  async accessChanged(roomId: string, userId?: string): Promise<void> {
+    await this.valkey.publish(ROOM_ACCESS_CHANNEL, roomAccessMessage({ roomId, userId })).catch((error: unknown) => this.logger.warn(`room access: ${String(error)}`));
+  }
+
+  /**
+   * A room's invite token. It's made from the server's secret rather than kept, so people who
+   * may invite can copy the link again, and the database only ever holds its hash.
+   */
+  private inviteTokenOf(room: { id: string; settings?: Record<string, unknown> }): string {
+    const generation = typeof room.settings?.inviteGeneration === "string" ? room.settings.inviteGeneration : "";
+    return createHmac("sha256", this.env.SERVICE_SECRET).update(`room-invite:${room.id}:${generation}`).digest("base64url");
+  }
+
+  async inviteLink(roomId: string, userId: string): Promise<RoomInviteLink> {
+    const { room } = await this.require(roomId, userId, "room.invite");
+    if (room.kind === "interview") throw new ForbiddenException("An interview decides who's in its room.");
+    const token = this.inviteTokenOf(room);
+    // A room older than this, or SERVICE_SECRET changed: the link shown now becomes the one that works.
+    if (room.inviteTokenHash !== sha256(token)) await this.handle.db.update(schema.rooms).set({ inviteTokenHash: sha256(token) }).where(eq(schema.rooms.id, roomId));
+    return { token };
+  }
+
+  /** A new link. The old one stops working. */
+  async resetInviteLink(roomId: string, userId: string): Promise<RoomInviteLink> {
+    const { room } = await this.require(roomId, userId, "room.manage");
+    if (room.kind === "interview") throw new ForbiddenException("An interview decides who's in its room.");
+    const inviteGeneration = randomBytes(12).toString("base64url");
+    const token = this.inviteTokenOf({ id: roomId, settings: { inviteGeneration } });
+    await this.handle.db
+      .update(schema.rooms)
+      .set({ inviteTokenHash: sha256(token), settings: sql`${schema.rooms.settings} || ${JSON.stringify({ inviteGeneration })}::jsonb` })
+      .where(eq(schema.rooms.id, roomId));
+    return { token };
+  }
 
   /** The caller's role in a room, or null. Private rooms 404 for outsiders. */
   async roleIn(roomId: string, userId: string): Promise<{ room: RoomRow; role: RoomRole | null }> {
@@ -103,12 +153,13 @@ export class RoomsService {
       importedBy: userId,
     };
 
-    const inviteToken = randomBytes(24).toString("base64url");
     for (let attempt = 0; ; attempt++) {
+      const id = newRoomCode();
+      const inviteToken = this.inviteTokenOf({ id });
       try {
         const room = await this.rooms.createWithOwner(
           {
-            id: newRoomCode(),
+            id,
             orgId,
             name: input.name,
             description: input.description,
@@ -147,6 +198,7 @@ export class RoomsService {
     const existing = await this.rooms.findMember(room.id, userId);
     if (existing?.status === "active") return { status: "joined", room: await this.summaryFor(room, existing.role) };
     if (existing?.status === "pending") return { status: "pending", roomName: room.name };
+    if (existing?.status === "removed") return { status: "refused", roomName: room.name };
 
     const tokenValid =
       Boolean(inviteToken && room.inviteTokenHash) &&
@@ -170,9 +222,11 @@ export class RoomsService {
 
   /** Change the room's name, description, visibility or join policy. */
   async update(roomId: string, userId: string, input: UpdateRoomInput): Promise<RoomSummary> {
-    const { role } = await this.require(roomId, userId, "room.manage");
+    const { role, room: before } = await this.require(roomId, userId, "room.manage");
     const set = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
     await this.handle.db.update(schema.rooms).set({ ...set, updatedAt: new Date() }).where(eq(schema.rooms.id, roomId));
+    // Visitors who aren't members were watching. Now they can't.
+    if (before.visibility === "public" && input.visibility === "private") await this.accessChanged(roomId);
     const room = await this.rooms.findById(roomId);
     return this.summaryFor(room!, role!);
   }
@@ -248,6 +302,7 @@ export class RoomsService {
   async remove(roomId: string, userId: string): Promise<RoomRow> {
     const { room } = await this.require(roomId, userId, "room.delete");
     await this.rooms.deleteRoom(roomId);
+    await this.accessChanged(roomId);
     return room;
   }
 

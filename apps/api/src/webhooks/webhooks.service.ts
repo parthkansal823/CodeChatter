@@ -97,7 +97,8 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
       if (input.active === true && !current.active) {
         const d = schema.webhookDeliveries;
         await tx.update(d).set({
-          status: "failed", lastError: "Expired while the webhook was paused", nextAttemptAt: null, lockedBy: null, lockedUntil: null,
+          // Keep an in-flight lease until its owner finishes: manual redelivery must not overlap that request.
+          status: "failed", lastError: "Expired while the webhook was paused", nextAttemptAt: null,
         }).where(and(eq(d.webhookId, id), eq(d.status, "pending"), lt(d.createdAt, sql`now() - interval '24 hours'`)));
       }
       const [updated] = await tx.update(schema.webhooks).set({
@@ -200,6 +201,7 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
   private async cleanup(): Promise<void> {
     const d = schema.webhookDeliveries;
     const days = this.env.WEBHOOK_DELIVERY_RETENTION_DAYS ?? 30;
+    const until = performance.now() + 5000;
     let removed: { id: string }[];
     do {
       const expired = this.handle.db.select({ id: d.id }).from(d)
@@ -207,8 +209,8 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
         .orderBy(d.createdAt, d.id).limit(1000).for("update", { skipLocked: true });
       // Each batch autocommits independently, releasing its locks before the next one.
       removed = await this.handle.db.delete(d).where(inArray(d.id, expired)).returning({ id: d.id });
-      if (removed.length === 1000) await new Promise<void>((resolve) => setImmediate(resolve));
-    } while (!this.stopping && removed.length === 1000);
+      if (removed.length === 1000 && performance.now() < until) await new Promise<void>((resolve) => setImmediate(resolve));
+    } while (!this.stopping && removed.length === 1000 && performance.now() < until);
   }
 
   private async batch(): Promise<void> {
@@ -237,13 +239,21 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
         const attempts = delivery.attempts + 1;
         const delivered = result.statusCode !== null && result.statusCode >= 200 && result.statusCode < 300 && !result.error;
         const now = new Date();
-        await this.handle.db.update(d).set({
+        const recorded = await this.handle.db.update(d).set({
           attempts, status: delivered ? "delivered" : attempts >= MAX_ATTEMPTS ? "failed" : "pending",
           nextAttemptAt: delivered || attempts >= MAX_ATTEMPTS ? null : new Date(now.getTime() + RETRY_MS[attempts - 1]!),
           lastStatusCode: result.statusCode, lastError: result.error, lastResponse: result.response,
           deliveredAt: delivered ? now : null, attemptLog: [...delivery.attemptLog, { attempt: attempts, at: now.toISOString(), ...result }],
           lockedBy: null, lockedUntil: null,
-        }).where(and(eq(d.id, delivery.id), eq(d.lockedBy, this.workerId), eq(d.status, "pending")));
+        }).where(and(eq(d.id, delivery.id), eq(d.lockedBy, this.workerId), eq(d.status, "pending"))).returning({ id: d.id });
+        if (!recorded.length) {
+          // Resume may have expired this row during HTTP. Preserve that failure and its
+          // history, releasing only our own lease; a reclaimed worker's lease stays intact.
+          await this.handle.db.update(d).set({ lockedBy: null, lockedUntil: null }).where(and(
+            eq(d.id, delivery.id), eq(d.lockedBy, this.workerId), eq(d.status, "failed"),
+            eq(d.lastError, "Expired while the webhook was paused"),
+          ));
+        }
       } catch {
         // A failed acknowledgement leaves only this lease recoverable; siblings still commit.
         this.logger.warn(`Webhook delivery ${delivery.id} could not be recorded; its lease will expire.`);

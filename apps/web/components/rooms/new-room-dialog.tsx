@@ -320,7 +320,7 @@ function CreatedStep({ room }: { room: CreatedRoom }) {
           Send this link to anyone you want in the room. They join as editors. You can change roles later.
         </DialogDescription>
       </DialogHeader>
-      {/* The whole link, wrapped: it's shown once, so it can be read and (one click) selected. */}
+      {/* The whole link, wrapped, so it can be read and (one click) selected. */}
       <div className="mt-6 flex items-center gap-2">
         <code className="min-w-0 flex-1 rounded-md border bg-panel px-3 py-2 text-xs break-all select-all">
           {link}
@@ -330,8 +330,8 @@ function CreatedStep({ room }: { room: CreatedRoom }) {
         </Button>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Room code <span className="font-mono text-foreground">{room.id}</span>. The link is shown once; you
-        can make a new one from the room.
+        Room code <span className="font-mono text-foreground">{room.id}</span>. You can copy the link again, or
+        make a new one, from Share in the room.
       </p>
       {room.imported && <ImportedNote imported={room.imported} />}
       <DialogFooter className="mt-8">

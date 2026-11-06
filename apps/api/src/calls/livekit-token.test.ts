@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { livekitToken } from "./livekit-token.js";
+import { livekitAdminToken, livekitToken } from "./livekit-token.js";
 
 const parts = (token: string) => {
   const [header, payload, signature] = token.split(".");
@@ -13,6 +13,16 @@ const parts = (token: string) => {
     signature: signature!,
   };
 };
+
+describe("livekitAdminToken", () => {
+  it("manages one call, for a minute", () => {
+    const token = parts(livekitAdminToken({ apiKey: "key", apiSecret: "a-secret-that-is-long-enough-1234", room: "room-TEAM22", now: 1_700_000_000_000 }));
+    expect(token.signature).toBe(createHmac("sha256", "a-secret-that-is-long-enough-1234").update(token.signed).digest("base64url"));
+    expect(token.payload.iss).toBe("key");
+    expect(token.payload.exp - token.payload.iat).toBe(60);
+    expect(token.payload.video).toEqual({ room: "room-TEAM22", roomAdmin: true });
+  });
+});
 
 describe("livekitToken", () => {
   const grant = { apiKey: "key", apiSecret: "a-secret-that-is-long-enough-1234", identity: "u1", name: "Ana", room: "room-TEAM22", canPublish: true, now: 1_700_000_000_000 };

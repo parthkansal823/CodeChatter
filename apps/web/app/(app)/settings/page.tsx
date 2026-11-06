@@ -17,6 +17,13 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Connections for your account." />
       <div className="grid max-w-2xl gap-8 px-6 py-6 sm:px-8">
         <GithubToken />
+        {org && org.id !== me.personalOrgId && (
+          <section className="grid gap-2 border-t pt-6">
+            <h2 className="font-medium">Members</h2>
+            <p className="text-muted-foreground">See the people in {org.name} and manage membership and invitations.</p>
+            <div><Button variant="outline" size="sm" asChild><Link href="/settings/members">Open members <ArrowRight /></Link></Button></div>
+          </section>
+        )}
         {canReadAudit && (
           <section className="grid gap-2 border-t pt-6">
             <h2 className="font-medium">Audit log</h2>

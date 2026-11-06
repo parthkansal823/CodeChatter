@@ -6,6 +6,8 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { io } from "socket.io-client";
+
 import { BASE, check, finish, launch } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
@@ -77,12 +79,51 @@ try {
   check("forkHasTheCode", await ok(b.locator(".monaco-editor .view-lines:visible").first().getByText(`forked ${stamp}`).waitFor({ timeout: 15_000 })));
   check("forkIsPrivateAndTheirs", await ok(b.getByRole("button", { name: "Private room: change who can see it" }).waitFor({ timeout: 5_000 })) && (await b.getByRole("button", { name: "New file" }).count()) === 1);
 
+  // test2 goes back to watch, with chat listening, as the room's page does.
+  await b.goto(`${BASE}/rooms/${roomId}`);
+  await b.getByRole("tree", { name: "Files" }).waitFor({ timeout: 60_000 });
+  const socketOf = async (page) => {
+    const cookies = await page.context().cookies();
+    const socket = io(BASE, { path: "/socket.io", transports: ["websocket"], extraHeaders: { origin: BASE, cookie: cookies.map((c) => `${c.name}=${c.value}`).join("; ") } });
+    await new Promise((resolve, reject) => {
+      socket.once("connect", resolve);
+      socket.once("connect_error", reject);
+    });
+    return socket;
+  };
+  const speaker = await socketOf(a);
+  const listener = await socketOf(b);
+  const heard = [];
+  listener.on("chat:message", (message) => heard.push(message.body));
+  await speaker.emitWithAck("room:join", roomId);
+  check("aVisitorCanListen", (await listener.emitWithAck("room:join", roomId)).ok === true);
+  const say = async (body) => {
+    const sent = await speaker.timeout(8000).emitWithAck("chat:send", { roomId, body, clientId: crypto.randomUUID() });
+    if (!sent.ok) throw new Error(`chat: ${sent.error}`);
+  };
+  await say("while public");
+  check("aVisitorHearsChat", await ok(new Promise((resolve, reject) => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (heard.includes("while public")) { clearInterval(timer); resolve(); }
+      else if (Date.now() - started > 8000) { clearInterval(timer); reject(new Error("nothing heard")); }
+    }, 100);
+  })));
+
   // Private again: test2 can't open test1's room.
   await a.getByRole("button", { name: "Public room: change who can see it" }).click();
   await a.getByRole("menuitem", { name: /^Private/ }).click();
   await a.getByRole("button", { name: "Private room: change who can see it" }).waitFor({ timeout: 10_000 });
   const closed = await call(b, `/api/rooms/${roomId}`);
   check("privateAgainIsClosed", closed.status === 404, closed.status);
+  // And if they already had it open, it closes on them.
+  check("aWatchingVisitorIsToldItsGone", await ok(b.getByRole("heading", { name: "You no longer have access to this room" }).waitFor({ timeout: 20_000 })));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await say("after private");
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  check("theyStopHearingChat", !heard.includes("after private"), heard.join(", "));
+  speaker.close();
+  listener.close();
 } catch (error) {
   const shot = join(tmpdir(), "public-rooms-failed.png");
   await b.screenshot({ path: shot }).catch(() => {});

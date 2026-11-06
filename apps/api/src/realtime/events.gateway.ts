@@ -1,5 +1,7 @@
 import type { Auth, AuthSession, OriginPolicy } from "@codechatter/auth";
 import {
+  ROOM_ACCESS_CHANNEL,
+  parseRoomAccessMessage,
   RoomCode,
   RunInput,
   RunStartInput,
@@ -12,7 +14,7 @@ import {
   type RunSnapshot,
   type ServerToClientEvents,
 } from "@codechatter/contracts";
-import { Inject, Logger } from "@nestjs/common";
+import { Inject, Logger, type OnModuleDestroy } from "@nestjs/common";
 import {
   ConnectedSocket,
   MessageBody,
@@ -22,14 +24,17 @@ import {
   type OnGatewayInit,
 } from "@nestjs/websockets";
 import { fromNodeHeaders } from "better-auth/node";
+import type { Redis } from "ioredis";
 import type { Server, Socket } from "socket.io";
 
-import { AUTH, ORIGINS } from "../infra/tokens.js";
+import { CallsService } from "../calls/calls.service.js";
+import { AUTH, ORIGINS, VALKEY } from "../infra/tokens.js";
 import { MessagesService } from "../messages/messages.service.js";
 import { bindSocketMetrics, chatMessages } from "../metrics/metrics.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js";
+import { LiveSockets } from "./live-sockets.js";
 
 type SocketData = { session: AuthSession };
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
@@ -45,17 +50,21 @@ const userChannel = (userId: string) => `user:${userId}`;
 // destroyUpgrade off: other WebSocket paths (/ws/terminal) share this HTTP
 // server, and engine.io would otherwise drop their upgrades after 1 s.
 @WebSocketGateway({ path: "/socket.io", serveClient: false, destroyUpgrade: false })
-export class EventsGateway implements OnGatewayInit {
+export class EventsGateway implements OnGatewayInit, OnModuleDestroy {
   private readonly logger = new Logger(EventsGateway.name);
+  private accessChanges: Redis | null = null;
   @WebSocketServer() server!: Server<ClientToServerEvents, ServerToClientEvents>;
 
   constructor(
     @Inject(AUTH) private readonly auth: Auth,
     @Inject(ORIGINS) private readonly origins: OriginPolicy,
+    @Inject(VALKEY) private readonly valkey: Redis,
     private readonly rooms: RoomsService,
     private readonly messages: MessagesService,
     private readonly runner: RunnerClient,
     private readonly notifications: NotificationsService,
+    private readonly live: LiveSockets,
+    private readonly calls: CallsService,
   ) {}
 
   /**
@@ -65,6 +74,15 @@ export class EventsGateway implements OnGatewayInit {
    */
   afterInit(server: Server) {
     bindSocketMetrics(server);
+    // A separate connection: a subscribed one can't do anything else.
+    this.accessChanges = this.valkey.duplicate();
+    this.accessChanges.on("message", (_channel, message: string) => {
+      const change = parseRoomAccessMessage(message);
+      void Promise.allSettled([this.recheckListeners(change.roomId, change.userId), this.live.recheck(change), this.calls.recheck(change)]).then((results) => {
+        for (const result of results) if (result.status === "rejected") this.logger.warn(`room access: ${String(result.reason)}`);
+      });
+    });
+    void this.accessChanges.subscribe(ROOM_ACCESS_CHANNEL);
     this.notifications.setPush((userId, item) => this.server.to(userChannel(userId)).emit("notification:new", item));
     server.use(async (socket, next) => {
       try {
@@ -80,6 +98,26 @@ export class EventsGateway implements OnGatewayInit {
         next(new Error("auth failed"));
       }
     });
+  }
+
+  onModuleDestroy() {
+    this.accessChanges?.disconnect();
+  }
+
+  /** Rights are checked at room:join, so when they shrink, whoever may no longer listen stops hearing the room. */
+  private async recheckListeners(roomId: string, userId?: string): Promise<void> {
+    const sockets = await this.server.local.in(channel(roomId)).fetchSockets();
+    await Promise.all(
+      sockets.map(async (socket) => {
+        const listener = (socket.data as SocketData).session.user.id;
+        if (userId && listener !== userId) return;
+        const allowed = await this.rooms.require(roomId, listener, "room.view").then(
+          () => true,
+          () => false,
+        );
+        if (!allowed) socket.leave(channel(roomId));
+      }),
+    );
   }
 
   @SubscribeMessage("room:join")
@@ -99,6 +137,11 @@ export class EventsGateway implements OnGatewayInit {
   async leave(@ConnectedSocket() socket: RoomSocket, @MessageBody() roomId: unknown) {
     const parsed = RoomCode.safeParse(roomId);
     if (parsed.success) await socket.leave(channel(parsed.data));
+  }
+
+  /** Someone joined, asked to, left, or had their role changed: everyone reads the room's people again. */
+  peopleChanged(roomId: string): void {
+    this.server.to(channel(roomId)).emit("room:people-changed");
   }
 
   /** A message posted by the server (GitHub activity) to everyone in the room. */

@@ -45,7 +45,8 @@ export function appCsp({ nonce, dev, drawioOrigin, livekitUrl }: CspInput): stri
     // 'self' covers this site's WebSockets too: collab, Socket.IO, terminals, language servers.
     ["connect-src", "'self'", "blob:", "data:", ...livekitSources(livekitUrl)],
     ["worker-src", "'self'", "blob:"],
-    ["frame-src", "'self'", ...(drawio ? [drawio] : [])],
+    // blob: for the PDF viewer. A blob: document inherits this policy, so it can't run scripts either.
+    ["frame-src", "'self'", "blob:", ...(drawio ? [drawio] : [])],
     ["frame-ancestors", "'self'"],
     ["object-src", "'none'"],
     ["base-uri", "'none'"],

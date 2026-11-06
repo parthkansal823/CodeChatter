@@ -32,9 +32,11 @@ const SUITES = [
     ["sandbox-git-runner", "git"],
   ]),
   ...service("apps/collab", [
+    ["collab", "collab"],
     ["checkpoints", "checkpoints"],
     ["notes-access", "notes-access"],
     ["interview-rules", "interviews"],
+    ["room-people-access", "room-people"],
   ]),
   ...service("apps/api", [
     ["api-binary-files", "blobs"],
@@ -50,6 +52,7 @@ const SUITES = [
     "binary-files",
     "sandbox-git",
     "interviews",
+    "csp",
     "history",
     "code-comments",
     "notes",
@@ -57,9 +60,11 @@ const SUITES = [
     "public-rooms",
     "present",
     "room-people",
+    "room-members",
     "search",
     "shortcuts",
     "mermaid",
+    "diagrams",
     "preview",
   ].map((name) => ({ name, cwd: "apps/web", file: `test/${name}.e2e.mjs`, browser: true })),
 ];

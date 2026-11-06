@@ -90,4 +90,28 @@ export type CreatedRoom = RoomSummary & { inviteToken: string; imported?: RepoIm
 
 export type JoinResult =
   | { status: "joined"; room: RoomSummary }
-  | { status: "pending"; roomName: string };
+  | { status: "pending"; roomName: string }
+  /** The owner removed them, or declined their request. They stay out until the owner lets them back. */
+  | { status: "refused"; roomName: string };
+
+/** The roles an owner can give someone (see assignableRoles). */
+export const MemberRoleInput = z.object({ role: z.enum(["editor", "runner", "viewer"]) });
+export type MemberRoleInput = z.infer<typeof MemberRoleInput>;
+
+/** A person's user id, in a route. */
+export const PersonId = z.string().min(1).max(128);
+
+export type RoomPerson = {
+  id: string;
+  name: string;
+  image: string | null;
+  role: z.infer<typeof RoomRoleSchema>;
+  /** Only for people waiting: names can be anything, and the owner has to know who's asking. */
+  email?: string;
+};
+
+/** A room's people, for whoever manages it. */
+export type RoomPeople = { members: RoomPerson[]; waiting: RoomPerson[]; removed: RoomPerson[] };
+
+/** The token in a room's invite link (/rooms/CODE?invite=token). */
+export type RoomInviteLink = { token: string };

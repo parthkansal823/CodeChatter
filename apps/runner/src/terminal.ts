@@ -1,6 +1,7 @@
 import type { TerminalClientMessage, TerminalServerMessage } from "@codechatter/contracts";
 import WebSocket from "ws";
 
+import { drained } from "./dev-server.js";
 import { log } from "./log.js";
 import { JAIL } from "./plans.js";
 import type { RoomSession } from "./room-session.js";
@@ -79,6 +80,17 @@ export async function openTerminal(ws: WebSocket, session: RoomSession, options:
     session.touch();
     stream.destroy(); // detaches the tmux client; the session lives on
   });
+}
+
+/**
+ * End one person's terminal sessions, and the programs running in them (tmux hangs up on
+ * them). A program they started to outlive its terminal (nohup, a daemon) keeps going until
+ * the sandbox restarts: everyone in a sandbox is the same user, so nothing can tell whose it is.
+ */
+export async function closeTerminals(session: RoomSession, prefix: string): Promise<void> {
+  const script = `tmux list-sessions -F '#S' 2>/dev/null | while read -r name; do case "$name" in "$1"*) tmux kill-session -t "=$name";; esac; done`;
+  const handle = await session.sandbox.exec([JAIL, "sh", "-c", script, "cc-term", prefix], { tty: false, stdin: false });
+  await drained(handle.stream);
 }
 
 const clamp = (value: unknown, min: number, max: number) => Math.min(max, Math.max(min, Math.round(Number(value) || min)));

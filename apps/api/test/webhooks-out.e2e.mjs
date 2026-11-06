@@ -219,6 +219,23 @@ try {
   const slowDelivered = await waitFor(async () => (await readLog(slow.webhook.id)).items.find((item) => item.id === slowPing.json.id && item.status === "delivered"), "slow delivery completion");
   check("completed attempt releases its lease", !slowDelivered.inFlight && slowDelivered.attempts === 1);
 
+  const expiringPing = await one(`${base}/${slow.webhook.id}/test`, { method: "POST" });
+  requireCheck("expiring slow receiver ping is queued", expiringPing.status === 202 && Boolean(expiringPing.json?.id));
+  await waitFor(() => heldResponses.has(expiringPing.json.id), "expiring slow receiver request");
+  await one(`${base}/${slow.webhook.id}`, { method: "PATCH", body: { active: false } });
+  await database.db.update(schema.webhookDeliveries).set({ createdAt: sql`now() - interval '25 hours'` })
+    .where(and(eq(schema.webhookDeliveries.id, expiringPing.json.id), eq(schema.webhookDeliveries.webhookId, slow.webhook.id)));
+  await one(`${base}/${slow.webhook.id}`, { method: "PATCH", body: { active: true } });
+  const expiredSending = (await readLog(slow.webhook.id)).items.find((item) => item.id === expiringPing.json.id);
+  check("resume expiry preserves an active request's lease", expiredSending?.status === "failed" && expiredSending.inFlight && expiredSending.lastError === "Expired while the webhook was paused");
+  const expiryRetry = await one(`${base}/${slow.webhook.id}/deliveries/${expiringPing.json.id}/redeliver`, { method: "POST" });
+  check("expired delivery cannot be retried while its original HTTP request runs", expiryRetry.status === 409 && received.filter((item) => item.headers["x-codechatter-delivery"] === expiringPing.json.id).length === 1);
+  heldResponses.get(expiringPing.json.id).writeHead(204);
+  heldResponses.get(expiringPing.json.id).end();
+  heldResponses.delete(expiringPing.json.id);
+  const expiredFinished = await waitFor(async () => (await readLog(slow.webhook.id)).items.find((item) => item.id === expiringPing.json.id && !item.inFlight), "expired request lease release");
+  check("finishing an expired request clears only its lease", expiredFinished.status === "failed" && expiredFinished.lastError === "Expired while the webhook was paused" && expiredFinished.attempts === expiredSending.attempts && expiredFinished.attemptLog.length === expiredSending.attemptLog.length && expiredFinished.deliveredAt === null);
+
   const ping = await one(`${base}/${id}/test`, { method: "POST" });
   requireCheck("ping is queued", [200, 201, 202].includes(ping.status) && ping.json?.event === "ping", `HTTP ${ping.status}`);
   const pingPost = await waitFor(() => received.find((item) => item.headers["x-codechatter-delivery"] === ping.json.id), "ping POST");
@@ -267,7 +284,9 @@ try {
   // Only delivery metadata is printed: no signing secrets, payloads or responses.
   for (const state of lastDeliveryStates.values()) console.log(`Delivery state: ${JSON.stringify(state)}`);
 } finally {
-  for (const response of heldResponses.values()) { response.writeHead(503); response.end(); }
+  for (const response of heldResponses.values()) {
+    if (!response.destroyed && !response.writableEnded) { response.writeHead(503); response.end(); }
+  }
   heldResponses.clear();
   for (const roomId of rooms) {
     const res = await one(`/api/rooms/${roomId}`, { method: "DELETE" }).catch(() => null);

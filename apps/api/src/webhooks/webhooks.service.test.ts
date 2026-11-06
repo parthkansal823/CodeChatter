@@ -4,6 +4,7 @@ import { schema, type DbHandle } from "@codechatter/db";
 import { WebhookPatch } from "@codechatter/contracts";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { sql, type SQL } from "drizzle-orm";
+import { performance } from "node:perf_hooks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Env } from "../config/env.js";
@@ -74,7 +75,10 @@ function setup(selectRows: unknown[][] = [], overrides: Partial<Env> = {}) {
         // Attach rejection handling immediately; the caller still observes the rejected await.
         void promise.catch(() => {});
         return {
-          returning: vi.fn(async () => claim ? workerRows.map((row) => ({ ...row.delivery, lockedBy: value.lockedBy, lockedUntil: new Date(Date.now() + 60_000) })) : returns.shift() ?? [table === schema.webhooks ? hook : delivery]),
+          returning: vi.fn(async () => {
+            if (failure) throw failure;
+            return claim ? workerRows.map((row) => ({ ...row.delivery, lockedBy: value.lockedBy, lockedUntil: new Date(Date.now() + 60_000) })) : returns.shift() ?? [table === schema.webhooks ? hook : delivery];
+          }),
           then: promise.then.bind(promise),
         };
       }) };
@@ -161,7 +165,9 @@ describe("outgoing webhook administration", () => {
     const { service, sets, selected, predicates } = setup([[{ role: "owner" }], [{ ...hook, active: false }], [{ active: false }]]);
     await service.update("org", "owner", hook.id, { active: true });
     expect(selected[2]?.for).toHaveBeenCalledWith("update");
-    expect(sets[0]).toEqual({ status: "failed", lastError: "Expired while the webhook was paused", nextAttemptAt: null, lockedBy: null, lockedUntil: null });
+    expect(sets[0]).toEqual({ status: "failed", lastError: "Expired while the webhook was paused", nextAttemptAt: null });
+    expect(sets[0]).not.toHaveProperty("lockedBy");
+    expect(sets[0]).not.toHaveProperty("lockedUntil");
     expect(sets[0]).not.toHaveProperty("attemptLog");
     const expiry = new PgDialect({ casing: "snake_case" }).sqlToQuery(predicates[0]!);
     expect(expiry.sql).toContain("interval '24 hours'");
@@ -251,6 +257,22 @@ describe("outgoing webhook worker", () => {
     expect(fixture.sets[1]).toMatchObject({ status: "delivered", lockedBy: null, lockedUntil: null });
   });
 
+  it("releases only its own lease when resume expires a delivery during HTTP, preserving the failure", async () => {
+    const fixture = setup([[{ hook, delivery }]]);
+    // The row no longer matches status=pending because resume expired it while HTTP was in flight.
+    fixture.returns.push([]);
+    vi.mocked(transport).mockResolvedValue({ status: 204, statusText: "No Content", headers: [], body: Buffer.alloc(0), truncated: false, totalMs: 1, firstByteMs: 1 });
+    await fixture.service.runWorker();
+    expect(fixture.sets).toHaveLength(2);
+    expect(fixture.sets[1]).toEqual({ lockedBy: null, lockedUntil: null });
+    const release = new PgDialect({ casing: "snake_case" }).sqlToQuery(fixture.predicates.at(-1)!);
+    expect(release.params).toEqual([delivery.id, fixture.claims[0]?.lockedBy, "failed", "Expired while the webhook was paused"]);
+    expect(release.sql).toContain('"locked_by"');
+    expect(fixture.sets[1]).not.toHaveProperty("status");
+    expect(fixture.sets[1]).not.toHaveProperty("lastError");
+    expect(fixture.sets[1]).not.toHaveProperty("attemptLog");
+  });
+
   it("prunes settled rows in independent thousand-row batches at most hourly", async () => {
     const { service, db, deleted, cleanupLimits, selected } = setup([], { WEBHOOK_DELIVERY_RETENTION_DAYS: 7 });
     deleted.push(Array.from({ length: 1000 }, (_, n) => ({ id: `old-${n}` })), [{ id: "last-old" }]);
@@ -275,6 +297,21 @@ describe("outgoing webhook worker", () => {
     vi.mocked(transport).mockResolvedValue({ status: 204, statusText: "No Content", headers: [], body: Buffer.alloc(0), truncated: false, totalMs: 1, firstByteMs: 1 });
     await fixture.service.runWorker();
     expect(fixture.sets[0]).toMatchObject({ status: "delivered" });
+  });
+
+  it("yields a large retention backlog after its wall-time budget and still sends due deliveries", async () => {
+    const fixture = setup([[{ hook, delivery }]]);
+    fixture.deleted.push(Array.from({ length: 1000 }, (_, n) => ({ id: `old-${n}` })), [{ id: "next-hour" }]);
+    vi.mocked(transport).mockResolvedValue({ status: 204, statusText: "No Content", headers: [], body: Buffer.alloc(0), truncated: false, totalMs: 1, firstByteMs: 1 });
+    const clock = vi.spyOn(performance, "now").mockReturnValue(5001).mockReturnValueOnce(0);
+    try {
+      await fixture.service.runWorker();
+      expect(fixture.db.delete).toHaveBeenCalledTimes(1);
+      expect(fixture.deleted).toEqual([[{ id: "next-hour" }]]);
+      expect(fixture.sets[0]).toMatchObject({ status: "delivered" });
+      await fixture.service.runWorker();
+      expect(fixture.db.delete).toHaveBeenCalledTimes(1);
+    } finally { clock.mockRestore(); }
   });
 
   it("uses all five backoff steps and gives up on the sixth failed attempt", async () => {
@@ -310,13 +347,13 @@ describe("outgoing webhook worker", () => {
   });
 
   it("never overlaps ticks in one process", async () => {
-    let finish: (() => void) | undefined;
+    let finish: ((rows: never[]) => void) | undefined;
     const { service, db } = setup();
-    db.transaction.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    db.transaction.mockImplementationOnce(() => new Promise<never[]>((resolve) => { finish = resolve; }));
     const first = service.runWorker();
     await service.runWorker();
     await vi.waitFor(() => expect(db.transaction).toHaveBeenCalledTimes(1));
-    finish!();
+    finish!([]);
     await first;
   });
 });

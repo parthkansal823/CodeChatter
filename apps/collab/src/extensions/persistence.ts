@@ -101,6 +101,12 @@ export function persistenceExtension(handle: DbHandle, instance: string): Extens
     });
   }
 
+  async function isDeleted(docName: string): Promise<boolean> {
+    const roomId = parseDocName(docName)?.roomId;
+    if (!roomId) return false;
+    return !(await db.query.rooms.findFirst({ where: eq(schema.rooms.id, roomId), columns: { id: true } }));
+  }
+
   return {
     extensionName: "pg-persistence",
 
@@ -119,6 +125,12 @@ export function persistenceExtension(handle: DbHandle, instance: string): Extens
 
     async onStoreDocument({ documentName, document }: onStoreDocumentPayload) {
       await flush();
+      // The room was deleted while this was open. Keep nothing: not this copy, and not what flush just wrote.
+      if (await isDeleted(documentName)) {
+        await db.delete(schema.docUpdates).where(eq(schema.docUpdates.docName, documentName));
+        await db.delete(schema.docSnapshots).where(eq(schema.docSnapshots.docName, documentName));
+        return;
+      }
       const known = persistedSV.get(documentName);
       const missing = known ? Y.encodeStateAsUpdate(document, known) : Y.encodeStateAsUpdate(document);
       // An empty diff encodes to 2 bytes (no structs, empty delete set).

@@ -38,6 +38,7 @@ export function JoinRoomDialog({ trigger }: { trigger: ReactNode }) {
     setError(null);
     try {
       const result = await join.mutateAsync(target);
+      if (result.status === "refused") return setError(`You can’t join ${result.roomName}. The owner removed you or declined your request.`);
       setOpen(false);
       setValue("");
       if (result.status === "pending") {

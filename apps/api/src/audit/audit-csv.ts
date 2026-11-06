@@ -70,7 +70,7 @@ export async function streamAuditCsv(
       before = page.at(-1)!.id;
       if (page.length < limit) break;
     }
-    if (options.truncated && count === AUDIT_CSV_LIMIT && !await write(AUDIT_CSV_TRUNCATED)) return;
+    if (options.truncated && !await write(AUDIT_CSV_TRUNCATED)) return;
     if (!response.destroyed && !response.writableEnded) response.end();
   } catch (error) {
     if (outputError || !cancellation.signal.aborted) report(outputError ?? error);

@@ -191,6 +191,20 @@ were separate manual runs before the coordinated-worker implementation:
 | One process, 50 x 10 | 500/500 | 523,485/523,485 | 228 ms (FAIL) | 70.7 ms (client-bound) |
 | Five processes, 5 x (10 x 10) | 500/500 | 538,227/538,227 | 132-134 ms (PASS) | 21 ms |
 
+Coordinated-worker runs on the shared development stack on 2026-11-06 kept
+the same 50 rooms, 10 people, 60 seconds, two edits per person per second and
+150 ms target:
+
+| Workers | Connections | Updates delivered | p95 | Client lag p99 |
+|---|---|---|---|---|
+| Automatic default: 8 | 500/500 | 537,453/537,453 | 212 ms (FAIL) | 23.1 ms |
+| Explicit `WORKERS=5` | 500/500 | 538,830/538,830 | 78 ms (PASS) | 20.3 ms |
+
+Both runs deleted all 50 rooms. The default result is retained even though the
+five-worker comparison passed. Shared-host activity and warmup can affect
+timings; repeat representative runs when choosing a worker count. Five workers
+are a verified starting point for this checkout.
+
 This test measures small Y.Map writes through the real sync protocol. It does
 not model Monaco rendering, browser main-thread work, large pastes, chat, calls
 or sandbox execution. Run realistic browser checks separately.

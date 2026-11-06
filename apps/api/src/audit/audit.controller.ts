@@ -3,7 +3,7 @@ import type { AuthSession } from "@codechatter/auth";
 import { AuditExportQuery, AuditQuery, type AuditActions, type AuditActors, type AuditEventItem, type AuditPage } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
 import { BadRequestException, Controller, ForbiddenException, Get, Header, Inject, Logger, NotFoundException, Param, Query, Res } from "@nestjs/common";
-import { and, asc, count, desc, eq, gte, lt, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, lte, type SQL } from "drizzle-orm";
 import type { Response } from "express";
 import { z } from "zod";
 
@@ -76,17 +76,15 @@ export class AuditController {
   ) {
     const org = await this.requireAdmin(orgId, session.user.id);
     const { auditEvents } = schema;
-    const [newest] = await this.handle.db.select({ id: auditEvents.id }).from(auditEvents)
-      .where(and(...this.filters(orgId, query))).orderBy(desc(auditEvents.id)).limit(1);
-    // Bound subsequent pages to the initial newest ID, so new events cannot lengthen the export.
-    // Count only up to cap + 1, without joining or transferring all matching events.
-    let truncated = false;
-    if (newest) {
-      const bounded = this.handle.db.select({ id: auditEvents.id }).from(auditEvents)
-        .where(and(...this.filters(orgId, query, undefined, newest.id))).limit(AUDIT_CSV_LIMIT + 1).as("export_limit");
-      const [matched] = await this.handle.db.select({ total: count() }).from(bounded);
-      truncated = (matched?.total ?? 0) > AUDIT_CSV_LIMIT;
-    }
+    // Snapshot only capped IDs, not event bodies. A count followed by separate pages
+    // could miss a late-committing older ID and silently mislabel a capped export.
+    // This bounded metadata snapshot fixes the header before the first CSV byte,
+    // without holding a database transaction open while the client downloads.
+    const selected = await this.handle.db.select({ id: auditEvents.id }).from(auditEvents)
+      .where(and(...this.filters(orgId, query))).orderBy(desc(auditEvents.id)).limit(AUDIT_CSV_LIMIT + 1);
+    const truncated = selected.length > AUDIT_CSV_LIMIT;
+    const ids = selected.slice(0, AUDIT_CSV_LIMIT).map((row) => row.id);
+    let offset = 0;
     // Slugs are stored as text. Keep untrusted punctuation out of the response header.
     const slug = org.slug.replace(/[^a-z0-9_-]/gi, "-").slice(0, 80) || "organisation";
     const date = new Date().toISOString().slice(0, 10);
@@ -94,7 +92,16 @@ export class AuditController {
     response.setHeader("Content-Disposition", `attachment; filename="audit-${slug}-${date}.csv"`);
     response.setHeader("Cache-Control", "private, no-store");
     if (truncated) response.setHeader("X-Audit-Truncated", "true");
-    await streamAuditCsv(response, (before, limit) => newest ? this.items(orgId, query, limit, before, newest.id) : Promise.resolve([]), {
+    await streamAuditCsv(response, async (before, limit) => {
+      const page: AuditEventItem[] = [];
+      // Deleting an event after the snapshot must not hide later pages that still exist.
+      while (page.length < limit && offset < ids.length && !response.destroyed) {
+        const batch = ids.slice(offset, offset + limit - page.length);
+        offset += batch.length;
+        page.push(...await this.items(orgId, query, batch.length, before, batch));
+      }
+      return page;
+    }, {
       truncated,
       onError: () => this.logger.error("Audit CSV export failed after streaming began."),
     });
@@ -112,7 +119,7 @@ export class AuditController {
     return org;
   }
 
-  private filters(orgId: string, query: AuditExportQuery, before?: string, ceiling?: string): SQL[] {
+  private filters(orgId: string, query: AuditExportQuery, before?: string): SQL[] {
     const { auditEvents } = schema;
     const filters: SQL[] = [eq(auditEvents.orgId, orgId)];
     if (query.action) filters.push(eq(auditEvents.action, query.action));
@@ -121,11 +128,10 @@ export class AuditController {
     if (query.from) filters.push(gte(auditEvents.createdAt, this.date(query.from)));
     if (query.to) filters.push(lte(auditEvents.createdAt, this.date(query.to)));
     if (before) filters.push(lt(auditEvents.id, before));
-    if (ceiling) filters.push(lte(auditEvents.id, ceiling));
     return filters;
   }
 
-  private async items(orgId: string, query: AuditExportQuery, limit: number, before?: string, ceiling?: string): Promise<AuditEventItem[]> {
+  private async items(orgId: string, query: AuditExportQuery, limit: number, before?: string, ids?: readonly string[]): Promise<AuditEventItem[]> {
     const { auditEvents, user, rooms } = schema;
     const rows = await this.handle.db.select({
       id: auditEvents.id,
@@ -141,7 +147,7 @@ export class AuditController {
     }).from(auditEvents)
       .leftJoin(user, eq(auditEvents.actorId, user.id))
       .leftJoin(rooms, and(eq(auditEvents.targetType, "room"), eq(auditEvents.targetId, rooms.id), eq(rooms.orgId, orgId)))
-      .where(and(...this.filters(orgId, query, before, ceiling)))
+      .where(and(...this.filters(orgId, query, before), ids ? inArray(auditEvents.id, [...ids]) : undefined))
       .orderBy(desc(auditEvents.id))
       .limit(limit);
     return rows.map((row) => ({

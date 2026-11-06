@@ -55,7 +55,10 @@ describe("AiController.complete", () => {
       expect(ai.hitCompletion).not.toHaveBeenCalled();
       expect(provider!.complete).not.toHaveBeenCalled();
     }
-    await expect(setup({ role: "candidate" }).call()).resolves.toEqual({ text: "return a + b" });
+    // A candidate can edit, but gets no help from the AI during an interview.
+    const candidate = setup({ role: "candidate" });
+    await expect(candidate.call()).rejects.toMatchObject({ status: 403, message: "AI help is off during an interview." });
+    expect(candidate.provider!.complete).not.toHaveBeenCalled();
   });
 
   it("says clearly when AI isn't set up", async () => {

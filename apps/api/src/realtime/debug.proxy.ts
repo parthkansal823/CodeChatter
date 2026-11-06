@@ -1,5 +1,5 @@
 import type { Auth, OriginPolicy } from "@codechatter/auth";
-import { can, RoomCode } from "@codechatter/contracts";
+import { can, ROOM_ACCESS_CLOSE, RoomCode } from "@codechatter/contracts";
 import { Logger } from "@nestjs/common";
 import { fromNodeHeaders } from "better-auth/node";
 import type { Server } from "node:http";
@@ -7,6 +7,7 @@ import WebSocket, { WebSocketServer } from "ws";
 
 import type { RoomsService } from "../rooms/rooms.service.js";
 import type { RunnerClient } from "../runner/runner.client.js";
+import type { LiveSockets } from "./live-sockets.js";
 
 /** Biggest message either way: a long variables list, a big output chunk. */
 const MAX_MESSAGE = 8 * 1024 * 1024;
@@ -15,9 +16,10 @@ const MAX_MESSAGE = 8 * 1024 * 1024;
  * The room's debugger: /ws/debug?room=ID (same origin via Caddy, so the session cookie
  * comes with the upgrade). Everyone in the room can watch the shared session; people
  * with Run rights drive it (start, step, evaluate), which the runner enforces from the
- * mode this proxy gives it. Messages pass through as they are.
+ * mode this proxy gives it. Messages pass through as they are. When someone's rights change
+ * the socket closes (LiveSockets), and the browser reconnects with the mode that fits, if any.
  */
-export function attachDebugProxy(server: Server, deps: { auth: Auth; origins: OriginPolicy; rooms: RoomsService; runner: RunnerClient }) {
+export function attachDebugProxy(server: Server, deps: { auth: Auth; origins: OriginPolicy; rooms: RoomsService; runner: RunnerClient; live: LiveSockets }) {
   const logger = new Logger("DebugProxy");
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE });
 
@@ -62,6 +64,10 @@ export function attachDebugProxy(server: Server, deps: { auth: Auth; origins: Or
       if (upstream.readyState === WebSocket.OPEN) upstream.send(data.toString());
       else if (upstream.readyState === WebSocket.CONNECTING) early.push(data.toString());
     });
-    client.on("close", () => upstream.close());
+    const unwatch = deps.live.watch(roomId, user.id, (role) => can(role, "code.run") === drive, () => client.close(ROOM_ACCESS_CLOSE.code, ROOM_ACCESS_CLOSE.reason));
+    client.on("close", () => {
+      unwatch();
+      upstream.close();
+    });
   }
 }

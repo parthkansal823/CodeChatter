@@ -108,6 +108,21 @@ The worker checks due deliveries every five seconds, up to 20 at a time. Any
 2xx response succeeds. Other HTTP statuses, timeouts, DNS failures and blocked
 addresses count as failed attempts. Redirects are never followed.
 
+Claiming is a short transaction: `FOR UPDATE SKIP LOCKED` selects due, unleased
+or expired-lease rows, assigns the API process's worker ID and a 60-second lease,
+then commits. The worker sends its batch in parallel outside any transaction;
+DNS plus HTTP has a ten-second deadline per request. Each result is saved in its
+own update only while that worker still owns the pending delivery, clearing the
+lease. A failed result update cannot roll back its siblings. A crashed worker's
+lease can be reclaimed after 60 seconds, while private test fixtures remain
+restricted to their original test worker.
+
+Delivery remains at least once. A crash after the receiver accepted a request
+but before its result was recorded can cause that delivery to be sent again.
+A process or machine suspended longer than the lease can also cause a duplicate;
+leases cannot fence a request already received by an external HTTP server.
+Receivers must keep their delivery-ID deduplication even with worker leases.
+
 | Attempt | Earliest time |
 | --- | --- |
 | 1 | When queued, at the next worker check |
@@ -130,9 +145,34 @@ The delivery log shows status, attempts, next try, HTTP code and every recorded
 attempt. Expand a row for its payload, error and receiver response. Responses
 are capped at 64 KB while reading; the log retains only their first 2 KB. Errors
 are limited to 500 characters. **Redeliver** starts a new six-attempt cycle and
-preserves the existing attempt history. Pausing an endpoint stops new audit
-deliveries and holds its pending queue until it is enabled again. Deleting it
-also deletes its deliveries and their logs.
+preserves the existing attempt history. A live worker lease is shown as
+**Sending** and cannot be manually redelivered; the API returns 409 if a retry
+races an active attempt. Lease identifiers are internal and are never returned
+in delivery logs.
+
+Pausing an endpoint stops new audit deliveries and holds its pending queue.
+When a paused endpoint is enabled again, pending deliveries created more than
+24 hours ago become `failed`, with **Expired while the webhook was paused** in
+the delivery log. They are not sent automatically; recent pending deliveries
+remain queued. Existing attempt history is preserved. An active lease is kept
+until its request finishes or the lease expires, blocking concurrent manual
+redelivery. The finishing worker releases only its own lease and cannot replace
+the expired status, error or history. An HTTP request already in flight can
+still reach its receiver. Manual redelivery is available after resuming and
+after any active attempt finishes if an old event is still needed.
+
+Each API process checks retention at most once an hour, including an initial
+check on its first worker tick. `WEBHOOK_DELIVERY_RETENTION_DAYS` defaults to
+30 (an integer from 1 to 3650). It removes `delivered` and `failed` rows whose
+creation time is older than that many days, in independently committed batches
+of at most 1,000. Pending rows are retained. Retrying an old delivery does not
+change its creation time, so it may be pruned once it settles. History is
+permanently removed by retention; export or retain it elsewhere if needed.
+Cleanup checks a five-second budget between batches, always allowing its first
+batch to finish. Remaining old rows wait until a later hourly check. This is a
+best-effort time budget, not a timeout that cancels a slow database statement;
+it prevents a large backlog from indefinitely delaying due deliveries.
+Deleting an endpoint also deletes its deliveries and their logs.
 
 ## Endpoint safety and local testing
 
@@ -158,10 +198,22 @@ After the owner generates and applies the migration and builds the API, run:
 
 ```sh
 cd apps/api
-node test/webhooks-out.e2e.mjs
+node --env-file=../../.env test/webhooks-out.e2e.mjs
 ```
 
 The script verifies signed room events, ping, failed-response scheduling, secret
-rotation, redelivery history, permissions and private-address rejection on the
-shared API. It deletes its own webhooks and rooms and stops only its child API
-and receiver. It never uses the shared rooms `E2ETST` or `TEAM22`.
+rotation, redelivery history, permissions, private-address rejection on the
+shared API, live lease retry conflicts, unlocked rows during HTTP sends and
+expiry on resume. Its direct database updates age only a delivery belonging to
+its own disposable webhook. It deletes its own webhooks and rooms and stops
+only its child API and receiver. It never uses the shared rooms `E2ETST` or
+`TEAM22`. Unit tests cover hourly retention, 1,000-row cleanup batches and
+independent result-update failure.
+
+For the lease upgrade, run `pnpm db:generate` and inspect its output before
+`pnpm db:migrate`. It should add only nullable `locked_by text` and
+`locked_until timestamptz` to `webhook_deliveries`, plus
+`webhook_deliveries_claim_idx` on `(next_attempt_at, id, locked_until)` where
+`status = 'pending'`. No backfill or table recreation is needed. Existing
+pending rows have no lease and remain claimable. Build the contracts and API
+after migration, then run the checks above.

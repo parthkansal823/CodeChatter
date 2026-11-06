@@ -13,6 +13,7 @@ import { AUTH, ENV, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./infra/tokens.js";
 import { httpMetrics, metricsHandler } from "./metrics/metrics.js";
 import { previewProxy, type PreviewHosts } from "./preview/preview-proxy.js";
 import { attachDebugProxy } from "./realtime/debug.proxy.js";
+import { LiveSockets } from "./realtime/live-sockets.js";
 import { attachLspProxy } from "./realtime/lsp.proxy.js";
 import { attachTerminalProxy } from "./realtime/terminal.proxy.js";
 import { ValkeyIoAdapter } from "./realtime/valkey-io.adapter.js";
@@ -26,6 +27,7 @@ app.useLogger(app.get(Logger));
 app.enableShutdownHooks();
 
 const env = app.get<Env>(ENV);
+const live = app.get(LiveSockets);
 const express = app.getHttpAdapter().getInstance();
 
 // Caddy is the single ingress hop; trust exactly one proxy for req.ip.
@@ -42,6 +44,7 @@ const preview = previewProxy({
   rooms: app.get(RoomsService),
   runner: app.get(RunnerClient),
   redis: app.get(VALKEY),
+  live,
 });
 express.use(preview.http);
 express.all("/api/auth/{*splat}", toNodeHandler(app.get<Auth>(AUTH)));
@@ -64,18 +67,21 @@ attachTerminalProxy(app.getHttpServer(), {
   origins: app.get<OriginPolicy>(ORIGINS),
   rooms: app.get(RoomsService),
   runner: app.get(RunnerClient),
+  live,
 });
 attachLspProxy(app.getHttpServer(), {
   auth: app.get<Auth>(AUTH),
   origins: app.get<OriginPolicy>(ORIGINS),
   rooms: app.get(RoomsService),
   runner: app.get(RunnerClient),
+  live,
 });
 attachDebugProxy(app.getHttpServer(), {
   auth: app.get<Auth>(AUTH),
   origins: app.get<OriginPolicy>(ORIGINS),
   rooms: app.get(RoomsService),
   runner: app.get(RunnerClient),
+  live,
 });
 
 await app.listen(env.API_PORT);

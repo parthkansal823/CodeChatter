@@ -1,5 +1,5 @@
 import type { Auth, OriginPolicy } from "@codechatter/auth";
-import { RoomCode } from "@codechatter/contracts";
+import { can, ROOM_ACCESS_CLOSE, RoomCode } from "@codechatter/contracts";
 import { Logger } from "@nestjs/common";
 import { fromNodeHeaders } from "better-auth/node";
 import type { Server } from "node:http";
@@ -7,6 +7,7 @@ import WebSocket, { WebSocketServer } from "ws";
 
 import type { RoomsService } from "../rooms/rooms.service.js";
 import type { RunnerClient } from "../runner/runner.client.js";
+import type { LiveSockets } from "./live-sockets.js";
 
 /** Languages with a language server in the sandbox image (the runner's lsp.ts has the same list). */
 export const LSP_LANGUAGES = new Set(["python", "c", "cpp", "go", "rust", "java"]);
@@ -19,7 +20,7 @@ const MAX_MESSAGE = 8 * 1024 * 1024;
  * `files.edit` permission (it's for people writing code; the server runs in the sandbox),
  * then pipes the socket to a language server the runner starts, message for message.
  */
-export function attachLspProxy(server: Server, deps: { auth: Auth; origins: OriginPolicy; rooms: RoomsService; runner: RunnerClient }) {
+export function attachLspProxy(server: Server, deps: { auth: Auth; origins: OriginPolicy; rooms: RoomsService; runner: RunnerClient; live: LiveSockets }) {
   const logger = new Logger("LspProxy");
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE });
 
@@ -64,6 +65,10 @@ export function attachLspProxy(server: Server, deps: { auth: Auth; origins: Orig
       if (upstream.readyState === WebSocket.OPEN) upstream.send(data.toString());
       else if (upstream.readyState === WebSocket.CONNECTING) early.push(data.toString());
     });
-    client.on("close", () => upstream.close());
+    const unwatch = deps.live.watch(roomId, user.id, (role) => can(role, "files.edit"), () => client.close(ROOM_ACCESS_CLOSE.code, ROOM_ACCESS_CLOSE.reason));
+    client.on("close", () => {
+      unwatch();
+      upstream.close();
+    });
   }
 }

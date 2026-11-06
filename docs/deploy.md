@@ -163,6 +163,15 @@ Copy backups off the server, for example with a nightly cron job to object stora
 
 **Before the first deploy, rotate every secret that v1 used** (`server/.env`): the OAuth client secrets, the Gmail App Password, and the database credentials. Then put the new values in `infra/.env.production` only.
 
+## The security policy (CSP)
+
+Every page carries a Content-Security-Policy with a nonce of its own (`apps/web/lib/csp.ts`, and why in `docs/adr/0010-content-security-policy.md`). You only need to think about it in two cases:
+
+- **LiveKit somewhere other than this site's `/livekit`:** set `LIVEKIT_URL`. Compose and the Helm chart pass it to the web service, and the policy allows that host.
+- **A self-hosted draw.io:** set `NEXT_PUBLIC_DRAWIO_URL` when you **build** the image, as the Diagrams tool reads it then too.
+
+If a call or a diagram doesn't connect, look in the browser's console for "Content Security Policy".
+
 ## Showcase on Vercel (free)
 
 The landing page can go live on its own, with no app behind it: the code, a demo video and how to run it, for anyone you send the link to. Its sign-in buttons become "Watch the 2-minute demo", "See the code" and "Run it yourself", and the app's pages lead back home (`apps/web/lib/showcase.ts`).

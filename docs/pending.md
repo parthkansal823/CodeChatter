@@ -11,23 +11,29 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## In progress (2026-11-06)
 
-- 🟡 **ChatGPT:** prompt 13 (follow-ups).
+- 🟡 **Claude:** interview mode, the next version (step 11).
+- 🟡 **ChatGPT:** prompt 9 (teams).
+- ✅ Checked: ChatGPT's prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
 - ✅ Just finished by Claude:
+  - managing a room's members (approve, decline, remove, change roles, leave), and the invite link from Share;
+  - the browser security policy, checked against a production build (`docs/adr/0010-content-security-policy.md`);
+  - access ending when a public room goes private or a room is deleted;
+  - the old live-document test working again, in CI (`apps/collab/test/collab.e2e.mjs`);
   - interview mode (step 11), with the interviewer and candidate room roles (`docs/interviews.md`);
-  - end-to-end tests in CI (waiting for their first run on GitHub);
+  - end-to-end tests in CI (their first run on GitHub found what's fixed below; the next push should be green);
   - metrics and dashboards checked (ChatGPT 8);
   - real git in the sandbox (step 7);
   - binary files, and deleting a room's stored files with the room.
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **13** (follow-ups) → **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
-2. **Claude:** step 10's security and accessibility passes, and the cutover from v1, before launch.
+1. **ChatGPT**, one prompt at a time, each checked before the next: **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
+2. **Claude:** interview mode's next version (step 11), then accessibility, gVisor, a final security review and the cutover from v1 (step 10), before launch.
 3. **You:** record the README's GIF and 2-minute video (step 12).
 
 ## Your actions
 
-- **Commit and push** what's uncommitted. That also starts the new **End-to-end** workflow; I read its result from GitHub, so just tell me when it's pushed.
+- **Commit and push** what's uncommitted. Your last push failed CI and End-to-end on things fixed here (a test interview mode broke, the PDF viewer's frame, a cut-off copy of a large file). I read the result from GitHub, so just tell me when it's pushed.
 - **Untrack the last Codex files:** `git rm -r --cached .codex apps/web/AGENTS.md`, then commit. They stay on your disk.
 - **Before deploying:**
   - rotate every v1 secret (`server/.env`);
@@ -127,18 +133,16 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - then a guest role, auto-join by email domain, organisation templates and policies
 - 🟡 Account: profile, password, two-factor, active sessions (**ChatGPT 10**)
   - then pages for appearance, notifications and connected accounts
+- ⬜ Rooms, later: more than one owner, and handing a room to someone else
 - ⬜ Usage dashboard: runs, AI tokens and sandbox minutes, with quotas
 - ⬜ Instance admin: users, rooms, health
 
 ## Step 9 · Automations and platform
 
-- 🟡 Webhooks follow-ups (**ChatGPT 13**):
-  - a lease instead of one long transaction;
-  - delivery retention;
-  - expiring deliveries left pending while a webhook was paused.
 - ⬜ Dependencies:
   - a per-person rate limit;
   - a fade that shows the side tabs scroll.
+- ⬜ **Pipelines, Jenkins-style** (the owner's idea, 2026-11-06): stages and steps in a file in the room, run in its sandbox, with live logs and a run history, started by hand, on a schedule or by a push. Our own rather than embedding Jenkins, which is heavy and hard to make safe for many rooms. Together with the terminals, ports, databases and Kubernetes panel, this is what "DevOps online" means here.
 - ⬜ Workflow builder (n8n-style): triggers, actions, conditions, run history
 - ⬜ Public API with personal access tokens, and a `cc` CLI that syncs a folder with a room
 - ⬜ MCP server: Claude Code, Claude Desktop and Cursor open rooms, edit and run
@@ -148,28 +152,34 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 - 🟡 Nightly backups and a restore drill (**ChatGPT 11**)
 - ⬜ OpenTelemetry traces
-- 🟡 End-to-end tests in CI: the workflow's first run on GitHub (**you** push, **Claude** reads the result)
+- 🟡 End-to-end tests in CI: a green run on GitHub (**you** push, **Claude** reads the result). Watch `code-comments` and `new-room`, which each needed their retry on the first run.
 - ⬜ Metrics, later:
   - `METRICS_TOKEN` and scraping in the Helm chart;
   - move from `prom-client` to `@prometheus-io/client`.
-- ⬜ `apps/collab/test/collab.e2e.mjs`: rewrite it for today's E2ETST, or delete it (`checkpoints` and `notes-access` cover most of it)
-- 🟡 Follow-ups (**ChatGPT 13**):
-  - the audit log's CSV streamed with no silent cap;
-  - the filter labels lined up;
-  - a `WORKERS` option for the load test.
-- ⬜ Sandbox and browser security: gVisor runtime, CSP with nonces, a separate origin for previews
+- ⬜ Sandbox security: the gVisor runtime
 - ⬜ Accessibility: an axe audit with no violations; Lighthouse 90+ on marketing pages
 - ⬜ Cutover from v1: move the data from MongoDB, then delete `client/` and `server/`
 - ⬜ A final security review
 
+## Bugs to look at
+
+- ⬜ `apps/web/components/room/tools/api-studio/script-worker-source.ts` is dead code: nothing imports it, and the `script-sandbox.ts` it mentions is gone. Delete it, or build the pre-request scripts it was for. Those would need a frame with their own policy, like `/frames/document`.
+
 ## Step 11 · Interview mode: after launch (**Claude**)
 
-The mode itself is done. What's left:
+The mode itself is done. Next (the owner's ideas, 2026-11-06, being built now):
+
+- 🟡 **Scheduling many candidates at once:** a pasted list, one link each, emailed together, with a page for the whole batch
+- 🟡 **A real question bank:** tags and difficulty, and random questions picked from it, so candidates don't all get the same paper
+- 🟡 **More kinds of question:** multiple choice marked automatically, then short answers, alongside coding
+- 🟡 **Harder to cheat, honestly stated:** a browser can't prevent cheating, so the record shows what happened (leaving the tab or fullscreen, pasting in, a second device), questions come in shuffled order, and the server keeps the time. Webcam proctoring is left out for now: it needs consent, storage and legal care.
+- 🟡 **A results table** to compare the candidates of a batch
+
+What else is left:
 
 - ⬜ Hidden tests on the Kubernetes driver (a one-off pod, as the Docker driver's throwaway container); **Run tests** refuses there until then
 - ⬜ A scorecard for each interviewer (one is shared now, and the last save wins)
 - ⬜ The report as a PDF (Markdown now)
-- ⬜ Closing open connections when a room's role changes outside interviews: the mechanism exists now (`ROOM_ACCESS_CHANNEL`), and the rooms API doesn't use it yet
 
 ## Step 12 · Recruiter kit
 
@@ -177,6 +187,8 @@ The mode itself is done. What's left:
 
 ## Step 13 · Advanced features
 
+- ⬜ **For researchers** (the owner's idea, 2026-11-06): a layout that opens on notebooks, data, documents and PDFs, which all exist already. LaTeX and citations after that, as they need new tools in the sandbox image.
+- ⬜ **AI analysis** (the owner's idea, 2026-11-06): a review of the whole project from the AI panel (architecture, risks, what to fix first), and "explain this data" for notebooks and databases. It goes with "Ask the codebase".
 - ⬜ **Together:** suggestion mode, room branches, live authorship, session recording and replay, smarter calls (captions, AI notes)
 - ⬜ **Developer tools:**
   - a test explorer with coverage;

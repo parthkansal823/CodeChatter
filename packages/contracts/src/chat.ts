@@ -37,6 +37,8 @@ export interface ServerToClientEvents {
   "notification:new": (notification: NotificationItem) => void;
   /** An interview in this room changed: read it again (GET rooms/:id/interview). */
   "interview:changed": () => void;
+  /** Someone joined, asked to, left, or had their role changed: read the room's people again. */
+  "room:people-changed": () => void;
 }
 
 export interface ClientToServerEvents {

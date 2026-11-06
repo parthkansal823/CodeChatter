@@ -30,5 +30,9 @@ describe("notificationText", () => {
       "Ana replied on app.py:4 in Team playground: “done”",
     );
     expect(notificationText({ type: "room.requested", actor: null, room, payload: {} })).toBe("Someone asked to join Team playground");
+    expect(notificationText({ type: "room.approved", actor, room, payload: { role: "editor" } })).toBe("Ana let you into Team playground as editor");
+    expect(notificationText({ type: "room.declined", actor, room, payload: {} })).toBe("Ana declined your request to join Team playground");
+    expect(notificationText({ type: "room.removed", actor, room, payload: {} })).toBe("Ana removed you from Team playground");
+    expect(notificationText({ type: "room.role", actor, room, payload: { role: "viewer" } })).toBe("Ana made you viewer in Team playground");
   });
 });

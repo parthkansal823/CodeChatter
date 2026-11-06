@@ -2,7 +2,6 @@ import { ensurePersonalOrg, type AuthSession } from "@codechatter/auth";
 import type { ObjectStore } from "@codechatter/auth/s3";
 import {
   can,
-  ROOM_ACCESS_CHANNEL,
   roomBlobPrefix,
   type InterviewInvitation,
   type InterviewListItem,
@@ -21,11 +20,10 @@ import {
 import { schema, type DbHandle } from "@codechatter/db";
 import { BadRequestException, ConflictException, ForbiddenException, GoneException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
-import type { Redis } from "ioredis";
 import { createHash, randomBytes } from "node:crypto";
 
 import type { Env } from "../config/env.js";
-import { DB, ENV, OBJECT_STORE, VALKEY } from "../infra/tokens.js";
+import { DB, ENV, OBJECT_STORE } from "../infra/tokens.js";
 import { MailService } from "../mail/mail.service.js";
 import { EventsGateway } from "../realtime/events.gateway.js";
 import { RoomsRepository } from "../rooms/rooms.repository.js";
@@ -61,7 +59,6 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(DB) private readonly handle: DbHandle,
     @Inject(ENV) private readonly env: Env,
-    @Inject(VALKEY) private readonly redis: Redis,
     @Inject(OBJECT_STORE) private readonly store: ObjectStore | null,
     private readonly rooms: RoomsService,
     private readonly repo: RoomsRepository,
@@ -308,7 +305,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
 
   /** Tell collab to reconnect the room's editors with their new rights, and browsers to read the interview again. */
   private async announce(row: Pick<InterviewRow, "roomId">, rightsChanged: boolean): Promise<void> {
-    if (rightsChanged) await this.redis.publish(ROOM_ACCESS_CHANNEL, row.roomId).catch((error: unknown) => this.logger.warn(`room access: ${String(error)}`));
+    if (rightsChanged) await this.rooms.accessChanged(row.roomId);
     this.events.interviewChanged(row.roomId);
   }
 
@@ -409,6 +406,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   async remove(id: string, session: AuthSession): Promise<void> {
     const row = await this.asInterviewer(id, session.user.id);
     await this.repo.deleteRoom(row.roomId); // The interview and its runs go with the room.
+    await this.rooms.accessChanged(row.roomId);
     await Promise.all([
       this.runner.destroyRoom(row.roomId, session.user).catch(() => {}),
       this.store?.deletePrefix(roomBlobPrefix(row.roomId)).catch(() => 0),

@@ -138,6 +138,7 @@ flowchart TD
 *Goal: what an organisation needs.* Details: §8.
 
 - 🟡 Organisations: teams, members, invitations (ChatGPT, prompt 9)
+- ✅ Managing a room's people: approve, decline, remove, change roles, leave, and an invite link from Share. Rights changing closes what the person has open
 - 🟡 Settings: profile, password, two-factor, active sessions (ChatGPT, prompt 10)
 - ✅ Audit log with filters and CSV export
 - ✅ Room roles for interviews (interviewer, candidate)
@@ -147,22 +148,23 @@ flowchart TD
 
 *Goal: CodeChatter as a platform others build on.* Details: §9.
 
-- ✅ Outgoing webhooks: signed, retried, with a delivery log (follow-ups: ChatGPT, prompt 13)
+- ✅ Outgoing webhooks: signed, retried, with a delivery log, leases and retention
 - ✅ Dependency alerts from OSV, in a side tool
-- ⬜ Workflow builder; public API and `cc` CLI; MCP server; `devcontainer.json`
+- ⬜ Pipelines, Jenkins-style; workflow builder; public API and `cc` CLI; MCP server; `devcontainer.json`
 
 ## Step 10 · Hardening and launch 🟡 ← now
 
 *Goal: safe, observable and tested enough to run for real.* Details: §10.
 
-- ✅ Load test: 500 live connections, p95 under 150 ms (follow-up: ChatGPT, prompt 13)
+- ✅ Load test: 500 live connections, p95 under 150 ms, across several processes
 - 🟡 Operations: Prometheus metrics and Grafana ✅; nightly backups (ChatGPT, prompt 11); traces ⬜
-- ✅ GitHub Actions CI: lint, types, tests, image builds, vulnerability scan (green on GitHub)
-- 🟡 End-to-end tests in CI: 29 suites pass here; first run on GitHub to come
-- ⬜ Sandbox and browser security (gVisor, CSP nonces); accessibility (axe, Lighthouse)
+- 🟡 GitHub Actions CI: lint, types, tests, image builds, vulnerability scan. Failing on a test interview mode broke; fixed, and waiting for the next push
+- 🟡 End-to-end tests in CI: 37 suites. The first run on GitHub found three real problems, fixed; waiting for a green run
+- ✅ Browser security: a nonce-based security policy, previews in a sandboxed frame, access that really ends when a room goes private or is deleted
+- ⬜ Sandbox security (gVisor); accessibility (axe, Lighthouse)
 - ⬜ Cutover from v1; a final security review
 
-## Step 11 · Interview mode ✅
+## Step 11 · Interview mode 🟡
 
 *Goal: a complete hiring flow.* Details: §7 and `docs/interviews.md`.
 
@@ -171,6 +173,7 @@ flowchart TD
 - ✅ Server-side timer that really takes the candidate's rights away
 - ✅ Hidden tests in a throwaway container; private rubric and scorecards
 - ✅ Replay, and a report
+- 🟡 Next version: many candidates at once, random questions from the bank, multiple choice, a record of suspicious behaviour, a results table
 
 ## Step 12 · Recruiter kit 🟡
 

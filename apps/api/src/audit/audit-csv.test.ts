@@ -106,6 +106,12 @@ describe("streamAuditCsv", () => {
     expect(text()).not.toContain(failure.message);
   });
 
+  it("keeps the truncation marker if selected events disappear during export", async () => {
+    const { response, text } = output();
+    await streamAuditCsv(response, async () => [item], { truncated: true, onError: () => { throw new Error("Unexpected export error"); } });
+    expect(text()).toBe(auditCsv([item]) + AUDIT_CSV_TRUNCATED);
+  });
+
   it("stops reading when the client disconnects during a page fetch", async () => {
     const { response, text } = output();
     let reads = 0;
@@ -136,7 +142,7 @@ describe("streamAuditCsv", () => {
 describe("audit export preflight", () => {
   for (const total of [100_000, 100_001]) {
     it(`sets truncation before the first byte only when ${total} matches exceed the cap`, async () => {
-      const answers: unknown[][] = [[{ id: "org", slug: "test-org" }], [{ role: "owner" }], [{ id: item.id }], [{ total }], []];
+      const answers: unknown[][] = [[{ id: "org", slug: "test-org" }], [{ role: "owner" }], Array.from({ length: total }, () => ({ id: item.id }))];
       const limits: number[] = [];
       const db = { select() {
         const chain = {
@@ -149,7 +155,7 @@ describe("audit export preflight", () => {
       const controller = new AuditController({ db } as unknown as DbHandle);
       const headers = new Map<string, unknown>();
       const atFirstByte: unknown[] = [];
-      const response = Object.assign(new Writable({ write(_chunk, _encoding, done) { atFirstByte.push(headers.get("X-Audit-Truncated")); done(); } }), {
+      const response = Object.assign(new Writable({ write(_chunk, _encoding, done) { atFirstByte.push(headers.get("X-Audit-Truncated")); this.destroy(); done(); } }), {
         setHeader(name: string, value: unknown) { headers.set(name, value); },
       });
       await controller.export({ user: { id: "owner" } } as AuthSession, "org", {}, response as unknown as Response);

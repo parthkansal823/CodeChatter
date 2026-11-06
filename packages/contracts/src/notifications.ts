@@ -5,7 +5,7 @@ import { z } from "zod";
  * chat, replied on a code comment of yours or started one where you're mentioned, joined a
  * room you own or asked to; unread ones arrive live and, an hour on, in an email digest.
  */
-export const NOTIFICATION_TYPES = ["mention", "comment.reply", "comment.new", "room.joined", "room.requested"] as const;
+export const NOTIFICATION_TYPES = ["mention", "comment.reply", "comment.new", "room.joined", "room.requested", "room.approved", "room.declined", "room.removed", "room.role"] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export type NotificationPayload = {
@@ -74,6 +74,14 @@ export function notificationText(item: Pick<NotificationItem, "type" | "actor" |
       return `${who} joined ${room}${item.payload.role ? ` as ${item.payload.role}` : ""}`;
     case "room.requested":
       return `${who} asked to join ${room}`;
+    case "room.approved":
+      return `${who} let you into ${room}${item.payload.role ? ` as ${item.payload.role}` : ""}`;
+    case "room.declined":
+      return `${who} declined your request to join ${room}`;
+    case "room.removed":
+      return `${who} removed you from ${room}`;
+    case "room.role":
+      return `${who} made you ${item.payload.role ?? "something else"} in ${room}`;
   }
 }
 

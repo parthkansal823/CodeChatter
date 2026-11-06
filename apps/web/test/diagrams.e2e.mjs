@@ -1,14 +1,36 @@
 // Diagrams (draw.io), two people: a new diagram shows up for the other person, edits in draw.io reach
 // each other live (draw.io's own patches over the room document), someone opening it later loads
-// everything, and the diagram downloads as a .drawio file. Needs internet for embed.diagrams.net.
+// everything, and the diagram downloads as a .drawio file.
+//
+// embed.diagrams.net answers automated browsers with a 403, so the real draw.io comes from a throwaway
+// container instead. The app still asks for embed.diagrams.net, under its real security policy; only the
+// answer comes from here. The first run downloads the image (400 MB).
 //   node test/diagrams.e2e.mjs        (from apps/web, with the dev stack running)
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-import { check, finish, launch } from "./browser.mjs";
+import { check, finish, launch, sleep } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
 const ok = (promise) => promise.then(() => true, () => false);
 const DRAWIO = "https://embed.diagrams.net";
+const IMAGE = "jgraph/drawio:32.6.10";
+const CONTAINER = `cc-drawio-test-${stamp}`;
+
+const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 600_000 }).trim();
+process.on("exit", () => spawnSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" }));
+docker("run", "-d", "--rm", "--name", CONTAINER, "-p", "127.0.0.1::8080", IMAGE);
+const localDrawio = `http://${docker("port", CONTAINER, "8080/tcp").split("\n")[0]}`;
+for (let tries = 0; !(await fetch(localDrawio).then((response) => response.ok, () => false)); tries++) {
+  if (tries === 90) throw new Error("draw.io's container didn't start");
+  await sleep(1000);
+}
+const answerFromLocalDrawio = (context) =>
+  context.route(`${DRAWIO}/**`, async (route) => {
+    const { pathname, search } = new URL(route.request().url());
+    await route.fulfill({ response: await route.fetch({ url: `${localDrawio}${pathname}${search}` }) });
+  });
+
 const frameOf = (page) => page.frameLocator('iframe[title^="Diagram"]');
 const texts = (page) => frameOf(page).locator(".geDiagramContainer").getByText("Text", { exact: true }).count();
 // draw.io's own Insert > Text, as its menu runs it; then finish editing so the change is committed.
@@ -32,7 +54,10 @@ async function waitForTexts(page, n) {
 const { browser, errors, signIn } = await launch();
 const one = await signIn("test1@codechatter.local");
 const a = one.page;
-const b = (await signIn("test2@codechatter.local")).page;
+const two = await signIn("test2@codechatter.local");
+const b = two.page;
+await answerFromLocalDrawio(one.context);
+await answerFromLocalDrawio(two.context);
 for (const page of [a, b]) await page.getByRole("button", { name: "Diagrams", exact: true }).click();
 
 await a.getByRole("button", { name: "New diagram" }).first().click();

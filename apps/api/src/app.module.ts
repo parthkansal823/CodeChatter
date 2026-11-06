@@ -15,6 +15,7 @@ import { SourceControlService } from "./github/source-control.service.js";
 import { WebhookController } from "./github/webhook.controller.js";
 import { HealthController } from "./health/health.controller.js";
 import { CallsController } from "./calls/calls.controller.js";
+import { CallsService } from "./calls/calls.service.js";
 import { CheckpointsController } from "./history/checkpoints.controller.js";
 import { ActivityService } from "./notifications/activity.service.js";
 import { NotificationsController } from "./notifications/notifications.controller.js";
@@ -28,6 +29,7 @@ import { MeController } from "./me/me.controller.js";
 import { MessagesController } from "./messages/messages.controller.js";
 import { MessagesService } from "./messages/messages.service.js";
 import { EventsGateway } from "./realtime/events.gateway.js";
+import { LiveSockets } from "./realtime/live-sockets.js";
 import { MetaController } from "./meta/meta.controller.js";
 import { AuditService } from "./audit/audit.service.js";
 import { AuditController } from "./audit/audit.controller.js";
@@ -35,6 +37,8 @@ import { BlobsController } from "./blobs/blobs.controller.js";
 import { GitController } from "./sandbox/git.controller.js";
 import { InterviewInvitesController, InterviewsController } from "./interviews/interviews.controller.js";
 import { InterviewsService } from "./interviews/interviews.service.js";
+import { RoomPeopleController } from "./rooms/room-people.controller.js";
+import { RoomPeopleService } from "./rooms/room-people.service.js";
 import { RoomsController } from "./rooms/rooms.controller.js";
 import { RoomsRepository } from "./rooms/rooms.repository.js";
 import { RoomsService } from "./rooms/rooms.service.js";
@@ -66,7 +70,7 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController],
+  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController],
   providers: [
     AiService,
     InterviewsService,
@@ -86,6 +90,9 @@ const dev = process.env.NODE_ENV !== "production";
     MessagesService,
     RunnerClient,
     EventsGateway,
+    LiveSockets,
+    CallsService,
+    RoomPeopleService,
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_FILTER, useClass: ProblemFilter },
   ],

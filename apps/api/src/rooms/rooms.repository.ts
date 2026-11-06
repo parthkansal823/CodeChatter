@@ -1,7 +1,7 @@
 import type { RoomRole } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import { DB } from "../infra/tokens.js";
 
@@ -9,6 +9,7 @@ type RoomRow = typeof schema.rooms.$inferSelect;
 type NewRoom = typeof schema.rooms.$inferInsert;
 type NewRoomRepo = typeof schema.roomRepos.$inferInsert;
 export type MemberRow = typeof schema.roomMembers.$inferSelect;
+type MemberStatus = MemberRow["status"];
 
 /** Queries only. Business rules live in RoomsService. */
 @Injectable()
@@ -55,6 +56,47 @@ export class RoomsRepository {
 
   async addMember(roomId: string, userId: string, role: RoomRole, status: "active" | "pending"): Promise<void> {
     await this.db.insert(schema.roomMembers).values({ roomId, userId, role, status }).onConflictDoNothing();
+  }
+
+  /** Everyone with a row in the room, oldest first: members, people waiting, people removed. */
+  people(roomId: string) {
+    return this.db
+      .select({
+        id: schema.user.id,
+        name: schema.user.name,
+        email: schema.user.email,
+        image: schema.user.image,
+        role: schema.roomMembers.role,
+        status: schema.roomMembers.status,
+      })
+      .from(schema.roomMembers)
+      .innerJoin(schema.user, eq(schema.roomMembers.userId, schema.user.id))
+      .where(eq(schema.roomMembers.roomId, roomId))
+      .orderBy(asc(schema.roomMembers.createdAt));
+  }
+
+  async personName(userId: string): Promise<string> {
+    const row = await this.db.query.user.findFirst({ where: eq(schema.user.id, userId), columns: { name: true } });
+    return row?.name ?? "Someone";
+  }
+
+  /** Change someone's row if it's in one of these states. Never an owner's. Undefined when nothing changed. */
+  async setMember(roomId: string, userId: string, from: MemberStatus[], set: { role?: RoomRole; status?: MemberStatus }): Promise<MemberRow | undefined> {
+    const [row] = await this.db
+      .update(schema.roomMembers)
+      .set({ ...set, updatedAt: new Date() })
+      .where(and(eq(schema.roomMembers.roomId, roomId), eq(schema.roomMembers.userId, userId), inArray(schema.roomMembers.status, from), ne(schema.roomMembers.role, "owner")))
+      .returning();
+    return row;
+  }
+
+  /** Delete someone's row if it's in one of these states. Never an owner's. */
+  async deleteMember(roomId: string, userId: string, from: MemberStatus[]): Promise<boolean> {
+    const rows = await this.db
+      .delete(schema.roomMembers)
+      .where(and(eq(schema.roomMembers.roomId, roomId), eq(schema.roomMembers.userId, userId), inArray(schema.roomMembers.status, from), ne(schema.roomMembers.role, "owner")))
+      .returning({ userId: schema.roomMembers.userId });
+    return rows.length > 0;
   }
 
   async deleteRoom(id: string): Promise<void> {

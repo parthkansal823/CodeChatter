@@ -31,6 +31,10 @@ const ACTIONS: Record<string, { kind: RoomActivityItem["kind"]; text: (data: Rec
   "repo.pull-request": { kind: "pull-request", text: (d) => `opened pull request #${d.number ?? "?"}` },
   "sandbox.image": { kind: "settings", text: (d) => `switched the sandbox to the ${d.image ?? "other"} image` },
   "checkpoint.delete": { kind: "checkpoint", text: () => "deleted a checkpoint" },
+  "room.member.approve": { kind: "joined", text: (d) => `let ${d.person ?? "someone"} into the room` },
+  "room.member.role": { kind: "settings", text: (d) => `made ${d.person ?? "someone"} ${d.role ?? "something else"}` },
+  "room.member.remove": { kind: "settings", text: (d) => `removed ${d.person ?? "someone"} from the room` },
+  "room.member.leave": { kind: "settings", text: () => "left the room" },
 };
 
 /**

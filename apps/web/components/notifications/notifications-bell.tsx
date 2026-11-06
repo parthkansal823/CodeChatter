@@ -2,7 +2,7 @@
 
 import { notificationText, type NotificationItem, type NotificationSettings } from "@codechatter/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Bell, MessageSquare, UserPlus } from "lucide-react";
+import { AtSign, Bell, MessageSquare, UserCheck, UserCog, UserPlus, UserX } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -18,7 +18,9 @@ import { cn } from "@/lib/utils";
 const KEY = ["notifications"] as const;
 const SETTINGS_KEY = ["notification-settings"] as const;
 
-const ICON = { mention: AtSign, "comment.reply": MessageSquare, "comment.new": MessageSquare, "room.joined": UserPlus, "room.requested": UserPlus };
+const ICON = { mention: AtSign, "comment.reply": MessageSquare, "comment.new": MessageSquare, "room.joined": UserPlus, "room.requested": UserPlus, "room.approved": UserCheck, "room.declined": UserX, "room.removed": UserX, "room.role": UserCog };
+/** These say you're out of the room, so there's nowhere to go. */
+const NO_WAY_IN = new Set<NotificationItem["type"]>(["room.declined", "room.removed"]);
 
 /**
  * The inbox: a bell with how many notifications are unread, and the list. New ones arrive
@@ -64,7 +66,7 @@ export function NotificationsBell({ className }: { className?: string }) {
   const go = (item: NotificationItem) => {
     if (!item.readAt) read.mutate({ ids: [item.id] });
     setOpen(false);
-    if (item.room) router.push(`/rooms/${item.room.id}` as never);
+    if (item.room && !NO_WAY_IN.has(item.type)) router.push(`/rooms/${item.room.id}` as never);
   };
 
   return (

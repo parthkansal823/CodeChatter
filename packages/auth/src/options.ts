@@ -12,6 +12,7 @@ type OrganizationOptions = NonNullable<Parameters<typeof organization>[0]>;
 
 export interface PluginCallbacks {
   sendInvitationEmail?: OrganizationOptions["sendInvitationEmail"];
+  organizationHooks?: OrganizationOptions["organizationHooks"];
 }
 
 export function schemaShapingOptions(callbacks: PluginCallbacks = {}) {
@@ -31,6 +32,7 @@ export function schemaShapingOptions(callbacks: PluginCallbacks = {}) {
         allowUserToCreateOrganization: true,
         creatorRole: "owner",
         ...(callbacks.sendInvitationEmail && { sendInvitationEmail: callbacks.sendInvitationEmail }),
+        ...(callbacks.organizationHooks && { organizationHooks: callbacks.organizationHooks }),
       }),
       admin(),
     ],

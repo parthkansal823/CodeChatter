@@ -9,6 +9,7 @@ import type { Redis } from "ioredis";
 
 import type { Env } from "../config/env.js";
 import type { RoomsService } from "../rooms/rooms.service.js";
+import type { LiveSockets } from "../realtime/live-sockets.js";
 import type { RunnerClient } from "../runner/runner.client.js";
 
 /**
@@ -60,7 +61,7 @@ export class PreviewHosts {
   }
 }
 
-type Deps = { env: Env; hosts: PreviewHosts; rooms: RoomsService; runner: RunnerClient; redis: Redis };
+type Deps = { env: Env; hosts: PreviewHosts; rooms: RoomsService; runner: RunnerClient; redis: Redis; live: LiveSockets };
 
 export function createPreviewTicket(deps: Pick<Deps, "env" | "hosts">, target: PreviewTarget, user: { id: string; name: string }): string {
   const ticket = signServiceToken(deps.env.SERVICE_SECRET, { aud: "preview", sub: `${target.roomId}:${target.port}`, uid: user.id, name: user.name }, 60);
@@ -87,6 +88,10 @@ function withoutOurCookie(header: string | undefined): string | undefined {
 export function previewProxy(deps: Deps) {
   const logger = new Logger("PreviewProxy");
   const access = new Map<string, number>(); // `${uid}:${room}` → allowed until (ms)
+  // Rights changed: what's remembered is out of date.
+  deps.live.onChange(({ roomId, userId }) => {
+    for (const key of access.keys()) if (userId ? key === `${userId}:${roomId}` : key.endsWith(`:${roomId}`)) access.delete(key);
+  });
 
   /** Cookie valid for this exact room and port, and the person still has access. */
   async function viewer(req: IncomingMessage, target: PreviewTarget): Promise<{ id: string; name: string } | null> {
@@ -207,6 +212,9 @@ export function previewProxy(deps: Deps) {
           };
           socket.on("error", close);
           upstreamSocket.on("error", close);
+          // Hot reload's socket stays open, so it ends when they can't look any more.
+          const unwatch = deps.live.watch(target.roomId, user.id, () => true, close);
+          socket.once("close", unwatch);
         });
         upstream.on("response", (answer) => socket.end(`HTTP/1.1 ${answer.statusCode ?? 502} Bad Gateway\r\nConnection: close\r\n\r\n`));
         upstream.on("error", () => socket.destroy());

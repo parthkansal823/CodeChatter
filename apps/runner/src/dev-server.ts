@@ -133,7 +133,7 @@ async function inWorkspace(session: RoomSession, cmd: string[]): Promise<number 
   return handle.exitCode();
 }
 
-function drained(stream: Duplex): Promise<void> {
+export function drained(stream: Duplex): Promise<void> {
   return new Promise((resolve) => {
     stream.on("end", resolve);
     stream.on("close", resolve);

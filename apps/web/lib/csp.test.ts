@@ -28,10 +28,10 @@ test("closes plugins, base tags, foreign forms and framing", () => {
   assert.equal(directive(policy, "default-src"), "default-src 'self'");
 });
 
-test("frames this site, and draw.io by its origin", () => {
-  assert.equal(directive(appCsp({ nonce: "a", dev: false }), "frame-src"), "frame-src 'self'");
-  assert.equal(directive(appCsp({ nonce: "a", dev: false, drawioOrigin: "https://embed.diagrams.net/some/path?x=1" }), "frame-src"), "frame-src 'self' https://embed.diagrams.net");
-  assert.equal(directive(appCsp({ nonce: "a", dev: false, drawioOrigin: "not a url" }), "frame-src"), "frame-src 'self'");
+test("frames this site, PDFs from blobs, and draw.io by its origin", () => {
+  assert.equal(directive(appCsp({ nonce: "a", dev: false }), "frame-src"), "frame-src 'self' blob:");
+  assert.equal(directive(appCsp({ nonce: "a", dev: false, drawioOrigin: "https://embed.diagrams.net/some/path?x=1" }), "frame-src"), "frame-src 'self' blob: https://embed.diagrams.net");
+  assert.equal(directive(appCsp({ nonce: "a", dev: false, drawioOrigin: "not a url" }), "frame-src"), "frame-src 'self' blob:");
 });
 
 test("connects to this site, and to LiveKit when it lives elsewhere", () => {

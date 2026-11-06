@@ -1,8 +1,8 @@
 import { schema, type Db } from "@codechatter/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
-import { eq } from "drizzle-orm";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { and, eq } from "drizzle-orm";
 import type { Redis } from "ioredis";
 
 import { uuidv7 } from "./ids.js";
@@ -10,6 +10,59 @@ import type { OriginPolicy } from "./origins.js";
 import { schemaShapingOptions } from "./options.js";
 import { hashPassword, isLegacyHash, verifyPassword } from "./password.js";
 import { valkeyStorage } from "./storage.js";
+
+type Organisation = { slug: string; metadata?: unknown };
+const isOwner = (role: unknown) => typeof role === "string" && role.split(",").some((value) => value.trim() === "owner");
+
+/** Personal markers and slugs are reserved for ensurePersonalOrg, which writes directly to the database. */
+function isPersonal(organisation: Organisation): boolean {
+  let metadata = organisation.metadata;
+  if (typeof metadata === "string") {
+    try { metadata = JSON.parse(metadata) as unknown; } catch { metadata = null; }
+  }
+  return organisation.slug.startsWith("u-") || Boolean(metadata && typeof metadata === "object" && "personal" in metadata && metadata.personal === true);
+}
+
+function requireSharedOrganisation(organisation: Organisation): void {
+  if (isPersonal(organisation)) throw new APIError("FORBIDDEN", { message: "A personal workspace is just for its owner. Create an organisation to invite people." });
+}
+
+function validateOrganisationIdentity(organisation: { slug?: string; metadata?: unknown }): void {
+  if (organisation.slug?.toLowerCase().startsWith("u-") || (organisation.metadata && typeof organisation.metadata === "object" && "personal" in organisation.metadata)) {
+    throw new APIError("BAD_REQUEST", { message: "That slug or workspace type is reserved for personal workspaces." });
+  }
+}
+
+/** Recheck last-owner changes in the same short transaction as the write, including the plugin's hookless leave route. */
+function organisationSafeAdapter(db: Db): ReturnType<typeof drizzleAdapter> {
+  return (options) => {
+    const adapter = drizzleAdapter(db, { provider: "pg", schema })(options);
+    const protect = async <T>(data: Parameters<typeof adapter.delete>[0], nextRole: unknown, mutate: (scoped: typeof adapter) => Promise<T>): Promise<T> => db.transaction(async (tx) => {
+      const scoped = drizzleAdapter(tx, { provider: "pg", schema })(options);
+      const initial = await scoped.findOne<typeof schema.member.$inferSelect>(data);
+      if (!initial) return mutate(scoped);
+      // The organisation row serialises changes to different owner rows across API instances.
+      const [organisation] = await tx.select().from(schema.organization).where(eq(schema.organization.id, initial.organizationId)).for("update");
+      const current = await scoped.findOne<typeof schema.member.$inferSelect>(data);
+      if (current && isOwner(current.role) && !isOwner(nextRole)) {
+        const members = await tx.select({ role: schema.member.role }).from(schema.member).where(eq(schema.member.organizationId, current.organizationId));
+        if ((organisation && isPersonal(organisation)) || members.filter((member) => isOwner(member.role)).length <= 1) {
+          throw new APIError("BAD_REQUEST", { message: "The last owner cannot leave, be removed or have their role changed. Make someone else an owner first." });
+        }
+      }
+      return mutate(scoped);
+    });
+    const guarded: typeof adapter = {
+      ...adapter,
+      update: <T>(data: Parameters<typeof adapter.update>[0]) => data.model === "member" && Object.hasOwn(data.update, "role")
+        ? protect(data, data.update.role, (scoped) => scoped.update<T>(data)) : adapter.update<T>(data),
+      delete: (data) => data.model === "member" ? protect(data, undefined, (scoped) => scoped.delete(data)) : adapter.delete(data),
+      // Preserve the configured autocommit fallback, but keep nested plugin operations on the guarded adapter.
+      transaction: (callback) => callback(guarded),
+    };
+    return guarded;
+  };
+}
 
 export { hashPassword, verifyPassword, isLegacyHash, legacyHashForTests } from "./password.js";
 export { uuidv7 } from "./ids.js";
@@ -82,13 +135,37 @@ export function createAuth(options: CreateAuthOptions) {
     throw new Error(`APP_URL must start with https:// in production, or be a localhost address (got ${appUrl}).`);
   }
   const shaping = schemaShapingOptions({
-    sendInvitationEmail: async (data) =>
-      mail.sendOrgInvitationEmail({
+    sendInvitationEmail: async (data) => {
+      // Resending an existing invitation bypasses beforeCreateInvitation in Better Auth 1.7.
+      requireSharedOrganisation(data.organization);
+      return mail.sendOrgInvitationEmail({
         email: data.email,
         inviterName: data.inviter.user.name,
         orgName: data.organization.name,
         url: `${appUrl}/invite/${data.id}`,
-      }),
+      });
+    },
+    organizationHooks: {
+      beforeCreateOrganization: async ({ organization }) => { validateOrganisationIdentity(organization); },
+      beforeUpdateOrganization: async ({ organization, member }) => {
+        const current = await db.query.organization.findFirst({ where: eq(schema.organization.id, member.organizationId) });
+        if (current && isPersonal(current) && (organization.slug !== undefined || organization.metadata !== undefined)) {
+          throw new APIError("FORBIDDEN", { message: "A personal workspace's slug and type cannot be changed." });
+        }
+        validateOrganisationIdentity(organization);
+      },
+      beforeDeleteOrganization: async ({ organization }) => { requireSharedOrganisation(organization); },
+      beforeCreateInvitation: async ({ organization }) => { requireSharedOrganisation(organization); },
+      beforeAcceptInvitation: async ({ organization, invitation }) => {
+        requireSharedOrganisation(organization);
+        if (isOwner(invitation.role)) {
+          const inviter = await db.query.member.findFirst({ where: and(eq(schema.member.organizationId, organization.id), eq(schema.member.userId, invitation.inviterId)) });
+          if (!isOwner(inviter?.role)) throw new APIError("FORBIDDEN", { message: "That owner invitation is no longer valid. Ask an owner to send a new invitation." });
+        }
+      },
+      beforeAddMember: async ({ organization }) => { requireSharedOrganisation(organization); },
+      beforeUpdateMemberRole: async ({ organization }) => { requireSharedOrganisation(organization); },
+    },
   });
 
   return betterAuth({
@@ -96,7 +173,7 @@ export function createAuth(options: CreateAuthOptions) {
     baseURL: appUrl,
     secret,
     trustedOrigins: origins ? (request) => origins.trustedFor(request?.headers.get("origin")) : [appUrl],
-    database: drizzleAdapter(db, { provider: "pg", schema }),
+    database: organisationSafeAdapter(db),
     secondaryStorage: valkeyStorage(redis),
 
     emailAndPassword: {
@@ -163,6 +240,19 @@ export function createAuth(options: CreateAuthOptions) {
     },
 
     hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        // The normal hook also protects new invitations; this covers the plugin's resend fast path.
+        if (ctx.path !== "/organization/invite-member") return;
+        const session = await getSessionFromCtx(ctx);
+        if (!session) return;
+        const body = ctx.body as { organizationId?: unknown } | undefined;
+        const id = typeof body?.organizationId === "string" ? body.organizationId : session.session.activeOrganizationId;
+        if (!id) return;
+        const membership = await db.query.member.findFirst({ where: and(eq(schema.member.organizationId, id), eq(schema.member.userId, session.user.id)) });
+        if (!membership) return;
+        const organisation = await db.query.organization.findFirst({ where: eq(schema.organization.id, id) });
+        if (organisation) requireSharedOrganisation(organisation);
+      }),
       // Upgrade v1 PBKDF2 hashes to argon2id the first time the password is
       // proven correct; the plaintext exists only during this request.
       after: createAuthMiddleware(async (ctx) => {

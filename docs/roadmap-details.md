@@ -486,13 +486,16 @@ What's left is in `docs/pending.md` under step 11.
   - **Database:** migration `0007` adds `webhooks` and `webhook_deliveries`.
   - **Docs:** `docs/webhooks.md`, for people writing a receiver, with how to verify the signature.
   - **Fixed here:** a webhook that couldn't be queued was logged as "audit write failed"; it now has its own message, and the audit row stays recorded.
-  - **Follow-ups handed to ChatGPT** (`docs/handoff/chatgpt-13-follow-ups.md`), found while checking:
-    - the worker should claim deliveries with a lease rather than hold one transaction across up to 20 sends; one failed update now rolls back the batch, and everything in it is sent again;
-    - old deliveries should be deleted after 30 days, and ones left pending while a webhook was paused should expire;
-    - also the audit CSV's silent 10,000-row cap, and a `WORKERS` option for the load test.
+  - **Follow-ups, written by ChatGPT and checked 2026-11-06:**
+    - **A lease:** the worker claims up to 20 deliveries in a short transaction (60 seconds, `locked_by` and `locked_until`, migration `0009`), sends them together outside any transaction (10 seconds each at most), and records each one on its own. One failed update no longer sends the whole batch again.
+    - **Retention:** delivered and failed deliveries go after `WEBHOOK_DELIVERY_RETENTION_DAYS` (30), at most hourly, 1,000 at a time.
+    - **Expiry:** when a webhook is resumed, deliveries left pending for over 24 hours fail with "Expired while the webhook was paused", shown in the log.
+    - **Audit CSV:** streamed up to 100,000 rows. The file says so when it stops there, or fails partway.
+    - **Audit filters:** the five labels line up (measured at desktop, tablet and phone widths).
+    - **Load test:** `WORKERS` forks the load across processes. The default 50 rooms × 10 people passes: 500/500 connections, p95 54 ms, every update delivered. A worker killed mid-run fails the report and leaves no rooms behind.
   - **Tests:**
-    - unit tests for the signature and the service (API 482/482);
-    - `apps/api/test/webhooks-out.e2e.mjs` 35/35, with its own API on :4013 and its own receiver;
+    - unit tests for the signature and the service;
+    - `apps/api/test/webhooks-out.e2e.mjs` 48/48, with its own API on :4013 and its own receiver, and `apps/api/test/audit.e2e.mjs` 42/42;
     - the page checked in a browser.
 - ⬜ **Public API** with personal access tokens, and a `cc` CLI that syncs a folder with a room.
 - ⬜ **CodeChatter MCP server:** Claude Code, Claude Desktop and Cursor can open rooms, read and edit files, and run code.
@@ -531,7 +534,14 @@ What's left is in `docs/pending.md` under step 11.
 
 ## 10. Hardening and launch ⬜
 
-- ⬜ **Sandbox and browser security:** gVisor runtime, CSP with nonces, and a separate origin for previews.
+- ✅ **Browser security** (`docs/adr/0010-content-security-policy.md`):
+  - **Security policy:** every page has a nonce for that response (`lib/csp.ts`, `proxy.ts`). Injected scripts, handlers and `javascript:` links don't run, and production has no `eval`.
+  - **HTML preview:** runs in `/frames/document`, with a policy of its own and an opaque origin however it's reached. Dev servers already had their own origin.
+  - **Every browser suite** now fails on anything the policy refuses (`test/browser.mjs`).
+  - **Access ends when it should:** when a public room goes private or a room is deleted, `RoomsService.accessChanged` closes the room's editor sockets, and the gateway rechecks who hears its chat and runs. The page says "You no longer have access" instead of showing a frozen room.
+  - **Deleted rooms stay deleted:** the last connection closing used to write the document back to Postgres. Now it keeps nothing (`persistence.ts`).
+  - Tests: `lib/csp.test.ts` (8), `test/csp.e2e.mjs`, `apps/collab/test/collab.e2e.mjs` (24), `test/public-rooms.e2e.mjs`.
+- ⬜ **Sandbox security:** gVisor runtime.
 - 🟡 **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups.
   - ✅ **Metrics and dashboards** (2026-11-06), written by ChatGPT. `docs/metrics.md` covers them.
     - **What's measured:**
@@ -590,13 +600,13 @@ What's left is in `docs/pending.md` under step 11.
   - **Green on GitHub** since `47b3e71` (2026-11-05).
   - **End-to-end tests in CI** (2026-11-06): `.github/workflows/e2e.yml`, apart from CI so a flaky run can't hold it up. `docs/ci.md` covers it.
     - It starts the dev infrastructure on one runner, builds the sandbox's base image (sharing a cache with the `images` job), migrates and seeds, starts the dev servers, compiles the pages the tests open, and runs `scripts/e2e-ci.mjs`.
-    - **29 suites:** 13 for the runner, collab and the API, and 16 in the browser. They need neither the full image, nor a paid AI key, nor real GitHub. All 29 pass here, with no retries, in about 7 minutes.
+    - **35 suites:** 16 for the runner, collab and the API, and 19 in the browser. They need neither the full image, nor a paid AI key, nor real GitHub. The first 29 passed together here, with no retries, in about 7 minutes. The 6 added since have only passed on their own so far.
     - **Failures** become annotations on the run, with a table on its page; logs and screenshots are kept as artifacts.
     - **Found on the way:**
       - suites run back to back trip the 10-a-minute sign-in limit, so the script clears only those counters in the dev Valkey before each suite (the limit itself stays, and `auth-flow.e2e.mjs` checks it);
       - the browser tests load Playwright from `spikes/s1-editor`, which the root install doesn't install, so the workflow installs it;
       - `isolation.e2e.mjs` flagged the read-only template cache (`cc-dev-warm`), and now allows it;
-      - `apps/collab/test/collab.e2e.mjs` is from the first spike and expects files E2ETST doesn't have, so it's left out.
+      - `apps/collab/test/collab.e2e.mjs` started in the first spike and expected files E2ETST no longer has. It now makes its own disposable rooms, and it's in the list: 15 checks, including the only ones for a foreign site's connection, a signed-out visitor, and edits surviving everyone leaving.
 
   Still to do:
   - the workflow's first run on GitHub.
@@ -851,7 +861,7 @@ The **Design** tool. Tests:
 
 ### Diagrams (draw.io) ✅
 
-The **Diagrams** tool is the real draw.io editor (open source, Apache 2.0), embedded through its official embed mode. It has every draw.io feature: all shape libraries (flowchart, UML, ER, BPMN, network, cloud…), connectors and layouts, pages and layers, and its own export dialogs. Browser test: `apps/web/test/diagrams.e2e.mjs` (7/7, two people).
+The **Diagrams** tool is the real draw.io editor (open source, Apache 2.0), embedded through its official embed mode. It has every draw.io feature: all shape libraries (flowchart, UML, ER, BPMN, network, cloud…), connectors and layouts, pages and layers, and its own export dialogs. Browser test: `apps/web/test/diagrams.e2e.mjs` (8/8, two people, in CI). embed.diagrams.net answers automated browsers with a 403, so the test serves the real draw.io from a throwaway container (`jgraph/drawio`) while the app still asks for embed.diagrams.net under its real security policy.
 
 - ✅ **Edited together live:**
   - draw.io's own per-shape patches (diffSync) travel over the room document, so two people editing different shapes both keep their work
@@ -863,7 +873,7 @@ The **Diagrams** tool is the real draw.io editor (open source, Apache 2.0), embe
   - follows light and dark mode
 - ✅ **Export:** draw.io's PNG, JPEG, SVG, PDF and HTML dialogs, with all their options, or the `.drawio` file itself.
 - 🟡 **Hosting:**
-  - loads from embed.diagrams.net by default; PDF export goes through draw.io's server
+  - loads from embed.diagrams.net by default (it opened in a normal browser, under the security policy, on 2026-11-06); PDF export goes through draw.io's server
   - `NEXT_PUBLIC_DRAWIO_URL` points at a self-hosted copy (`docker run jgraph/drawio`)
   - ⬜ add it to production compose
 - ⬜ **Next:** comments on shapes, diagrams embedded in Docs pages, AI "draw this as a diagram" (Mermaid to draw.io).

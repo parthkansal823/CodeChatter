@@ -24,9 +24,20 @@ export type CallGrant = {
 
 const base64url = (input: string | Buffer) => Buffer.from(input).toString("base64url");
 
+function signed(apiSecret: string, payload: object): string {
+  const header = { alg: "HS256", typ: "JWT" };
+  const unsigned = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
+  return `${unsigned}.${createHmac("sha256", apiSecret).update(unsigned).digest("base64url")}`;
+}
+
+/** For the API's own calls to LiveKit's server API, about one call, for a minute. */
+export function livekitAdminToken(grant: { apiKey: string; apiSecret: string; room: string; now?: number }): string {
+  const issued = Math.floor((grant.now ?? Date.now()) / 1000);
+  return signed(grant.apiSecret, { iss: grant.apiKey, sub: "codechatter-api", nbf: issued, iat: issued, exp: issued + 60, video: { room: grant.room, roomAdmin: true } });
+}
+
 export function livekitToken(grant: CallGrant): string {
   const issued = Math.floor((grant.now ?? Date.now()) / 1000);
-  const header = { alg: "HS256", typ: "JWT" };
   const payload = {
     iss: grant.apiKey,
     sub: grant.identity,
@@ -45,7 +56,5 @@ export function livekitToken(grant: CallGrant): string {
       canUpdateOwnMetadata: false,
     },
   };
-  const unsigned = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
-  const signature = createHmac("sha256", grant.apiSecret).update(unsigned).digest("base64url");
-  return `${unsigned}.${signature}`;
+  return signed(grant.apiSecret, payload);
 }

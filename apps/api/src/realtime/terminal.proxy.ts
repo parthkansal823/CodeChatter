@@ -1,5 +1,5 @@
 import type { Auth, OriginPolicy } from "@codechatter/auth";
-import { RoomCode, type TerminalServerMessage } from "@codechatter/contracts";
+import { can, ROOM_ACCESS_CLOSE, RoomCode, type TerminalServerMessage } from "@codechatter/contracts";
 import { Logger } from "@nestjs/common";
 import { fromNodeHeaders } from "better-auth/node";
 import type { Server } from "node:http";
@@ -7,18 +7,23 @@ import WebSocket, { WebSocketServer } from "ws";
 
 import type { RoomsService } from "../rooms/rooms.service.js";
 import type { RunnerClient } from "../runner/runner.client.js";
+import type { LiveSockets } from "./live-sockets.js";
 
 /** Most terminals one person may have open in a room. */
 export const MAX_TERMINALS = 4;
+
+/** How the names of one person's terminal sessions start (`<prefix>-1`, `<prefix>-task`). */
+export const terminalSessionPrefix = (userId: string) => `u${userId.replace(/[^a-zA-Z0-9]/g, "")}`.slice(0, 38);
 
 /**
  * Browser terminals: /ws/terminal?room=ID&n=1..4&cols&rows (same origin via
  * Caddy, so the session cookie comes with the upgrade). The API checks the
  * Origin, the session and the `terminal.open` permission, then pipes the
  * socket to the runner with a service token. Session names come from the
- * user id, so nobody can attach to someone else's terminal.
+ * user id, so nobody can attach to someone else's terminal. It closes when
+ * they lose the permission (LiveSockets).
  */
-export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins: OriginPolicy; rooms: RoomsService; runner: RunnerClient }) {
+export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins: OriginPolicy; rooms: RoomsService; runner: RunnerClient; live: LiveSockets }) {
   const logger = new Logger("TerminalProxy");
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 
@@ -47,7 +52,7 @@ export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins:
       // room's shared dev server session (its .codechatter/room.json). All need terminal rights,
       // checked above; the dev session is a shell like any other.
       const shared = url.searchParams.get("shared");
-      const you = `u${session.user.id.replace(/[^a-zA-Z0-9]/g, "")}`;
+      const you = terminalSessionPrefix(session.user.id);
       const name = shared === "dev" ? "dev" : `${you}-${shared === "task" ? "task" : n}`.slice(0, 40);
       const user = { id: session.user.id, name: session.user.name };
       wss.handleUpgrade(req, socket, head, (client) => pipe(client, room.data, name, cols, rows, user));
@@ -75,6 +80,10 @@ export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins:
       if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary });
       else if (upstream.readyState === WebSocket.CONNECTING) early.push({ data, binary });
     });
-    client.on("close", () => upstream.close());
+    const unwatch = deps.live.watch(roomId, user.id, (role) => can(role, "terminal.open"), () => client.close(ROOM_ACCESS_CLOSE.code, ROOM_ACCESS_CLOSE.reason));
+    client.on("close", () => {
+      unwatch();
+      upstream.close();
+    });
   }
 }
