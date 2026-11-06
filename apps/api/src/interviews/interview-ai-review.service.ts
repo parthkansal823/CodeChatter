@@ -10,7 +10,8 @@ import type { ModelRequest } from "../ai/prompts.js";
 import { describeAiError, type AiProvider } from "../ai/providers.js";
 import { estimateUsage } from "../ai/usage.js";
 import { DB } from "../infra/tokens.js";
-import { looksLikeJpeg, parseReview, parseSheet, ReviewUnreadable, reviewRequest, sheetRequest } from "./ai-review.js";
+import { looksLikeJpeg, parseReview, parseSheet, ReviewUnreadable, reviewRequest, sheetRequest, theirWords, type ReviewFacts } from "./ai-review.js";
+import { reviewSignals } from "./review-signals.js";
 import { InterviewsService } from "./interviews.service.js";
 import { askedOf } from "./paper.js";
 
@@ -69,6 +70,19 @@ export class InterviewAiReviewService {
       this.db.select().from(schema.interviewAnswers).where(eq(schema.interviewAnswers.interviewId, id)).orderBy(asc(schema.interviewAnswers.updatedAt)),
     ]);
 
+    const facts: ReviewFacts = {
+      mode: row.mode,
+      startedAt: row.startedAt,
+      finishedAt: row.finishedAt,
+      durationMinutes: row.durationMinutes,
+      aiAllowed: row.aiAllowed,
+      questions: row.paper.filter((question) => askedOf(row.mode, question)),
+      events: events.map((event) => ({ kind: event.kind, at: event.at, detail: event.detail })),
+      edits: edits.map((item) => ({ minute: new Date(item.minute), edits: item.edits, bytes: item.bytes })),
+      runs: runs.map((run) => ({ at: run.createdAt, questionId: run.questionId, passed: run.passed, total: run.total, compileError: run.compileError !== null })),
+      answers: answers.map((answer) => ({ questionId: answer.questionId, at: answer.updatedAt, text: answer.text, chose: answer.choiceIds.length, awarded: answer.awarded })),
+      files: input.files,
+    };
     let found: Pick<AiReview, "summary" | "findings" | "questions">;
     const looked = { camera: false, screen: false };
     const notes: string[] = [];
@@ -77,24 +91,9 @@ export class InterviewAiReviewService {
       const text = await this.ask(
         provider,
         session.user.id,
-        reviewRequest(
-          {
-            mode: row.mode,
-            startedAt: row.startedAt,
-            finishedAt: row.finishedAt,
-            durationMinutes: row.durationMinutes,
-            aiAllowed: row.aiAllowed,
-            questions: row.paper.filter((question) => askedOf(row.mode, question)),
-            events: events.map((event) => ({ kind: event.kind, at: event.at, detail: event.detail })),
-            edits: edits.map((item) => ({ minute: new Date(item.minute), edits: item.edits, bytes: item.bytes })),
-            runs: runs.map((run) => ({ at: run.createdAt, questionId: run.questionId, passed: run.passed, total: run.total, compileError: run.compileError !== null })),
-            answers: answers.map((answer) => ({ questionId: answer.questionId, at: answer.updatedAt, text: answer.text, chose: answer.choiceIds.length, awarded: answer.awarded })),
-            files: input.files,
-          },
-          this.ai.contextChars,
-        ),
+        reviewRequest(facts, this.ai.contextChars),
       );
-      found = parseReview(text, row.startedAt);
+      found = parseReview(text, row.startedAt, { words: theirWords(facts), minutes: row.durationMinutes });
     } catch (error) {
       if (error instanceof ReviewUnreadable) throw new BadGatewayException("The AI's answer couldn't be read. Try again.");
       if ((error as Error).name === "TimeoutError") throw new GatewayTimeoutException("The AI took too long. Try again.");
@@ -117,7 +116,7 @@ export class InterviewAiReviewService {
       }
     }
 
-    const review: AiReview = { at: new Date().toISOString(), model: provider.settings.model, summary: found.summary, findings: [...found.findings, ...stills], questions: found.questions, looked, note: notes.join(" ") || null };
+    const review: AiReview = { at: new Date().toISOString(), model: provider.settings.model, summary: found.summary, findings: [...reviewSignals(facts), ...found.findings, ...stills], questions: found.questions, looked, note: notes.join(" ") || null };
     // Only its own column. A score and the record's level are never the AI's to change.
     await this.db.update(schema.interviews).set({ aiReview: review }).where(eq(schema.interviews.id, id));
     return { interview: await this.interviews.viewFor(id), orgId: row.orgId, looked };

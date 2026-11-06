@@ -45,6 +45,21 @@ services:
     volumes: ["./caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro"]
     extra_hosts: ["host.docker.internal:host-gateway"]
 
+  # Optional: the local AI, for people without a key. A profile, so `pnpm infra:up` and CI
+  # don't download it: `pnpm ai:up` starts it, `pnpm ai:pull` gets the model. Models live in
+  # a volume. The context length is the server's, because the API talks to Ollama's
+  # OpenAI-style endpoint, which can't set one per request; AI_CONTEXT_CHARS has to fit it.
+  ollama:
+    image: ollama/ollama:0.40.14
+    profiles: [ai]
+    ports: ["11434:11434"]
+    environment:
+      OLLAMA_CONTEXT_LENGTH: "16384"
+      OLLAMA_KEEP_ALIVE: 30m
+    volumes: [ollama-models:/root/.ollama]
+    healthcheck: { test: ["CMD", "ollama", "list"], interval: 3s, retries: 40 }
+
 volumes:
   pg-data:
   seaweed-data:
+  ollama-models:

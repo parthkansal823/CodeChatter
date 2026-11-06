@@ -214,6 +214,7 @@ export class InterviewTestsService {
         score: scorePaper(row.paper, mine, runs.filter((run) => run.interviewId === row.id)),
         integrity: { level: integrityLevel(counts, edits), counts, bigEdits: edits },
         recommendation: row.scorecard.recommendation,
+        aiToCheck: row.aiReview ? row.aiReview.findings.filter((finding) => finding.level === "look").length : null,
       };
     });
     const tally = { candidates: rows.length, started: rows.filter((row) => row.startedAt).length, finished: rows.filter((row) => row.status === "finished").length };

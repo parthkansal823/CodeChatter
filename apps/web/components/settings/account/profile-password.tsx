@@ -70,6 +70,7 @@ export function PasswordSettings({ userId, email, hasPassword }: { userId: strin
     if (newPassword !== confirmation) { setError("The two new passwords don't match."); return; }
     setBusy(true);
     setError("");
+    let changed = false;
     try {
       const result = await authClient.changePassword({ currentPassword, newPassword, revokeOtherSessions: revokeOthers });
       if (result.error) {
@@ -78,14 +79,15 @@ export function PasswordSettings({ userId, email, hasPassword }: { userId: strin
             : result.error.status === 429 ? "Too many attempts. Wait a minute, then try again." : "Couldn't change your password. Try again.");
         return;
       }
+      changed = true;
       setCurrentPassword("");
       setNewPassword("");
       setConfirmation("");
+      toast.success("Password changed.");
       await authClient.getSession({ query: { disableCookieCache: true } });
       await queryClient.invalidateQueries({ queryKey: ["account-sessions", userId] });
-      toast.success("Password changed.");
       router.refresh();
-    } catch { setError("Couldn't finish the request. Check your connection before trying again."); }
+    } catch { setError(changed ? "Your password changed. Refresh the page to update your device list." : "Couldn't finish the request. Check your connection before trying again."); }
     finally { setBusy(false); }
   }
 

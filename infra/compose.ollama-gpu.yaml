@@ -1,0 +1,5 @@
+# Ollama on an NVIDIA GPU, for `pnpm ai:up:gpu`. Apart from the base file so that `pnpm ai:up`
+# still works on a machine without one (`gpus: all` refuses to start there).
+services:
+  ollama:
+    gpus: all

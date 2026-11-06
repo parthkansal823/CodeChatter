@@ -400,7 +400,7 @@ export const AiReviewInput = z.object({
 });
 export type AiReviewInput = z.infer<typeof AiReviewInput>;
 
-export type AiReviewFinding = { source: "activity" | "camera" | "screen"; level: "note" | "look"; title: string; detail: string; at: string | null };
+export type AiReviewFinding = { source: "signals" | "activity" | "camera" | "screen"; level: "note" | "look"; title: string; detail: string; at: string | null };
 export type AiReviewQuestion = { question: string; about: string };
 export type AiReview = {
   at: string;
@@ -533,6 +533,8 @@ export type BatchResultRow = {
   score: PaperScore;
   integrity: { level: IntegrityLevel; counts: IntegrityReport["counts"]; bigEdits: number };
   recommendation: "yes" | "maybe" | "no" | null;
+  /** How many things the AI's review says are worth checking; null until it's reviewed them. */
+  aiToCheck: number | null;
 };
 export type BatchResults = BatchListItem & { fullscreen: boolean; lockClipboard: boolean; recordWebcam: boolean; recordScreen: boolean; rows: BatchResultRow[] };
 

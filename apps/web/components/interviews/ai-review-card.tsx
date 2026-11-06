@@ -14,11 +14,11 @@ import { filesAt, parseReplayFrames } from "./replay";
 
 const MOST_FILES = 100;
 const MOST_FILE_CHARS = 200_000;
-const SOURCE_LABEL: Record<AiReviewFinding["source"], string> = { activity: "Their activity", camera: "Camera", screen: "Screen" };
+const SOURCE_LABEL: Record<AiReviewFinding["source"], string> = { signals: "Worked out from the record, not by the AI", activity: "Their activity", camera: "Camera", screen: "Screen" };
 const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 /** What they ended with, from the edit log. The API doesn't read live documents. */
-async function theirFiles(interviewId: string): Promise<AiReviewInput["files"]> {
+export async function theirFiles(interviewId: string): Promise<AiReviewInput["files"]> {
   const response = await fetch(`/api/interviews/${interviewId}/replay/updates`, { credentials: "same-origin" });
   if (!response.ok) return [];
   const frames = parseReplayFrames(new Uint8Array(await response.arrayBuffer()));

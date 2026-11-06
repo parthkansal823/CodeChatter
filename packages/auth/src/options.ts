@@ -1,4 +1,5 @@
 import type { BetterAuthOptions } from "better-auth";
+import { APIError } from "better-auth/api";
 import { admin, organization, twoFactor } from "better-auth/plugins";
 
 /**
@@ -16,11 +17,22 @@ export interface PluginCallbacks {
 }
 
 export function schemaShapingOptions(callbacks: PluginCallbacks = {}) {
+  // Only an isolated, local security test opts into account deletion. The shared
+  // stack and production keep their existing disabled setting.
+  const securityTestDeletion = process.env.NODE_ENV !== "production" && process.env.CODECHATTER_SECURITY_E2E === "1";
   return {
     appName: APP_NAME,
     basePath: "/api/auth",
     emailAndPassword: { enabled: true },
     user: {
+      deleteUser: {
+        enabled: securityTestDeletion,
+        beforeDelete: async (user) => {
+          if (!securityTestDeletion || !/^sec-[a-z0-9-]+@codechatter\.local$/i.test(user.email)) {
+            throw new APIError("FORBIDDEN", { message: "Only disposable local security-test accounts can be deleted here." });
+          }
+        },
+      },
       additionalFields: {
         // Hue (0-359) for the generated avatar when no image is set (v1 parity).
         avatarHue: { type: "number", required: false, input: true },

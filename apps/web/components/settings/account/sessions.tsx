@@ -1,10 +1,10 @@
 /** Show owned active sessions and revoke other devices without rendering their authentication tokens. */
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -22,11 +22,11 @@ class SessionError extends Error {
 function timeText(value: string | Date): string { return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); }
 
 export function AccountSessions({ userId }: { userId: string }) {
-  const queryClient = useQueryClient();
   const key = ["account-sessions", userId];
   const [busy, setBusy] = useState<string | null>(null);
   const sessions = useQuery({
     queryKey: key,
+    // Native revocation needs tokens; discard this query as soon as the view unmounts.
     gcTime: 0,
     retry: false,
     refetchInterval: 30_000,
@@ -45,15 +45,14 @@ export function AccountSessions({ userId }: { userId: string }) {
     },
   });
 
-  useEffect(() => () => {
-    // Native revokeSession needs a token. Keep those credentials only in the active view's memory.
-    queryClient.removeQueries({ queryKey: ["account-sessions", userId], exact: true });
-  }, [queryClient, userId]);
-
   async function revoke(session?: Session) {
     if (busy || (session && session.id === sessions.data?.currentId)) return;
     setBusy(session?.id ?? "all");
     try {
+      // Password and 2FA changes can rotate this session while an old table is still visible.
+      const current = await authClient.getSession({ query: { disableCookieCache: true } });
+      if (current.error || !current.data || current.data.user.id !== userId) { toast.error("Sign in again before signing out devices."); return; }
+      if (session?.id === current.data.session.id) { await sessions.refetch(); toast.info("This is your current device."); return; }
       const result = session ? await authClient.revokeSession({ token: session.token }) : await authClient.revokeOtherSessions();
       if (result.error) { toast.error(result.error.status === 401 || result.error.status === 403 ? "Sign in again before signing out other devices." : "Couldn't sign out the device. Try again."); return; }
       await sessions.refetch();
@@ -62,7 +61,9 @@ export function AccountSessions({ userId }: { userId: string }) {
     finally { setBusy(null); }
   }
 
-  const others = sessions.data?.items.filter((session) => session.id !== sessions.data.currentId) ?? [];
+  const items = sessions.data?.items ?? [];
+  const currentId = sessions.data?.currentId;
+  const others = items.filter((session) => session.id !== currentId);
   return (
     <section aria-labelledby="account-sessions-heading" className="grid gap-4 border-t pt-6">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id="account-sessions-heading" className="font-medium">Where you&apos;re signed in</h2><p className="text-muted-foreground">Sign out devices you no longer use.</p></div><Button size="icon-sm" variant="outline" aria-label="Refresh sessions" disabled={sessions.isFetching || Boolean(busy)} onClick={() => void sessions.refetch()}><RefreshCw aria-hidden className="size-3.5" /></Button></div>
@@ -72,13 +73,13 @@ export function AccountSessions({ userId }: { userId: string }) {
         <>
           <div className="rounded-md border"><Table className="min-w-2xl text-xs" aria-label="Active sessions">
             <TableHeader><TableRow><TableHead>Device</TableHead><TableHead>IP address</TableHead><TableHead>Last active</TableHead><TableHead>Started</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
-            <TableBody>{sessions.data?.items.map((session) => (
+            <TableBody>{items.map((session) => (
               <TableRow key={session.id}>
-                <TableCell className="whitespace-normal"><div>{describeSessionAgent(session.userAgent)}</div>{session.id === sessions.data.currentId && <span className="font-medium text-muted-foreground">This device</span>}</TableCell>
+                <TableCell className="whitespace-normal"><div>{describeSessionAgent(session.userAgent)}</div>{session.id === currentId && <span className="font-medium text-muted-foreground">This device</span>}</TableCell>
                 <TableCell>{session.ipAddress || "Not recorded"}</TableCell>
                 <TableCell><time dateTime={new Date(session.updatedAt).toISOString()}>{timeText(session.updatedAt)}</time></TableCell>
                 <TableCell><time dateTime={new Date(session.createdAt).toISOString()}>{timeText(session.createdAt)}</time></TableCell>
-                <TableCell className="text-right">{session.id !== sessions.data.currentId && <Button size="xs" variant="outline" disabled={Boolean(busy)} onClick={() => void revoke(session)}>{busy === session.id ? "Signing out…" : "Sign out"}</Button>}</TableCell>
+                <TableCell className="text-right">{session.id !== currentId && <Button size="xs" variant="outline" disabled={Boolean(busy)} onClick={() => void revoke(session)}>{busy === session.id ? "Signing out…" : "Sign out"}</Button>}</TableCell>
               </TableRow>
             ))}</TableBody>
           </Table></div>

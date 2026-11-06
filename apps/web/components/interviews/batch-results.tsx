@@ -3,10 +3,10 @@
 
 import { INTEGRITY_LABEL, type BatchResultRow, type BatchResults, type IntegrityKind } from "@codechatter/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, ArrowLeft, Download, ExternalLink, Loader2, ScanSearch, Trash2 } from "lucide-react";
+import { ArrowDownUp, ArrowLeft, Download, ExternalLink, Loader2, ScanSearch, Sparkles, Square, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/app/app-shell";
@@ -18,12 +18,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ApiError, api } from "@/lib/api";
 
+import { theirFiles } from "./ai-review-card";
 import { csvRow, downloadText, MODE_LABEL, RECOMMENDATION_LABEL, STATUS_LABEL } from "./format";
 import { IntegrityBadge, LEVEL_LABEL } from "./integrity-record";
 import { filesAt, parseReplayFrames } from "./replay";
 import { similarPairs, type CodeEntry, type SimilarPair } from "./similarity";
 
-type Sort = "name" | "score";
+type Sort = "name" | "score" | "check";
 const percent = (row: BatchResultRow) => (row.score.max ? Math.round((row.score.marks / row.score.max) * 100) : 0);
 
 /** A candidate's code: what they ended with and what they started with, from the edit log. */
@@ -65,6 +66,8 @@ export function BatchResultsPage({ id }: { id: string }) {
   const [deleting, setDeleting] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [pairs, setPairs] = useState<{ found: SimilarPair[]; compared: number } | null>(null);
+  const [reviewing, setReviewing] = useState<{ done: number; total: number } | null>(null);
+  const stopReviewing = useRef(false);
 
   if (results.isPending) return <div className="grid gap-3 p-8"><Skeleton className="h-8 w-1/3" /><Skeleton className="h-48" /></div>;
   if (results.isError || !results.data) {
@@ -72,11 +75,18 @@ export function BatchResultsPage({ id }: { id: string }) {
     return <p className="p-8 text-muted-foreground">{denied ? "This doesn't exist, or you don't have access to it." : "The results couldn't load. Try again in a moment."}</p>;
   }
   const batch = results.data;
-  const rows = [...batch.rows].sort((a, b) => (sort === "score" ? percent(b) - percent(a) || a.candidateName.localeCompare(b.candidateName) : a.candidateName.localeCompare(b.candidateName)));
+  const byName = (a: BatchResultRow, b: BatchResultRow) => a.candidateName.localeCompare(b.candidateName);
+  const order: Record<Sort, (a: BatchResultRow, b: BatchResultRow) => number> = {
+    name: byName,
+    score: (a, b) => percent(b) - percent(a) || byName(a, b),
+    check: (a, b) => (b.aiToCheck ?? -1) - (a.aiToCheck ?? -1) || byName(a, b),
+  };
+  const rows = [...batch.rows].sort(order[sort]);
+  const unreviewed = batch.rows.filter((row) => row.startedAt && row.aiToCheck === null);
 
   function exportCsv() {
     const lines = [
-      csvRow(["Candidate", "Email", "Status", "Marks", "Out of", "Percent", "Waiting to be marked", "Multiple choice", "Coding", "Short answer", "System design", "Answered", "Questions", "Integrity", "Recommendation", "Started", "Finished"]),
+      csvRow(["Candidate", "Email", "Status", "Marks", "Out of", "Percent", "Waiting to be marked", "Multiple choice", "Coding", "Short answer", "System design", "Answered", "Questions", "Integrity", "Recommendation", "Started", "Finished", "AI: to check"]),
       ...rows.map((row) =>
         csvRow([
           row.candidateName,
@@ -96,6 +106,7 @@ export function BatchResultsPage({ id }: { id: string }) {
           row.recommendation ?? "",
           row.startedAt ?? "",
           row.finishedAt ?? "",
+          row.aiToCheck ?? "",
         ]),
       ),
     ];
@@ -112,6 +123,38 @@ export function BatchResultsPage({ id }: { id: string }) {
       toast.error("The code couldn't be compared. Try again.");
     } finally {
       setComparing(false);
+    }
+  }
+
+  /** One at a time: a local model does one at a time anyway, and stopping loses nothing, since each review is saved as it finishes. */
+  async function reviewAll() {
+    const queue = unreviewed;
+    stopReviewing.current = false;
+    let failed = 0;
+    let done = 0;
+    setReviewing({ done, total: queue.length });
+    try {
+      for (const row of queue) {
+        if (stopReviewing.current) break;
+        try {
+          await api(`/api/interviews/${row.interviewId}/ai-review`, { method: "POST", json: { files: await theirFiles(row.interviewId) } });
+          done += 1;
+          setReviewing({ done, total: queue.length });
+          await results.refetch();
+        } catch (error) {
+          // Off, or used too much: every other candidate would get the same answer.
+          if (error instanceof ApiError && (error.status === 429 || error.status === 503)) {
+            toast.error(error.detail);
+            return;
+          }
+          failed += 1;
+        }
+      }
+      setSort("check");
+      if (failed) toast.error(`${failed} couldn't be reviewed. Ask again to try those.`);
+      else if (!stopReviewing.current) toast.success("The AI has looked at everyone.");
+    } finally {
+      setReviewing(null);
     }
   }
 
@@ -136,12 +179,25 @@ export function BatchResultsPage({ id }: { id: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="ghost" asChild><Link href={`/interviews${batch.mode === "assessment" ? "?tab=assessments" : ""}` as never}><ArrowLeft /> Back</Link></Button>
             <Button size="sm" variant="outline" disabled={comparing || batch.started < 2} onClick={() => void compare()}>{comparing ? <Loader2 className="animate-spin" /> : <ScanSearch />} Compare their code</Button>
+            {reviewing ? (
+              <Button size="sm" variant="outline" onClick={() => { stopReviewing.current = true; }}><Square /> Stop the AI</Button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={unreviewed.length ? undefined : 0}>
+                    <Button size="sm" variant="outline" disabled={!unreviewed.length} onClick={() => void reviewAll()}><Sparkles /> Ask the AI about all</Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{unreviewed.length ? `Reads the work and record of the ${unreviewed.length} not reviewed yet. It doesn't look at recordings: open a candidate for that.` : "Everyone who started has been reviewed."}</TooltipContent>
+              </Tooltip>
+            )}
             <Button size="sm" variant="outline" onClick={exportCsv}><Download /> Export CSV</Button>
             <Button size="sm" variant="ghost" onClick={() => setDeleting(true)}><Trash2 /> Delete</Button>
           </div>
         }
       />
       <div className="grid gap-4 px-6 py-4 sm:px-8">
+        {reviewing && <p role="status" className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> The AI has reviewed {reviewing.done} of {reviewing.total}. Each is saved as it finishes, and it points out what to check: it doesn&apos;t decide.</p>}
         {pairs && (
           <section aria-label="Code that looks alike" className="grid gap-1 rounded-md border p-3">
             <h2 className="font-medium">Code that looks alike</h2>
@@ -171,6 +227,9 @@ export function BatchResultsPage({ id }: { id: string }) {
               </TableHead>
               <TableHead className="hidden md:table-cell">Answered</TableHead>
               <TableHead>Record</TableHead>
+              <TableHead>
+                <Button size="xs" variant="ghost" className="-ml-2" aria-label="Sort by what the AI says to check" onClick={() => setSort("check")}>AI {sort === "check" && <ArrowDownUp />}</Button>
+              </TableHead>
               <TableHead className="hidden sm:table-cell">Verdict</TableHead>
               <TableHead><span className="sr-only">Room</span></TableHead>
             </TableRow>
@@ -198,6 +257,7 @@ export function BatchResultsPage({ id }: { id: string }) {
                 </TableCell>
                 <TableCell className="hidden tabular-nums md:table-cell">{row.answered} of {row.questions}</TableCell>
                 <TableCell>{row.startedAt ? <Flags row={row} /> : null}</TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">{row.aiToCheck === null ? "" : row.aiToCheck === 0 ? "Nothing to check" : <span className="font-medium text-brand">{row.aiToCheck} to check</span>}</TableCell>
                 <TableCell className="hidden sm:table-cell">{row.recommendation ? RECOMMENDATION_LABEL[row.recommendation] : ""}</TableCell>
                 <TableCell className="text-right">
                   <Button size="icon-sm" variant="ghost" asChild aria-label={`Open ${row.candidateName}'s room`}><Link href={`/rooms/${row.roomId}` as never}><ExternalLink /></Link></Button>

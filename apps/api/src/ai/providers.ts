@@ -206,6 +206,7 @@ export class OpenAiCompatibleProvider implements AiProvider {
         // Only OpenAI itself is sure to accept this; other servers get an estimate unless they report usage unasked.
         ...(!this.settings.baseURL && { stream_options: { include_usage: true } }),
         ...(this.settings.maxTokens && { max_tokens: this.settings.maxTokens }),
+        ...(request.json && { response_format: { type: "json_object" as const } }),
       },
       { signal },
     );

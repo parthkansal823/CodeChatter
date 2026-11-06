@@ -427,7 +427,7 @@ export const interviews = pgTable(
       at: string;
       model: string;
       summary: string;
-      findings: Array<{ source: "activity" | "camera" | "screen"; level: "note" | "look"; title: string; detail: string; at: string | null }>;
+      findings: Array<{ source: "signals" | "activity" | "camera" | "screen"; level: "note" | "look"; title: string; detail: string; at: string | null }>;
       questions: Array<{ question: string; about: string }>;
       looked: { camera: boolean; screen: boolean };
       note: string | null;

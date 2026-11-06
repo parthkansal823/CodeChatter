@@ -93,6 +93,8 @@ export type ModelRequest = {
   /** Oldest first, ending with the person's turn (which carries the context). */
   messages: AiTurn[];
   image?: { mediaType: string; data: string };
+  /** Ask the server to hold the answer to valid JSON, where it can. The prompt still has to say what shape. */
+  json?: boolean;
 };
 
 /** Turn a validated chat request plus server-side context into what a provider sends. */

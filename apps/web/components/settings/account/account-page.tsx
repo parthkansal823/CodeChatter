@@ -12,15 +12,27 @@ import { AccountProfile, PasswordSettings } from "./profile-password";
 import { AccountSessions } from "./sessions";
 import { TwoFactorSettings } from "./two-factor-settings";
 
+class AccountIdentityError extends Error {
+  constructor() { super("Sign in again to manage your account."); }
+}
+
 function AccountContent() {
   const me = useMe();
   const accounts = useQuery({
     queryKey: ["account-providers", me.user.id],
+    staleTime: 0,
     gcTime: 0,
     retry: false,
+    refetchOnWindowFocus: true,
     queryFn: async ({ signal }) => {
-      const result = await authClient.listAccounts({ fetchOptions: { signal } });
-      if (result.error || !result.data) throw new Error(result.error?.status === 401 ? "Sign in again to manage your account." : "Couldn't load how you sign in. Try again.");
+      const [result, current] = await Promise.all([
+        authClient.listAccounts({ fetchOptions: { signal } }),
+        authClient.getSession({ query: { disableCookieCache: true }, fetchOptions: { signal } }),
+      ]);
+      if (current.error?.status === 401 || current.error?.status === 403 || (!current.error && !current.data) || (current.data && current.data.user.id !== me.user.id)) throw new AccountIdentityError();
+      if (result.error?.status === 401 || result.error?.status === 403) throw new AccountIdentityError();
+      if (result.data?.some((account) => account.userId !== me.user.id)) throw new AccountIdentityError();
+      if (current.error || result.error || !result.data) throw new Error("Couldn't load how you sign in. Try again.");
       return result.data;
     },
   });
@@ -31,10 +43,11 @@ function AccountContent() {
     <>
       <PageHeader title="Account security" description="Your profile, password, two-factor sign-in and devices." actions={<Button size="sm" variant="outline" asChild><Link href="/settings">Back to settings</Link></Button>} />
       <div className="grid max-w-4xl gap-6 px-6 py-6 sm:px-8">
-        {accounts.isPending ? <p role="status" className="text-muted-foreground">Loading your account…</p> : accounts.isError ? (
+        {accounts.isPending ? <p role="status" className="text-muted-foreground">Loading your account…</p> : accounts.isError && (!accounts.data || accounts.error instanceof AccountIdentityError) ? (
           <div role="alert" className="grid gap-3"><p className="text-destructive">{accounts.error.message}</p><div><Button size="sm" variant="outline" onClick={() => void accounts.refetch()}>Try again</Button></div></div>
         ) : (
           <>
+            {accounts.isError && <div role="alert" className="grid gap-2"><p className="text-muted-foreground">Couldn&apos;t refresh how you sign in. Showing your last loaded settings.</p><div><Button size="sm" variant="outline" onClick={() => void accounts.refetch()}>Try again</Button></div></div>}
             <AccountProfile user={me.user} providers={providers} />
             <PasswordSettings userId={me.user.id} email={me.user.email} hasPassword={hasPassword} />
             <TwoFactorSettings hasPassword={hasPassword} />

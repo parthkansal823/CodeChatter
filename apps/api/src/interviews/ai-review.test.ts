@@ -85,6 +85,34 @@ describe("sheetRequest", () => {
   });
 });
 
+describe("what the model is told and held to", () => {
+  it("is told what code worked out, and asked for JSON", () => {
+    const request = reviewRequest(facts({ edits: [{ minute: at(4), edits: 1, bytes: 1900 }], files: [] }), 48_000);
+    expect(contentOf(request)).toMatch(/## Already worked out\n- Most of the work arrived at once/);
+    expect(request.json).toBe(true);
+  });
+
+  const said = (quote: string | null, minute: number | null = 1) => JSON.stringify({ findings: [{ level: "look", title: "T", detail: "D.", quote, minute }] });
+  const check = { words: "def merge(items):\n    return   sorted(items)", minutes: 60 };
+
+  it("keeps a quote that's really in their work, whatever the spacing or case", () => {
+    const [finding] = parseReview(said("RETURN sorted(items)"), START, check).findings;
+    expect(finding).toMatchObject({ level: "look", detail: 'D. "RETURN sorted(items)"' });
+  });
+
+  it("marks down a finding whose quote isn't in their work", () => {
+    const [finding] = parseReview(said("heapq.heappop(items)"), START, check).findings;
+    expect(finding!.level).toBe("note");
+    expect(finding!.detail).toContain("aren't in their work");
+    expect(finding!.detail).not.toContain("heappop");
+  });
+
+  it("drops a time outside the sitting", () => {
+    expect(parseReview(said(null, 500), START, check).findings[0]!.at).toBeNull();
+    expect(parseReview(said(null, 5), START, check).findings[0]!.at).toBe(at(5).toISOString());
+  });
+});
+
 describe("parseReview", () => {
   const answer = { summary: "One thing to check.", findings: [{ level: "look", title: "Code arrived at once", detail: "4000 bytes in one edit at 12m.", minute: 12 }], questions: [{ question: "Why sorted()?", about: "main.py" }] };
 
