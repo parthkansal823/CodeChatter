@@ -1,9 +1,13 @@
 /** Check audit CSV escaping and formula protection so exported logs remain readable and safe in spreadsheets. */
 import type { AuditEventItem } from "@codechatter/contracts";
+import type { AuthSession } from "@codechatter/auth";
+import type { DbHandle } from "@codechatter/db";
+import type { Response } from "express";
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
 
 import { AUDIT_CSV_FAILED, AUDIT_CSV_HEADER, AUDIT_CSV_LIMIT, AUDIT_CSV_TRUNCATED, auditCsv, auditCsvCell, streamAuditCsv } from "./audit-csv.js";
+import { AuditController } from "./audit.controller.js";
 
 const item: AuditEventItem = {
   id: "0199a000-0000-7000-8000-000000000001",
@@ -115,6 +119,46 @@ describe("streamAuditCsv", () => {
     expect(text()).toBe(auditCsv([]));
     expect(errors).toHaveLength(0);
   });
+
+  it("handles an asynchronous socket write error once without an unhandled error", async () => {
+    const failure = new Error("Fixture socket failed");
+    const response = new Writable({ write(_chunk, _encoding, done) { setImmediate(() => done(failure)); } });
+    const errors: unknown[] = [];
+    await streamAuditCsv(response, async () => {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      return events(1_000);
+    }, { truncated: false, onError: (error) => errors.push(error) });
+    expect(errors).toEqual([failure]);
+    expect(response.destroyed).toBe(true);
+  });
+});
+
+describe("audit export preflight", () => {
+  for (const total of [100_000, 100_001]) {
+    it(`sets truncation before the first byte only when ${total} matches exceed the cap`, async () => {
+      const answers: unknown[][] = [[{ id: "org", slug: "test-org" }], [{ role: "owner" }], [{ id: item.id }], [{ total }], []];
+      const limits: number[] = [];
+      const db = { select() {
+        const chain = {
+          from: () => chain, leftJoin: () => chain, where: () => chain, orderBy: () => chain,
+          limit: (limit: number) => { limits.push(limit); return chain; }, as: () => chain,
+          then: (resolve: (value: unknown) => void, reject: (error: unknown) => void) => Promise.resolve(answers.shift()).then(resolve, reject),
+        };
+        return chain;
+      } };
+      const controller = new AuditController({ db } as unknown as DbHandle);
+      const headers = new Map<string, unknown>();
+      const atFirstByte: unknown[] = [];
+      const response = Object.assign(new Writable({ write(_chunk, _encoding, done) { atFirstByte.push(headers.get("X-Audit-Truncated")); done(); } }), {
+        setHeader(name: string, value: unknown) { headers.set(name, value); },
+      });
+      await controller.export({ user: { id: "owner" } } as AuthSession, "org", {}, response as unknown as Response);
+      expect(atFirstByte[0]).toBe(total > AUDIT_CSV_LIMIT ? "true" : undefined);
+      expect(limits).toContain(100_001);
+      expect(headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+      expect(answers).toHaveLength(0);
+    });
+  }
 });
 
 describe("auditCsv", () => {

@@ -96,7 +96,7 @@ append a growing text document.
 - **Attempted, synced and failed connections** show setup and connection health.
   A disconnect after initial sync is a failure too.
 - **Sent edits** count local writes. **Expected deliveries** are
-  `sent Ã— (PEOPLE - 1)`. The report also gives expectations for the peers that
+  `sent × (PEOPLE - 1)`. The report also gives expectations for the peers that
   initially synced, so failed setup connections remain visible without being
   mistaken for successfully measured peers.
 - **Received deliveries** count unique observed writer sequence numbers.
@@ -142,7 +142,7 @@ the workload result, not an automatic server failure.
 
 Watch the load process's CPU, memory and network usage alongside server CPU,
 network and collab logs. Compare achieved sent edits per second with
-`ROOMS Ã— PEOPLE Ã— RATE`; a falling send rate with rising client event-loop lag
+`ROOMS × PEOPLE × RATE`; a falling send rate with rising client event-loop lag
 suggests a saturated generator. Running the generator and server on the same
 laptop makes them compete for CPU and memory.
 
@@ -188,8 +188,8 @@ were separate manual runs before the coordinated-worker implementation:
 
 | Run | Connections | Updates delivered | p95 | Client lag p99 |
 |---|---|---|---|---|
-| One process, 50 ? 10 | 500/500 | 523,485/523,485 | 228 ms (FAIL) | 70.7 ms (client-bound) |
-| Five processes, 5 ? (10 ? 10) | 500/500 | 538,227/538,227 | 132?134 ms (PASS) | 21 ms |
+| One process, 50 x 10 | 500/500 | 523,485/523,485 | 228 ms (FAIL) | 70.7 ms (client-bound) |
+| Five processes, 5 x (10 x 10) | 500/500 | 538,227/538,227 | 132-134 ms (PASS) | 21 ms |
 
 This test measures small Y.Map writes through the real sync protocol. It does
 not model Monaco rendering, browser main-thread work, large pastes, chat, calls

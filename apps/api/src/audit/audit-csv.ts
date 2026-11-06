@@ -45,8 +45,10 @@ export async function streamAuditCsv(
   const cancellation = new AbortController();
   const closed = () => cancellation.abort();
   let outputError: unknown;
-  const failed = (error: Error) => { outputError = error; cancellation.abort(); };
+  const failed = (error: Error) => { outputError = error; cancellation.abort(); report(error); };
   response.once("close", closed);
+  let reported = false;
+  const report = (error: unknown) => { if (!reported) { reported = true; options.onError(error); } };
   response.once("error", failed);
   const write = async (text: string) => {
     if (response.destroyed || response.writableEnded) return false;
@@ -71,13 +73,13 @@ export async function streamAuditCsv(
     if (options.truncated && count === AUDIT_CSV_LIMIT && !await write(AUDIT_CSV_TRUNCATED)) return;
     if (!response.destroyed && !response.writableEnded) response.end();
   } catch (error) {
-    if (outputError || !cancellation.signal.aborted) options.onError(outputError ?? error);
+    if (outputError || !cancellation.signal.aborted) report(outputError ?? error);
     if (!response.destroyed && !response.writableEnded) response.end(AUDIT_CSV_FAILED);
   } finally {
     // Keep the error listener until buffered writes finish, including a slow client's final chunk.
     if (!response.destroyed && !response.writableFinished) {
       await finished(response, { readable: false, cleanup: true }).catch((error: unknown) => {
-        if (outputError) options.onError(error);
+        if (outputError) report(error);
       });
     }
     response.off("close", closed);

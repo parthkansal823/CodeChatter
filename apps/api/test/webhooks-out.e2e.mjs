@@ -6,6 +6,8 @@
  * Every created webhook and room, the receiver and the child API are cleaned up.
  */
 import { spawn } from "node:child_process";
+import { createDb, schema } from "@codechatter/db";
+import { and, eq, sql } from "drizzle-orm";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { createServer as createTcpServer } from "node:net";
@@ -15,6 +17,7 @@ const ORIGIN = "http://localhost:8080";
 const API = "http://127.0.0.1:4013";
 const results = [];
 const received = [];
+const heldResponses = new Map();
 const hooks = new Set();
 const rooms = new Set();
 const lastDeliveryStates = new Map();
@@ -25,6 +28,7 @@ let childError;
 let orgId;
 let base;
 let interrupted = false;
+let database;
 
 function check(name, ok, detail = "") {
   results.push(Boolean(ok));
@@ -92,7 +96,9 @@ const receiver = createServer(async (req, res) => {
   let payload;
   try { payload = JSON.parse(raw.toString("utf8")); } catch { /* Recorded below for a useful failure. */ }
   received.push({ path: req.url, method: req.method, headers: req.headers, raw, payload });
-  if (req.url === "/fail") {
+  if (req.url === "/slow") {
+    heldResponses.set(req.headers["x-codechatter-delivery"], res);
+  } else if (req.url === "/fail") {
     res.writeHead(500, { "content-type": "text/plain" });
     res.end("Please try again");
   } else {
@@ -113,6 +119,8 @@ async function createHook(path, events) {
 let receiverUrl;
 
 try {
+  if (!process.env.DATABASE_URL) process.loadEnvFile("../../.env");
+  database = createDb(process.env.DATABASE_URL, { max: 2 });
   // Refuse to start if the fixed test port already belongs to another process.
   const probe = createTcpServer();
   await new Promise((resolve, reject) => { probe.once("error", reject); probe.listen(4013, "127.0.0.1", resolve); });
@@ -189,6 +197,28 @@ try {
   check("one subscribed room event", received.filter((item) => item.payload?.event === "room.create" && item.payload?.target?.id === roomId).length === 1 &&
     !received.some((item) => item.payload?.event === "room.delete" && item.payload?.target?.id === roomId));
 
+  const slow = await createHook("/slow", ["room.update"]);
+  const slowPing = await one(`${base}/${slow.webhook.id}/test`, { method: "POST" });
+  requireCheck("slow receiver ping is queued", slowPing.status === 202 && Boolean(slowPing.json?.id));
+  await waitFor(() => heldResponses.has(slowPing.json.id), "slow receiver request");
+  const sending = await readLog(slow.webhook.id);
+  check("delivery exposes sending state without lease identifiers", sending.items.some((item) => item.id === slowPing.json.id && item.inFlight) &&
+    !JSON.stringify(sending).includes("lockedBy") && !JSON.stringify(sending).includes("lockedUntil"));
+  const leasedRetry = await one(`${base}/${slow.webhook.id}/deliveries/${slowPing.json.id}/redeliver`, { method: "POST" });
+  check("manual redelivery cannot race an active lease", leasedRetry.status === 409);
+  const lockStarted = Date.now();
+  await database.db.transaction(async (tx) => {
+    await tx.execute(sql`set local lock_timeout = '1s'`);
+    await tx.select({ id: schema.webhookDeliveries.id }).from(schema.webhookDeliveries)
+      .where(eq(schema.webhookDeliveries.id, slowPing.json.id)).for("update", { noWait: true });
+  });
+  check("HTTP send holds no delivery row lock or transaction", Date.now() - lockStarted < 2000);
+  heldResponses.get(slowPing.json.id).writeHead(204);
+  heldResponses.get(slowPing.json.id).end();
+  heldResponses.delete(slowPing.json.id);
+  const slowDelivered = await waitFor(async () => (await readLog(slow.webhook.id)).items.find((item) => item.id === slowPing.json.id && item.status === "delivered"), "slow delivery completion");
+  check("completed attempt releases its lease", !slowDelivered.inFlight && slowDelivered.attempts === 1);
+
   const ping = await one(`${base}/${id}/test`, { method: "POST" });
   requireCheck("ping is queued", [200, 201, 202].includes(ping.status) && ping.json?.event === "ping", `HTTP ${ping.status}`);
   const pingPost = await waitFor(() => received.find((item) => item.headers["x-codechatter-delivery"] === ping.json.id), "ping POST");
@@ -207,6 +237,14 @@ try {
   const retried = await waitFor(async () => (await readLog(failing.webhook.id))?.items?.find((item) => item.id === failedPing.json.id && item.attemptLog.length === 2), "immediate retry");
   check("immediate retry preserves previous failure history", retried.status === "pending" && retried.attempts === 1 && retried.attemptLog.every((attempt) => attempt.statusCode === 500));
 
+  await one(`${base}/${failing.webhook.id}`, { method: "PATCH", body: { active: false } });
+  await database.db.update(schema.webhookDeliveries).set({ createdAt: sql`now() - interval '25 hours'` })
+    .where(and(eq(schema.webhookDeliveries.id, failedPing.json.id), eq(schema.webhookDeliveries.webhookId, failing.webhook.id)));
+  const resume = await one(`${base}/${failing.webhook.id}`, { method: "PATCH", body: { active: true } });
+  const expired = (await readLog(failing.webhook.id)).items.find((item) => item.id === failedPing.json.id);
+  check("resuming expires old pending deliveries", resume.status === 200 && expired?.status === "failed" && expired.lastError === "Expired while the webhook was paused" && expired.nextAttemptAt === null && !expired.inFlight);
+  check("expiry preserves all previous attempt history", expired?.attemptLog.length === retried.attemptLog.length && expired.attempts === retried.attempts);
+
   const rotated = await one(`${base}/${id}/rotate-secret`, { method: "POST" });
   requireCheck("rotate returns a fresh secret once", typeof rotated.json?.secret === "string" && rotated.json.secret !== secret);
   const afterRotate = await one(`${base}/${id}/test`, { method: "POST" });
@@ -223,11 +261,14 @@ try {
   check("update can pause and edit a webhook", patch.status === 200 && patch.json?.active === false && patch.json.description === "Paused by outgoing e2e");
   const cursor = await one(`${base}/${id}/deliveries?before=${afterRotate.json.id}`);
   check("delivery cursor is scoped and ordered", cursor.status === 200 && cursor.json.items.length <= 50 && !cursor.json.items.some((item) => item.id === afterRotate.json.id));
+
 } catch (error) {
   check("flow completes", false, interrupted ? "Interrupted" : error.message);
   // Only delivery metadata is printed: no signing secrets, payloads or responses.
   for (const state of lastDeliveryStates.values()) console.log(`Delivery state: ${JSON.stringify(state)}`);
 } finally {
+  for (const response of heldResponses.values()) { response.writeHead(503); response.end(); }
+  heldResponses.clear();
   for (const roomId of rooms) {
     const res = await one(`/api/rooms/${roomId}`, { method: "DELETE" }).catch(() => null);
     check(`cleanup room ${roomId}`, res?.status === 204 || res?.status === 404);
@@ -243,6 +284,7 @@ try {
   }
   receiver.closeAllConnections();
   await new Promise((resolve) => receiver.close(resolve));
+  await database?.close();
 }
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);

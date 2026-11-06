@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 
 import { krypton, mona, neon, radon } from "./fonts";
@@ -18,7 +19,9 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // proxy.ts gives every page a nonce. Reading it here also means pages render per request, which a nonce needs.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     // next-themes sets the theme class before paint, so no white flash (v1 had one).
     <html
@@ -27,7 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${mona.variable} ${neon.variable} ${krypton.variable} ${radon.variable}`}
     >
       <body>
-        <Providers>{children}</Providers>
+        <Providers nonce={nonce}>{children}</Providers>
       </body>
     </html>
   );

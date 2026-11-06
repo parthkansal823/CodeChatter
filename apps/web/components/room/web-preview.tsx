@@ -33,6 +33,7 @@ export function WebPreview({ preferred, onClose }: { preferred: string | null; o
   const [chosen, setChosen] = useState<string | null>(null);
   const entry = (chosen && pages.some((p) => p.path === chosen) ? chosen : null) ?? (preferred && /\.html?$/i.test(preferred) ? preferred : pages[0]?.path) ?? null;
   const [html, setHtml] = useState("");
+  const [generation, setGeneration] = useState(0);
   const [missing, setMissing] = useState<string[]>([]);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [reloads, setReloads] = useState(0);
@@ -57,6 +58,7 @@ export function WebPreview({ preferred, onClose }: { preferred: string | null; o
       if (built.html === shown.current) return;
       shown.current = built.html;
       setHtml(built.html);
+      setGeneration((n) => n + 1);
       setLogs([]);
     };
     const schedule = () => {
@@ -78,6 +80,11 @@ export function WebPreview({ preferred, onClose }: { preferred: string | null; o
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow) return;
+      // The frame is loaded and asks for its document (or the page reloaded itself).
+      if ((event.data as { __ccFrameReady?: boolean })?.__ccFrameReady) {
+        frame.current?.contentWindow?.postMessage({ __ccDocument: true, html }, "*");
+        return;
+      }
       const data = event.data as { __ccPreview?: boolean; level?: string; text?: string; navigate?: string };
       if (!data?.__ccPreview) return;
       if (data.navigate && entry) {
@@ -90,7 +97,7 @@ export function WebPreview({ preferred, onClose }: { preferred: string | null; o
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [entry, pages]);
+  }, [entry, pages, html]);
 
   const errors = logs.filter((l) => l.level === "error").length;
 
@@ -126,14 +133,15 @@ export function WebPreview({ preferred, onClose }: { preferred: string | null; o
 
       {entry ? (
         <>
-          {/* Created only once there is a document: an iframe first rendered with an
-              empty srcdoc stays on about:blank when srcdoc changes later. */}
+          {/* A new frame for each new document. It's a real address, not srcdoc, because a
+              srcdoc frame inherits this page's security policy, which would block the
+              preview's own scripts (app/frames/document/route.ts). */}
           {html ? (
             <iframe
               ref={frame}
-              key={reloads}
+              key={`${reloads}:${generation}`}
               title={`Preview of ${entry}`}
-              srcDoc={html}
+              src="/frames/document"
               // No allow-same-origin: the page gets an opaque origin and can't touch the app.
               sandbox="allow-scripts allow-forms allow-modals allow-popups"
               className="min-h-0 w-full flex-1 bg-white"

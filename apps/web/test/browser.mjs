@@ -17,8 +17,16 @@ export function check(name, ok, detail = "") {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  — ${String(detail).replace(/\s+/g, " ").slice(0, 160)}` : ""}`);
 }
 
+/** Anything the app's security policy refused, on any page of any suite (see launch). */
+const refused = [];
+/** For the suite that attacks the policy on purpose: what it set off so far doesn't count. */
+export const forgetRefused = () => {
+  refused.length = 0;
+};
+
 /** Prints the summary and exits non-zero when a check failed. */
 export function finish() {
+  check("nothing was refused by the security policy", refused.length === 0, [...new Set(refused)].join(" | "));
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);
@@ -27,6 +35,20 @@ export function finish() {
 /** `args`: extra browser switches (the call test's fake camera and microphone). */
 export async function launch({ args = [] } = {}) {
   const browser = await chromium.launch({ channel: "msedge", headless: process.env.HEADED !== "1", args });
+  // Every suite also proves the policy doesn't break what it tests.
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (...options) => {
+    const context = await newContext(...options);
+    context.on("page", (page) => {
+      page.on("console", (message) => {
+        if (message.type() !== "error" || !/Content Security Policy/.test(message.text())) return;
+        // A frame's own stricter policy (API Studio's response preview) isn't the app's.
+        if (message.location().url === "about:srcdoc") return;
+        refused.push(message.text().slice(0, 240));
+      });
+    });
+    return context;
+  };
   const errors = [];
   return {
     browser,

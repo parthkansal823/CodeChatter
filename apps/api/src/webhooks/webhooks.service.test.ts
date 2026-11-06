@@ -32,7 +32,7 @@ const delivery: Delivery = {
 
 function query(rows: unknown[]) {
   const q = {
-    from: vi.fn(() => q), where: vi.fn(() => q), orderBy: vi.fn(() => q), limit: vi.fn(() => q),
+    from: vi.fn(() => q), where: vi.fn((_where?: SQL) => q), orderBy: vi.fn(() => q), limit: vi.fn((_limit?: number) => q),
     innerJoin: vi.fn(() => q), for: vi.fn(() => q), getSQL: () => sql`select 1`,
     then: Promise.resolve(rows).then.bind(Promise.resolve(rows)),
   };
@@ -55,10 +55,10 @@ function setup(selectRows: unknown[][] = [], overrides: Partial<Env> = {}) {
   const db = {
     select: vi.fn((fields?: Record<string, unknown>) => {
       const idOnly = fields && Object.keys(fields).length === 1 && fields.id === schema.webhookDeliveries.id;
-      const q = query(idOnly ? [] : selectRows.shift() ?? workerRows.map((row) => row.hook));
+      const q = query(idOnly ? selectRows.shift() ?? [] : selectRows.shift() ?? workerRows.map((row) => row.hook));
       if (idOnly) {
         const limit = q.limit;
-        q.limit = vi.fn((n: number) => { if (n === 1000) cleanupLimits.push(n); return limit(); });
+        q.limit = vi.fn((n?: number) => { if (n === 1000) cleanupLimits.push(n); return limit(n); });
       }
       selected.push(q); return q;
     }),
@@ -149,6 +149,42 @@ describe("outgoing webhook administration", () => {
     expect(sets[0]).not.toHaveProperty("attemptLog");
     expect(sets[0]).not.toHaveProperty("payload");
   });
+
+  it("does not reset a delivery while a worker owns its lease", async () => {
+    const { service, returns, predicates } = setup([[{ role: "owner" }], [hook], [{ id: delivery.id }]]);
+    returns.push([]);
+    await expect(service.redeliver("org", "owner", hook.id, delivery.id)).rejects.toBeInstanceOf(ConflictException);
+    expect(new PgDialect({ casing: "snake_case" }).sqlToQuery(predicates[0]!).sql).toContain('"locked_until"');
+  });
+
+  it("expires old pending rows atomically when a paused hook resumes without erasing attempt history", async () => {
+    const { service, sets, selected, predicates } = setup([[{ role: "owner" }], [{ ...hook, active: false }], [{ active: false }]]);
+    await service.update("org", "owner", hook.id, { active: true });
+    expect(selected[2]?.for).toHaveBeenCalledWith("update");
+    expect(sets[0]).toEqual({ status: "failed", lastError: "Expired while the webhook was paused", nextAttemptAt: null, lockedBy: null, lockedUntil: null });
+    expect(sets[0]).not.toHaveProperty("attemptLog");
+    const expiry = new PgDialect({ casing: "snake_case" }).sqlToQuery(predicates[0]!);
+    expect(expiry.sql).toContain("interval '24 hours'");
+    expect(expiry.params).toContain(hook.id);
+    expect(expiry.params).toContain("pending");
+    expect(sets[1]).toMatchObject({ active: true });
+  });
+
+  it("does not expire pending rows when an already-active hook is saved", async () => {
+    const { service, sets } = setup([[{ role: "owner" }], [hook], [{ active: true }]]);
+    await service.update("org", "owner", hook.id, { active: true, description: "Still active" });
+    expect(sets).toHaveLength(1);
+    expect(sets[0]).toMatchObject({ active: true, description: "Still active" });
+    expect(sets[0]).not.toHaveProperty("status");
+  });
+
+  it("returns only a derived sending flag rather than lease identifiers", async () => {
+    const leased = { ...delivery, lockedBy: "private-worker", lockedUntil: new Date(Date.now() + 60_000) };
+    const { service } = setup([[{ role: "owner" }], [hook], [leased]]);
+    const result = await service.deliveries("org", "owner", hook.id);
+    expect(result.items[0]?.inFlight).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/lockedBy|lockedUntil|private-worker/);
+  });
 });
 
 describe("outgoing webhook queue", () => {
@@ -175,10 +211,20 @@ describe("outgoing webhook queue", () => {
 describe("outgoing webhook worker", () => {
   it("claims at most twenty due rows with skip-locked row locks and logs a signed success", async () => {
     vi.mocked(transport).mockResolvedValue({ status: 204, statusText: "No Content", headers: [], body: Buffer.alloc(0), truncated: false, totalMs: 1, firstByteMs: 1 });
-    const { service, selected, sets } = setup([[{ hook, delivery }]]);
+    const { service, selected, sets, claims, predicates } = setup([[{ hook, delivery }]]);
     await service.runWorker();
-    expect(selected[0]?.limit).toHaveBeenCalledWith(20);
-    expect(selected[0]?.for).toHaveBeenCalledWith("update", { of: schema.webhookDeliveries, skipLocked: true });
+    const claim = selected.find((q) => q.limit.mock.calls.some(([n]) => n === 20));
+    expect(claim).toBeDefined();
+    expect(claim?.for).toHaveBeenCalledWith("update", { of: schema.webhookDeliveries, skipLocked: true });
+    const condition = new PgDialect({ casing: "snake_case" }).sqlToQuery(claim!.where.mock.calls[0]![0]!);
+    expect(condition.sql).toContain('"locked_until" is null');
+    expect(condition.sql).toContain('"locked_until" <= now()');
+    expect(condition.sql).toContain('"private_test_owner"');
+    expect(claims[0]?.lockedBy).toEqual(expect.any(String));
+    expect(new PgDialect({ casing: "snake_case" }).sqlToQuery(claims[0]!.lockedUntil as SQL).sql).toContain("interval '60 seconds'");
+    const acknowledgement = new PgDialect({ casing: "snake_case" }).sqlToQuery(predicates.at(-1)!);
+    expect(acknowledgement.sql).toContain('"locked_by"');
+    expect(acknowledgement.params).toEqual([delivery.id, claims[0]?.lockedBy, "pending"]);
     expect(sets[0]).toMatchObject({ status: "delivered", attempts: 1, lastStatusCode: 204, lastError: null, nextAttemptAt: null });
     const request = vi.mocked(transport).mock.calls[0]![0];
     expect(request.address).toEqual({ address: "8.8.8.8", family: 4 });
@@ -187,6 +233,48 @@ describe("outgoing webhook worker", () => {
     expect(request.headers["X-CodeChatter-Delivery"]).toBe(delivery.id);
     expect(verify("webhook-secret", request.headers["X-CodeChatter-Timestamp"] as string, request.body!, request.headers["X-CodeChatter-Signature"] as string)).toBe(true);
     expect(sets[0]?.attemptLog).toHaveLength(1);
+    expect(sets[0]).toMatchObject({ lockedBy: null, lockedUntil: null });
+  });
+
+  it("sends after the claim commits and isolates one failed acknowledgement from its siblings", async () => {
+    const second = { ...delivery, id: "019b76da-a800-7000-8000-000000000003" };
+    const fixture = setup([[{ hook, delivery }, { hook, delivery: second }]]);
+    fixture.acknowledgements.push(new Error("fixture update failed"), undefined);
+    vi.mocked(transport).mockImplementation(async () => {
+      expect(fixture.inTransaction()).toBe(false);
+      return { status: 204, statusText: "No Content", headers: [], body: Buffer.alloc(0), truncated: false, totalMs: 1, firstByteMs: 1 };
+    });
+    await fixture.service.runWorker();
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(fixture.db.transaction).toHaveBeenCalledTimes(1);
+    expect(fixture.sets).toHaveLength(2);
+    expect(fixture.sets[1]).toMatchObject({ status: "delivered", lockedBy: null, lockedUntil: null });
+  });
+
+  it("prunes settled rows in independent thousand-row batches at most hourly", async () => {
+    const { service, db, deleted, cleanupLimits, selected } = setup([], { WEBHOOK_DELIVERY_RETENTION_DAYS: 7 });
+    deleted.push(Array.from({ length: 1000 }, (_, n) => ({ id: `old-${n}` })), [{ id: "last-old" }]);
+    await service.runWorker();
+    expect(db.delete).toHaveBeenCalledTimes(2);
+    expect(cleanupLimits).toEqual([1000, 1000]);
+    const predicate = new PgDialect({ casing: "snake_case" }).sqlToQuery(selected[0]!.where.mock.calls[0]![0]!);
+    expect(predicate.params).toEqual(["delivered", "failed", 7]);
+    expect(predicate.sql).toContain("interval '1 day'");
+    await service.runWorker();
+    expect(db.delete).toHaveBeenCalledTimes(2);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60 * 60_000 + 1);
+    try {
+      await service.runWorker();
+      expect(db.delete).toHaveBeenCalledTimes(3);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("still delivers when retention cleanup fails", async () => {
+    const fixture = setup([[{ hook, delivery }]]);
+    fixture.db.delete.mockImplementationOnce(() => ({ where: vi.fn(() => ({ returning: vi.fn(async () => { throw new Error("cleanup unavailable"); }) })) }));
+    vi.mocked(transport).mockResolvedValue({ status: 204, statusText: "No Content", headers: [], body: Buffer.alloc(0), truncated: false, totalMs: 1, firstByteMs: 1 });
+    await fixture.service.runWorker();
+    expect(fixture.sets[0]).toMatchObject({ status: "delivered" });
   });
 
   it("uses all five backoff steps and gives up on the sixth failed attempt", async () => {
@@ -227,7 +315,7 @@ describe("outgoing webhook worker", () => {
     db.transaction.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
     const first = service.runWorker();
     await service.runWorker();
-    expect(db.transaction).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(db.transaction).toHaveBeenCalledTimes(1));
     finish!();
     await first;
   });
