@@ -33,6 +33,10 @@ export const ROOM_ACCESS_CHANNEL = "codechatter:room-access";
 /** How a socket closes when its owner's rights changed. Clients that reconnect get what's left. */
 export const ROOM_ACCESS_CLOSE = { code: 4205, reason: "Your access to this room changed" } as const;
 
+/** A signed-in session ended (signing out, Sign out on another device, a changed password). The message is its id. */
+export const SESSION_ENDED_CHANNEL = "codechatter:session-ended";
+export const SESSION_ENDED_CLOSE = { code: 4206, reason: "You were signed out" } as const;
+
 /** Whose rights changed: one person's, or (no userId) anyone's in the room. */
 export type RoomAccessChange = { roomId: string; userId?: string };
 

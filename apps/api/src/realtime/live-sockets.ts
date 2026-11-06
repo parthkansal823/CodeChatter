@@ -4,7 +4,7 @@ import { Injectable } from "@nestjs/common";
 
 import { RoomsService } from "../rooms/rooms.service.js";
 
-type Watched = { userId: string; stillAllowed: (role: RoomRole) => boolean; close: () => void };
+type Watched = { userId: string; stillAllowed: (role: RoomRole) => boolean; close: () => void; sessionId: string | undefined };
 
 /**
  * Terminals, language servers, the debugger and dev servers' hot reload check rights once, when
@@ -20,8 +20,8 @@ export class LiveSockets {
   constructor(private readonly rooms: RoomsService) {}
 
   /** Returns how to stop watching: call it when the socket closes. */
-  watch(roomId: string, userId: string, stillAllowed: Watched["stillAllowed"], close: Watched["close"]): () => void {
-    const watched: Watched = { userId, stillAllowed, close };
+  watch(roomId: string, userId: string, stillAllowed: Watched["stillAllowed"], close: Watched["close"], sessionId?: string): () => void {
+    const watched: Watched = { userId, stillAllowed, close, sessionId };
     const inRoom = this.byRoom.get(roomId) ?? new Set<Watched>();
     inRoom.add(watched);
     this.byRoom.set(roomId, inRoom);
@@ -34,6 +34,11 @@ export class LiveSockets {
   /** For whatever else remembers an answer (the preview's short cache of who may look). */
   onChange(listener: (change: RoomAccessChange) => void): void {
     this.listeners.add(listener);
+  }
+
+  /** That session was signed out: its sockets go, and the same person's other devices stay. */
+  sessionEnded(sessionId: string): void {
+    for (const inRoom of this.byRoom.values()) for (const socket of [...inRoom]) if (socket.sessionId === sessionId) socket.close();
   }
 
   async recheck(change: RoomAccessChange): Promise<void> {

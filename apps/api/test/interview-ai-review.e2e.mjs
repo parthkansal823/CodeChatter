@@ -166,7 +166,7 @@ try {
   record("aRealQuoteStands", quoted[1].level === "look" && quoted[1].detail.includes("print(SORTED([2, 1]))"));
   const table = (await api(c1, `/api/interview-batches/${made.body.id}`)).body.rows;
   const countOf = (interviewId) => table.find((row) => row.interviewId === interviewId).aiToCheck;
-  record("theResultsTableCountsWhatToCheck", countOf(id) === 2, JSON.stringify(table.map((row) => row.aiToCheck)));
+  record("theResultsTableCountsWhatToCheck", countOf(id) === 3, JSON.stringify(table.map((row) => row.aiToCheck)));
   record("andIsEmptyForSomeoneNotReviewed", countOf(unstarted.interviewId) === null);
 
   // Stills, for a sitting whose candidate was told.

@@ -1,0 +1,124 @@
+{{- /* Nightly verified logical backups share the container scripts and keep their own durable claim. */ -}}
+{{- if and .Values.backup.enabled .Values.postgres.enabled (not .Values.postgres.externalUrl) }}
+{{- $component := dict "root" . "component" "backup" }}
+{{- $secretName := .Values.backup.s3.existingSecret | default (printf "%s-backup-s3" .Release.Name) }}
+{{- range $kind, $count := .Values.backup.retention }}
+{{- if not (regexMatch "^[0-9]+$" (toString $count)) }}
+{{- fail (printf "backup.retention.%s must be a non-negative integer" $kind) }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-backup-scripts
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+data:
+  # These bodies are copied unchanged from infra/backup; test-backup.sh checks drift.
+  # BEGIN BACKUP SCRIPTS
+  entrypoint.sh: |
+    #!/bin/sh
+    # Refuse to run until the shared scripts have been embedded during development.
+    echo 'backup FAILED: backup scripts are not embedded' >&2
+    exit 1
+  # END BACKUP SCRIPTS
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-backups
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+  # Deleting a Helm release must not delete its only local backup copies.
+  annotations: { helm.sh/resource-policy: keep }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: {{ .Values.backup.storage }} } }
+  {{- with (.Values.backup.storageClass | default .Values.storageClass) }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- if and .Values.backup.s3.url (not .Values.backup.s3.existingSecret) }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+type: Opaque
+stringData:
+  BACKUP_S3_URL: {{ .Values.backup.s3.url | quote }}
+  BACKUP_S3_ENDPOINT: {{ .Values.backup.s3.endpoint | quote }}
+  BACKUP_S3_REGION: {{ .Values.backup.s3.region | quote }}
+  BACKUP_S3_ACCESS_KEY: {{ required "backup.s3.accessKey is needed with backup.s3.url" .Values.backup.s3.accessKey | quote }}
+  BACKUP_S3_SECRET_KEY: {{ required "backup.s3.secretKey is needed with backup.s3.url" .Values.backup.s3.secretKey | quote }}
+  BACKUP_S3_FORCE_PATH_STYLE: {{ .Values.backup.s3.forcePathStyle | quote }}
+{{- end }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-backup
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+spec:
+  schedule: {{ required "backup.schedule is needed" .Values.backup.schedule | quote }}
+  timeZone: {{ required "backup.timeZone is needed" .Values.backup.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.backup.startingDeadlineSeconds }}
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels: {{- include "cc.componentLabels" $component | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext: {{- include "cc.podSecurity" (dict "uid" 70 "gid" 70) | nindent 12 }}
+          containers:
+            - name: backup
+              image: {{ .Values.backup.image | quote }}
+              imagePullPolicy: {{ .Values.backup.pullPolicy }}
+              command: [sh, /opt/codechatter-backup/entrypoint.sh]
+              args: [now]
+              env:
+                - { name: PGHOST, value: {{ printf "%s-postgres" .Release.Name | quote }} }
+                - { name: PGPORT, value: "5432" }
+                - { name: PGUSER, value: codechatter }
+                - { name: PGDATABASE, value: codechatter }
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" . }}, key: POSTGRES_PASSWORD } }
+                - { name: BACKUP_DIR, value: /backups }
+                - { name: BACKUP_TZ, value: {{ .Values.backup.timeZone | quote }} }
+                - { name: BACKUP_KEEP_DAILY, value: {{ .Values.backup.retention.daily | quote }} }
+                - { name: BACKUP_KEEP_WEEKLY, value: {{ .Values.backup.retention.weekly | quote }} }
+                - { name: BACKUP_KEEP_MONTHLY, value: {{ .Values.backup.retention.monthly | quote }} }
+                {{- if or .Values.backup.s3.url .Values.backup.s3.existingSecret }}
+                - name: BACKUP_S3_URL
+                  valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: BACKUP_S3_URL } }
+                - name: BACKUP_S3_ACCESS_KEY
+                  valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: BACKUP_S3_ACCESS_KEY } }
+                - name: BACKUP_S3_SECRET_KEY
+                  valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: BACKUP_S3_SECRET_KEY } }
+                - name: BACKUP_S3_ENDPOINT
+                  valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: BACKUP_S3_ENDPOINT, optional: true } }
+                - name: BACKUP_S3_REGION
+                  valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: BACKUP_S3_REGION, optional: true } }
+                - name: BACKUP_S3_FORCE_PATH_STYLE
+                  valueFrom: { secretKeyRef: { name: {{ $secretName }}, key: BACKUP_S3_FORCE_PATH_STYLE, optional: true } }
+                {{- end }}
+              securityContext: {{- include "cc.containerSecurity" . | nindent 16 }}
+              resources: {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - { name: scripts, mountPath: /opt/codechatter-backup, readOnly: true }
+                - { name: backups, mountPath: /backups }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: scripts
+              configMap: { name: {{ .Release.Name }}-backup-scripts, defaultMode: 0555 }
+            - name: backups
+              persistentVolumeClaim: { claimName: {{ .Release.Name }}-backups }
+            - { name: tmp, emptyDir: {} }
+{{- end }}

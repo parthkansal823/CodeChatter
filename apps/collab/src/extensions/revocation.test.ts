@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import type { Hocuspocus } from "@hocuspocus/server";
 
-import { closeRoomConnections } from "./revocation.js";
+import { closeRoomConnections, closeSessionConnections } from "./revocation.js";
 
 function connection(userId: string | null = "ana") {
   const log: string[] = [];
@@ -36,4 +36,19 @@ test("about one person, it closes only their sockets: nobody else, and not the r
 
 test("a room nobody has open is fine", () => {
   assert.deepEqual(closeRoomConnections({ documents: new Map() } as unknown as Pick<Hocuspocus, "documents">, { roomId: "ABC234" }), []);
+});
+
+test("a sign-in ending closes that device's connections in every room: not their other device's, nor the runner's", () => {
+  const device = (sessionId: string | null) => ({ ...connection(sessionId ? "ana" : null), context: { userId: sessionId ? "ana" : null, sessionId } });
+  const [here, there, other, runner] = [device("signed-out"), device("signed-out"), device("still-in"), device(null)];
+  const documents = new Map([
+    ["room:ABC234:files", { connections: new Map([[here, {}], [other, {}], [runner, {}]]) }],
+    ["room:XYZ789:files", { connections: new Map([[there, {}]]) }],
+  ]);
+  const closed = closeSessionConnections({ documents } as unknown as Pick<Hocuspocus, "documents">, "signed-out");
+  assert.equal(closed, 2);
+  assert.deepEqual(here.log, ["detached", "socket 4206"]);
+  assert.deepEqual(there.log, ["detached", "socket 4206"]);
+  assert.deepEqual(other.log, []);
+  assert.deepEqual(runner.log, []);
 });

@@ -125,6 +125,18 @@ It reads the record, how the code came about minute by minute, test runs, answer
 
 **AI in hiring has rules of its own in some places:** the EU's AI Act treats it as high-risk, for one. A person making every decision, as here, is part of what's asked for, but it isn't all of it, so get advice before using this with real candidates there.
 
+### What it was checked on
+
+Worked out by plain code, and right whichever model runs: text addressed to whoever reviews the work, most of the work arriving in one minute, that coming just after leaving the page, passing every test on the first run, finishing very early, and two naming styles in one file. These come first and say they aren't from the AI. The model is told only their titles, because a detail can quote the candidate, and the candidate's words stay inside the fence.
+
+The model has to quote its evidence. A quote that isn't in the candidate's work, or a time outside the sitting, marks that finding down and says why. Copying the prompt's example back, or saying the same about every still, counts as saying nothing.
+
+**Ask the AI about all**, on the results page, does the work and record of everyone not yet reviewed, one at a time, each saved as it finishes, and sorts by how many things there are to check. It doesn't look at recordings: open a candidate for that.
+
+**The model.** `gemma4:e4b` in Docker (`pnpm ai:up:gpu`, `pnpm ai:pull gemma4:e4b`), chosen against `qwen3.5:4b` on 2026-11-06 with the review's real prompts: it found a written answer that didn't match the code every time, and asked questions about the code itself. A review takes about a minute on a laptop with a 4 GB GPU, at about 9 tokens a second, and the GPU barely helps at that size. Thinking is turned off for Ollama: it made answers about four times slower.
+
+**Stills are only a hint.** On real-looking stills it found about half of what was there, with some false alarms (a laptop as "a second screen"). So they're notes, they don't count towards "to check", and they say which moment to watch. It finding nothing in a recording means nothing.
+
 ## When it ends
 
 The candidate's rights really go, whoever or whatever ended it:

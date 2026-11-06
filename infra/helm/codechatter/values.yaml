@@ -99,6 +99,37 @@ postgres:
   storage: 5Gi
   resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
 
+# Nightly logical dumps of bundled Postgres. Managed external databases use their
+# own backup policy; externalUrl disables this job even when enabled is true.
+backup:
+  enabled: true
+  # Build infra/backup/Dockerfile, then publish this image for a remote cluster.
+  image: codechatter-backup:pg18-rclone1.70.3
+  pullPolicy: IfNotPresent
+  schedule: "0 3 * * *"
+  # Kubernetes 1.27+ interprets schedule in this zone, independently of node TZ.
+  timeZone: UTC
+  retention: { daily: 7, weekly: 4, monthly: 6 }
+  storage: 10Gi
+  # Empty: inherit storageClass below, then the cluster's default.
+  storageClass: ""
+  resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  activeDeadlineSeconds: 21600
+  s3:
+    # Empty: local PVC only. Prefer an existing dedicated Secret in production.
+    url: ""
+    endpoint: ""
+    region: us-east-1
+    accessKey: ""
+    secretKey: ""
+    forcePathStyle: true
+    # Keys: BACKUP_S3_URL, BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY;
+    # optional BACKUP_S3_ENDPOINT, BACKUP_S3_REGION, BACKUP_S3_FORCE_PATH_STYLE.
+    existingSecret: ""
+
 valkey:
   enabled: true
   externalUrl: ""

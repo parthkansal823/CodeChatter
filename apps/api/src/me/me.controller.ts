@@ -42,7 +42,8 @@ export class MeController {
       session: {
         id: session.session.id,
         expiresAt: session.session.expiresAt,
-        activeOrganizationId: session.session.activeOrganizationId ?? personalOrgId,
+        // A session can still name a team they've left, been removed from, or that was deleted.
+        activeOrganizationId: organizations.find((org) => org.id === session.session.activeOrganizationId)?.id ?? personalOrgId,
       },
       personalOrgId,
       organizations,

@@ -108,9 +108,9 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async orgOf(session: AuthSession): Promise<string> {
-    const orgId = session.session.activeOrganizationId ?? (await ensurePersonalOrg(this.db, session.user));
-    if (!(await this.repo.isOrgMember(orgId, session.user.id))) throw new ForbiddenException("You're not a member of that organisation.");
-    return orgId;
+    // A session can still name a team they've left, been removed from, or that was deleted.
+    const active = session.session.activeOrganizationId;
+    return active && (await this.repo.isOrgMember(active, session.user.id)) ? active : ensurePersonalOrg(this.db, session.user);
   }
 
   // The question bank.

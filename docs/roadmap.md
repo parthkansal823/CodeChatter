@@ -137,9 +137,9 @@ flowchart TD
 
 *Goal: what an organisation needs.* Details: §8.
 
-- 🟡 Organisations: teams, members, invitations (ChatGPT, prompt 9)
+- ✅ Organisations: teams, members, invitations
 - ✅ Managing a room's people: approve, decline, remove, change roles, leave, and an invite link from Share. Rights changing closes what the person has open
-- 🟡 Settings: profile, password, two-factor, active sessions (ChatGPT, prompt 10)
+- ✅ Settings: profile, password, two-factor, active sessions
 - ✅ Audit log with filters and CSV export
 - ✅ Room roles for interviews (interviewer, candidate)
 - ⬜ Usage dashboard with quotas; instance admin

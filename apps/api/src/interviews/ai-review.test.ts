@@ -85,6 +85,29 @@ describe("sheetRequest", () => {
   });
 });
 
+describe("a model copying the prompt's example", () => {
+  const times = Array.from({ length: 8 }, (_, index) => at(index).toISOString());
+  const sheet = (items: Array<{ label: string; what: string }>) => JSON.stringify({ findings: items });
+
+  it("isn't a finding on a sheet", () => {
+    expect(parseSheet(sheet([{ label: "C1", what: "<what it shows>" }, { label: "C2", what: "a few plain words" }, { label: "C3", what: "A phone" }]), "camera", times).map((item) => item.title)).toEqual(["A phone"]);
+  });
+
+  it("nor is saying the same about every still", () => {
+    expect(() => parseSheet(sheet(times.map((_, index) => ({ label: `C${index + 1}`, what: "A person" }))), "camera", times)).toThrow(ReviewUnreadable);
+    expect(parseSheet(sheet([{ label: "C1", what: "A phone" }, { label: "C2", what: "A phone" }]), "camera", times)).toHaveLength(2);
+    // A short sheet can honestly show the same thing throughout.
+    expect(parseSheet(sheet([{ label: "C1", what: "Nobody in view" }, { label: "C2", what: "Nobody in view" }]), "camera", times.slice(0, 2))).toHaveLength(2);
+  });
+
+  it("nor in a review", () => {
+    const review = parseReview(JSON.stringify({ summary: "at most two sentences", findings: [{ level: "look", title: "a few words", detail: "x" }, { level: "note", title: "Real", detail: "y" }], questions: [{ question: "...", about: "z" }] }), START);
+    expect(review.summary).toBe("");
+    expect(review.findings.map((item) => item.title)).toEqual(["Real"]);
+    expect(review.questions).toEqual([]);
+  });
+});
+
 describe("what the model is told and held to", () => {
   it("is told what code worked out, and asked for JSON", () => {
     const request = reviewRequest(facts({ edits: [{ minute: at(4), edits: 1, bytes: 1900 }], files: [] }), 48_000);
@@ -157,7 +180,7 @@ describe("parseSheet", () => {
   const times = ["2026-11-06T10:03:00Z", "2026-11-06T10:06:00Z"];
 
   it("puts each finding at its still's time", () => {
-    expect(parseSheet(JSON.stringify({ findings: [{ label: "C2", what: "Two people in view" }] }), "camera", times)).toEqual([{ source: "camera", level: "look", title: "Two people in view", detail: "", at: times[1] }]);
+    expect(parseSheet(JSON.stringify({ findings: [{ label: "C2", what: "Two people in view" }] }), "camera", times)).toEqual([{ source: "camera", level: "note", title: "Two people in view", detail: "", at: times[1] }]);
   });
 
   it("drops labels that aren't on the sheet", () => {

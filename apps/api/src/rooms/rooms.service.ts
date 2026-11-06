@@ -136,10 +136,9 @@ export class RoomsService {
 
   async create(session: AuthSession, input: CreateRoomInput): Promise<CreatedRoom> {
     const userId = session.user.id;
-    const orgId = session.session.activeOrganizationId ?? (await ensurePersonalOrg(this.handle.db, session.user));
-    if (!(await this.rooms.isOrgMember(orgId, userId))) {
-      throw new ForbiddenException("You're not a member of that organisation.");
-    }
+    // A session can still name a team they've left, been removed from, or that was deleted.
+    const active = session.session.activeOrganizationId;
+    const orgId = active && (await this.rooms.isOrgMember(active, userId)) ? active : await ensurePersonalOrg(this.handle.db, session.user);
 
     // Download first: a repository that can't be imported leaves no empty room behind.
     const repo = input.repo ? await this.github.download(userId, input.repo) : null;

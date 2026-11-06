@@ -15,3 +15,20 @@ Rooms run on this cluster, a namespace each (cc-{{ .Values.runner.namespace }}-<
 Watch it come up (the first start migrates the database):
 
   kubectl get pods -n {{ .Release.Namespace }} -w
+
+{{- if .Values.postgres.externalUrl }}
+
+Nightly database backups are skipped: postgres.externalUrl uses a managed/external database.
+Configure and test that provider's backups and point-in-time recovery.
+{{- else if and .Values.backup.enabled .Values.postgres.enabled }}
+
+Nightly database backups: {{ .Values.backup.schedule }} ({{ .Values.backup.timeZone }}).
+  kubectl get cronjob {{ .Release.Name }}-backup -n {{ .Release.Namespace }}
+  kubectl get cronjob {{ .Release.Name }}-backup -n {{ .Release.Namespace }} -o jsonpath='{.status.lastSuccessfulTime}'
+{{- if and (not .Values.backup.s3.url) (not .Values.backup.s3.existingSecret) }}
+Only the local backup PVC is configured; these backups are not off the server.
+{{- end }}
+{{- else }}
+
+Nightly database backups are disabled; no bundled-Postgres backup CronJob is installed.
+{{- end }}

@@ -15,6 +15,20 @@ function setup(roles: Record<string, RoomRole>) {
 }
 
 describe("LiveSockets", () => {
+  it("closes only the signed-out session's sockets, in every room", () => {
+    const { live } = setup({});
+    const [here, there, otherDevice, preview] = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
+    live.watch("ROOM01", "ana", () => true, here, "session-a");
+    live.watch("ROOM02", "ana", () => true, there, "session-a");
+    live.watch("ROOM01", "ana", () => true, otherDevice, "session-b");
+    live.watch("ROOM01", "ana", () => true, preview);
+    live.sessionEnded("session-a");
+    expect(here).toHaveBeenCalledOnce();
+    expect(there).toHaveBeenCalledOnce();
+    expect(otherDevice).not.toHaveBeenCalled();
+    expect(preview).not.toHaveBeenCalled();
+  });
+
   it("closes a socket whose person has lost access", async () => {
     const { live } = setup({});
     const close = vi.fn();

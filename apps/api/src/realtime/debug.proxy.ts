@@ -43,7 +43,7 @@ export function attachDebugProxy(server: Server, deps: { auth: Auth; origins: Or
       } catch {
         return reject("403 Forbidden");
       }
-      const user = { id: session.user.id, name: session.user.name };
+      const user = { id: session.user.id, name: session.user.name, sessionId: session.session.id };
       wss.handleUpgrade(req, socket, head, (client) => pipe(client, room.data, drive, user));
     })().catch((error: unknown) => {
       logger.warn(`debugger upgrade failed: ${String(error)}`);
@@ -51,7 +51,7 @@ export function attachDebugProxy(server: Server, deps: { auth: Auth; origins: Or
     });
   });
 
-  function pipe(client: WebSocket, roomId: string, drive: boolean, user: { id: string; name: string }) {
+  function pipe(client: WebSocket, roomId: string, drive: boolean, user: { id: string; name: string; sessionId: string }) {
     const upstream = new WebSocket(deps.runner.debugUrl(roomId, drive), { headers: deps.runner.headers(roomId, user), maxPayload: MAX_MESSAGE });
     const early: string[] = [];
     upstream.on("open", () => {
@@ -64,7 +64,7 @@ export function attachDebugProxy(server: Server, deps: { auth: Auth; origins: Or
       if (upstream.readyState === WebSocket.OPEN) upstream.send(data.toString());
       else if (upstream.readyState === WebSocket.CONNECTING) early.push(data.toString());
     });
-    const unwatch = deps.live.watch(roomId, user.id, (role) => can(role, "code.run") === drive, () => client.close(ROOM_ACCESS_CLOSE.code, ROOM_ACCESS_CLOSE.reason));
+    const unwatch = deps.live.watch(roomId, user.id, (role) => can(role, "code.run") === drive, () => client.close(ROOM_ACCESS_CLOSE.code, ROOM_ACCESS_CLOSE.reason), user.sessionId);
     client.on("close", () => {
       unwatch();
       upstream.close();

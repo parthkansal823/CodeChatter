@@ -109,6 +109,8 @@ export interface CreateAuthOptions {
   production: boolean;
   /** Extra browser origins to trust (LAN devices in dev); APP_URL is always trusted. */
   origins?: OriginPolicy;
+  /** A session ended, however it ended: whatever is still connected on it should stop. */
+  onSessionEnded?: (sessionId: string) => void | Promise<void>;
   oauth?: {
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
@@ -231,7 +233,9 @@ export function createAuth(options: CreateAuthOptions) {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
       storeSessionInDatabase: true,
-      cookieCache: { enabled: true, maxAge: 60 },
+      // Off: a cached session goes on working for up to its age after being signed out, and each
+      // check only reads Valkey anyway.
+      cookieCache: { enabled: false },
     },
     rateLimit: {
       enabled: true,
@@ -259,6 +263,13 @@ export function createAuth(options: CreateAuthOptions) {
         create: {
           after: async (user) => {
             await ensurePersonalOrg(db, user);
+          },
+        },
+      },
+      session: {
+        delete: {
+          after: async (session) => {
+            await options.onSessionEnded?.(session.id);
           },
         },
       },

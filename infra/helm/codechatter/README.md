@@ -10,6 +10,7 @@ The whole app on one cluster, and each room's sandbox, databases and package pro
    ```sh
    pnpm k8s:images        # web, api, collab, runner, migrate
    pnpm sandbox:build     # the rooms' sandbox (or sandbox:build:full for every language)
+   docker build -t codechatter-backup:pg18-rclone1.70.3 infra/backup
    ```
 
 3. Install:
@@ -48,6 +49,7 @@ Uninstall with `helm uninstall codechatter -n codechatter`, then delete the room
 | livekit | calls, with built-in TURN over UDP | signalling through the edge (`/livekit`); media and TURN through a separate LoadBalancer |
 | runner | each room's sandbox, databases and package proxy, on this cluster | the API only |
 | postgres, valkey | the app's data | the app |
+| backup | verified nightly Postgres dumps, retained on a PVC and optionally S3 | the CronJob; no public service |
 | mailpit | catches the demo's emails | the edge (`/mail/`) |
 
 The API and collab apply the database migrations before they start, and the demo seed loads the test accounts once the API is up.
@@ -71,11 +73,67 @@ Set these in your values:
 - `previewOrigin`: a separate domain for previews, so a dev server can't share the app's cookies.
 - `images.registry` and a pinned `images.tag`; `runner.sandbox.image` pinned too, with `runner.sandbox.pull: IfNotPresent`.
 - `seed: false`, and `mail.mailpit: false` with your `mail.smtp`.
-- `postgres.externalUrl` (a managed database, or CloudNativePG) and `valkey.externalUrl`, or keep the bundled ones with a backup plan.
+- `postgres.externalUrl` (a managed database, or CloudNativePG) and `valkey.externalUrl`, or keep bundled Postgres with the nightly backups below.
 - `objectStore` (endpoint, region, bucket, accessKey, secretKey): an S3-compatible bucket for rooms' binary files (images, PDFs, fonts), reached by the API and the runner. Without it, binary files are off and uploads say so (`docs/deploy.md`, Binary files).
 - Secrets: give `secrets.*`, or let the chart generate them on install. It keeps them on upgrades.
 - The cluster must enforce NetworkPolicies (Calico, Cilium, or kindnet with kube-network-policies, as on Docker Desktop).
 - The kubelet should set a pod process limit (`podPidsLimit`). The sandbox limits its own processes, but databases rely on the node's limit.
+
+## Database backups
+
+Bundled Postgres gets a `backup` CronJob by default. It runs at 03:00 in `backup.timeZone` (UTC by default), with `concurrencyPolicy: Forbid`, one retry, a one-hour start deadline and a six-hour run deadline. Kubernetes 1.27 or newer is required for the native CronJob `timeZone` field. `backup.schedule`, the deadlines, resource limits and Job history limits are configurable. The container runs as UID/GID 70 with the chart's security settings, a read-only root, writable `/tmp` and a `10Gi` backup PVC.
+
+The extra image combines the Postgres 18 clients with pinned rclone 1.70.3. Build it with the command above. For a remote cluster, publish the image to your registry and set `backup.image` to that pinned image; the default pull policy is `IfNotPresent`. The chart's ConfigMap mounts the same four scripts as Compose: `entrypoint.sh`, `common.sh`, `backup.sh` and `restore.sh`. The Docker-only test checks that the embedded script bodies exactly match `infra/backup`.
+
+Backups include the PostgreSQL schema and data: accounts, rooms, Yjs text documents, checkpoints, chat, audit and webhook records. Valkey and sandbox volumes are excluded. Room binary files and recordings live in the application's separate object-store bucket; only their database references are in a dump. Protect that bucket separately with versioning, replication or its provider's backup policy.
+
+`backup.retention` keeps the union of the latest seven distinct daily dates, four Sundays and six first-of-month dates, with the newest backup always protected. Each custom-format dump has a SHA-256 sidecar, is checked with `pg_restore --list`, and is published only after completion. Local copies are under `/backups` on `<release>-backups`. The PVC has `helm.sh/resource-policy: keep`, so uninstalling the release leaves it in place. Reuse that claim on reinstall; delete it explicitly only after independently confirming the offsite copies you need.
+
+Without S3, logs and installation NOTES clearly say the copies remain local. For offsite copies, create a dedicated Secret from a private file containing `BACKUP_S3_URL`, `BACKUP_S3_ACCESS_KEY` and `BACKUP_S3_SECRET_KEY`. Optional keys are `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION` (default `us-east-1`) and `BACKUP_S3_FORCE_PATH_STYLE` (default `true`). Use a separate backup bucket or prefix, with read/list/write/delete permission on that prefix for retention and restores. Keep the bucket private.
+
+```sh
+kubectl create secret generic codechatter-backup-s3 -n codechatter \
+  --from-env-file=/secure/codechatter-backup-s3.env
+```
+
+Set the existing Secret's name in values; no credentials need to be passed on the Helm command line:
+
+```yaml
+backup:
+  s3:
+    existingSecret: codechatter-backup-s3
+```
+
+Alternatively, `backup.s3.url`, `endpoint`, `region`, `accessKey`, `secretKey` and `forcePathStyle` create a dedicated chart Secret when `url` is set. Helm stores those values in its release record, so prefer `existingSecret` in production. That option takes precedence over inline S3 settings. Do not publish rendered manifests: the chart's other resources include generated credentials too.
+
+When `postgres.externalUrl` is set, no backup ConfigMap, PVC, Secret or CronJob is rendered, and NOTES says why. Use the managed database's backups and restore drills. `backup.enabled: false` also skips these resources; disabling bundled Postgres skips them as well.
+
+Check the schedule and recent work (replace the release and namespace as needed):
+
+```sh
+kubectl get cronjob codechatter-backup -n codechatter
+kubectl get jobs -n codechatter -l app.kubernetes.io/component=backup
+kubectl get cronjob codechatter-backup -n codechatter \
+  -o jsonpath='{.status.lastSuccessfulTime}'
+kubectl create job --from=cronjob/codechatter-backup \
+  codechatter-backup-manual-$(date -u +%s) -n codechatter
+```
+
+Alert when `status.lastSuccessfulTime` is absent after the first scheduled run, or older than 26 hours. A Job completing successfully means its dump was verified, retention completed and any configured S3 upload succeeded. `/backups/last-success` holds a UTC epoch timestamp; `/backups/last-failure` holds a sanitized failure reason. Job failure alerts and the age check cover different failures: no scheduled Job cannot update the status files. See the [Kubernetes CronJob reference](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) for scheduling and history behavior.
+
+Do a monthly scratch restore using the same Job template and PVC. Choose a real dump basename from the backup logs, or an `s3://bucket/prefix/codechatter-<timestamp>.dump` key. This creates a new `codechatter_restore_<stamp>` database; it does not replace `codechatter`:
+
+```sh
+kubectl create job --from=cronjob/codechatter-backup codechatter-restore-drill \
+  -n codechatter --dry-run=client -o yaml \
+  | kubectl patch --local -f - --type=json -o yaml \
+      -p='[{"op":"replace","path":"/spec/template/spec/containers/0/args","value":["restore","/backups/codechatter-<UTC timestamp>.dump"]}]' \
+  | kubectl apply -n codechatter -f -
+kubectl logs -n codechatter -f job/codechatter-restore-drill
+kubectl wait -n codechatter --for=condition=complete job/codechatter-restore-drill --timeout=1h
+```
+
+Good means the checksum and restore succeed and row counts for `user`, `rooms`, `doc_snapshots`, `checkpoints` and `audit_events` match the expected backup data. Remove the scratch database after inspection, then delete the drill Job so the name can be reused. The full [deployment restore procedure](../../../docs/deploy.md#backups) covers cleanup and a real live restore. Live replacement requires stopped app services, `BACKUP_APP_STOPPED=yes` and typing the exact database name interactively; do not put those settings on the nightly CronJob.
 
 ## Calls and TURN
 

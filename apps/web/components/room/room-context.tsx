@@ -86,7 +86,11 @@ export function RoomProvider({ room: loaded, me, children }: { room: RoomSummary
     const readAccess = () =>
       void fetch(`/api/rooms/${room.id}`, { credentials: "same-origin" }).then(
         async (response) => {
-          if ([401, 403, 404].includes(response.status)) setDenied(true);
+          if ([401, 403, 404].includes(response.status)) {
+            setDenied(true);
+            // Nothing's left to retry: the screen that replaces the room says what to do, and reloading starts afresh.
+            socket.disconnect();
+          }
           else if (response.ok) setLiveRole(((await response.json()) as RoomSummary).role);
         },
         () => {},

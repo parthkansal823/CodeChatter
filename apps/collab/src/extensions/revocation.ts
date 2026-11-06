@@ -1,5 +1,5 @@
 /** Close a room's open sockets when someone's rights change, so nobody keeps writing on an old answer. */
-import { parseRoomAccessMessage, ROOM_ACCESS_CHANNEL, ROOM_ACCESS_CLOSE, type RoomAccessChange } from "@codechatter/contracts";
+import { parseRoomAccessMessage, ROOM_ACCESS_CHANNEL, ROOM_ACCESS_CLOSE, SESSION_ENDED_CHANNEL, SESSION_ENDED_CLOSE, type RoomAccessChange } from "@codechatter/contracts";
 import { parseDocName } from "@codechatter/workspace-model";
 import type { Extension, Hocuspocus } from "@hocuspocus/server";
 import { Redis } from "ioredis";
@@ -30,14 +30,31 @@ export function closeRoomConnections(instance: Pick<Hocuspocus, "documents">, { 
   return closed;
 }
 
+/** A sign-in ended: that device's connections close, in every room. It reconnects, and is refused. Their other devices carry on. */
+export function closeSessionConnections(instance: Pick<Hocuspocus, "documents">, sessionId: string): number {
+  let closed = 0;
+  for (const document of instance.documents.values()) {
+    for (const connection of [...document.connections.keys()]) {
+      if ((connection.context as { sessionId?: string | null } | undefined)?.sessionId !== sessionId) continue;
+      connection.close(SESSION_ENDED_CLOSE);
+      connection.webSocket.close(SESSION_ENDED_CLOSE.code, SESSION_ENDED_CLOSE.reason);
+      closed += 1;
+    }
+  }
+  return closed;
+}
+
 export function revocationExtension(valkeyUrl: string): Extension {
   let subscriber: Redis | null = null;
   return {
     extensionName: "access-revocation",
     async onConfigure({ instance }) {
       subscriber = new Redis(valkeyUrl);
-      subscriber.on("message", (_channel, message: string) => void closeRoomConnections(instance, parseRoomAccessMessage(message)));
-      await subscriber.subscribe(ROOM_ACCESS_CHANNEL);
+      subscriber.on("message", (channel, message: string) => {
+        if (channel === SESSION_ENDED_CHANNEL) closeSessionConnections(instance, message);
+        else closeRoomConnections(instance, parseRoomAccessMessage(message));
+      });
+      await subscriber.subscribe(ROOM_ACCESS_CHANNEL, SESSION_ENDED_CHANNEL);
     },
     async onDestroy() {
       subscriber?.disconnect();

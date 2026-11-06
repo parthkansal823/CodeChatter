@@ -185,7 +185,7 @@ One private Docker container per room (ADR 0003). It has no network, no secrets,
 
 ## 4. AI copilot and AI agent 🟡
 
-The **AI** tab sits next to Chat. This PC runs it on **local Ollama** (`AI_PROVIDER=ollama`, `AI_MODEL=hermes3`): free, private, no key. Other options are in `.env.example`.
+The **AI** tab sits next to Chat. This PC runs it on **local Ollama** (`AI_PROVIDER=ollama`, `AI_MODEL=gemma4:e4b`, in Docker): free, private, no key. Other options are in `.env.example`.
 
 Tests:
 - API unit tests: 310/310
@@ -470,12 +470,20 @@ What's left is in `docs/pending.md` under step 11.
   - **CI's unit tests:** a test still expected candidates to get AI help. Also, this Vitest no longer skips `dist/`, so the API's tests ran twice locally (`apps/api/vitest.config.ts`).
   - **The PDF viewer's frame:** already fixed when the run started.
 
-- 🟡 **Organisations:** making a team (`/orgs/new`, which the switcher links to but doesn't exist), the members page, and the invitation page (`/invite/<id>`, which invitation emails already link to). Handed to ChatGPT: the brief is `docs/handoff/chatgpt-9-org-members.md`.
+- ✅ **Organisations** (ChatGPT's prompt 9, checked 2026-11-06): making a team (`/orgs/new`), the members page (`/settings/members`: roles, removing, leaving, inviting up to 20 at once, pending invitations with Copy link) and the invitation page (`/invite/<id>`, under `(auth)` so signed-out visitors can reach it). In `apps/web/components/settings/members/`, with the server's rules in `packages/auth/src/index.ts`: organisation hooks, and an adapter that locks the organisation's row so two owners can't demote each other at once.
+  - Checking it found one bug, fixed: someone removed from a team, or whose team was deleted, kept it as their session's active organisation, so New room and Interviews refused them. `/api/me`, `RoomsService.create` and `InterviewsService.orgOf` now fall back to their personal workspace.
+  - Tests: `apps/web/test/org-members.e2e.mjs` (51, the pages) and `org-rules.e2e.mjs` (74, the same rules tried directly against the API, on its own API with mail going to Mailpit), both in CI. An owner invitation accepted after its inviter was demoted is refused by `beforeAcceptInvitation`, read but not run: it needs a third account.
   - roles: owner, admin, member, guest
   - invitations, and auto-join by email domain
   - organisation templates and policies
 - ✅ **Room roles:** owner, editor, runner, viewer, interviewer, candidate. One permission matrix drives all of them, and interview mode (§7) gives the last two their use.
-- 🟡 **Settings pages:** profile, password, two-factor sign-in (the sign-in step exists, but nothing turns it on) and active sessions. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-10-account-security.md`.
+- ✅ **Settings pages** (ChatGPT's prompt 10, checked 2026-11-06): `/settings/account` has profile, password, two-factor sign-in (a secret and link to set up, on only once a code checks out, backup codes shown once) and where you're signed in, with Sign out for each device. `/two-factor` takes a backup code. In `apps/web/components/settings/account/`.
+  - Tests: `apps/web/test/account-security.e2e.mjs` (32, on a throwaway account). Checked by hand against its own API, 42 checks: a password alone gives no session, and can't turn it off, make codes or change the password; guessing is cut off after about 10 codes or 3 backup codes; secret and backup codes aren't readable in the database; someone else can't see or end your sessions.
+  - What checking found: a code can be reused until it expires (in `docs/pending.md`), and an open room stayed connected after its device was signed out, which is fixed:
+    - Any session ending (signing out, Sign out on another device, a changed password) publishes its id on Valkey (`SESSION_ENDED_CHANNEL`, from a Better Auth `session.delete` hook in `packages/auth/src/index.ts`). Collab (`revocation.ts`), Socket.IO (`events.gateway.ts`) and terminals, language servers and the debugger (`live-sockets.ts`) close what's connected on that session, and the person's other devices aren't touched.
+    - The session cookie cache is off, because a cached session kept working for up to 60 seconds after being signed out, and would have let a closed socket straight back in. Each request now reads the session from Valkey.
+    - The room page stops reconnecting once it's refused.
+    - Tests: `apps/web/test/sign-out-device.e2e.mjs` (12), in CI, and unit tests for both closers.
   - profile
   - security: 2FA, active sessions
   - appearance, editor, notifications, connected accounts

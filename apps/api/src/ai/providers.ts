@@ -119,6 +119,7 @@ export class OpenAiCompatibleProvider implements AiProvider {
             ...request.chat.messages.map((turn): OpenAI.Chat.ChatCompletionMessageParam => ({ role: turn.role, content: turn.content })),
           ],
           ...(tuned && { temperature: request.temperature, max_tokens: request.maxTokens }),
+          ...(this.settings.provider === "ollama" && { reasoning_effort: "none" as const }),
         },
         // A retry would arrive after the person has typed on.
         { signal, maxRetries: 0 },
@@ -207,6 +208,8 @@ export class OpenAiCompatibleProvider implements AiProvider {
         ...(!this.settings.baseURL && { stream_options: { include_usage: true } }),
         ...(this.settings.maxTokens && { max_tokens: this.settings.maxTokens }),
         ...(request.json && { response_format: { type: "json_object" as const } }),
+        // Thinking first made a local model about four times slower, for answers no better here.
+        ...(this.settings.provider === "ollama" && { reasoning_effort: "none" as const }),
       },
       { signal },
     );

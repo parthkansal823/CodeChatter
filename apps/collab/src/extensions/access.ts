@@ -9,6 +9,8 @@ import { and, eq } from "drizzle-orm";
 export interface CollabContext {
   /** null for the runner, which writes files that programs create in the sandbox. */
   userId: string | null;
+  /** The sign-in this connection rests on; null for the runner. */
+  sessionId: string | null;
   name: string;
   image: string | null;
   roomId: string;
@@ -38,7 +40,7 @@ export function accessExtension(deps: { auth: Auth; db: Db; origins: OriginPolic
         const claims = verifyServiceToken(deps.serviceSecret, token, "collab");
         if (!claims || claims.sub !== documentName) throw new Error("invalid service token");
         connectionConfig.readOnly = false;
-        return { userId: null, name: "Sandbox", image: null, roomId: parsed.roomId, role: "editor" };
+        return { userId: null, sessionId: null, name: "Sandbox", image: null, roomId: parsed.roomId, role: "editor" };
       }
 
       if (!deps.origins.isAllowed(requestHeaders.get("origin"))) throw new Error("forbidden origin");
@@ -67,6 +69,7 @@ export function accessExtension(deps: { auth: Auth; db: Db; origins: OriginPolic
         parsed.kind === "mine" ? false : !can(role, parsed.kind === "comments" || parsed.kind === "notes" ? "room.chat" : "files.edit");
       return {
         userId: session.user.id,
+        sessionId: session.session.id,
         name: session.user.name,
         image: session.user.image ?? null,
         roomId: parsed.roomId,

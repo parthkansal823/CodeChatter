@@ -1,4 +1,5 @@
 import { createAuth, createOriginPolicy, type Auth, type OriginPolicy } from "@codechatter/auth";
+import { SESSION_ENDED_CHANNEL } from "@codechatter/contracts";
 import { objectStoreFromEnv, type ObjectStore } from "@codechatter/auth/s3";
 import { createDb, type DbHandle } from "@codechatter/db";
 import { Global, Inject, Module, type OnApplicationShutdown } from "@nestjs/common";
@@ -41,6 +42,10 @@ import { AUTH, DB, ENV, OBJECT_STORE, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./t
           secret: env.BETTER_AUTH_SECRET,
           production: env.NODE_ENV === "production",
           origins,
+          // Sockets check once, when they connect. Better to leave one open than to fail a sign-out.
+          onSessionEnded: async (sessionId) => {
+            await redis.publish(SESSION_ENDED_CHANNEL, sessionId).catch((error: unknown) => console.warn(`session ended: ${String(error)}`));
+          },
           oauth: {
             ...(env.GOOGLE_CLIENT_ID && {
               google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },

@@ -144,13 +144,153 @@ docker image prune -f   # reclaim space from old images
 | Logs | `dc logs -f api` (or `web`, `collab`, `caddy`) |
 | Restart one service | `dc restart api` |
 | Database shell | `dc exec postgres psql -U codechatter` |
-| Backup | `dc exec -T postgres pg_dump -U codechatter codechatter \| gzip > backup-$(date +%F).sql.gz` |
-| Restore | `gunzip -c backup.sql.gz \| dc exec -T postgres psql -U codechatter codechatter` |
+| Backup now | `dc run --rm --no-deps backup now` |
+| Restore drill | Restore a completed archive into a scratch database; see **Backups** below |
 | Stop everything | `dc down` (data stays in Docker volumes; `down -v` deletes it) |
 
-Copy backups off the server, for example with a nightly cron job to object storage.
-
 **GitHub activity in chat** (a room's Source Control view → Activity in chat) needs GitHub to reach `APP_URL/api/github/webhooks/<room>`, so it works on a public address, not on localhost. Each delivery must be signed with the room's secret; nothing else is accepted on that path.
+
+## Backups
+
+Production Compose builds `infra/backup/Dockerfile`: PostgreSQL 18 client tools,
+rclone **1.70.3** copied from its pinned official image, and time-zone data. The
+`backup` service runs at **03:00 in `BACKUP_TZ`**, which defaults to UTC. Set an IANA
+zone such as `Asia/Kolkata` to match the server's local clock. Archive names always
+use UTC: `codechatter-YYYY-MM-DDTHHMMZ.dump`, with a matching `.dump.sha256`.
+
+This backs up the database: accounts, organisations, rooms, persisted Yjs text
+documents, checkpoints, chat, audit events and webhook configuration/deliveries.
+Valkey sessions/caches and sandbox volumes are excluded; sandboxes are scratch
+space. Binary room files and recordings live in the app's object store, outside
+Postgres: these archives preserve their database references, not their object
+payloads. Protect that separate bucket with its own versioning/replication policy.
+This is a logical database backup, not continuous WAL archiving or point-in-time
+recovery. Recovery may lose changes since the last successful nightly dump.
+
+The dump is written to a temporary filename, checked with `pg_restore --list`,
+then published with its checksum. A shared volume lock prevents backup/restore
+overlap. A failed dump, check, upload or prune exits non-zero. Logs end with
+`backup ok: <file> <size> <duration>s` or `backup FAILED: <reason>` and never print
+database passwords or S3 credentials.
+
+### Off-server storage and retention
+
+Add these to **`infra/.env.production`**, using a private bucket on a different
+server or provider. These are separate from the app's `S3_*` settings:
+
+```dotenv
+BACKUP_TZ=UTC
+BACKUP_S3_URL=s3://your-private-backups/codechatter
+BACKUP_S3_ENDPOINT=https://s3.your-provider.example
+BACKUP_S3_REGION=us-east-1
+BACKUP_S3_ACCESS_KEY=replace-with-a-backup-only-access-key
+BACKUP_S3_SECRET_KEY=replace-with-its-secret
+BACKUP_S3_FORCE_PATH_STYLE=true
+```
+
+For AWS S3, leave the endpoint empty and use the bucket's region. For other
+S3-compatible stores, use their endpoint and region. Grant list/get/put/delete
+only for this dedicated backup prefix; deletion is needed for retention. Keep
+the bucket private and use HTTPS. Server-side encryption and provider versioning
+are additional bucket settings; account for retained versions in storage costs.
+
+```sh
+dc up -d --build backup
+dc run --rm --no-deps backup now
+dc logs --tail=30 backup
+```
+
+Without an S3 URL and credentials, archives stay on the `backups` Docker volume
+at `/backups`; the log explicitly says they are **not off the server**. Local-only
+storage does not protect against losing the host. The default retention is the
+union of **7 daily, 4 Sunday and 6 first-of-month backups**, applied independently
+to local and S3 inventories. Override `BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY` and
+`BACKUP_KEEP_MONTHLY` if needed. A backup can satisfy more than one category.
+The current run and newest timestamp are protected even after a clock rollback;
+this can retain an extra archive. Each deletion is logged. Use one deployment
+as the writer of a given S3 prefix; the filesystem lock does not span clusters.
+
+List completed local files without starting another scheduler:
+
+```sh
+dc run --rm --no-deps --entrypoint sh backup -c 'ls -lh /backups/codechatter-*.dump /backups/codechatter-*.dump.sha256'
+```
+
+### Monthly restore drill
+
+Run this monthly and record its output. It uses the latest completed nightly
+archive and leaves the live database and application services running. Check the
+filename's UTC date against last night's expected run, especially after changing
+time zones or fixing the server clock. If there is no archive, stop and investigate.
+
+```sh
+LAST_BACKUP=$(dc run --rm --no-deps --entrypoint sh backup -c 'for f in /backups/codechatter-*.dump; do test -f "$f.sha256" && printf "%s\n" "$f"; done | sort | tail -n 1')
+test -n "$LAST_BACKUP"
+SCRATCH="codechatter_restore_$(date -u +%Y%m%dT%H%M%S)_$$"
+dc run --rm --no-deps -e BACKUP_RESTORE_DATABASE="$SCRATCH" backup restore "$LAST_BACKUP"
+dc exec -T postgres psql -U codechatter -d "$SCRATCH" -v ON_ERROR_STOP=1 -c 'SELECT count(*) AS users FROM public."user"; SELECT count(*) AS rooms FROM public.rooms; SELECT count(*) AS snapshots FROM public.doc_snapshots; SELECT count(*) AS checkpoints FROM public.checkpoints; SELECT count(*) AS audit_events FROM public.audit_events;'
+# Drop only the scratch database named above after reviewing the results.
+dc exec -T postgres dropdb -U codechatter "$SCRATCH"
+```
+
+Good means: checksum and archive checks succeed, restore exits zero, all five
+tables can be read, and counts match the data expected at backup time (zero can
+be valid for an unused feature). For stronger confidence, check a known room or
+checkpoint too. Default restoration creates a unique
+`codechatter_restore_<stamp>` database and refuses to reuse an existing one.
+To exercise the off-server copy instead, use its full key as the restore argument:
+
+```sh
+dc run --rm --no-deps backup restore s3://your-private-backups/codechatter/codechatter-YYYY-MM-DDTHHMMZ.dump
+```
+
+Both local and S3 restoration check the companion checksum **before creating or
+replacing a database**. Restore only trusted archives: checksums detect corruption,
+not malicious changes to both the dump and checksum.
+
+### Restore the live database
+
+For recovery, first choose and drill the archive as above. Stop the app writers
+and the backup scheduler; leave Postgres up. Coordinate a maintenance window:
+
+```sh
+dc stop web api collab runner backup
+dc run --rm --no-deps -e BACKUP_APP_STOPPED=yes backup restore /backups/codechatter-YYYY-MM-DDTHHMMZ.dump --into-live
+# At the prompt, type exactly: codechatter
+# Continue only after a successful restore and plausible printed row counts.
+dc up -d web api collab runner backup
+```
+
+`--into-live` requires both the stopped-app acknowledgement and typed database
+name; remaining database connections cause refusal. It replaces the live database
+and loses changes after that archive. If restoration fails after replacement,
+keep writers stopped and recover with a verified archive. Do not use `down -v`:
+it removes the database and backup volumes. After recovery, use the app's normal
+migration/update procedure if the archive predates the deployed schema. Valkey
+can still contain sessions or cache entries for newer data; invalidate those
+through a separately planned cache reset before reopening access if necessary.
+
+### Detect a missed backup
+
+`/backups/last-success` contains completion time as Unix seconds; `last-failure`
+records a safe failure reason. Alert on a failure log/status and on no success in
+26 hours. This one-line check exits non-zero on missing, stale or future success
+time; run it hourly from host cron or an uptime monitor using the same `dc` command:
+
+```sh
+dc run --rm --no-deps --entrypoint sh backup -c 'test -s /backups/last-success && last=$(cat /backups/last-success) && now=$(date -u +%s) && test "$last" -le "$now" && test "$((now-last))" -le 93600'
+```
+
+Cron does not inherit an interactive shell alias: expand `dc` to
+`docker compose --env-file /absolute/path/infra/.env.production -f /absolute/path/infra/compose.yaml`.
+On Kubernetes, enable the chart's backup settings and alert when the CronJob's
+`.status.lastSuccessfulTime` is absent or older than 26 hours; see the
+[chart README](../infra/helm/codechatter/README.md). Kubernetes-managed external
+databases are excluded from this CronJob and need their provider's backup policy.
+
+The isolated local drill is `sh infra/backup/test-backup.sh`; it owns its own
+Postgres, S3 server, network and volumes and cleans them up. It never connects to
+the shared dev database.
 
 ## Safety rules the stack enforces
 

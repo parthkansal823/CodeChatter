@@ -11,9 +11,11 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## In progress (2026-11-06)
 
-- 🟡 **ChatGPT:** prompt 9 (teams).
-- ✅ Checked: ChatGPT's prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
+- 🟡 **ChatGPT:** prompt 11 (backups).
+- ✅ Checked: ChatGPT's prompt 10 (account security: profile, password, two-factor, active sessions), prompt 9 (teams: `/orgs/new`, members, `/invite/<id>`) and prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
 - ✅ Just finished by Claude:
+  - signing out a device now ends what it has open, at once: the live document, chat, terminals, language servers and the debugger;
+  - the AI's review, further: signals worked out by code, checked quotes, reviewing a whole batch, and a real model (`gemma4:e4b`, in Docker: `pnpm ai:up:gpu`);
   - recording assessments (webcam and screen, with consent) and the AI's review of a sitting, which points and suggests questions and never decides (step 11);
   - interviews and assessments as two modes (step 11): live interviews on video with questions asked on the spot and the AI switch; assessments with a paper drawn for each candidate; multiple choice, short answers and system design; the integrity record; results tables; comparing code (`docs/interviews.md`);
   - managing a room's members (approve, decline, remove, change roles, leave), and the invite link from Share;
@@ -28,13 +30,14 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
+1. **ChatGPT**, one prompt at a time, each checked before the next: **11** (backups) → **12** (TURN over TLS).
 2. **Claude:** accessibility, gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **You:** record the README's GIF and 2-minute video (step 12).
 
 ## Your actions
 
-- **Commit and push** what's uncommitted: recording assessments and the AI's review. It adds 3 end-to-end suites and migrations `0013` and `0014`. I read the result from GitHub, so just tell me when it's pushed.
+- **Commit and push** what's uncommitted (the new end-to-end suites). I read the result from GitHub, so just tell me when it's pushed.
+- **Point dev mail at Mailpit:** `.env` sends through real Gmail, so tests that invite people send real mail to addresses that don't exist. Set `SMTP_HOST=localhost`, `SMTP_PORT=1025` and empty `SMTP_USER`/`SMTP_PASS` unless you're testing real delivery. `org-rules` already does this for itself; `org-members` and the interview suites don't.
 - **Untrack the last Codex files:** `git rm -r --cached .codex apps/web/AGENTS.md`, then commit. They stay on your disk.
 - **Before deploying:**
   - rotate every v1 secret (`server/.env`);
@@ -130,10 +133,10 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Step 8 · Teams and admin
 
-- 🟡 Teams: `/orgs/new`, members, invitations (`/invite/<id>`) (**ChatGPT 9**)
-  - then a guest role, auto-join by email domain, organisation templates and policies
-- 🟡 Account: profile, password, two-factor, active sessions (**ChatGPT 10**)
-  - then pages for appearance, notifications and connected accounts
+- ⬜ Teams, later: a guest role, auto-join by email domain, organisation templates and policies
+- ⬜ What signing out doesn't end yet: a video call the device is in (LiveKit knows a person, not a sign-in, so removing them would drop their other devices too), and a dev server's preview, whose own cookie lasts 12 hours and is checked against the room, not the sign-in. Both end when the person loses access to the room. Worth closing in the final security review.
+- ⬜ A two-factor code can be used again until it expires (about 30 seconds): Better Auth doesn't remember used ones. Someone would need the password and that code at that moment. Worth closing in the final security review.
+- ⬜ Account, later: pages for appearance, notifications and connected accounts
 - ⬜ Rooms, later: more than one owner, and handing a room to someone else
 - ⬜ Usage dashboard: runs, AI tokens and sandbox minutes, with quotas
 - ⬜ Instance admin: users, rooms, health
@@ -171,8 +174,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 Interviews and assessments are done (`docs/interviews.md`). What's left:
 
 - ⬜ **Before real candidates: legal advice** on recording and on AI in hiring where they live (**you**: `docs/interviews.md` says what each does)
-- ⬜ Try the AI's review with a real model, and a vision model on real recordings: only a stand-in has answered so far, so how good its suggestions are is unknown (**Claude**, once one is running)
-- ⬜ The AI reviewing a whole batch in one go, most concerning first (one sitting at a time now)
+- ⬜ The AI on real recordings: tried on real-looking stills only. `gemma4:e4b` on this laptop found about half of what was there (16 of 30, 6 false alarms), so stills are notes that say which moment to watch, and finding nothing there means nothing. Try a stronger or cloud model when there's a reason to rely on them
 - ⬜ Negative marking, and sections with a time each
 - ⬜ Showing Diagrams and Boards in the replay (files only now)
 - ⬜ An email reminder before an assessment closes

@@ -54,7 +54,7 @@ export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins:
       const shared = url.searchParams.get("shared");
       const you = terminalSessionPrefix(session.user.id);
       const name = shared === "dev" ? "dev" : `${you}-${shared === "task" ? "task" : n}`.slice(0, 40);
-      const user = { id: session.user.id, name: session.user.name };
+      const user = { id: session.user.id, name: session.user.name, sessionId: session.session.id };
       wss.handleUpgrade(req, socket, head, (client) => pipe(client, room.data, name, cols, rows, user));
     })().catch((error: unknown) => {
       logger.warn(`terminal upgrade failed: ${String(error)}`);
@@ -62,7 +62,7 @@ export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins:
     });
   });
 
-  function pipe(client: WebSocket, roomId: string, name: string, cols: number, rows: number, user: { id: string; name: string }) {
+  function pipe(client: WebSocket, roomId: string, name: string, cols: number, rows: number, user: { id: string; name: string; sessionId: string }) {
     const upstream = new WebSocket(deps.runner.terminalUrl(roomId, name, cols, rows), { headers: deps.runner.headers(roomId, user) });
     const early: Array<{ data: WebSocket.RawData; binary: boolean }> = [];
     const status = (message: TerminalServerMessage) => client.readyState === WebSocket.OPEN && client.send(JSON.stringify(message));
@@ -80,7 +80,7 @@ export function attachTerminalProxy(server: Server, deps: { auth: Auth; origins:
       if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary });
       else if (upstream.readyState === WebSocket.CONNECTING) early.push({ data, binary });
     });
-    const unwatch = deps.live.watch(roomId, user.id, (role) => can(role, "terminal.open"), () => client.close(ROOM_ACCESS_CLOSE.code, ROOM_ACCESS_CLOSE.reason));
+    const unwatch = deps.live.watch(roomId, user.id, (role) => can(role, "terminal.open"), () => client.close(ROOM_ACCESS_CLOSE.code, ROOM_ACCESS_CLOSE.reason), user.sessionId);
     client.on("close", () => {
       unwatch();
       upstream.close();

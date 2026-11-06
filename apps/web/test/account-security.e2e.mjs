@@ -30,6 +30,7 @@ let currentPassword = originalPassword;
 let pageErrors = [];
 let interrupted = false;
 let lastAuthenticatorWindow = -1;
+let lastAuthResponse = "none";
 
 // RFC 6238: decode the actual base32 secret shown by the application and use
 // SHA-1, a 30-second moving counter, dynamic truncation and six decimal digits.
@@ -77,6 +78,10 @@ async function until(operation, timeout = 30_000) {
 function observe(page) {
   // Error messages and Playwright call logs can contain entered secrets.
   page.on("pageerror", () => pageErrors.push("PageError"));
+  page.on("response", (response) => {
+    const path = new URL(response.url()).pathname;
+    if (["/api/auth/sign-up/email", "/api/auth/verify-email", "/api/auth/list-accounts", "/api/auth/get-session"].includes(path)) lastAuthResponse = `${path}: ${response.status()}`;
+  });
   page.setDefaultTimeout(30_000);
   page.setDefaultNavigationTimeout(90_000);
   return page;
@@ -230,6 +235,13 @@ async function cleanupFixture() {
 
 async function run() {
   verify("RFC 6238 matches the published SHA-1 test vector", totp("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", 59_000) === "287082");
+  stage = "shared API and Mailpit health preflight";
+  const [meta, session, mailbox] = await Promise.all([
+    fetch(`${BASE}/api/meta`, { signal: AbortSignal.timeout(15_000) }),
+    fetch(`${BASE}/api/auth/get-session`, { signal: AbortSignal.timeout(15_000) }),
+    fetch(`${mailpit}/api/v1/messages`, { signal: AbortSignal.timeout(15_000) }),
+  ]);
+  verify("shared API and local Mailpit are ready before fixture creation", meta.ok && session.ok && mailbox.ok);
   stage = "local verification handler";
   const signupEndpoint = await initialiseFixtureAuth();
   ({ browser, errors: pageErrors } = await launch());
@@ -323,7 +335,10 @@ async function run() {
   verify("settings recover without losing the backup-code view", await page.getByLabel("Backup codes", { exact: true }).inputValue() === backupCodes.join("\n"));
   stage = "copying and downloading backup codes";
   await page.getByRole("button", { name: "Copy backup codes", exact: true }).click();
-  verify("copy contains exactly the displayed backup codes", await page.evaluate(() => navigator.clipboard.readText()) === backupCodes.join("\n"));
+  // Clipboard writes complete after the click handler returns, and Windows
+  // can expose native CRLF line endings when reading the clipboard back.
+  await until(async () => (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, "\n") === backupCodes.join("\n"));
+  verify("copy contains exactly the displayed backup codes", true);
   const downloading = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download backup codes", exact: true }).click();
   const download = await downloading;
@@ -399,7 +414,11 @@ async function run() {
 
 for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { interrupted = true; void browser?.close(); });
 try { await run(); }
-catch (error) { check("account security flow completes", false, `${stage}: ${/^[A-Za-z]+$/.test(error?.name ?? "") ? error.name : "Error"}`); }
+catch (error) {
+  const errorName = /^[A-Za-z]+$/.test(error?.name ?? "") ? error.name : "Error";
+  const networkCode = String(error?.message ?? "").match(/net::ERR_[A-Z_]+/)?.[0];
+  check("account security flow completes", false, `${stage}: ${errorName}${networkCode ? ` (${networkCode})` : ""}; ${lastAuthResponse}`);
+}
 finally {
   stage = "fixture cleanup";
   try { await cleanupFixture(); }

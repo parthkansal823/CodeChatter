@@ -1,6 +1,7 @@
 import type { Auth, AuthSession, OriginPolicy } from "@codechatter/auth";
 import {
   ROOM_ACCESS_CHANNEL,
+  SESSION_ENDED_CHANNEL,
   parseRoomAccessMessage,
   RoomCode,
   RunInput,
@@ -76,13 +77,17 @@ export class EventsGateway implements OnGatewayInit, OnModuleDestroy {
     bindSocketMetrics(server);
     // A separate connection: a subscribed one can't do anything else.
     this.accessChanges = this.valkey.duplicate();
-    this.accessChanges.on("message", (_channel, message: string) => {
+    this.accessChanges.on("message", (channelName, message: string) => {
+      if (channelName === SESSION_ENDED_CHANNEL) {
+        void this.sessionEnded(message).catch((error: unknown) => this.logger.warn(`session ended: ${String(error)}`));
+        return;
+      }
       const change = parseRoomAccessMessage(message);
       void Promise.allSettled([this.recheckListeners(change.roomId, change.userId), this.live.recheck(change), this.calls.recheck(change)]).then((results) => {
         for (const result of results) if (result.status === "rejected") this.logger.warn(`room access: ${String(result.reason)}`);
       });
     });
-    void this.accessChanges.subscribe(ROOM_ACCESS_CHANNEL);
+    void this.accessChanges.subscribe(ROOM_ACCESS_CHANNEL, SESSION_ENDED_CHANNEL);
     this.notifications.setPush((userId, item) => this.server.to(userChannel(userId)).emit("notification:new", item));
     server.use(async (socket, next) => {
       try {
@@ -102,6 +107,13 @@ export class EventsGateway implements OnGatewayInit, OnModuleDestroy {
 
   onModuleDestroy() {
     this.accessChanges?.disconnect();
+  }
+
+  /** A session signed out, on this instance or another: nothing connected on it stays connected. */
+  private async sessionEnded(sessionId: string): Promise<void> {
+    this.live.sessionEnded(sessionId);
+    const sockets = await this.server.local.fetchSockets();
+    for (const socket of sockets) if ((socket.data as SocketData).session?.session.id === sessionId) socket.disconnect(true);
   }
 
   /** Rights are checked at room:join, so when they shrink, whoever may no longer listen stops hearing the room. */
