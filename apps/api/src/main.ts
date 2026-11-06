@@ -10,6 +10,7 @@ import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module.js";
 import type { Env } from "./config/env.js";
 import { AUTH, ENV, ORIGINS, PREVIEW_HOSTS, VALKEY } from "./infra/tokens.js";
+import { httpMetrics, metricsHandler } from "./metrics/metrics.js";
 import { previewProxy, type PreviewHosts } from "./preview/preview-proxy.js";
 import { attachDebugProxy } from "./realtime/debug.proxy.js";
 import { attachLspProxy } from "./realtime/lsp.proxy.js";
@@ -30,6 +31,9 @@ const express = app.getHttpAdapter().getInstance();
 // Caddy is the single ingress hop; trust exactly one proxy for req.ip.
 express.set("trust proxy", 1);
 express.disable("x-powered-by");
+// Direct service port only: outside Nest's /api prefix, guards and preview proxy.
+express.all("/metrics", metricsHandler(env));
+express.use(httpMetrics);
 // Preview hosts (p3000-room.preview…) are answered before anything else: they
 // are a separate origin and never reach the app's routes.
 const preview = previewProxy({

@@ -26,6 +26,7 @@ import type { Server, Socket } from "socket.io";
 
 import { AUTH, ORIGINS } from "../infra/tokens.js";
 import { MessagesService } from "../messages/messages.service.js";
+import { bindSocketMetrics, chatMessages } from "../metrics/metrics.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js";
@@ -63,6 +64,7 @@ export class EventsGateway implements OnGatewayInit {
    * "room:join", which could arrive before the session was attached.)
    */
   afterInit(server: Server) {
+    bindSocketMetrics(server);
     this.notifications.setPush((userId, item) => this.server.to(userChannel(userId)).emit("notification:new", item));
     server.use(async (socket, next) => {
       try {
@@ -116,6 +118,7 @@ export class EventsGateway implements OnGatewayInit {
       return { ok: false, error: "You can't post in this room." };
     }
     const message = await this.messages.create({ ...input.data, userId: session.user.id });
+    chatMessages.inc();
     // People mentioned by name hear about it wherever they are.
     void this.notifications.notifyMentions(input.data.roomId, session.user.id, message.body).catch((error) => this.logger.warn(`mentions: ${String(error)}`));
     // Everyone else gets it from the broadcast; the sender from the ack.

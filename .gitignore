@@ -82,9 +82,14 @@ temp/
 # Claude Code (its instructions, settings, hooks and agents)
 CLAUDE.md
 .claude/
-# ChatGPT (its coding agent's instructions, and the prompts handed to it)
+# ChatGPT and Codex (their instructions, settings, hooks and agents, and the prompts handed to them)
 AGENTS.md
+AGENTS.override.md
+.codex/
 docs/handoff/
+
+# End-to-end run logs and screenshots (scripts/e2e-ci.mjs)
+e2e-logs/
 
 # Load test output (apps/collab/test/load.mjs)
 apps/collab/test/load-report.json

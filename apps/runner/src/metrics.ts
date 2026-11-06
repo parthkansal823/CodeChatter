@@ -57,7 +57,7 @@ export function recordRun(path: string, exit: Pick<RunExit, "code" | "reason" | 
 
 /** Socket addresses are authoritative; proxy headers cannot turn a public proxy into a metrics ingress. */
 export function metricsAccess(req: Pick<IncomingMessage, "headers" | "socket">, env: Pick<Env, "NODE_ENV" | "METRICS_TOKEN">): 200 | 401 | 403 {
-  if (["forwarded", "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host"].some((name) => Object.hasOwn(req.headers, name))) return 403;
+  if (Object.keys(req.headers).some((name) => name.toLowerCase() === "forwarded" || name.toLowerCase().startsWith("x-forwarded-"))) return 403;
   const token = env.METRICS_TOKEN;
   if (token) {
     const header = req.headers.authorization;

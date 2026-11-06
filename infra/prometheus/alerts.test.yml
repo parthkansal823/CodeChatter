@@ -1,0 +1,117 @@
+# Exercise alert thresholds and pending periods without a running application or database.
+rule_files:
+  - alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: sustained API errors wait five minutes
+    interval: 1m
+    input_series:
+      - series: 'codechatter_http_requests_total{job="api",method="GET",route="/api/rooms/:id",status="500"}'
+        values: '0+10x20'
+      - series: 'codechatter_http_requests_total{job="api",method="GET",route="/api/rooms/:id",status="200"}'
+        values: '0+90x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: CodeChatterApiHighErrorRate
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: CodeChatterApiHighErrorRate
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "API 5xx responses exceed 5%"
+              description: "Over 5% of API HTTP responses have been 5xx for five minutes."
+  - name: exactly five percent API errors does not alert
+    interval: 1m
+    input_series:
+      - series: 'codechatter_http_requests_total{job="api",status="500"}'
+        values: '0+5x20'
+      - series: 'codechatter_http_requests_total{job="api",status="200"}'
+        values: '0+95x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CodeChatterApiHighErrorRate
+        exp_alerts: []
+  - name: slow successful stores wait five minutes
+    interval: 1m
+    input_series:
+      - series: 'codechatter_collab_store_duration_seconds_bucket{job="collab",le="1"}'
+        values: '0+90x20'
+      - series: 'codechatter_collab_store_duration_seconds_bucket{job="collab",le="2.5"}'
+        values: '0+100x20'
+      - series: 'codechatter_collab_store_duration_seconds_bucket{job="collab",le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: CodeChatterCollabSlowStore
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: CodeChatterCollabSlowStore
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Collab store p95 exceeds one second"
+              description: "The p95 of successful collab store chains has exceeded one second for five minutes."
+  - name: fast stores do not alert
+    interval: 1m
+    input_series:
+      - series: 'codechatter_collab_store_duration_seconds_bucket{job="collab",le="1"}'
+        values: '0+100x20'
+      - series: 'codechatter_collab_store_duration_seconds_bucket{job="collab",le="2.5"}'
+        values: '0+100x20'
+      - series: 'codechatter_collab_store_duration_seconds_bucket{job="collab",le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CodeChatterCollabSlowStore
+        exp_alerts: []
+  - name: runner failures wait ten minutes
+    interval: 1m
+    input_series:
+      - series: 'codechatter_runner_runs_total{job="runner",language="javascript",outcome="timeout"}'
+        values: '0+60x20'
+      - series: 'codechatter_runner_runs_total{job="runner",language="python",outcome="success"}'
+        values: '0+40x20'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: CodeChatterRunnerHighFailureRate
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: CodeChatterRunnerHighFailureRate
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Runner failures exceed 50%"
+              description: "Over 50% of completed started Runs have failed for ten minutes; user stops are not failures."
+  - name: fifty percent failures and user stops do not alert
+    interval: 1m
+    input_series:
+      - series: 'codechatter_runner_runs_total{job="runner",outcome="error"}'
+        values: '0+50x20'
+      - series: 'codechatter_runner_runs_total{job="runner",outcome="stopped"}'
+        values: '0+50x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CodeChatterRunnerHighFailureRate
+        exp_alerts: []
+  - name: idle and absent services do not produce application failure alerts
+    interval: 1m
+    input_series:
+      - series: 'codechatter_http_requests_total{job="api",status="500"}'
+        values: '0+0x20'
+      - series: 'codechatter_http_requests_total{job="api",status="200"}'
+        values: '0+0x20'
+      - series: 'codechatter_runner_runs_total{job="runner",outcome="error"}'
+        values: '0+0x20'
+      - series: 'codechatter_runner_runs_total{job="runner",outcome="success"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CodeChatterApiHighErrorRate
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: CodeChatterRunnerHighFailureRate
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: CodeChatterCollabSlowStore
+        exp_alerts: []

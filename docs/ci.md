@@ -11,6 +11,29 @@
 
 Jobs have a 30-minute limit; sandbox builds have 60 minutes. Images are built without publishing. Run **Actions → Sandbox full image → Run workflow** to build the larger sandbox `full` target manually.
 
+## End-to-end
+
+The `End-to-end` workflow (`.github/workflows/e2e.yml`) tests the whole app on one machine. It runs on pushes to `main`, and by hand from **Actions → End-to-end → Run workflow**. It's separate from `CI`, so a slow or flaky run doesn't hold up CI's checks.
+
+It starts the dev infrastructure, builds the sandbox's base image (sharing a cache with the `images` job), migrates and seeds the database, starts the dev servers, compiles the pages the tests open, and then runs `scripts/e2e-ci.mjs`. It needs no repository secrets: `.env` comes from `.env.example`, with secrets made for that run.
+
+`scripts/e2e-ci.mjs` runs the suites one after another:
+- **What's in it:** runner, collab, API and browser suites that work on the base image, without a paid AI key or real GitHub.
+- **Logs:** each suite writes to `e2e-logs/<name>.log`. Logs and screenshots are kept for 7 days, under the run's artifacts.
+- **Retries:** a browser suite gets one retry, and a pass on the second try shows as a warning.
+- **Failures:** each one appears as an annotation on the run, with a table on its summary page.
+- **Sign-ins:** each suite starts by clearing the sign-in counters in the dev stack's Valkey. The limit of 10 sign-ins a minute per address stays on, and `apps/api/test/auth-flow.e2e.mjs` checks it, but suites run back to back would hit it together.
+
+Run it here against the running dev stack, all of it or by name:
+
+```bash
+node scripts/e2e-ci.mjs
+node scripts/e2e-ci.mjs sandbox-git files
+node scripts/e2e-ci.mjs --list
+```
+
+The dev servers restart when their source changes, so don't edit `apps/` while it runs: a suite that loses its server fails with `ECONNREFUSED`, and may leave its files in E2ETST.
+
 ## Run the checks locally
 
 These commands use Bash (Git Bash or WSL on Windows), from the repository root, with Node 24, pnpm, Docker, and Trivy available. Ask the owner before running `pnpm install` in the shared checkout. CI runs this installation command:

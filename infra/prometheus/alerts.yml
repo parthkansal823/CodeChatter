@@ -1,0 +1,42 @@
+# Starter alerts for sustained application failures and slow successful collab stores.
+# Ratios aggregate across replicas; idle services do not produce failure alerts.
+groups:
+  - name: codechatter
+    rules:
+      - alert: CodeChatterApiHighErrorRate
+        expr: |
+          (
+            sum(rate(codechatter_http_requests_total{job="api",status=~"5.."}[5m]))
+            / sum(rate(codechatter_http_requests_total{job="api"}[5m]))
+          ) > 0.05
+          and sum(rate(codechatter_http_requests_total{job="api"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 5xx responses exceed 5%"
+          description: "Over 5% of API HTTP responses have been 5xx for five minutes."
+      - alert: CodeChatterCollabSlowStore
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(codechatter_collab_store_duration_seconds_bucket{job="collab"}[5m]))
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Collab store p95 exceeds one second"
+          description: "The p95 of successful collab store chains has exceeded one second for five minutes."
+      - alert: CodeChatterRunnerHighFailureRate
+        expr: |
+          (
+            sum(rate(codechatter_runner_runs_total{job="runner",outcome=~"error|timeout|output-limit|reset"}[5m]))
+            / sum(rate(codechatter_runner_runs_total{job="runner"}[5m]))
+          ) > 0.5
+          and sum(rate(codechatter_runner_runs_total{job="runner"}[5m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Runner failures exceed 50%"
+          description: "Over 50% of completed started Runs have failed for ten minutes; user stops are not failures."

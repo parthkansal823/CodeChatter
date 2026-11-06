@@ -9,6 +9,8 @@ const Env = z.object({
   /** Comma-separated extra browser origins to trust (e.g. a tunnel URL). */
   EXTRA_ORIGINS: z.string().optional().default(""),
   API_PORT: z.coerce.number().int().positive().default(4000),
+  /** Required for remote scrapes; unset permits only development loopback requests. */
+  METRICS_TOKEN: z.string().trim().optional(),
   /** Permit private receiver fixtures only in development; the worker also checks NODE_ENV. */
   WEBHOOKS_ALLOW_PRIVATE: z.enum(["0", "1"]).default("0").transform((value) => value === "1"),
   DATABASE_URL: z.string().startsWith("postgres"),

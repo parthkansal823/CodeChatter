@@ -149,9 +149,11 @@ try {
     record("mountsOnlyItsOwnStorage", claims.sort().join(",") === "home,workspace" && pod.metadata?.namespace !== `cc-${NAMESPACE}-${other.toLowerCase()}`, `${pod.metadata?.namespace}: ${claims.join(",")}`);
   } else {
     const info = await new Docker().getContainer(`cc-${NAMESPACE}-room-${ROOM.toLowerCase()}`).inspect();
-    const volumes = info.Mounts.filter((m) => m.Type === "volume").map((m) => m.Name);
+    const volumes = info.Mounts.filter((m) => m.Type === "volume");
     const own = [`cc-${NAMESPACE}-ws-${ROOM.toLowerCase()}`, `cc-${NAMESPACE}-home-${ROOM.toLowerCase()}`];
-    record("mountsOnlyItsOwnStorage", volumes.length > 0 && volumes.every((name) => own.includes(name)), volumes.join(","));
+    // The one volume rooms share is the pre-warmed template cache, and it's read-only (warm-cache.ts).
+    const shared = (m) => m.Name === `cc-${NAMESPACE}-warm` && m.RW === false;
+    record("mountsOnlyItsOwnStorage", volumes.length > 0 && volumes.every((m) => own.includes(m.Name) || shared(m)), volumes.map((m) => `${m.Name}${m.RW ? "" : " (read-only)"}`).join(","));
   }
 } finally {
   for (const peer of [a, b]) {

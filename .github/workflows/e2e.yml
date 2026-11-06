@@ -1,0 +1,105 @@
+# The end-to-end suites against the whole app on one machine: the dev infrastructure
+# (Postgres, Valkey, Mailpit, SeaweedFS, LiveKit, Caddy), the sandbox's base image, the dev
+# servers, and Edge for the browser tests. scripts/e2e-ci.mjs names the suites. It's apart
+# from CI, so a slow or flaky run doesn't hold up CI's checks. docs/ci.md has more.
+name: End-to-end
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  e2e:
+    # Pinned, not ubuntu-latest: the browser tests drive the Edge this image comes with.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up pnpm from package.json
+        uses: pnpm/action-setup@v5
+      - name: Set up Node.js 24 and the pnpm cache
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies from the lockfile
+        run: pnpm install --frozen-lockfile
+      - name: Check that Edge is there
+        run: microsoft-edge --version
+      - name: Write .env with secrets made for this run
+        run: |
+          cp .env.example .env
+          for name in BETTER_AUTH_SECRET SERVICE_SECRET DATA_ENCRYPTION_KEY; do
+            sed -i "s|^$name=.*|$name=$(openssl rand -hex 32)|" .env
+          done
+      - name: Start the infrastructure
+        run: pnpm infra:up
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build the sandbox's base image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./sandbox
+          file: sandbox/image/Dockerfile
+          target: base
+          load: true
+          tags: codechatter-sandbox:dev
+          # CI's images job builds this target too, so the two share a cache.
+          cache-from: type=gha,scope=ci-sandbox-base
+          cache-to: type=gha,mode=max,scope=ci-sandbox-base
+      - name: Build the shared packages
+        run: pnpm turbo run build --filter='./packages/*'
+      - name: Migrate the database and make the test accounts and rooms
+        run: |
+          pnpm db:migrate
+          pnpm seed
+      - name: Start the dev servers
+        run: |
+          nohup pnpm dev > e2e-dev.log 2>&1 &
+          for attempt in $(seq 1 120); do
+            if curl -fsS -m 10 -o /dev/null http://localhost:8080/api/healthz \
+              && curl -fsS -m 10 -o /dev/null http://127.0.0.1:4200/healthz; then
+              echo "API and runner answered after about $((attempt * 5)) seconds"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error title=Dev servers::They didn't start in 10 minutes"
+          tail -60 e2e-dev.log
+          exit 1
+      # Next compiles a page the first time it's asked for. The tests' time limits are for
+      # pages that are ready, and a runner's first compile can take minutes.
+      - name: Compile the web pages the tests open
+        run: |
+          for page in /sign-in /dashboard /explore /settings /rooms/E2ETST; do
+            code=$(curl -s -m 280 -o /dev/null -w '%{http_code}' "http://localhost:8080$page" || echo failed)
+            echo "$page: $code"
+          done
+      - name: Run the end-to-end suites
+        run: node scripts/e2e-ci.mjs
+      - name: Keep the logs and screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-logs
+          path: |
+            e2e-logs/
+            e2e-dev.log
+            /tmp/*.png
+          if-no-files-found: ignore
+          retention-days: 7

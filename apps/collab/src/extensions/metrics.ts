@@ -7,6 +7,7 @@ import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from "prom
 import type { Env } from "../env.js";
 
 export const metricsRegistry = new Registry();
+metricsRegistry.setDefaultLabels({ service: "collab" });
 collectDefaultMetrics({ register: metricsRegistry, prefix: "codechatter_" });
 
 let currentInstance: Hocuspocus | null = null;
