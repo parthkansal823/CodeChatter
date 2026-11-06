@@ -14,13 +14,14 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - 🟡 **ChatGPT:** prompt 9 (teams).
 - ✅ Checked: ChatGPT's prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
 - ✅ Just finished by Claude:
+  - recording assessments (webcam and screen, with consent) and the AI's review of a sitting, which points and suggests questions and never decides (step 11);
   - interviews and assessments as two modes (step 11): live interviews on video with questions asked on the spot and the AI switch; assessments with a paper drawn for each candidate; multiple choice, short answers and system design; the integrity record; results tables; comparing code (`docs/interviews.md`);
   - managing a room's members (approve, decline, remove, change roles, leave), and the invite link from Share;
   - the browser security policy, checked against a production build (`docs/adr/0010-content-security-policy.md`);
   - access ending when a public room goes private or a room is deleted;
   - the old live-document test working again, in CI (`apps/collab/test/collab.e2e.mjs`);
   - interview mode (step 11), with the interviewer and candidate room roles (`docs/interviews.md`);
-  - end-to-end tests in CI (their first run on GitHub found what's fixed below; the next push should be green);
+  - end-to-end tests in CI, green on GitHub (39 suites in 15 minutes, 2026-11-06);
   - metrics and dashboards checked (ChatGPT 8);
   - real git in the sandbox (step 7);
   - binary files, and deleting a room's stored files with the room.
@@ -33,7 +34,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Your actions
 
-- **Commit and push** what's uncommitted. Your last push failed CI and End-to-end on things fixed here (a test interview mode broke, the PDF viewer's frame, a cut-off copy of a large file). I read the result from GitHub, so just tell me when it's pushed.
+- **Commit and push** what's uncommitted: recording assessments and the AI's review. It adds 3 end-to-end suites and migrations `0013` and `0014`. I read the result from GitHub, so just tell me when it's pushed.
 - **Untrack the last Codex files:** `git rm -r --cached .codex apps/web/AGENTS.md`, then commit. They stay on your disk.
 - **Before deploying:**
   - rotate every v1 secret (`server/.env`);
@@ -152,7 +153,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 - 🟡 Nightly backups and a restore drill (**ChatGPT 11**)
 - ⬜ OpenTelemetry traces
-- 🟡 End-to-end tests in CI: a green run on GitHub (**you** push, **Claude** reads the result). Watch `code-comments` and `new-room`, which each needed their retry on the first run.
+- ⬜ End-to-end tests in CI: `new-room`, the first browser suite, has needed its retry in both runs we've read (it crashes on its first try, then passes). Worth finding out why.
 - ⬜ Metrics, later:
   - `METRICS_TOKEN` and scraping in the Helm chart;
   - move from `prom-client` to `@prometheus-io/client`.
@@ -169,7 +170,9 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 Interviews and assessments are done (`docs/interviews.md`). What's left:
 
-- ⬜ **Webcam or screen recording for assessments:** a decision for the owner first, as it needs consent, storage and legal care for where candidates live
+- ⬜ **Before real candidates: legal advice** on recording and on AI in hiring where they live (**you**: `docs/interviews.md` says what each does)
+- ⬜ Try the AI's review with a real model, and a vision model on real recordings: only a stand-in has answered so far, so how good its suggestions are is unknown (**Claude**, once one is running)
+- ⬜ The AI reviewing a whole batch in one go, most concerning first (one sitting at a time now)
 - ⬜ Negative marking, and sections with a time each
 - ⬜ Showing Diagrams and Boards in the replay (files only now)
 - ⬜ An email reminder before an assessment closes

@@ -70,6 +70,21 @@ function recordLines(interview: InterviewerInterview): string[] {
   ];
 }
 
+/** The AI's reading, marked as what it is. */
+function aiLines(interview: InterviewerInterview): string[] {
+  const review = interview.aiReview;
+  if (!review) return [];
+  return [
+    "",
+    "## What the AI suggested",
+    "",
+    `From ${review.model}. It points, and it can be wrong: this isn't a finding, and it didn't change any marks.`,
+    ...(review.summary ? ["", review.summary] : []),
+    ...(review.findings.length ? ["", ...review.findings.map((finding) => `- ${finding.title}${finding.detail ? `: ${finding.detail}` : ""}`)] : []),
+    ...(review.questions.length ? ["", "Questions to ask them:", "", ...review.questions.map((question) => `- ${question.question}`)] : []),
+  ];
+}
+
 export function interviewReport(interview: InterviewerInterview): string {
   const { scorecard } = interview;
   const labels = new Map(interview.rubric.map((criterion) => [criterion.id, criterion.label]));
@@ -101,6 +116,8 @@ export function interviewReport(interview: InterviewerInterview): string {
   if (scorecard.notes.trim()) lines.push("", "## Notes", "", scorecard.notes.trim());
   if (interview.paper?.length) lines.push(...paperLines(interview));
   if (interview.integrity) lines.push(...recordLines(interview));
+  if (interview.recordingConsentAt) lines.push("", `Recorded with their agreement, given ${when(interview.recordingConsentAt)}.`);
+  lines.push(...aiLines(interview));
   lines.push("", "## Test runs", "");
   if (latest) {
     // Newest first in the data; a report reads oldest first.

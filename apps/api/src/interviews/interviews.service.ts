@@ -60,6 +60,9 @@ export type NewSitting = {
   closesAt: Date | null;
   fullscreen: boolean;
   lockClipboard: boolean;
+  recordWebcam: boolean;
+  recordScreen: boolean;
+  aiReviewRecording: boolean;
 };
 
 /**
@@ -264,6 +267,9 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
         closesAt: null,
         fullscreen: false,
         lockClipboard: false,
+        recordWebcam: false,
+        recordScreen: false,
+        aiReviewRecording: false,
       },
       sha256(token),
     );
@@ -326,6 +332,9 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
             closesAt: input.closesAt,
             fullscreen: input.fullscreen,
             lockClipboard: input.lockClipboard,
+            recordWebcam: input.recordWebcam,
+            recordScreen: input.recordScreen,
+            aiReviewRecording: input.aiReviewRecording,
             candidateTokenHash: tokenHash,
           })
           .returning();
@@ -435,11 +444,14 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async start(id: string, userId: string): Promise<InterviewerInterview> {
-    return this.interviewerView(await this.begin(await this.asInterviewer(id, userId)));
+    const row = await this.asInterviewer(id, userId);
+    // Starting someone's assessment for them would start their clock, and a recording they haven't agreed to.
+    if (row.mode === "assessment") throw new ConflictException("The candidate starts an assessment themselves.");
+    return this.interviewerView(await this.begin(row));
   }
 
   /** The candidate starts their assessment: once the link is theirs, and only inside its window. */
-  async startAssessment(token: string, userId: string): Promise<JoinedInterview> {
+  async startAssessment(token: string, userId: string, consent: boolean): Promise<JoinedInterview> {
     const row = await this.byToken(token);
     this.assertOpen(row);
     if (row.mode !== "assessment") throw new ConflictException("Your interviewer starts the interview.");
@@ -451,6 +463,10 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     if (row.opensAt && row.opensAt > now) throw new ConflictException("This assessment hasn't opened yet.");
     if (row.closesAt && row.closesAt <= now) throw new GoneException("This assessment has closed.");
+    if (row.recordWebcam || row.recordScreen) {
+      if (!consent) throw new BadRequestException("This assessment records you, so you have to agree to that before it starts.");
+      await this.db.update(schema.interviews).set({ recordingConsentAt: now }).where(eq(schema.interviews.id, row.id));
+    }
     const started = await this.begin(row);
     return { roomId: started.roomId, interviewId: started.id, waiting: false };
   }
@@ -673,6 +689,10 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       closesAt: row.closesAt?.toISOString() ?? null,
       fullscreen: row.fullscreen,
       lockClipboard: row.lockClipboard,
+      recordWebcam: row.recordWebcam,
+      recordScreen: row.recordScreen,
+      recordingKeptDays: this.env.INTERVIEW_RECORDING_RETENTION_DAYS,
+      aiReviewRecording: row.aiReviewRecording,
       now: new Date().toISOString(),
       candidateName: row.candidateName,
       interviewerName: name,

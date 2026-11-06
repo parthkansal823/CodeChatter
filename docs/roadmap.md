@@ -158,8 +158,8 @@ flowchart TD
 
 - ✅ Load test: 500 live connections, p95 under 150 ms, across several processes
 - 🟡 Operations: Prometheus metrics and Grafana ✅; nightly backups (ChatGPT, prompt 11); traces ⬜
-- 🟡 GitHub Actions CI: lint, types, tests, image builds, vulnerability scan. Failing on a test interview mode broke; fixed, and waiting for the next push
-- 🟡 End-to-end tests in CI: 39 suites. The first run on GitHub found three real problems, fixed; waiting for a green run
+- ✅ GitHub Actions CI: lint, types, tests, image builds, vulnerability scan (green on GitHub)
+- ✅ End-to-end tests in CI: green on GitHub, 39 suites in 15 minutes. 3 more go with the next push
 - ✅ Browser security: a nonce-based security policy, previews in a sandboxed frame, access that really ends when a room goes private or is deleted
 - ⬜ Sandbox security (gVisor); accessibility (axe, Lighthouse)
 - ⬜ Cutover from v1; a final security review
@@ -177,6 +177,8 @@ flowchart TD
 - ✅ Assessments: many candidates at once, a random paper for each, a window to start in, a results table
 - ✅ Multiple choice marked by the server, short answers, and system design in the room's Diagrams and Board
 - ✅ A record of anything unusual (leaving the tab, pasting, a second device, the page going quiet), and comparing candidates' code
+- ✅ Recording assessments, webcam and screen, with consent, audited viewing and automatic deletion
+- ✅ The AI's review: what to check, questions only the author could answer, and stills if they were told. It never decides
 
 ## Step 12 · Recruiter kit 🟡
 

@@ -57,6 +57,8 @@ express.use(
 // A commit carries the room's changed files, up to what an import takes; everything else stays at 1 MB.
 express.use("/api/rooms/:roomId/repo/commit", json({ limit: "30mb" }));
 express.use("/api/rooms/:roomId/repo/publish", json({ limit: "30mb" }));
+// A sitting's code, and stills from its recording.
+express.use("/api/interviews/:id/ai-review", json({ limit: "20mb" }));
 app.useBodyParser("json", { limit: "1mb" });
 app.useWebSocketAdapter(new ValkeyIoAdapter(app, env.VALKEY_URL));
 app.setGlobalPrefix("api");

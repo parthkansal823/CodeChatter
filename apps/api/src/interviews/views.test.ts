@@ -16,6 +16,11 @@ const row = (status: InterviewRow["status"] = "live"): InterviewRow => ({
   closesAt: null,
   fullscreen: false,
   lockClipboard: false,
+  recordWebcam: false,
+  recordScreen: false,
+  recordingConsentAt: null,
+  aiReviewRecording: false,
+  aiReview: null,
   beatSession: null,
   beatNetwork: null,
   beatAt: null,
@@ -100,6 +105,14 @@ describe("a paper, as a candidate sees it", () => {
     expect(seen.paper[1]!.hiddenTestCount).toBe(1);
     expect(JSON.stringify(seen)).not.toContain("PAPER-HIDDEN");
     expect(JSON.stringify(seen)).not.toContain("NOT-ASKED-STARTER");
+  });
+
+  it("never carries the AI's reading", () => {
+    const reviewed = { ...withPaper("assessment"), aiReview: { at: "", model: "m", summary: "AI-SUMMARY", findings: [], questions: [{ question: "AI-QUESTION", about: "" }], looked: { camera: false, screen: false }, note: null } };
+    const seen = JSON.stringify(candidateInterview(reviewed, [], "Bo", NOW));
+    expect(seen).not.toContain("AI-SUMMARY");
+    expect(seen).not.toContain("AI-QUESTION");
+    expect(JSON.stringify(interviewerInterview(reviewed, [], "Bo", NOW))).toContain("AI-SUMMARY");
   });
 
   it("shows nothing of it before it starts, whichever mode", () => {

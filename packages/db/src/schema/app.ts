@@ -351,6 +351,9 @@ export const interviewBatches = pgTable(
     closesAt: timestamp({ withTimezone: true }),
     fullscreen: boolean().notNull().default(false),
     lockClipboard: boolean().notNull().default(false),
+    recordWebcam: boolean().notNull().default(false),
+    recordScreen: boolean().notNull().default(false),
+    aiReviewRecording: boolean().notNull().default(false),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },
@@ -413,6 +416,22 @@ export const interviews = pgTable(
     /** Ask for full screen, and block pasting in and copying the questions out. */
     fullscreen: boolean().notNull().default(false),
     lockClipboard: boolean().notNull().default(false),
+    /** Record their webcam and screen, which they have to agree to before they start. */
+    recordWebcam: boolean().notNull().default(false),
+    recordScreen: boolean().notNull().default(false),
+    recordingConsentAt: timestamp({ withTimezone: true }),
+    /** Whether the AI may look at stills from the recording, which the candidate is told before they agree. */
+    aiReviewRecording: boolean().notNull().default(false),
+    /** The AI's latest reading, for interviewers. It points; a person decides. */
+    aiReview: jsonb().$type<{
+      at: string;
+      model: string;
+      summary: string;
+      findings: Array<{ source: "activity" | "camera" | "screen"; level: "note" | "look"; title: string; detail: string; at: string | null }>;
+      questions: Array<{ question: string; about: string }>;
+      looked: { camera: boolean; screen: boolean };
+      note: string | null;
+    }>(),
     /** The page reporting in: which browser tab, which network (a hash, not the address), when. */
     beatSession: text(),
     beatNetwork: text(),
@@ -499,6 +518,29 @@ export const interviewEvents = pgTable(
     at: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index().on(t.interviewId, t.at)],
+);
+
+/**
+ * An assessment's recording, as clips that each play by themselves, so one lost upload doesn't
+ * spoil the rest. The bytes are in the object store under the room, so they go with it.
+ * Deleted after INTERVIEW_RECORDING_RETENTION_DAYS.
+ */
+export const interviewRecordings = pgTable(
+  "interview_recordings",
+  {
+    id: uuidv7Pk(),
+    interviewId: uuid()
+      .notNull()
+      .references(() => interviews.id, { onDelete: "cascade" }),
+    stream: text().$type<"webcam" | "screen">().notNull(),
+    key: text().notNull(),
+    contentType: text().notNull(),
+    bytes: integer().notNull(),
+    startedAt: timestamp({ withTimezone: true }).notNull(),
+    durationMs: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.interviewId, t.stream, t.startedAt), index().on(t.createdAt)],
 );
 
 /** Each time the tests ran in an interview, with every case's result. Hidden cases' details stay with interviewers. */

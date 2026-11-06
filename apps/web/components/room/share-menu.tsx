@@ -77,7 +77,8 @@ export function ShareMenu() {
             <Link2 /> Share
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="grid w-80 gap-3 text-xs" aria-label="Share this room">
+        {/* The editor takes focus when it finishes loading: that shouldn't close this on someone who just opened it. Clicking elsewhere still does. */}
+        <PopoverContent align="end" className="grid w-80 gap-3 text-xs" aria-label="Share this room" onFocusOutside={(event) => event.preventDefault()}>
           <div className="flex items-center gap-2">
             <span className="flex-1 text-muted-foreground">
               Room code <span className="font-mono text-foreground">{room.id}</span>

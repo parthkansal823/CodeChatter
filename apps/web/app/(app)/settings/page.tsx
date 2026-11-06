@@ -16,6 +16,11 @@ export default function SettingsPage() {
     <>
       <PageHeader title="Settings" description="Connections for your account." />
       <div className="grid max-w-2xl gap-8 px-6 py-6 sm:px-8">
+        <section className="grid gap-2">
+          <h2 className="font-medium">Account security</h2>
+          <p className="text-muted-foreground">Update your name and password, set up two-factor sign-in and manage your devices.</p>
+          <div><Button variant="outline" size="sm" asChild><Link href="/settings/account">Open account security <ArrowRight /></Link></Button></div>
+        </section>
         <GithubToken />
         {org && org.id !== me.personalOrgId && (
           <section className="grid gap-2 border-t pt-6">

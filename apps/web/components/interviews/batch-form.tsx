@@ -79,6 +79,9 @@ export function BatchForm({ mode }: { mode: "interview" | "assessment" }) {
   const [closesAt, setClosesAt] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [lockClipboard, setLockClipboard] = useState(false);
+  const [recordWebcam, setRecordWebcam] = useState(false);
+  const [recordScreen, setRecordScreen] = useState(false);
+  const [aiReviewRecording, setAiReviewRecording] = useState(false);
   const [sendEmail, setSendEmail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +106,7 @@ export function BatchForm({ mode }: { mode: "interview" | "assessment" }) {
       ...(assessment && isoFromLocalInput(closesAt) && { closesAt: isoFromLocalInput(closesAt) }),
       fullscreen,
       lockClipboard,
+      ...(assessment && { recordWebcam, recordScreen, aiReviewRecording: aiReviewRecording && (recordWebcam || recordScreen) }),
       sendEmail,
     });
     if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "Check the form.");
@@ -224,6 +228,25 @@ export function BatchForm({ mode }: { mode: "interview" | "assessment" }) {
           <p className="text-muted-foreground">Always on: the server keeps the time, there&apos;s no internet from the sandbox, AI is off{assessment ? "" : " until you allow it"}, and leaving the tab, pasting from outside and second devices go on a record for you. Candidates are told before they start.</p>
           <label className="flex items-center gap-1.5"><Checkbox checked={fullscreen} onCheckedChange={(on) => setFullscreen(on === true)} /> Ask for full screen</label>
           <label className="flex items-center gap-1.5"><Checkbox checked={lockClipboard} onCheckedChange={(on) => setLockClipboard(on === true)} /> Block pasting from outside and copying the questions</label>
+          {assessment && (
+            <>
+              <label className="flex items-center gap-1.5"><Checkbox checked={recordWebcam} onCheckedChange={(on) => setRecordWebcam(on === true)} /> Record their webcam</label>
+              <label className="flex items-center gap-1.5"><Checkbox checked={recordScreen} onCheckedChange={(on) => setRecordScreen(on === true)} /> Record their whole screen</label>
+              {(recordWebcam || recordScreen) && (
+                <label className="flex items-center gap-1.5"><Checkbox checked={aiReviewRecording} onCheckedChange={(on) => setAiReviewRecording(on === true)} /> Let the AI look at stills from the recording, when someone asks it to</label>
+              )}
+              {aiReviewRecording && (recordWebcam || recordScreen) && (
+                <p role="note" className="text-muted-foreground">
+                  It looks for another person, a phone or other apps on screen, and never identifies anyone or judges faces. Candidates are told. The stills go to whichever AI this server uses, so check you&apos;re happy with that: a local model keeps them here.
+                </p>
+              )}
+              {(recordWebcam || recordScreen) && (
+                <p role="note" className="text-muted-foreground">
+                  They have to agree before they start, and can&apos;t take it otherwise. No sound is recorded. Only you and your organisation&apos;s admins can watch, each time is logged, and recordings are deleted automatically (after 30 days, unless your server says otherwise). Recording people has legal rules that differ by country: check it&apos;s allowed where your candidates are, and offer another way to anyone who can&apos;t agree.
+                </p>
+              )}
+            </>
+          )}
         </section>
 
         {error && <p role="alert" className="text-destructive">{error}</p>}

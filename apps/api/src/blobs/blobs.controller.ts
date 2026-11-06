@@ -138,7 +138,7 @@ export class BlobsController {
 }
 
 /** The raw body, hashed as it arrives; refused (and the rest drained) past `max` bytes. */
-async function readBody(request: Request, max: number): Promise<{ bytes: Buffer; sha256: string }> {
+export async function readBody(request: Request, max: number): Promise<{ bytes: Buffer; sha256: string }> {
   const tooLarge = () => new PayloadTooLargeException(`Files can be up to ${Math.round(max / 1024 / 1024)} MB.`);
   if (Number(request.headers["content-length"]) > max) {
     request.resume();

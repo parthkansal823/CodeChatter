@@ -8,42 +8,33 @@
  */
 "use client";
 
-import { BROWSER_INTEGRITY_KINDS, type RoomInterview } from "@codechatter/contracts";
+import type { RoomInterview } from "@codechatter/contracts";
 import { Maximize } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { useRoom } from "@/components/room/room-context";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
-type Kind = (typeof BROWSER_INTEGRITY_KINDS)[number];
-type Noticed = { kind: Kind; at: string; length?: number };
+import { noteIntegrity as note, putBackNoticed, takeNoticed } from "./integrity-queue";
 
 const BEAT_MS = 15_000;
 /** Under this it's a word or a line, which anyone might paste. */
 const WORTH_NOTING = 40;
-const MOST_IN_ONE_BEAT = 50;
 
 export function IntegrityGuard({ interview }: { interview: RoomInterview }) {
   const { room } = useRoom();
   const [sessionId] = useState(() => crypto.randomUUID());
-  const queue = useRef<Noticed[]>([]);
   const [fullscreen, setFullscreen] = useState(() => typeof document !== "undefined" && Boolean(document.fullscreenElement));
   const { lockClipboard, fullscreen: wantsFullscreen } = interview;
   const live = interview.status === "live";
 
   useEffect(() => {
     if (!live) return;
-    const note = (kind: Kind, length?: number) => {
-      if (queue.current.length < MOST_IN_ONE_BEAT) queue.current.push({ kind, at: new Date().toISOString(), ...(length !== undefined && { length }) });
-    };
     const beat = () => {
-      const events = queue.current.splice(0);
-      void api(`/api/rooms/${room.id}/interview/heartbeat`, { method: "POST", json: { sessionId, events } }).catch(() => {
-        // Keep them for next time: being offline for a moment shouldn't lose the record.
-        queue.current.unshift(...events.slice(0, MOST_IN_ONE_BEAT));
-      });
+      const events = takeNoticed();
+      void api(`/api/rooms/${room.id}/interview/heartbeat`, { method: "POST", json: { sessionId, events } }).catch(() => putBackNoticed(events));
     };
 
     const onVisibility = () => {

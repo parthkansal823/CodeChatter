@@ -1,7 +1,7 @@
 /** The candidate's link: join with or without an account, then wait for the interviewer, or start an assessment themselves. Shows nothing of the questions. */
 "use client";
 
-import type { InterviewInvitation, JoinedInterview } from "@codechatter/contracts";
+import type { InterviewInvitation, JoinedInterview, RecordingStream } from "@codechatter/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -9,7 +9,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Logo } from "@/components/brand/logo";
+import { useRecording } from "@/components/room/tools/interview/recorder";
+import { TurnOnRecording } from "@/components/room/tools/interview/recording-gate";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, api } from "@/lib/api";
 import type { Me } from "@/lib/me";
@@ -54,7 +57,30 @@ function Rules({ invite }: { invite: InterviewInvitation }) {
       <li>Leaving this tab, pasting from outside and opening it on a second device go on a record they can see.</li>
       {invite.fullscreen && <li>It runs in full screen.</li>}
       {invite.lockClipboard && <li>Pasting from outside and copying the questions are off.</li>}
+      {(invite.recordWebcam || invite.recordScreen) && <li>It records you. You&apos;re asked to agree first, below.</li>}
+      <li>An AI may help whoever assesses you, by reading your work and what&apos;s on the record, without your name. A person makes every decision.</li>
     </ul>
+  );
+}
+
+/** What they're agreeing to, in plain words. Nothing records until they say yes. */
+function ConsentToRecording({ invite, agreed, onChange }: { invite: InterviewInvitation; agreed: boolean; onChange: (on: boolean) => void }) {
+  const what = [invite.recordWebcam && "your camera", invite.recordScreen && "your whole screen"].filter(Boolean).join(" and ");
+  return (
+    <div className="grid gap-2 rounded-md border p-3 text-left">
+      <h2 className="font-medium">This assessment records {what}</h2>
+      <ul className="list-disc pl-5 text-muted-foreground">
+        <li>From when you start until you hand in. No sound is recorded.</li>
+        {invite.recordScreen && <li>Everything on your screen is in it, so close anything private and turn off notifications first.</li>}
+        <li>Only the people assessing you and their organisation&apos;s admins can watch it, and each time is logged.</li>
+        <li>It&apos;s deleted automatically after {invite.recordingKeptDays} days.</li>
+        {invite.aiReviewRecording && <li>An AI may look at stills from it, to spot another person, a phone or other apps on your screen. It doesn&apos;t identify you or judge your face, expression or where you look. A person decides anything that comes of it.</li>}
+        <li>If you&apos;d rather not, ask whoever sent this for another way to be assessed. You can&apos;t take this one without it.</li>
+      </ul>
+      <label className="flex items-center gap-2 font-medium">
+        <Checkbox checked={agreed} onCheckedChange={(on) => onChange(on === true)} /> I agree to being recorded
+      </label>
+    </div>
   );
 }
 
@@ -67,6 +93,8 @@ export function JoinInterview({ token }: { token: string }) {
   const [joined, setJoined] = useState<JoinedInterview | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const recording = useRecording((state) => state.live);
 
   const invitation = useQuery({
     queryKey: ["interview-invitation", token],
@@ -98,9 +126,9 @@ export function JoinInterview({ token }: { token: string }) {
     [router],
   );
   const refuse = useCallback((error: unknown) => setProblem(error instanceof ApiError ? error.detail : "That didn't work. Try again."), []);
-  const press = (path: "claim" | "guest" | "start") => {
+  const press = (path: "claim" | "guest" | "start", json?: unknown) => {
     setBusy(true);
-    void api<JoinedInterview>(`/api/interview-invites/${token}/${path}`, { method: "POST" }).then(accept, refuse).finally(() => setBusy(false));
+    void api<JoinedInterview>(`/api/interview-invites/${token}/${path}`, { method: "POST", ...(json !== undefined && { json }) }).then(accept, refuse).finally(() => setBusy(false));
   };
 
   // Coming back to a link you already used: carry on without asking. Once per page.
@@ -142,13 +170,18 @@ export function JoinInterview({ token }: { token: string }) {
   const details = [`${invite.durationMinutes} minutes`, assessment ? null : when(invite.scheduledAt)].filter(Boolean).join(" · ");
   const windowWords = assessment && (invite.opensAt || invite.closesAt) ? [invite.opensAt && `Opens ${when(invite.opensAt)}`, invite.closesAt && `start by ${when(invite.closesAt)}`].filter(Boolean).join(", ") : null;
   if (joined?.waiting && assessment) {
+    const wanted: RecordingStream[] = [...(invite.recordWebcam ? (["webcam"] as const) : []), ...(invite.recordScreen ? (["screen"] as const) : [])];
+    const ready = wanted.length === 0 || (agreed && wanted.every((stream) => recording[stream]));
     return (
       <Page title={invite.title}>
         <p className="text-muted-foreground">Hi {invite.candidateName}. {invite.questions ? `${paperWords(invite.questions)}. ` : ""}You have {invite.durationMinutes} minutes from when you start.</p>
         {windowWords && <p className="flex items-center justify-center gap-2 text-muted-foreground"><Clock className="size-4" /> {windowWords}</p>}
         <Rules invite={invite} />
+        {wanted.length > 0 && <ConsentToRecording invite={invite} agreed={agreed} onChange={setAgreed} />}
+        {/* Before the clock starts, so a camera that doesn't work costs them nothing. */}
+        {wanted.length > 0 && agreed && !opensLater && <TurnOnRecording wanted={wanted} />}
         {problem && <p role="alert" className="text-destructive">{problem}</p>}
-        <Button disabled={busy || opensLater} onClick={() => press("start")}>{busy && <Loader2 className="animate-spin" />} {opensLater ? "It hasn't opened yet" : "I understand. Start the assessment"}</Button>
+        <Button disabled={busy || opensLater || !ready} onClick={() => press("start", { consent: wanted.length > 0 && agreed })}>{busy && <Loader2 className="animate-spin" />} {opensLater ? "It hasn't opened yet" : "I understand. Start the assessment"}</Button>
         <p className="text-muted-foreground">You can&apos;t pause it once it starts.</p>
       </Page>
     );

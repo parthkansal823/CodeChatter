@@ -131,7 +131,7 @@ export function BatchResultsPage({ id }: { id: string }) {
     <>
       <PageHeader
         title={batch.title}
-        description={`${MODE_LABEL[batch.mode]} · ${batch.durationMinutes} minutes · ${batch.started} of ${batch.candidates} started · ${batch.finished} finished${dates ? ` · ${dates}` : ""}`}
+        description={`${MODE_LABEL[batch.mode]} · ${batch.durationMinutes} minutes · ${batch.started} of ${batch.candidates} started · ${batch.finished} finished${dates ? ` · ${dates}` : ""}${batch.recordWebcam || batch.recordScreen ? ` · Records ${[batch.recordWebcam && "camera", batch.recordScreen && "screen"].filter(Boolean).join(" and ")}` : ""}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="ghost" asChild><Link href={`/interviews${batch.mode === "assessment" ? "?tab=assessments" : ""}` as never}><ArrowLeft /> Back</Link></Button>

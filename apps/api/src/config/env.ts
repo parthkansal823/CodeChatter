@@ -15,6 +15,8 @@ const Env = z.object({
   WEBHOOKS_ALLOW_PRIVATE: z.enum(["0", "1"]).default("0").transform((value) => value === "1"),
   /** Settled webhook deliveries are pruned hourly after this many days. */
   WEBHOOK_DELIVERY_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
+  /** Assessment recordings are deleted this many days after they're made. */
+  INTERVIEW_RECORDING_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
   DATABASE_URL: z.string().startsWith("postgres"),
   VALKEY_URL: z.string().startsWith("redis"),
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),

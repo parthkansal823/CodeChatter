@@ -1,14 +1,15 @@
 /** Many candidates at once, a candidate's answers, marking them, and the page reporting in for the integrity record. */
 import { HeartbeatInput, integrityLevel, SaveAnswerInput, type BatchListItem, type BatchResultRow, type BatchResults, type CandidateAnswer, type IntegrityKind, type IntegrityReport, type InterviewerInterview, type ScheduleBatchData, type ScheduledBatch } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import type { ObjectStore } from "@codechatter/auth/s3";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { and, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import type { z } from "zod";
 
 import type { AuthSession } from "@codechatter/auth";
 import type { Env } from "../config/env.js";
-import { DB, ENV } from "../infra/tokens.js";
+import { DB, ENV, OBJECT_STORE } from "../infra/tokens.js";
 import { MailService } from "../mail/mail.service.js";
 import { EventsGateway } from "../realtime/events.gateway.js";
 import { InterviewsService } from "./interviews.service.js";
@@ -21,6 +22,8 @@ const MOST_EVENTS = 2000;
 /** The page reports every 15 seconds, and a hidden tab's timers can slow to once a minute. */
 const SILENT_MS = 90_000;
 const SECOND_SESSION_REPEAT_MS = 60_000;
+/** Clips arrive every half a minute. Longer than this with none, and something's stopped them. */
+const RECORDING_QUIET_MS = 90_000;
 
 @Injectable()
 export class InterviewTestsService {
@@ -29,6 +32,7 @@ export class InterviewTestsService {
   constructor(
     @Inject(DB) private readonly handle: DbHandle,
     @Inject(ENV) private readonly env: Env,
+    @Inject(OBJECT_STORE) private readonly store: ObjectStore | null,
     private readonly mail: MailService,
     private readonly interviews: InterviewsService,
     private readonly events: EventsGateway,
@@ -45,6 +49,9 @@ export class InterviewTestsService {
    * half-scheduled. One candidate failing after that doesn't take the others with it.
    */
   async scheduleBatch(session: AuthSession, input: ScheduleBatchData): Promise<ScheduledBatch> {
+    if ((input.recordWebcam || input.recordScreen) && !this.store) {
+      throw new ServiceUnavailableException("Recording needs file storage, which isn't set up on this server (S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY).");
+    }
     const orgId = await this.interviews.orgOf(session);
     const bank = await this.interviews.bankOf(orgId);
     let sittings;
@@ -58,7 +65,7 @@ export class InterviewTestsService {
     const closesAt = input.closesAt ? new Date(input.closesAt) : null;
     const [batch] = await this.db
       .insert(schema.interviewBatches)
-      .values({ orgId, mode: input.mode, title: input.title, durationMinutes: input.durationMinutes, paper: input.paper, opensAt: startsAt, closesAt, fullscreen: input.fullscreen, lockClipboard: input.lockClipboard, createdBy: session.user.id })
+      .values({ orgId, mode: input.mode, title: input.title, durationMinutes: input.durationMinutes, paper: input.paper, opensAt: startsAt, closesAt, fullscreen: input.fullscreen, lockClipboard: input.lockClipboard, recordWebcam: input.recordWebcam, recordScreen: input.recordScreen, aiReviewRecording: input.aiReviewRecording, createdBy: session.user.id })
       .returning();
 
     const made: Array<{ row: Awaited<ReturnType<InterviewsService["createSitting"]>>; token: string }> = [];
@@ -84,6 +91,9 @@ export class InterviewTestsService {
             closesAt: input.mode === "assessment" ? closesAt : null,
             fullscreen: input.fullscreen,
             lockClipboard: input.lockClipboard,
+            recordWebcam: input.recordWebcam,
+            recordScreen: input.recordScreen,
+            aiReviewRecording: input.aiReviewRecording,
           },
           sha256(token),
         );
@@ -207,7 +217,7 @@ export class InterviewTestsService {
       };
     });
     const tally = { candidates: rows.length, started: rows.filter((row) => row.startedAt).length, finished: rows.filter((row) => row.status === "finished").length };
-    return { ...this.listItem(batch, tally), fullscreen: batch.fullscreen, lockClipboard: batch.lockClipboard, rows: table };
+    return { ...this.listItem(batch, tally), fullscreen: batch.fullscreen, lockClipboard: batch.lockClipboard, recordWebcam: batch.recordWebcam, recordScreen: batch.recordScreen, rows: table };
   }
 
   /** Delete it and every sitting in it, with their rooms. Not while one is running. */
@@ -287,6 +297,8 @@ export class InterviewTestsService {
     if (sessions.second && !(await this.saidLately(row.id, "second-session", now))) server("second-session");
     if (row.beatNetwork && row.beatNetwork !== network) server("network-changed");
     if (row.beatAt && now.getTime() - row.beatAt.getTime() > SILENT_MS) server("page-silent", { seconds: Math.round((now.getTime() - row.beatAt.getTime()) / 1000) });
+    const quiet = await this.quietRecording(row, now);
+    if (quiet !== null && !(await this.saidLately(row.id, "recording-missing", now))) server("recording-missing", { seconds: quiet });
     for (const event of input.events) {
       const at = new Date(event.at);
       noticed.push({ interviewId: row.id, kind: event.kind, source: "browser", at: at > now ? now : at, detail: event.length === undefined ? {} : { length: event.length } });
@@ -297,6 +309,21 @@ export class InterviewTestsService {
     }
     await this.db.update(schema.interviews).set({ beatSession: sessions.stored, beatNetwork: network, beatAt: now }).where(eq(schema.interviews.id, row.id));
     return { status: row.status };
+  }
+
+  /** How many seconds since a recording it should be making last arrived, if that's too long. The page can't hide this. */
+  private async quietRecording(row: Awaited<ReturnType<InterviewsService["createSitting"]>>, now: Date): Promise<number | null> {
+    const wanted = [...(row.recordWebcam ? ["webcam"] : []), ...(row.recordScreen ? ["screen"] : [])];
+    if (!wanted.length || !row.startedAt) return null;
+    const { interviewRecordings: clips } = schema;
+    const rows = await this.db
+      .select({ stream: clips.stream, last: sql<string>`max(${clips.createdAt})` })
+      .from(clips)
+      .where(eq(clips.interviewId, row.id))
+      .groupBy(clips.stream);
+    const lastOf = new Map(rows.map((item) => [item.stream as string, new Date(item.last).getTime()]));
+    const longest = Math.max(...wanted.map((stream) => now.getTime() - (lastOf.get(stream) ?? row.startedAt!.getTime())));
+    return longest > RECORDING_QUIET_MS ? Math.round(longest / 1000) : null;
   }
 
   private async saidLately(interviewId: string, kind: IntegrityKind, now: Date): Promise<boolean> {

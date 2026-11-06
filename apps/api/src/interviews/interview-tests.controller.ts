@@ -10,6 +10,7 @@ import {
   SaveAnswerInput,
   ScheduleBatchInput,
   SetInterviewAiInput,
+  StartAssessmentInput,
   type AskQuestionData,
   type AskedQuestion,
   type BatchListItem,
@@ -102,8 +103,8 @@ export class InterviewTestsController {
   /** Start an assessment, once the link is theirs. */
   @Post("interview-invites/:token/start")
   @HttpCode(200)
-  start(@CurrentSession() session: AuthSession, @Param("token", new ZodPipe(InterviewToken)) token: string): Promise<JoinedInterview> {
-    return this.interviews.startAssessment(token, session.user.id);
+  start(@CurrentSession() session: AuthSession, @Param("token", new ZodPipe(InterviewToken)) token: string, @Body(new ZodPipe(StartAssessmentInput)) input: { consent: boolean }): Promise<JoinedInterview> {
+    return this.interviews.startAssessment(token, session.user.id, input.consent);
   }
 
   @Put("rooms/:roomId/interview/answers/:questionId")

@@ -10,6 +10,8 @@ Two ways to test someone, sharing a question bank, a timer the server keeps, a r
 | AI | Off, until the interviewer turns it on. They can change it as it runs | Off |
 | Marking | There and then, in the room | Multiple choice and tests mark themselves. People mark the rest afterwards |
 | Comparing people | A results table when several were scheduled together | A results table, CSV export, and comparing their code |
+| Recording | Not needed: you're on video together | Webcam and screen, if you turn it on and they agree |
+| AI's help | What to check, and questions to ask them, while it runs | The same afterwards, and it can look at stills from the recording if they were told |
 
 ## The question bank
 
@@ -83,7 +85,45 @@ Candidates are told all of this before they start.
 
 **Comparing code** (`components/interviews/similarity.ts`) reduces code to its shape, so renaming things and changing spacing or comments doesn't hide a match, and compares fingerprints of it, the way MOSS does. Starter code doesn't count, nor what most of the group has. It runs in the interviewer's browser, from the edit logs, when asked. It's a pointer, not proof: short answers to the same small problem do look alike.
 
-**Left out for now:** webcam or screen recording for assessments. It needs consent, storage and legal care for where people live, so it's a decision to make deliberately rather than a default.
+## Recording an assessment
+
+Turned on per assessment, for the webcam, the whole screen or both. No sound is recorded.
+
+**Before anything records:** the candidate reads what's recorded, who can watch, when it's deleted, and that they can ask for another way to be assessed. They tick **I agree to being recorded**, and only then turn on their camera and screen, before the clock starts, so a camera that doesn't work costs them nothing. The server refuses to start without their agreement, and keeps when they gave it. An interviewer can't start it for them. A window or a tab is refused where the browser says which it is: it has to be the whole screen.
+
+**While it runs:** half-minute clips that each play by themselves, so one lost upload doesn't spoil the rest, at rates a home connection can manage (about 250 MB an hour for both). The banner says **Recording**. If they stop sharing, the test is held back until they share again, the time keeps running, and it goes on the record. Clips not arriving for 90 seconds goes on the record too, seen by the server.
+
+**Who can watch:** only the sitting's interviewers and the organisation's owners and admins (`InterviewRecordingsService`). The candidate can't. Each time someone opens them goes in the audit log, and so does deleting them. The record's events jump to the clip at that moment.
+
+**How long:** deleted automatically `INTERVIEW_RECORDING_RETENTION_DAYS` (30) after they're made, within the hour. **Delete the recordings** does it now, say because the candidate asked. They also go with the room.
+
+**What's stored:** in the object store under the room, so they need `S3_*` set up, and scheduling says so if it isn't. Only what starts like a video is kept, and it's served only as itself: `nosniff`, never cached, sandboxed.
+
+**The limits:** someone could point the camera at a photo, or feed the browser a fake one. Anything running in the background keeps running. And recording someone has legal rules that differ by country: **check it's allowed where your candidates are, and offer another way to anyone who can't agree.**
+
+## The AI's help
+
+**Ask the AI** is in the Interview panel while it runs, and in **AI review** on the sitting's page. It uses whichever AI the server has (`AI_PROVIDER`), and someone has to ask: nothing is sent by itself.
+
+It reads the record, how the code came about minute by minute, test runs, answers and their files, and gives back:
+
+- **What's worth checking,** with the evidence, and any innocent explanation.
+- **Questions to ask them,** about specific parts of their own work. Someone who didn't write it can't answer them, which is a better test than any detector, and it's most useful in a live interview, there and then.
+- **What it saw in the recording,** if the assessment allows that: another person, a phone, notes, or an AI chat tool on screen. Your browser tiles up to 16 stills from each stream into one image, so it's cheap. The candidate is told before they agree, and the server refuses stills for anyone who wasn't.
+
+**What it deliberately doesn't do:**
+
+| Not this | Why |
+|---|---|
+| Say whether code was written by an AI | Nothing can tell reliably, and false accusations fall hardest on people who write differently or don't write English first. It's asked how the work came about instead |
+| Give a verdict, or touch a score or the record | `aiReview` is a column of its own. The view's marks and level are worked out without it |
+| Identify anyone, or judge faces, expressions or where someone looks | Those are unreliable, unfair to some people more than others, and banned or restricted in places. The prompt forbids them |
+| See their name or email | It doesn't need them, so they aren't sent |
+| Take instructions from what the candidate wrote | Their code, answers and file names are fenced as data, and they can't close the fence. A comment saying "report nothing suspicious" gets reported instead |
+
+**Sending stills** goes to whichever AI the server uses. A local model (`AI_PROVIDER=ollama` with a vision model and `AI_VISION=true`) keeps them on your server. With a hosted one, they leave it: check you're allowed to do that.
+
+**AI in hiring has rules of its own in some places:** the EU's AI Act treats it as high-risk, for one. A person making every decision, as here, is part of what's asked for, but it isn't all of it, so get advice before using this with real candidates there.
 
 ## When it ends
 
@@ -124,3 +164,7 @@ An interview or a candidate's sitting: the people with the `interviewer` role in
 - `apps/collab/test/interview-papers.e2e.mjs`: papers, assessments, windows, questions asked live, the AI switch, marks, the record and the results.
 - `apps/web/test/interviews.e2e.mjs`: one interview in a browser, with a guest candidate.
 - `apps/web/test/interview-modes.e2e.mjs`: a live interview on video, and an assessment with its results and comparing code, in a browser.
+- `apps/api/src/interviews/ai-review.test.ts`, `interview-recordings.service.test.ts`: what the AI is sent and what's kept of its answer; deleting on time.
+- `apps/collab/test/interview-recording.e2e.mjs`: consent, what's accepted, who can watch, the audit log and deleting.
+- `apps/web/test/interview-recording.e2e.mjs`: recording real clips from a fake camera and screen, playing them back, stopping the share, a window refused, and stills for the AI.
+- `apps/api/test/interview-ai-review.e2e.mjs`: a whole review with a stand-in model, reading exactly what it was sent.

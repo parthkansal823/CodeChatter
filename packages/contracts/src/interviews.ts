@@ -295,9 +295,9 @@ export type PaperScore = {
 // The integrity record.
 
 /** What the candidate's page reports about itself. It could be suppressed, which is why the server also notices the page going quiet. */
-export const BROWSER_INTEGRITY_KINDS = ["tab-hidden", "window-blur", "fullscreen-left", "pasted", "paste-blocked", "copy-blocked", "second-screen"] as const;
+export const BROWSER_INTEGRITY_KINDS = ["tab-hidden", "window-blur", "fullscreen-left", "pasted", "paste-blocked", "copy-blocked", "second-screen", "camera-stopped", "screen-stopped"] as const;
 /** What the server sees for itself. */
-export const SERVER_INTEGRITY_KINDS = ["second-session", "network-changed", "page-silent", "ai-on", "ai-off", "ai-used"] as const;
+export const SERVER_INTEGRITY_KINDS = ["second-session", "network-changed", "page-silent", "ai-on", "ai-off", "ai-used", "recording-missing"] as const;
 export type IntegrityKind = (typeof BROWSER_INTEGRITY_KINDS)[number] | (typeof SERVER_INTEGRITY_KINDS)[number];
 
 export const INTEGRITY_LABEL: Record<IntegrityKind, string> = {
@@ -314,6 +314,9 @@ export const INTEGRITY_LABEL: Record<IntegrityKind, string> = {
   "ai-on": "AI allowed by the interviewer",
   "ai-off": "AI turned off by the interviewer",
   "ai-used": "Used the AI",
+  "camera-stopped": "Camera turned off",
+  "screen-stopped": "Stopped sharing their screen",
+  "recording-missing": "No recording arriving",
 };
 
 export const HeartbeatInput = z.object({
@@ -339,8 +342,8 @@ export type IntegrityReport = {
  */
 export function integrityLevel(counts: IntegrityReport["counts"], bigEdits: number): IntegrityLevel {
   const n = (kind: IntegrityKind) => counts[kind] ?? 0;
-  if (n("second-session") > 0 || n("pasted") >= 5 || n("tab-hidden") >= 15 || n("page-silent") >= 3) return "concern";
-  if (n("pasted") > 0 || n("paste-blocked") > 0 || n("copy-blocked") > 0 || n("tab-hidden") >= 3 || n("window-blur") >= 5 || n("fullscreen-left") > 0 || n("network-changed") > 0 || n("page-silent") > 0 || bigEdits > 2) return "look";
+  if (n("second-session") > 0 || n("pasted") >= 5 || n("tab-hidden") >= 15 || n("page-silent") >= 3 || n("recording-missing") >= 3 || n("screen-stopped") >= 3) return "concern";
+  if (n("camera-stopped") > 0 || n("screen-stopped") > 0 || n("recording-missing") > 0 || n("pasted") > 0 || n("paste-blocked") > 0 || n("copy-blocked") > 0 || n("tab-hidden") >= 3 || n("window-blur") >= 5 || n("fullscreen-left") > 0 || n("network-changed") > 0 || n("page-silent") > 0 || bigEdits > 2) return "look";
   return "clear";
 }
 
@@ -357,6 +360,62 @@ export const ScheduleInterviewInput = z.object({
 });
 export type ScheduleInterviewInput = z.input<typeof ScheduleInterviewInput>;
 export type ScheduleInterviewData = z.output<typeof ScheduleInterviewInput>;
+
+// Recording an assessment.
+
+export const RECORDING_STREAMS = ["webcam", "screen"] as const;
+export type RecordingStream = (typeof RECORDING_STREAMS)[number];
+export const RECORDING_STREAM_LABEL: Record<RecordingStream, string> = { webcam: "Camera", screen: "Screen" };
+/** How long each clip runs. They're recorded one after another. */
+export const RECORDING_CLIP_MS = 30_000;
+/** Far more than half a minute needs at the rates the page asks for. */
+export const RECORDING_CLIP_MAX_BYTES = 8 * 1024 * 1024;
+/** One sitting can't fill the store, whatever a page sends. Eight hours fits, at those rates. */
+export const RECORDING_SITTING_MAX_BYTES = 3 * 1024 * 1024 * 1024;
+
+export const RecordingClipQuery = z.strictObject({
+  stream: z.enum(RECORDING_STREAMS),
+  startedAt: z.iso.datetime({ offset: true }),
+  durationMs: z.coerce.number().int().min(0).max(10 * 60_000),
+});
+export type RecordingClip = { id: string; stream: RecordingStream; startedAt: string; durationMs: number; bytes: number };
+export type InterviewRecordings = {
+  clips: RecordingClip[];
+  bytes: number;
+  /** When the candidate agreed. */
+  consentAt: string | null;
+  /** How long clips are kept after they're recorded. */
+  keptDays: number;
+};
+
+// The AI's reading of a sitting: what to check and what to ask. A person decides.
+
+/** Stills from a recording, tiled into one JPEG by the reviewer's browser, and when each was taken. */
+export const AiReviewSheet = z.object({ data: z.string().min(1).max(3_000_000), times: z.array(z.iso.datetime({ offset: true })).min(1).max(24) });
+export const AiReviewInput = z.object({
+  /** Their files at the end, from the reviewer's browser: the API doesn't read live documents. */
+  files: z.array(z.object({ path: z.string().max(1000), text: z.string().max(200_000) })).max(100).default([]),
+  webcam: AiReviewSheet.optional(),
+  screen: AiReviewSheet.optional(),
+});
+export type AiReviewInput = z.infer<typeof AiReviewInput>;
+
+export type AiReviewFinding = { source: "activity" | "camera" | "screen"; level: "note" | "look"; title: string; detail: string; at: string | null };
+export type AiReviewQuestion = { question: string; about: string };
+export type AiReview = {
+  at: string;
+  model: string;
+  summary: string;
+  findings: AiReviewFinding[];
+  /** To ask them: someone who didn't write the work couldn't answer these. */
+  questions: AiReviewQuestion[];
+  /** What it looked at from the recording. */
+  looked: { camera: boolean; screen: boolean };
+  note: string | null;
+};
+
+/** Starting an assessment that records needs them to say yes. */
+export const StartAssessmentInput = z.object({ consent: z.boolean().default(false) }).default({ consent: false });
 
 export const BatchCandidate = z.object({
   name: z.string().trim().min(1, "A candidate needs a name.").max(200),
@@ -379,8 +438,15 @@ export const ScheduleBatchInput = z
     closesAt: z.iso.datetime({ offset: true }).optional(),
     fullscreen: z.boolean().default(false),
     lockClipboard: z.boolean().default(false),
+    /** An assessment: record their webcam and screen. They have to agree before they start. */
+    recordWebcam: z.boolean().default(false),
+    recordScreen: z.boolean().default(false),
+    /** Let the AI look at stills from that recording. They're told before they agree. */
+    aiReviewRecording: z.boolean().default(false),
     sendEmail: z.boolean().default(false),
   })
+  .refine((batch) => !batch.aiReviewRecording || batch.recordWebcam || batch.recordScreen, { path: ["aiReviewRecording"], message: "There's no recording for the AI to look at." })
+  .refine((batch) => batch.mode === "assessment" || (!batch.recordWebcam && !batch.recordScreen), { path: ["recordWebcam"], message: "Only an assessment is recorded: an interview is already on video." })
   .refine((batch) => batch.mode === "interview" || batch.paper.fixed.length + batch.paper.random.length > 0, { path: ["paper"], message: "Add at least one question." })
   .refine((batch) => !batch.startsAt || !batch.closesAt || Date.parse(batch.startsAt) < Date.parse(batch.closesAt), { path: ["closesAt"], message: "It has to close after it opens." })
   .refine((batch) => new Set(batch.candidates.flatMap((candidate) => (candidate.email ? [candidate.email.toLowerCase()] : []))).size === batch.candidates.filter((candidate) => candidate.email).length, { path: ["candidates"], message: "The same email is on the list twice." })
@@ -468,7 +534,7 @@ export type BatchResultRow = {
   integrity: { level: IntegrityLevel; counts: IntegrityReport["counts"]; bigEdits: number };
   recommendation: "yes" | "maybe" | "no" | null;
 };
-export type BatchResults = BatchListItem & { fullscreen: boolean; lockClipboard: boolean; rows: BatchResultRow[] };
+export type BatchResults = BatchListItem & { fullscreen: boolean; lockClipboard: boolean; recordWebcam: boolean; recordScreen: boolean; rows: BatchResultRow[] };
 
 /** A run's result as anyone in the room sees it. Hidden cases are only counted. */
 export type VisibleCaseResult = { id: string; input: string; expected: string; verdict: string; stdout: string; stderr: string; timeMs: number };
@@ -515,6 +581,9 @@ export type CandidateInterview = {
   lockClipboard: boolean;
   /** Whether the candidate may use the AI. */
   aiAllowed: boolean;
+  /** Whether this sitting records them, which they agreed to before starting. */
+  recordWebcam: boolean;
+  recordScreen: boolean;
 };
 
 export const Scorecard = z.object({
@@ -533,6 +602,10 @@ export type InterviewerInterview = Omit<CandidateInterview, "runs" | "paper" | "
   score: PaperScore;
   integrity: IntegrityReport;
   batchId: string | null;
+  recordingConsentAt: string | null;
+  /** The AI's latest reading of this sitting, if someone has asked for one. */
+  aiReview: AiReview | null;
+  aiReviewRecording: boolean;
   candidateEmail: string | null;
   candidateJoined: boolean;
   hiddenTests: Array<Pick<InterviewTest, "id" | "input" | "expected">>;
@@ -554,6 +627,12 @@ export type InterviewInvitation = {
   closesAt: string | null;
   fullscreen: boolean;
   lockClipboard: boolean;
+  /** What's recorded, which they have to agree to before they start, and for how long it's kept. */
+  recordWebcam: boolean;
+  recordScreen: boolean;
+  recordingKeptDays: number;
+  /** Whether an AI may look at stills from the recording. */
+  aiReviewRecording: boolean;
   /** The server's clock, so a wrong clock doesn't change when the window looks open. */
   now: string;
   candidateName: string;

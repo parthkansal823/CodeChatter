@@ -128,6 +128,8 @@ export function candidateInterview(row: InterviewRow, runs: readonly RunRow[], i
     fullscreen: row.fullscreen,
     lockClipboard: row.lockClipboard,
     aiAllowed: row.aiAllowed,
+    recordWebcam: row.recordWebcam,
+    recordScreen: row.recordScreen,
   };
 }
 
@@ -151,6 +153,9 @@ export function interviewerInterview(row: InterviewRow, runs: readonly RunRow[],
     hiddenTestCount: tests.filter((test) => test.hidden).length,
     role: "interviewer",
     batchId: row.batchId,
+    recordingConsentAt: row.recordingConsentAt?.toISOString() ?? null,
+    aiReview: row.aiReview,
+    aiReviewRecording: row.aiReviewRecording,
     candidateEmail: row.candidateEmail,
     candidateJoined: row.candidateUserId !== null,
     hiddenTests: tests.filter((test) => test.hidden).map(({ id, input, expected }) => ({ id, input, expected })),

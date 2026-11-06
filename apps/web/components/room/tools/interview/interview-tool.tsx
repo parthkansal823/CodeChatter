@@ -14,6 +14,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import * as Y from "yjs";
 
+import { AiReviewCard } from "@/components/interviews/ai-review-card";
 import { MODE_LABEL, STATUS_LABEL } from "@/components/interviews/format";
 import { IntegrityRecord } from "@/components/interviews/integrity-record";
 import { PaperReview } from "@/components/interviews/paper-review";
@@ -302,10 +303,16 @@ export default function InterviewTool(_props: RoomToolProps) {
             <ScorecardForm key={interview.id} rubric={interview.rubric} scorecard={interview.scorecard} onSave={saveScorecard} />
           </section>
           {interview.status !== "scheduled" && (
-            <section className="grid gap-2 border-t p-3" aria-label="The record">
-              <h3 className="font-medium">The record</h3>
-              <IntegrityRecord integrity={interview.integrity} />
-            </section>
+            <>
+              <section className="grid gap-2 border-t p-3" aria-label="Ask the AI">
+                <h3 className="font-medium">Ask the AI what to check</h3>
+                <AiReviewCard interview={interview} onChanged={setInterview} />
+              </section>
+              <section className="grid gap-2 border-t p-3" aria-label="The record">
+                <h3 className="font-medium">The record</h3>
+                <IntegrityRecord integrity={interview.integrity} />
+              </section>
+            </>
           )}
         </>
       )}

@@ -16,6 +16,11 @@ const interview = (over: Partial<InterviewerInterview> = {}): InterviewerIntervi
   fullscreen: false,
   lockClipboard: false,
   aiAllowed: false,
+  recordWebcam: false,
+  recordScreen: false,
+  recordingConsentAt: null,
+  aiReview: null,
+  aiReviewRecording: false,
   id: "i1",
   roomId: "ABC234",
   title: "Two sum",
@@ -119,6 +124,19 @@ test("has the record, as signs to weigh", () => {
   assert.match(report, /Open in a second tab or device: 1/);
   assert.match(report, /Big edits at once: 2/);
   assert.match(interviewReport(interview()), /Nothing was recorded/);
+});
+
+test("marks what the AI said as what it is", () => {
+  const report = interviewReport(interview({ aiReview: { at: "", model: "stand-in", summary: "One thing.", findings: [{ source: "activity", level: "look", title: "All at once", detail: "A big edit.", at: null }], questions: [{ question: "Why this?", about: "" }], looked: { camera: false, screen: false }, note: null } }));
+  assert.match(report, /## What the AI suggested/);
+  assert.match(report, /it can be wrong: this isn't a finding/);
+  assert.match(report, /- All at once: A big edit\./);
+  assert.match(report, /- Why this\?/);
+  assert.doesNotMatch(interviewReport(interview()), /What the AI suggested/);
+});
+
+test("says they agreed to being recorded", () => {
+  assert.match(interviewReport(interview({ recordingConsentAt: "2026-11-06T10:00:00.000Z" })), /Recorded with their agreement/);
 });
 
 test("a CSV can't smuggle in a formula, or break its columns", () => {

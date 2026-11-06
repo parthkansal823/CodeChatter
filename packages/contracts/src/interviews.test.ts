@@ -57,6 +57,16 @@ describe("ScheduleBatchInput", () => {
     expect(ScheduleBatchInput.safeParse({ ...batch, startsAt: "2026-12-02T10:00:00Z", closesAt: "2026-12-01T10:00:00Z" }).success).toBe(false);
   });
 
+  it("records only an assessment", () => {
+    expect(ScheduleBatchInput.safeParse({ ...batch, recordWebcam: true, recordScreen: true }).success).toBe(true);
+    expect(ScheduleBatchInput.safeParse({ ...batch, mode: "interview", recordScreen: true }).success).toBe(false);
+  });
+
+  it("lets the AI look only at a recording that exists", () => {
+    expect(ScheduleBatchInput.safeParse({ ...batch, aiReviewRecording: true }).success).toBe(false);
+    expect(ScheduleBatchInput.safeParse({ ...batch, recordWebcam: true, aiReviewRecording: true }).success).toBe(true);
+  });
+
   it("can't email someone with no address", () => {
     expect(ScheduleBatchInput.safeParse({ ...batch, sendEmail: true, candidates: [{ name: "Ana" }] }).success).toBe(false);
   });
@@ -171,6 +181,14 @@ describe("integrityLevel", () => {
     expect(integrityLevel({ pasted: 1 }, 0)).toBe("look");
     expect(integrityLevel({ "copy-blocked": 1 }, 0)).toBe("look");
     expect(integrityLevel({}, 3)).toBe("look");
+  });
+
+  it("asks someone to look when a recording stops, and worries if it keeps stopping", () => {
+    expect(integrityLevel({ "screen-stopped": 1 }, 0)).toBe("look");
+    expect(integrityLevel({ "camera-stopped": 1 }, 0)).toBe("look");
+    expect(integrityLevel({ "recording-missing": 1 }, 0)).toBe("look");
+    expect(integrityLevel({ "recording-missing": 3 }, 0)).toBe("concern");
+    expect(integrityLevel({ "screen-stopped": 3 }, 0)).toBe("concern");
   });
 
   it("raises a concern for what's hard to explain", () => {

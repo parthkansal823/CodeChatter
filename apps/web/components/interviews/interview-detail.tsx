@@ -18,10 +18,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 
+import { AiReviewCard } from "./ai-review-card";
 import { formatCountdown, MODE_LABEL, STATUS_LABEL } from "./format";
 import { IntegrityBadge, IntegrityRecord } from "./integrity-record";
 import { CandidateLinkDialog } from "./interviews-page";
 import { PaperReview } from "./paper-review";
+import { RecordingsView } from "./recordings-view";
 import { interviewReport } from "./report";
 import { ReplayView } from "./replay-view";
 import { RunList } from "./run-list";
@@ -175,6 +177,8 @@ export function InterviewDetail({ id }: { id: string }) {
           {interview.paper.length > 0 && <TabsTrigger value="answers">Answers</TabsTrigger>}
           <TabsTrigger value="scorecard">Scorecard</TabsTrigger>
           <TabsTrigger value="record">The record</TabsTrigger>
+          {(interview.recordWebcam || interview.recordScreen) && <TabsTrigger value="recordings">Recordings</TabsTrigger>}
+          <TabsTrigger value="ai">AI review</TabsTrigger>
           <TabsTrigger value="runs">Test runs ({interview.runs.length})</TabsTrigger>
           <TabsTrigger value="replay">Replay</TabsTrigger>
           <TabsTrigger value="report">Report</TabsTrigger>
@@ -184,6 +188,14 @@ export function InterviewDetail({ id }: { id: string }) {
             <PaperReview interview={interview} onChanged={(next) => queryClient.setQueryData(key, next)} />
           </TabsContent>
         )}
+        {(interview.recordWebcam || interview.recordScreen) && (
+          <TabsContent value="recordings" className="pt-2">
+            <RecordingsView interview={interview} />
+          </TabsContent>
+        )}
+        <TabsContent value="ai" className="max-w-3xl pt-2">
+          <AiReviewCard interview={interview} onChanged={(next) => queryClient.setQueryData(key, next)} />
+        </TabsContent>
         <TabsContent value="record" className="max-w-3xl pt-2">
           <IntegrityRecord integrity={interview.integrity} />
         </TabsContent>

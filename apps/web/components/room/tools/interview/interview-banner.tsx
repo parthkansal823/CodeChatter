@@ -2,7 +2,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Timer } from "lucide-react";
+import { Circle, Timer } from "lucide-react";
 import { useEffect } from "react";
 
 import { formatCountdown } from "@/components/interviews/format";
@@ -11,6 +11,8 @@ import { getSocket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 
 import { IntegrityGuard } from "./integrity-guard";
+import { stopRecording, useRecording } from "./recorder";
+import { RecordingGate } from "./recording-gate";
 import { interviewKey, useCountdown, useRoomInterview } from "./use-interview";
 
 const LAST_MINUTES = 5 * 60_000;
@@ -38,8 +40,11 @@ export function InterviewBanner({ onOpen }: { onOpen: () => void }) {
   const finished = interview?.status === "finished";
   const candidate = room.role === "candidate";
   useEffect(() => {
-    if (finished && candidate) window.location.reload();
+    // The last clip first: reloading would lose it.
+    if (finished && candidate) void stopRecording().finally(() => window.location.reload());
   }, [finished, candidate]);
+  const live = useRecording((state) => state.live);
+  const recording = live.webcam || live.screen;
 
   const left = useCountdown(interview?.status === "live" ? interview.endsAt : null, interview?.now, dataUpdatedAt);
 
@@ -65,11 +70,15 @@ export function InterviewBanner({ onOpen }: { onOpen: () => void }) {
   return (
     <>
     {room.role === "candidate" && <IntegrityGuard interview={interview} />}
+    {room.role === "candidate" && (interview.recordWebcam || interview.recordScreen) && <RecordingGate interview={interview} />}
     <button type="button" onClick={onOpen} className="flex h-7 w-full shrink-0 items-center gap-2 border-b bg-panel px-3 text-left text-xs hover:bg-accent" aria-label={`${message}. Open the ${what} panel.`}>
       <Timer className="size-3.5 shrink-0 text-brand" />
       <span className="min-w-0 truncate">{message}</span>
+      {recording && interview.status === "live" && (
+        <span role="status" className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground"><Circle className="size-2 fill-brand text-brand" /> Recording</span>
+      )}
       {left !== null && (
-        <span role="timer" aria-live="off" className={cn("ml-auto shrink-0 font-mono font-medium tabular-nums", left <= LAST_MINUTES && "text-brand")}>
+        <span role="timer" aria-live="off" className={cn("shrink-0 font-mono font-medium tabular-nums", !recording && "ml-auto", left <= LAST_MINUTES && "text-brand")}>
           {left <= 0 ? "Time's up" : `${formatCountdown(left)} left`}
         </span>
       )}

@@ -38,6 +38,7 @@ const SUITES = [
     ["interview-rules", "interviews"],
     ["room-people-access", "room-people"],
     ["interview-papers", "interview-papers"],
+    ["interview-recording-rules", "interview-recording"],
   ]),
   ...service("apps/api", [
     ["api-binary-files", "blobs"],
@@ -45,6 +46,7 @@ const SUITES = [
     ["api-webhooks", "webhooks-out"],
     ["api-notifications", "notifications"],
     ["api-source-control", "source-control"],
+    ["api-interview-ai-review", "interview-ai-review"],
   ]),
   ...[
     "new-room",
@@ -54,6 +56,7 @@ const SUITES = [
     "sandbox-git",
     "interviews",
     "interview-modes",
+    "interview-recording",
     "csp",
     "history",
     "code-comments",

@@ -19,6 +19,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 
+import { stopRecording } from "./recorder";
 import { interviewKey } from "./use-interview";
 
 const failed = (error: unknown, fallback: string) => toast.error(error instanceof ApiError ? error.detail : fallback);
@@ -156,6 +157,8 @@ export function CandidatePaper({ interview, stateVector }: { interview: Candidat
   async function handIn() {
     setHandingIn(false);
     try {
+      // Before it's over: the last clip goes while they're still recording.
+      await stopRecording();
       await api(`/api/rooms/${room.id}/interview/submit`, { method: "POST" });
       await queryClient.invalidateQueries({ queryKey: key });
     } catch (error) {

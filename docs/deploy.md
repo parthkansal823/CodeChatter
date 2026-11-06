@@ -163,6 +163,10 @@ Copy backups off the server, for example with a nightly cron job to object stora
 
 **Before the first deploy, rotate every secret that v1 used** (`server/.env`): the OAuth client secrets, the Gmail App Password, and the database credentials. Then put the new values in `infra/.env.production` only.
 
+## Interviews and assessments
+
+Recording assessments needs the object store (`S3_*`). Recordings are deleted `INTERVIEW_RECORDING_RETENTION_DAYS` (30) after they're made. They're large, at about 250 MB an hour per candidate for webcam and screen, so size the store for that. Check the law where your candidates are before turning recording or the AI review on: `docs/interviews.md` has what each does.
+
 ## The security policy (CSP)
 
 Every page carries a Content-Security-Policy with a nonce of its own (`apps/web/lib/csp.ts`, and why in `docs/adr/0010-content-security-policy.md`). You only need to think about it in two cases:
