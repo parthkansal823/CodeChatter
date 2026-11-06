@@ -11,8 +11,9 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## In progress (2026-11-06)
 
-- 🟡 **Claude:** interview mode (step 11).
+- 🟡 **ChatGPT:** prompt 13 (follow-ups).
 - ✅ Just finished by Claude:
+  - interview mode (step 11), with the interviewer and candidate room roles (`docs/interviews.md`);
   - end-to-end tests in CI (waiting for their first run on GitHub);
   - metrics and dashboards checked (ChatGPT 8);
   - real git in the sandbox (step 7);
@@ -21,9 +22,8 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 ## Up next, in order
 
 1. **ChatGPT**, one prompt at a time, each checked before the next: **13** (follow-ups) → **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
-2. **Claude:** interview mode (step 11), with the interviewer and candidate room roles (step 8).
+2. **Claude:** step 10's security and accessibility passes, and the cutover from v1, before launch.
 3. **You:** record the README's GIF and 2-minute video (step 12).
-4. Then step 10's security and accessibility passes, and the cutover from v1, before launch.
 
 ## Your actions
 
@@ -127,7 +127,6 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - then a guest role, auto-join by email domain, organisation templates and policies
 - 🟡 Account: profile, password, two-factor, active sessions (**ChatGPT 10**)
   - then pages for appearance, notifications and connected accounts
-- ⬜ Room roles for interviews: interviewer and candidate (**Claude**, with step 11)
 - ⬜ Usage dashboard: runs, AI tokens and sandbox minutes, with quotas
 - ⬜ Instance admin: users, rooms, health
 
@@ -163,15 +162,14 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ Cutover from v1: move the data from MongoDB, then delete `client/` and `server/`
 - ⬜ A final security review
 
-## Step 11 · Interview mode (**Claude**)
+## Step 11 · Interview mode: after launch (**Claude**)
 
-- ⬜ Question bank with starter code and test cases, visible and hidden
-- ⬜ Schedule an interview, with interviewer and candidate roles and a single-use candidate link
-- ⬜ Server-side timer and phases
-- ⬜ A tests panel: the judge runs the hidden tests. The candidate sees pass counts, and interviewers see diffs.
-- ⬜ Private rubric and scorecards the candidate never sees
-- ⬜ Replay: code, runs and chat on one timeline
-- ⬜ Report export
+The mode itself is done. What's left:
+
+- ⬜ Hidden tests on the Kubernetes driver (a one-off pod, as the Docker driver's throwaway container); **Run tests** refuses there until then
+- ⬜ A scorecard for each interviewer (one is shared now, and the last save wins)
+- ⬜ The report as a PDF (Markdown now)
+- ⬜ Closing open connections when a room's role changes outside interviews: the mechanism exists now (`ROOM_ACCESS_CHANNEL`), and the rooms API doesn't use it yet
 
 ## Step 12 · Recruiter kit
 

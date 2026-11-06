@@ -39,6 +39,8 @@ export type RoomSummary = {
   name: string;
   description: string;
   templateId: string | null;
+  /** "interview" rooms belong to an interview (GET rooms/:id/interview). */
+  kind: "workspace" | "interview";
   /** "owner/name" when the room was made from a GitHub repository. */
   repo: string | null;
   visibility: "private" | "public";

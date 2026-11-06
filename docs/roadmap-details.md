@@ -416,15 +416,29 @@ Tests:
     - repositories in subfolders.
 - ✅ **Secret scanning** before a push (`apps/api/src/github/secret-scan.ts`). A commit, a publish or a gist with a key or password in it is refused with each finding: the file and line, what kind (AWS, GitHub, GitLab, Slack, Stripe, Google, OpenAI, Anthropic, npm and SendGrid keys, private keys, a password in a database URL, a secret in an `.env` file, a hard-coded secret). The preview shows only the key's ends. Source control and the gist dialog list the findings, and each one opens its file at that line. "Commit anyway" (or Publish, or Make it) sends it, and the audit log records where and what kind, never the secret. Placeholders, names, words, documentation values (`EXAMPLE`, `abcdefg…`), local database URLs and a line marked `gitleaks:allow` are let through; the repository's 692 files and every template scan clean. Tests: unit 11/11, the API's source-control e2e 55/55 (refused commit and publish, a gist sent anyway), browser `secret-scan.e2e.mjs` 8/8.
 
-## 7. Interview mode ⬜
+## 7. Interview mode ✅
 
-- ⬜ Question bank with starter code and test cases (visible and hidden).
-- ⬜ Schedule an interview, with interviewer and candidate roles and a single-use candidate link.
-- ⬜ Server-side timer and phases.
-- ⬜ Tests panel: a judge container runs the hidden tests. The candidate sees pass counts; interviewers see diffs.
-- ⬜ Private rubric and scorecards that the candidate never receives.
-- ⬜ Replay: code, runs and chat on one timeline.
-- ⬜ Report export.
+How it works and what it guarantees: `docs/interviews.md`.
+
+- ✅ **Question bank:** starter files, visible and hidden tests, a rubric and a length, per organisation (`interview_questions`, `/interviews`, `components/interviews/question-form.tsx`). Removing one archives it; interviews keep their own snapshot.
+- ✅ **Scheduling:** a private room with `kind: "interview"` and the creator as `interviewer`, seeded from the snapshot by collab (`persistence.ts`). The candidate's link is single-use, stored as a hash, can be replaced until used, and can be emailed (`interviewInvitationEmail`).
+- ✅ **Joining:** with an account, or as a guest under the candidate's name (`DemoService.createGuestAccount`). They have no room membership until it starts, and wait on `/interview/<token>`, which shows nothing of the question.
+- ✅ **Server-side timer and phases:** scheduled, live, finished or cancelled. `InterviewsService` closes interviews that run out, with conditional updates so several API instances are safe. Browsers count down from the server's `now`.
+- ✅ **Rights really go:** the candidate becomes a viewer, collab closes the room's sockets (`extensions/revocation.ts`, over Valkey), and the sandbox restarts.
+- ✅ **Tests panel:** the room's Interview panel (`tools/interview/`). Hidden tests run in a throwaway container with no network (`apps/runner/src/judge-box.ts`). Candidates see counts, and interviewers see every case (`interviews/views.ts`).
+- ✅ **Private rubric and scorecard** (`scorecard-form.tsx`), behind `interview.rubric`.
+- ✅ **Replay:** code, runs and chat on one line, rebuilt in the browser from `doc_updates` (`replay.ts`, `replay-view.tsx`).
+- ✅ **Report:** Markdown to copy or download (`report.ts`).
+- ✅ **No AI for candidates:** refused by the API and hidden in the room. No forking interview rooms.
+
+Tests: `apps/api/src/interviews/views.test.ts` (6), `apps/web/components/interviews/{replay,report}.test.ts` (11), `apps/collab/src/extensions/revocation.test.ts` (2), `apps/runner/test/judge-isolated.e2e.mjs` (9), `apps/collab/test/interviews.e2e.mjs` (78, including the timer taking rights from an open editor), `apps/web/test/interviews.e2e.mjs` (32, the whole flow with a guest). All three end-to-end suites are in `scripts/e2e-ci.mjs`.
+
+Found by those tests and fixed:
+
+- Hocuspocus's `closeConnections` detaches the document but leaves the socket open, so a candidate's editor would have gone silently stale. Revocation closes the socket.
+- A scorecard stayed on "Save" after saving, because `jsonb` returns keys in its own order. The form compares values.
+
+What's left is in `docs/pending.md` under step 11.
 
 ## 8. Teams and admin ⬜
 
@@ -432,7 +446,7 @@ Tests:
   - roles: owner, admin, member, guest
   - invitations, and auto-join by email domain
   - organisation templates and policies
-- ⬜ **Room roles:** owner, editor, runner, viewer, interviewer, candidate. One permission matrix (done) drives all of them.
+- ✅ **Room roles:** owner, editor, runner, viewer, interviewer, candidate. One permission matrix drives all of them, and interview mode (§7) gives the last two their use.
 - 🟡 **Settings pages:** profile, password, two-factor sign-in (the sign-in step exists, but nothing turns it on) and active sessions. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-10-account-security.md`.
   - profile
   - security: 2FA, active sessions

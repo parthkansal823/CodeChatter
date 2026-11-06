@@ -51,7 +51,7 @@ function footer(exit: RunExit): string {
  * person who started it can type into it (input() prompts, menus).
  */
 export function RunOutput() {
-  const { me, can } = useRoom();
+  const { me, can, room } = useRoom();
   const run = useRun();
   const [empty, setEmpty] = useState(!run.run);
   const [failure, setFailure] = useState(false);
@@ -95,7 +95,7 @@ export function RunOutput() {
           </p>
         </div>
       )}
-      {failure && ai.data?.configured && can("room.chat") && (
+      {failure && ai.data?.configured && can("room.chat") && room.role !== "candidate" && (
         <div role="group" aria-label="Ask the AI about this error" className="absolute top-2 right-3 flex gap-1">
           <Button size="xs" variant="outline" className="bg-background" onClick={explainRunError}>
             <Sparkles /> Explain error

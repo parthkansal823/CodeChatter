@@ -1,5 +1,5 @@
 import type { AuthMail } from "@codechatter/auth";
-import { orgInvitationEmail, resetPasswordEmail, verifyEmail, type RenderedEmail } from "@codechatter/emails";
+import { interviewInvitationEmail, orgInvitationEmail, resetPasswordEmail, verifyEmail, type RenderedEmail } from "@codechatter/emails";
 import { Inject, Injectable, Logger, type OnApplicationBootstrap } from "@nestjs/common";
 import nodemailer, { type Transporter } from "nodemailer";
 
@@ -51,5 +51,9 @@ export class MailService implements AuthMail, OnApplicationBootstrap {
 
   async sendOrgInvitationEmail(input: { email: string; inviterName: string; orgName: string; url: string }) {
     await this.send(input.email, await orgInvitationEmail(input));
+  }
+
+  async sendInterviewInvitation(input: { email: string; candidateName: string; interviewerName: string; minutes: number; when: string | null; url: string }) {
+    await this.send(input.email, await interviewInvitationEmail(input));
   }
 }

@@ -75,6 +75,8 @@ export type WebhookDelivery = {
   payload: WebhookPayload;
   status: WebhookDeliveryStatus;
   attempts: number;
+  /** True only while a worker's current delivery lease is live; lease identifiers stay private. */
+  inFlight: boolean;
   nextAttemptAt: string | null;
   lastStatusCode: number | null;
   lastError: string | null;

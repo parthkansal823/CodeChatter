@@ -22,9 +22,10 @@ Both this page and pending.md are updated after every finished piece.
   - **platform** (step 9): follow-ups.
 
   These are mostly with ChatGPT, through the prompts in `docs/handoff/`.
+- **Just done:** interview mode (step 11).
 - **Next:**
-  - interview mode (step 11), which I'm building now;
-  - then the recruiter kit's video (step 12).
+  - security, accessibility and the cutover from v1 (step 10);
+  - the recruiter kit's video (step 12).
 
 ```mermaid
 flowchart TD
@@ -37,7 +38,7 @@ flowchart TD
   S7 --> S8["8 · Teams and admin 🟡"]
   S8 --> S9["9 · Automations and platform 🟡"]
   S9 --> S10["10 · Hardening and launch 🟡 ← now"]
-  S10 --> S11["11 · Interview mode ⬜"]
+  S10 --> S11["11 · Interview mode ✅"]
   S11 --> S12["12 · Recruiter kit 🟡"]
   S12 --> S13["13 · Advanced features ⬜"]
 ```
@@ -139,7 +140,8 @@ flowchart TD
 - 🟡 Organisations: teams, members, invitations (ChatGPT, prompt 9)
 - 🟡 Settings: profile, password, two-factor, active sessions (ChatGPT, prompt 10)
 - ✅ Audit log with filters and CSV export
-- ⬜ Room roles for interviews (interviewer, candidate); usage dashboard with quotas; instance admin
+- ✅ Room roles for interviews (interviewer, candidate)
+- ⬜ Usage dashboard with quotas; instance admin
 
 ## Step 9 · Automations and platform 🟡
 
@@ -160,15 +162,15 @@ flowchart TD
 - ⬜ Sandbox and browser security (gVisor, CSP nonces); accessibility (axe, Lighthouse)
 - ⬜ Cutover from v1; a final security review
 
-## Step 11 · Interview mode ⬜
+## Step 11 · Interview mode ✅
 
-*Goal: a complete hiring flow.* Details: §7.
+*Goal: a complete hiring flow.* Details: §7 and `docs/interviews.md`.
 
-- ⬜ Question bank with visible and hidden tests
-- ⬜ Scheduling, interviewer and candidate roles, a single-use candidate link
-- ⬜ Server-side timer and phases
-- ⬜ Hidden tests run by the judge; private rubric and scorecards
-- ⬜ Replay, and a report
+- ✅ Question bank with visible and hidden tests
+- ✅ Scheduling, interviewer and candidate roles, a single-use candidate link
+- ✅ Server-side timer that really takes the candidate's rights away
+- ✅ Hidden tests in a throwaway container; private rubric and scorecards
+- ✅ Replay, and a report
 
 ## Step 12 · Recruiter kit 🟡
 

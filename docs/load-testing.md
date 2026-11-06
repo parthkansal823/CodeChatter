@@ -1,3 +1,4 @@
+<!-- Explain the disposable-room workload, worker coordination, and the limits of its latency measurements. -->
 # Live editing load test
 
 `apps/collab/test/load.mjs` opens real Yjs/Hocuspocus connections through Caddy,
@@ -63,6 +64,7 @@ and 9,000 peer deliveries per second once all 500 connections have synced.
 | `APP_URL` | `http://localhost:8080` | App origin; WebSocket URL is its `/collab` endpoint, using `ws` or `wss`. |
 | `ROOMS` | `50` | Number of newly created rooms. |
 | `PEOPLE` | `10` | Connections per room. Use at least two to measure peer delivery. |
+| `WORKERS` | `min(8, max(1, os.availableParallelism() - 1))` | Forked load processes; rooms are split across them. `1` runs everything in the original single process. |
 | `SECONDS` | `60` | Editing duration after initial sync completes. |
 | `RATE` | `2` | Edits per second per person, with random initial delay and roughly 20% interval jitter. |
 | `TARGET_P95_MS` | `150` | Global delivery p95 must be strictly below this many milliseconds. |
@@ -78,8 +80,8 @@ or browser is required for this test.
 
 ## Reading the report
 
-Every five seconds the script prints connection counts, delivered updates per
-second and the running p95. At the end it prints the result and writes the full
+The parent prints one combined live line every five seconds, with connection counts, delivered updates per
+second and the running p95. At the end it prints one result and writes the full
 JSON report to `apps/collab/test/load-report.json`, regardless of the caller's
 working directory. The report is ignored by git and replaced on the next run;
 save a copy if you need comparisons.
@@ -94,7 +96,7 @@ append a growing text document.
 - **Attempted, synced and failed connections** show setup and connection health.
   A disconnect after initial sync is a failure too.
 - **Sent edits** count local writes. **Expected deliveries** are
-  `sent × (PEOPLE - 1)`. The report also gives expectations for the peers that
+  `sent Ã— (PEOPLE - 1)`. The report also gives expectations for the peers that
   initially synced, so failed setup connections remain visible without being
   mistaken for successfully measured peers.
 - **Received deliveries** count unique observed writer sequence numbers.
@@ -106,29 +108,41 @@ append a growing text document.
   deliveries took at most that long. The maximum, deliveries over one second,
   and each room's counts help expose outliers. The worst room's p95 can be much
   slower than the global p95 and is printed separately.
-- Latencies use integer-millisecond histogram buckets and nearest-rank
-  percentiles. `Date.now()` already has millisecond precision; there is no extra
-  rounding. Counts per bucket use less memory than retaining every delivery.
+- Latencies use integer-millisecond histogram buckets through 2,000 ms, then
+  10 ms buckets through 10 seconds, 100 ms through a minute, and one-second
+  buckets thereafter. Coarser buckets report their upper bound, so a tail
+  percentile is conservative. The actual maximum and count above one second
+  remain exact. Histogram counts merge before nearest-rank percentiles are
+  calculated; worker percentiles are never averaged. No raw delivery samples
+  are retained or sent over IPC.
 
 `PASS` requires a measured p95 strictly below `TARGET_P95_MS`, no missing expected
 peer deliveries, and at most 1% failed connections. Setup errors, cleanup errors
 or missing measurement samples fail the run. A normal failure exits with code 1.
 Ctrl+C stops edits, closes connections and deletes created rooms before exiting
-with code 130; SIGTERM does the same with code 143. Let cleanup finish. Forced
-termination, a machine crash or unavailable API can prevent deletion; the report
-identifies rooms that could not be deleted so they can be removed later.
+with code 130; SIGTERM does the same with code 143. Let cleanup finish. The parent
+creates and records every room before forking, owns deletion, and stops the
+remaining workers if one crashes. A worker is given ten seconds to stop before
+it is killed; cleanup waits for all children to exit and for collab's debounced
+stores to settle. A lost creation response is reconciled against the unique
+run-specific room names. Failed deletion is retried three times and reported.
+Forced termination of the parent, a machine crash, or an unavailable API can
+still prevent deletion. The report contains known room IDs; ambiguous creates
+also print a warning to check room names containing the full run ID.
 
 ## Tell whether the client is the limit
 
-The script measures its own event-loop delay with
+Every worker measures its own event-loop delay with
 `perf_hooks.monitorEventLoopDelay` during editing. A client p99 above 50 ms prints
 a warning: client scheduling delay then contaminates the delivery numbers, so
-the run cannot establish the server's latency alone. This is a warning alongside
+the run cannot establish the server's latency alone. The combined report keeps
+each worker's lag and shows the worst worker p99 and maximum, rather than
+averaging percentiles. This is a warning alongside
 the workload result, not an automatic server failure.
 
 Watch the load process's CPU, memory and network usage alongside server CPU,
 network and collab logs. Compare achieved sent edits per second with
-`ROOMS × PEOPLE × RATE`; a falling send rate with rising client event-loop lag
+`ROOMS Ã— PEOPLE Ã— RATE`; a falling send rate with rising client event-loop lag
 suggests a saturated generator. Running the generator and server on the same
 laptop makes them compete for CPU and memory.
 
@@ -139,34 +153,43 @@ overhead, Wi-Fi and server connection limits. Repeat from a separate machine or
 split the generator across machines. If client lag falls while server latency
 stays high at the same combined workload, investigate the server next.
 
-### Several processes on one machine
+### Workers on one machine
 
-One Node process can't decode the full workload's ~9,000 updates per second
-without lagging. Run the same 500 connections as five processes of 10 rooms
-each, which use five CPU cores. Each process makes and deletes its own rooms.
-From `apps/collab` in PowerShell:
+The default uses available CPU cores, capped at eight workers, leaving one core
+free where possible. The parent signs in and creates all rooms; workers only
+connect and edit the assigned IDs. They send compact cumulative histogram,
+connection, edit, room and event-loop snapshots over IPC once per second.
+All workers finish their initial ramp and sync before a shared start barrier
+releases editing. Empty shares are allowed when there are fewer rooms than
+workers. The parent merges counters and histogram bins into one report and
+performs all room deletions, including after a child crash. Only the parent
+writes `load-report.json`; there are no competing output files.
+
+To select five workers for the full 500 connections:
 
 ```powershell
-$env:ROOMS = "10"; $env:PEOPLE = "10"
-1..5 | ForEach-Object { Start-Process node "--env-file=../../.env", "test/load.mjs" -NoNewWindow -PassThru -RedirectStandardOutput "load-$_.log" } | Wait-Process
+$env:ROOMS = '50'; $env:PEOPLE = '10'; $env:SECONDS = '60'
+$env:WORKERS = '5'
+node --env-file=../../.env test/load.mjs
 ```
 
-or in a POSIX shell:
-
-```bash
-for i in 1 2 3 4 5; do ROOMS=10 PEOPLE=10 node --env-file=../../.env test/load.mjs > load-$i.log 2>&1 & done; wait
+```sh
+WORKERS=5 ROOMS=50 PEOPLE=10 SECONDS=60 node --env-file=../../.env test/load.mjs
 ```
 
-Every process must pass. They all write `load-report.json`, so read each
-process's printed report (the `load-*.log` files) instead.
+Remove `WORKERS` to use the CPU-based default; set `WORKERS=1` to compare with
+the original single-process behavior. More workers are not always faster when
+the generator and services share the same machine. Compare per-worker lag and
+achieved send rate, and repeat representative runs.
 
-Measured on a laptop against the dev stack (collab under `tsx watch`) on
-2026-11-05:
+Earlier measurements on a laptop against the dev stack (collab under
+`tsx watch`) on 2026-11-05 illustrate why process distribution matters. These
+were separate manual runs before the coordinated-worker implementation:
 
 | Run | Connections | Updates delivered | p95 | Client lag p99 |
 |---|---|---|---|---|
-| One process, 50 × 10 | 500/500 | 523,485/523,485 | 228 ms (FAIL) | 70.7 ms (client-bound) |
-| Five processes, 5 × (10 × 10) | 500/500 | 538,227/538,227 | 132–134 ms (PASS) | 21 ms |
+| One process, 50 ? 10 | 500/500 | 523,485/523,485 | 228 ms (FAIL) | 70.7 ms (client-bound) |
+| Five processes, 5 ? (10 ? 10) | 500/500 | 538,227/538,227 | 132?134 ms (PASS) | 21 ms |
 
 This test measures small Y.Map writes through the real sync protocol. It does
 not model Monaco rendering, browser main-thread work, large pastes, chat, calls
@@ -192,7 +215,7 @@ APP_URL=https://code.example.com ROOMS=10 PEOPLE=10 SECONDS=60 \
 ```
 
 Start five such machines together for 50 total rooms and 500 connections. Each
-process creates a separate room cohort; all peers of each room stay on that
+parent creates a separate room cohort; all peers of each room stay on one worker on that
 machine. This spreads client CPU while preserving the same-clock measurement.
 If the deployed environment has no local `.env`, omit `--env-file` and supply all
 settings through the shell.

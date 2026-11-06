@@ -53,6 +53,22 @@ export function orgInvitationEmail(input: { inviterName: string; orgName: string
   );
 }
 
+export function interviewInvitationEmail(input: { candidateName: string; interviewerName: string; minutes: number; when: string | null; url: string }) {
+  return build(
+    `Your interview with ${input.interviewerName} on CodeChatter`,
+    <EmailLayout preview={`A ${input.minutes} minute coding interview with ${input.interviewerName}`}>
+      <Heading>Your coding interview</Heading>
+      <Paragraph>
+        Hi {input.candidateName}, {input.interviewerName} invited you to a {input.minutes} minute coding interview on CodeChatter
+        {input.when ? ` on ${input.when}` : ""}.
+      </Paragraph>
+      <Paragraph>This link is only for you and works for one person. You don’t need an account.</Paragraph>
+      <Action href={input.url}>Open your interview</Action>
+      <FallbackLink href={input.url} />
+    </EmailLayout>,
+  );
+}
+
 export function roomShareEmail(input: { inviterName: string; roomName: string; role: string; url: string }) {
   return build(
     `${input.inviterName} shared “${input.roomName}” with you`,

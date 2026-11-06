@@ -104,11 +104,11 @@ function DeliveryRows({ delivery, busy, redeliver }: { delivery: WebhookDelivery
       <TableRow>
         <TableCell><Time value={delivery.createdAt} /></TableCell>
         <TableCell className="font-mono">{delivery.event}</TableCell>
-        <TableCell><Status status={delivery.status} /></TableCell>
+        <TableCell><div className="grid max-w-60 gap-1 whitespace-normal"><Status status={delivery.status} />{delivery.inFlight && <span className="text-muted-foreground">Sending</span>}{delivery.lastError === "Expired while the webhook was paused" && <span className="text-destructive">{delivery.lastError}</span>}</div></TableCell>
         <TableCell>{delivery.lastStatusCode ?? "—"}</TableCell>
         <TableCell>{delivery.attempts}/6</TableCell>
         <TableCell>{delivery.status === "pending" && delivery.nextAttemptAt ? <Time value={delivery.nextAttemptAt} /> : "—"}</TableCell>
-        <TableCell><div className="flex items-center gap-1"><Button size="xs" variant="ghost" aria-expanded={expanded} aria-controls={`webhook-delivery-${delivery.id}`} aria-label={`${expanded ? "Hide" : "Show"} details for delivery ${delivery.id}`} onClick={() => setExpanded(!expanded)}><ChevronDown aria-hidden className={cn("size-3 transition-transform", expanded && "rotate-180")} />Details</Button><Button size="xs" variant="outline" disabled={busy} onClick={redeliver}>Redeliver</Button></div></TableCell>
+        <TableCell><div className="flex items-center gap-1"><Button size="xs" variant="ghost" aria-expanded={expanded} aria-controls={`webhook-delivery-${delivery.id}`} aria-label={`${expanded ? "Hide" : "Show"} details for delivery ${delivery.id}`} onClick={() => setExpanded(!expanded)}><ChevronDown aria-hidden className={cn("size-3 transition-transform", expanded && "rotate-180")} />Details</Button><Button size="xs" variant="outline" disabled={busy || delivery.inFlight} onClick={redeliver}>Redeliver</Button></div></TableCell>
       </TableRow>
       {expanded && <TableRow id={`webhook-delivery-${delivery.id}`}><TableCell colSpan={7} className="whitespace-normal bg-muted/30 p-4">
         <div className="grid min-w-0 gap-4">
@@ -152,7 +152,7 @@ function DeliveryLog({ orgId, webhook, onClose }: { orgId: string; webhook: Webh
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto shadow-none sm:max-w-5xl">
         <DialogHeader><DialogTitle>Delivery log</DialogTitle><DialogDescription className="break-all">{webhook.url}</DialogDescription></DialogHeader>
-        <p className="text-xs text-muted-foreground">Attempts and responses update every five seconds. Response bodies show the first 2 KB.</p>
+        <p className="text-xs text-muted-foreground">Attempts and responses update every five seconds. Response bodies show the first 2 KB. Resuming expires pending deliveries older than 24 hours. Settled deliveries are kept for 30 days by default.</p>
         {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
         {deliveries.isError && <div role="alert" className="flex flex-wrap items-center gap-2 text-xs"><span>{detail(deliveries.error)}</span><Button size="xs" variant="outline" onClick={() => void deliveries.refetch()}>Try again</Button></div>}
         <div className="min-w-0 overflow-hidden rounded-md border" aria-busy={deliveries.isPending}>

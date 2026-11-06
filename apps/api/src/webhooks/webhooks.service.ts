@@ -1,8 +1,8 @@
 /** Queue organisation audit events and deliver them later with pinned networking and durable retries. */
 import type { WebhookDelivery, WebhookDeliveryPage, WebhookInput, WebhookItem, WebhookPatch, WebhookPayload } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
-import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import { and, desc, eq, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
+import { and, desc, eq, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -41,6 +41,7 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
   private timer: ReturnType<typeof setInterval> | null = null;
   private inFlight: Promise<void> | null = null;
   private stopping = false;
+  private cleanupAfter = 0;
 
   constructor(@Inject(DB) private readonly handle: DbHandle, @Inject(ENV) private readonly env: Env) {}
 
@@ -89,10 +90,21 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
       try { await this.deliveryTarget(old); }
       catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "That webhook URL cannot be reached safely."); }
     }
-    const [row] = await this.handle.db.update(schema.webhooks).set({
-      ...input, ...(target && { url: target.url.href, privateTestOwner: target.privateTestOwner }), updatedAt: new Date(),
-    }).where(and(eq(schema.webhooks.id, id), eq(schema.webhooks.orgId, orgId))).returning();
-    if (!row) throw new NotFoundException("That webhook doesn't exist in this organisation.");
+    const row = await this.handle.db.transaction(async (tx) => {
+      const [current] = await tx.select({ active: schema.webhooks.active }).from(schema.webhooks)
+        .where(and(eq(schema.webhooks.id, id), eq(schema.webhooks.orgId, orgId))).limit(1).for("update");
+      if (!current) throw new NotFoundException("That webhook doesn't exist in this organisation.");
+      if (input.active === true && !current.active) {
+        const d = schema.webhookDeliveries;
+        await tx.update(d).set({
+          status: "failed", lastError: "Expired while the webhook was paused", nextAttemptAt: null, lockedBy: null, lockedUntil: null,
+        }).where(and(eq(d.webhookId, id), eq(d.status, "pending"), lt(d.createdAt, sql`now() - interval '24 hours'`)));
+      }
+      const [updated] = await tx.update(schema.webhooks).set({
+        ...input, ...(target && { url: target.url.href, privateTestOwner: target.privateTestOwner }), updatedAt: new Date(),
+      }).where(and(eq(schema.webhooks.id, id), eq(schema.webhooks.orgId, orgId))).returning();
+      return updated!;
+    });
     return this.item(row);
   }
 
@@ -141,10 +153,14 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
     const hook = await this.find(orgId, id);
     if (!hook.active) throw new BadRequestException("Enable this webhook before redelivering an event.");
     const d = schema.webhookDeliveries;
-    // PostgreSQL waits for the worker's row lock: a manual retry cannot race its write.
-    const [row] = await this.handle.db.update(d).set({ status: "pending", attempts: 0, nextAttemptAt: new Date(), deliveredAt: null })
-      .where(and(eq(d.webhookId, id), eq(d.id, deliveryId))).returning();
-    if (!row) throw new NotFoundException("That delivery doesn't belong to this webhook.");
+    // The worker no longer holds a row lock during HTTP; do not reset a live lease.
+    const [row] = await this.handle.db.update(d).set({ status: "pending", attempts: 0, nextAttemptAt: new Date(), deliveredAt: null, lockedBy: null, lockedUntil: null })
+      .where(and(eq(d.webhookId, id), eq(d.id, deliveryId), or(isNull(d.lockedUntil), lte(d.lockedUntil, sql`now()`)))).returning();
+    if (!row) {
+      const [existing] = await this.handle.db.select({ id: d.id }).from(d).where(and(eq(d.webhookId, id), eq(d.id, deliveryId))).limit(1);
+      if (existing) throw new ConflictException("That delivery is being sent. Wait for this attempt to finish.");
+      throw new NotFoundException("That delivery doesn't belong to this webhook.");
+    }
     return this.delivery(row);
   }
 
@@ -165,35 +181,74 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Only one tick per process; PostgreSQL row locks coordinate different instances. */
+  /** Only one tick per process; short PostgreSQL claims coordinate leases across instances. */
   async runWorker(): Promise<void> {
     if (this.stopping || this.inFlight) return;
-    this.inFlight = this.batch().catch((error: unknown) => this.logger.warn(`Webhook worker failed: ${error instanceof Error ? error.message : "database error"}`));
+    this.inFlight = this.work().catch(() => this.logger.warn("Webhook worker database operation failed."));
     try { await this.inFlight; } finally { this.inFlight = null; }
+  }
+
+  private async work(): Promise<void> {
+    // Retention failures must not prevent delivery, and even failed cleanup attempts run at most hourly.
+    if (Date.now() >= this.cleanupAfter) {
+      this.cleanupAfter = Date.now() + 60 * 60_000;
+      await this.cleanup().catch(() => this.logger.warn("Webhook retention cleanup failed."));
+    }
+    await this.batch();
+  }
+
+  private async cleanup(): Promise<void> {
+    const d = schema.webhookDeliveries;
+    const days = this.env.WEBHOOK_DELIVERY_RETENTION_DAYS ?? 30;
+    let removed: { id: string }[];
+    do {
+      const expired = this.handle.db.select({ id: d.id }).from(d)
+        .where(and(inArray(d.status, ["delivered", "failed"]), lt(d.createdAt, sql`now() - ${days} * interval '1 day'`)))
+        .orderBy(d.createdAt, d.id).limit(1000).for("update", { skipLocked: true });
+      // Each batch autocommits independently, releasing its locks before the next one.
+      removed = await this.handle.db.delete(d).where(inArray(d.id, expired)).returning({ id: d.id });
+      if (removed.length === 1000) await new Promise<void>((resolve) => setImmediate(resolve));
+    } while (!this.stopping && removed.length === 1000);
   }
 
   private async batch(): Promise<void> {
     const d = schema.webhookDeliveries;
     const w = schema.webhooks;
-    await this.handle.db.transaction(async (tx) => {
-      const rows = await tx.select({ delivery: d, hook: w }).from(d).innerJoin(w, eq(d.webhookId, w.id))
-        .where(and(eq(d.status, "pending"), lte(d.nextAttemptAt, new Date()), eq(w.active, true),
+    const rows = await this.handle.db.transaction(async (tx) => {
+      const due = tx.select({ id: d.id }).from(d).innerJoin(w, eq(d.webhookId, w.id))
+        .where(and(eq(d.status, "pending"), lte(d.nextAttemptAt, sql`now()`), eq(w.active, true),
+          or(isNull(d.lockedUntil), lte(d.lockedUntil, sql`now()`)),
           or(isNull(w.privateTestOwner), eq(w.privateTestOwner, this.workerId))))
         .orderBy(d.nextAttemptAt, d.id).limit(20).for("update", { of: d, skipLocked: true });
-      // Keep locks until each attempt is logged. Other instances skip these rows.
-      await Promise.all(rows.map(async ({ delivery, hook }) => {
+      const claimed = await tx.update(d).set({ lockedBy: this.workerId, lockedUntil: sql`now() + interval '60 seconds'` })
+        .where(inArray(d.id, due)).returning();
+      if (!claimed.length) return [];
+      const hooks = await tx.select().from(w).where(inArray(w.id, [...new Set(claimed.map((delivery) => delivery.webhookId))]));
+      return claimed.flatMap((delivery) => {
+        const hook = hooks.find((hook) => hook.id === delivery.webhookId);
+        return hook ? [{ delivery, hook }] : [];
+      });
+    });
+    // All twenty requests start together, each with a ten-second DNS+HTTP budget,
+    // well inside the sixty-second lease. No pooled transaction spans the network.
+    await Promise.all(rows.map(async ({ delivery, hook }) => {
+      try {
         const result = await this.send(hook, delivery);
         const attempts = delivery.attempts + 1;
         const delivered = result.statusCode !== null && result.statusCode >= 200 && result.statusCode < 300 && !result.error;
         const now = new Date();
-        await tx.update(d).set({
+        await this.handle.db.update(d).set({
           attempts, status: delivered ? "delivered" : attempts >= MAX_ATTEMPTS ? "failed" : "pending",
           nextAttemptAt: delivered || attempts >= MAX_ATTEMPTS ? null : new Date(now.getTime() + RETRY_MS[attempts - 1]!),
           lastStatusCode: result.statusCode, lastError: result.error, lastResponse: result.response,
           deliveredAt: delivered ? now : null, attemptLog: [...delivery.attemptLog, { attempt: attempts, at: now.toISOString(), ...result }],
-        }).where(eq(d.id, delivery.id));
-      }));
-    });
+          lockedBy: null, lockedUntil: null,
+        }).where(and(eq(d.id, delivery.id), eq(d.lockedBy, this.workerId), eq(d.status, "pending")));
+      } catch {
+        // A failed acknowledgement leaves only this lease recoverable; siblings still commit.
+        this.logger.warn(`Webhook delivery ${delivery.id} could not be recorded; its lease will expire.`);
+      }
+    }));
   }
 
   private async send(hook: Hook, delivery: Delivery) {
@@ -290,6 +345,6 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
     return { id: row.id, webhookId: row.webhookId, event: row.event, payload: row.payload as unknown as WebhookPayload, status: row.status,
       attempts: row.attempts, nextAttemptAt: row.nextAttemptAt?.toISOString() ?? null, lastStatusCode: row.lastStatusCode,
       lastError: row.lastError, lastResponse: row.lastResponse, createdAt: row.createdAt.toISOString(), deliveredAt: row.deliveredAt?.toISOString() ?? null,
-      attemptLog: row.attemptLog };
+      attemptLog: row.attemptLog, inFlight: Boolean(row.lockedBy && row.lockedUntil && row.lockedUntil.getTime() > Date.now()) };
   }
 }

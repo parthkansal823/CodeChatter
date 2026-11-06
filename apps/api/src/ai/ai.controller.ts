@@ -46,6 +46,8 @@ import { estimateUsage } from "./usage.js";
 // while a model thinks before its first word.
 const HEARTBEAT_MS = 15_000;
 
+const NO_AI_IN_INTERVIEWS = "AI help is off during an interview.";
+
 @Controller()
 export class AiController {
   private readonly logger = new Logger("AI");
@@ -76,7 +78,8 @@ export class AiController {
     @Body(new ZodPipe(AiChatInput)) input: AiChatInput,
     @Res() res: Response,
   ): Promise<void> {
-    await this.rooms.require(roomId, session.user.id, "room.chat");
+    const { role } = await this.rooms.require(roomId, session.user.id, "room.chat");
+    if (role === "candidate") throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
     const provider = this.ai.provider;
     if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");
     if (input.context.image && !provider.settings.vision) {
@@ -173,6 +176,7 @@ export class AiController {
   ): Promise<AiCompletion> {
     // A suggestion is typed into the file: it takes the right to edit as well as to use the AI.
     const { role } = await this.rooms.require(roomId, session.user.id, "files.edit");
+    if (role === "candidate") throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
     if (!can(role, "room.chat")) throw new ForbiddenException("You don't have access to do that in this room.");
     const provider = this.ai.provider;
     if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");

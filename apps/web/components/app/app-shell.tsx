@@ -1,3 +1,4 @@
+/** The signed-in pages' frame: the sidebar (phone: a sheet), the current user, and each page's header. */
 "use client";
 
 import { Compass, LayoutGrid, Menu, Settings, Users } from "lucide-react";

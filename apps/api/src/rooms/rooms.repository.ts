@@ -38,10 +38,10 @@ export class RoomsRepository {
   }
 
   /** Room + owner membership (and the repository it's made from) in one transaction: a room never exists ownerless. */
-  async createWithOwner(room: NewRoom, ownerId: string, repo?: Omit<NewRoomRepo, "roomId">): Promise<RoomRow> {
+  async createWithOwner(room: NewRoom, ownerId: string, repo?: Omit<NewRoomRepo, "roomId">, role: "owner" | "interviewer" = "owner"): Promise<RoomRow> {
     return this.db.transaction(async (tx) => {
       const [created] = await tx.insert(schema.rooms).values(room).returning();
-      await tx.insert(schema.roomMembers).values({ roomId: created!.id, userId: ownerId, role: "owner" });
+      await tx.insert(schema.roomMembers).values({ roomId: created!.id, userId: ownerId, role });
       if (repo) await tx.insert(schema.roomRepos).values({ ...repo, roomId: created!.id });
       return created!;
     });

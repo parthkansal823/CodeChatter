@@ -14,12 +14,13 @@ import {
   type QuestionItem,
   type QuestionListItem,
   type RoomInterview,
+  type ScheduleInterviewData,
   type ScheduledInterview,
   type Scorecard,
 } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
-import { BadRequestException, ConflictException, ForbiddenException, GoneException, Inject, Injectable, Logger, NotFoundException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { BadRequestException, ConflictException, ForbiddenException, GoneException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import type { Redis } from "ioredis";
 import { createHash, randomBytes } from "node:crypto";
 
@@ -29,7 +30,7 @@ import { MailService } from "../mail/mail.service.js";
 import { EventsGateway } from "../realtime/events.gateway.js";
 import { RoomsRepository } from "../rooms/rooms.repository.js";
 import { newRoomCode, RoomsService } from "../rooms/rooms.service.js";
-import { RunnerClient, type RunnerUser } from "../runner/runner.client.js";
+import { RunnerClient, RunnerUnavailableError, type RunnerUser } from "../runner/runner.client.js";
 import { candidateInterview, candidateRun, interviewerInterview, interviewerRun, interviewListItem, type InterviewRow, type RunRow } from "./views.js";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -161,6 +162,15 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
 
   // Interviews.
 
+  private async isOrgAdmin(orgId: string, userId: string): Promise<boolean> {
+    const [member] = await this.db
+      .select({ role: schema.member.role })
+      .from(schema.member)
+      .where(and(eq(schema.member.organizationId, orgId), eq(schema.member.userId, userId)))
+      .limit(1);
+    return member?.role === "owner" || member?.role === "admin";
+  }
+
   private async interviewerName(row: InterviewRow): Promise<string | null> {
     if (!row.interviewerId) return null;
     const [user] = await this.db.select({ name: schema.user.name }).from(schema.user).where(eq(schema.user.id, row.interviewerId)).limit(1);
@@ -170,12 +180,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   /** An organisation's owners and admins see all its interviews; others, the ones they run. */
   async list(session: AuthSession): Promise<InterviewListItem[]> {
     const orgId = await this.orgOf(session);
-    const [member] = await this.db
-      .select({ role: schema.member.role })
-      .from(schema.member)
-      .where(and(eq(schema.member.organizationId, orgId), eq(schema.member.userId, session.user.id)))
-      .limit(1);
-    const everything = member?.role === "owner" || member?.role === "admin";
+    const everything = await this.isOrgAdmin(orgId, session.user.id);
     const rows = await this.db
       .select({ interview: schema.interviews, interviewerName: schema.user.name })
       .from(schema.interviews)
@@ -186,10 +191,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return rows.map((row) => interviewListItem(row.interview, row.interviewerName));
   }
 
-  async schedule(
-    session: AuthSession,
-    input: { questionId: string; candidateName: string; candidateEmail?: string; scheduledAt?: string; durationMinutes?: number; sendEmail: boolean },
-  ): Promise<ScheduledInterview> {
+  async schedule(session: AuthSession, input: ScheduleInterviewData): Promise<ScheduledInterview> {
     const question = await this.questionRow(session, input.questionId);
     if (input.sendEmail && !input.candidateEmail) throw new BadRequestException("Add the candidate's email to send them the link.");
     const token = randomBytes(24).toString("base64url");
@@ -225,7 +227,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
           {
             id: newRoomCode(),
             orgId: question.orgId,
-            name: `Interview: ${input.candidateName}`.slice(0, 120),
+            name: `Interview: ${input.candidateName}`.slice(0, 80),
             description: "",
             kind: "interview",
             templateId: "blank",
@@ -267,11 +269,13 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return row;
   }
 
-  /** The interview, for someone who may see its rubric: only its interviewers. Others get a plain 404 or 403. */
+  /** The interview, for someone who may see its rubric: its interviewers, and the organisation's owners and admins. */
   private async asInterviewer(id: string, userId: string): Promise<InterviewRow> {
     const row = await this.row(id);
-    await this.rooms.require(row.roomId, userId, "interview.rubric");
-    return row;
+    const member = await this.repo.findMember(row.roomId, userId);
+    if (member?.status === "active" && can(member.role, "interview.rubric")) return row;
+    if (await this.isOrgAdmin(row.orgId, userId)) return row;
+    throw new ForbiddenException("You don't have access to this interview.");
   }
 
   private async runRows(interviewId: string): Promise<RunRow[]> {
@@ -326,7 +330,8 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .returning();
     if (!started) throw new ConflictException(`This interview is ${row.status === "live" ? "already running" : row.status}.`);
     await this.setCandidateRole(started, "candidate");
-    await this.announce(started, true);
+    // Nobody's rights shrink, and the candidate had no connection to close.
+    await this.announce(started, false);
     return this.interviewerView(started);
   }
 
@@ -462,7 +467,8 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   async claim(token: string, userId: string): Promise<JoinedInterview> {
     const row = await this.byToken(token);
     this.assertOpen(row);
-    if (row.interviewerId === userId) throw new ConflictException("You're the interviewer. Open the candidate's link in a private window to try it.");
+    const member = await this.repo.findMember(row.roomId, userId);
+    if (member && can(member.role, "interview.rubric")) throw new ConflictException("You're an interviewer here. Open the candidate's link in a private window to try it.");
     const [claimed] = await this.db
       .update(schema.interviews)
       .set({ candidateUserId: userId, candidateJoinedAt: new Date(), updatedAt: new Date() })
@@ -487,7 +493,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     const { role } = await this.rooms.require(roomId, session.user.id, "code.run");
     const [row] = await this.db.select().from(schema.interviews).where(eq(schema.interviews.roomId, roomId)).limit(1);
     if (!row) throw new NotFoundException("This room isn't an interview.");
-    if (row.status !== "live") throw new ConflictException("The tests run while the interview is running.");
+    if (row.status !== "live" || (row.endsAt && row.endsAt <= new Date())) throw new ConflictException("The tests run while the interview is running.");
     const tests = row.question.tests;
     if (!tests.length) throw new ConflictException("This question has no tests.");
     if (this.testing.has(row.id)) throw new ConflictException("The tests are already running.");
@@ -530,7 +536,9 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async judge(roomId: string, user: RunnerUser, input: Parameters<RunnerClient["judge"]>[2]): Promise<JudgeEvent[]> {
-    const upstream = await this.runner.judge(roomId, user, input);
+    const upstream = await this.runner.judge(roomId, user, input).catch((error: unknown) => {
+      throw error instanceof RunnerUnavailableError ? new ServiceUnavailableException(error.message) : error;
+    });
     const decoder = new TextDecoder();
     let buffer = "";
     const events: JudgeEvent[] = [];
@@ -555,11 +563,10 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   async replay(id: string, userId: string): Promise<InterviewReplay> {
     const row = await this.asInterviewer(id, userId);
     const { from, to } = this.range(row);
-    const during = (column: typeof schema.docUpdates.ts) => and(gte(column, from), lte(column, to));
     const updates = await this.db
       .select({ ts: schema.docUpdates.ts })
       .from(schema.docUpdates)
-      .where(and(eq(schema.docUpdates.docName, `room:${row.roomId}:files`), during(schema.docUpdates.ts)))
+      .where(and(eq(schema.docUpdates.docName, `room:${row.roomId}:files`), gte(schema.docUpdates.ts, from), lte(schema.docUpdates.ts, to)))
       .orderBy(asc(schema.docUpdates.ts));
     const step = Math.max(1, Math.ceil(updates.length / MOMENTS));
     const moments = updates.filter((_, index) => index % step === 0 || index === updates.length - 1).map((update) => update.ts.toISOString());
@@ -572,7 +579,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .select({ at: schema.messages.createdAt, body: schema.messages.body, by: schema.user.name })
       .from(schema.messages)
       .leftJoin(schema.user, eq(schema.messages.userId, schema.user.id))
-      .where(and(eq(schema.messages.roomId, row.roomId), during(schema.messages.createdAt as never), or(inArray(schema.messages.kind, ["text", "code"]))))
+      .where(and(eq(schema.messages.roomId, row.roomId), gte(schema.messages.createdAt, from), lte(schema.messages.createdAt, to), inArray(schema.messages.kind, ["text", "code"])))
       .orderBy(asc(schema.messages.createdAt))
       .limit(2000);
     const events: InterviewReplay["events"] = [
@@ -593,7 +600,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .from(schema.docUpdates)
       .where(eq(schema.docUpdates.docName, `room:${row.roomId}:files`))
       .orderBy(asc(schema.docUpdates.seq));
-    const frames: Buffer[] = [];
+    const frames: Uint8Array[] = [];
     for (const update of updates) {
       const head = Buffer.alloc(12);
       head.writeDoubleBE(update.ts.getTime(), 0);

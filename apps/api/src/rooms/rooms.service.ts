@@ -28,7 +28,7 @@ type RoomRow = NonNullable<Awaited<ReturnType<RoomsRepository["findById"]>>>;
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
-function newRoomCode(): string {
+export function newRoomCode(): string {
   let code = "";
   for (let i = 0; i < 6; i++) code += ROOM_CODE_ALPHABET[randomInt(ROOM_CODE_ALPHABET.length)];
   return code;
@@ -222,6 +222,7 @@ export class RoomsService {
    */
   async fork(session: AuthSession, sourceId: string, input: ForkRoomInput): Promise<CreatedRoom> {
     const { room: source } = await this.require(sourceId, session.user.id, "room.view");
+    if (source.kind === "interview") throw new ForbiddenException("An interview room can't be forked.");
     const created = await this.create(session, { name: input.name, description: source.description, templateId: "blank", visibility: "private", joinPolicy: "invite" } as CreateRoomInput);
     const forkedFrom = { id: source.id, name: source.name };
     await this.rooms.setSetting(created.id, "forkedFrom", forkedFrom);
@@ -266,6 +267,7 @@ export class RoomsService {
       name: room.name,
       description: room.description,
       templateId: room.templateId,
+      kind: room.kind,
       repo,
       visibility: room.visibility,
       joinPolicy: room.joinPolicy,

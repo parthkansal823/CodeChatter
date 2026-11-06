@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, DevServerStatus, GitResponse, GitRunnerRequest, JudgeInput, KubeRequest, KubeResponse, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import type { DatabaseKind, DatabaseStatus, DevServerStatus, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
@@ -91,7 +91,7 @@ export class RunnerClient {
   }
 
   /** Run test cases; the response body streams NDJSON JudgeEvents. */
-  async judge(roomId: string, user: RunnerUser, input: JudgeInput): Promise<AsyncIterable<Uint8Array>> {
+  async judge(roomId: string, user: RunnerUser, input: JudgeRunnerInput): Promise<AsyncIterable<Uint8Array>> {
     const response = await this.call(`/rooms/${roomId}/judge`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
     if (!response.ok || !response.body) throw new RunnerUnavailableError();
     return response.body as unknown as AsyncIterable<Uint8Array>;

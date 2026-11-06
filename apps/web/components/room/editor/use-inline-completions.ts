@@ -11,10 +11,10 @@ import { api } from "@/lib/api";
 /** GET /api/ai/status, shared with the AI panel (same query key). */
 export const useAiStatus = () => useQuery({ queryKey: ["ai-status"], queryFn: () => api<AiStatus>("/api/ai/status"), staleTime: 60_000 });
 
-/** Whether this person gets AI suggestions in this room: AI is set up and they may edit files. */
+/** Whether this person gets AI suggestions in this room: AI is set up, they may edit files, and they aren't a candidate in an interview. */
 export function useAiSuggestionsAllowed(): boolean {
-  const { can } = useRoom();
-  return useAiStatus().data?.configured === true && can("files.edit");
+  const { can, room } = useRoom();
+  return useAiStatus().data?.configured === true && can("files.edit") && room.role !== "candidate";
 }
 
 /** Call once in the room workspace: tells the editor's suggestion provider which room it's in, and whether to ask. */

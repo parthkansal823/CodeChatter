@@ -25,6 +25,7 @@ const SUITES = [
   ...service("apps/runner", [
     ["runner", "runner"],
     ["judge", "judge"],
+    ["judge-isolated", "judge-isolated"],
     ["isolation", "isolation"],
     ["network", "network"],
     ["sandbox-binary-files", "blobs"],
@@ -33,6 +34,7 @@ const SUITES = [
   ...service("apps/collab", [
     ["checkpoints", "checkpoints"],
     ["notes-access", "notes-access"],
+    ["interview-rules", "interviews"],
   ]),
   ...service("apps/api", [
     ["api-binary-files", "blobs"],
@@ -47,6 +49,7 @@ const SUITES = [
     "files",
     "binary-files",
     "sandbox-git",
+    "interviews",
     "history",
     "code-comments",
     "notes",

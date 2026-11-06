@@ -7,15 +7,18 @@
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 import * as Y from "yjs";
 import WebSocket from "ws";
+import { fork } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { setMaxListeners } from "node:events";
 import { writeFile } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const reportPath = new URL("./load-report.json", import.meta.url);
-const runId = randomUUID();
+const worker = process.argv.includes("--load-worker");
+let runId = randomUUID();
 const startedAt = new Date().toISOString();
 const stop = new AbortController();
 // Hundreds of pending syncs legitimately listen for the same cancellation.
@@ -35,13 +38,17 @@ let received = 0;
 let editingMs = 0;
 let lagSummary = null;
 let progressTimer;
+let coordinator = false;
+let uncertainCreate = false;
+const roomNames = new Set();
+const children = [];
 const lag = monitorEventLoopDelay({ resolution: 10 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     if (interrupted) return;
     interrupted = signal;
-    console.log(`\n${signal}: stopping edits and cleaning up disposable rooms...`);
+    if (!worker) console.log(`\n${signal}: stopping edits and cleaning up disposable rooms...`);
     stop.abort();
   });
 }
@@ -64,6 +71,7 @@ function readConfig() {
     appUrl: url.origin,
     websocketUrl: `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/collab`,
     rooms: option("ROOMS", 50, { min: 1, integer: true }),
+    workers: option("WORKERS", Math.min(8, Math.max(1, availableParallelism() - 1)), { min: 1, integer: true }),
     people: option("PEOPLE", 10, { min: 2, integer: true }),
     seconds: option("SECONDS", 60, { min: 0.1 }),
     rate: option("RATE", 2, { min: 0.001 }),
@@ -74,10 +82,11 @@ function readConfig() {
   };
 }
 
-// Exact integer-millisecond bins avoid retaining millions of delivery samples.
+// One-millisecond bins through two seconds, then coarser upper bounds keep IPC compact.
 function histogram() { return { bins: new Map(), samples: 0, max: 0, over1000: 0 }; }
 function record(h, ms) {
-  h.bins.set(ms, (h.bins.get(ms) ?? 0) + 1);
+  const bucket = ms <= 2000 ? ms : ms <= 10_000 ? Math.ceil(ms / 10) * 10 : ms <= 60_000 ? Math.ceil(ms / 100) * 100 : Math.ceil(ms / 1000) * 1000;
+  h.bins.set(bucket, (h.bins.get(bucket) ?? 0) + 1);
   h.samples++;
   h.max = Math.max(h.max, ms);
   if (ms > 1000) h.over1000++;
@@ -136,8 +145,10 @@ async function makeRooms() {
     while (!stop.signal.aborted && next < config.rooms) {
       const index = next++;
       try {
+        const name = `Load ${runId} ${index + 1}`;
+        roomNames.add(name);
         const res = await request("/api/rooms", {
-          method: "POST", body: JSON.stringify({ name: `Load ${runId.slice(0, 8)} ${index + 1}` }),
+          method: "POST", body: JSON.stringify({ name }),
         });
         if (!res.ok) {
           await res.arrayBuffer();
@@ -149,6 +160,7 @@ async function makeRooms() {
         }
         rooms.push({ id: room.id, clients: [], sent: 0, received: 0, initiallySynced: 0, latency: histogram() });
       } catch (error) {
+        uncertainCreate = true;
         stop.abort();
         throw error;
       }
@@ -236,7 +248,7 @@ function connect(room, person) {
         client.synced = true;
         client.finishSync(true);
       });
-      client.provider.on("authenticationFailed", ({ reason }) => fail(`Authentication failed: ${reason}`));
+      client.provider.on("authenticationFailed", () => fail("Authentication failed"));
       client.socket.on("maxAttemptsFailed", () => fail("WebSocket connection attempt failed"));
       client.socket.on("disconnect", ({ event }) => fail(`WebSocket disconnected (${event?.code ?? "unknown"})`));
       timer = setTimeout(() => fail(`Sync timeout after ${config.syncTimeoutMs} ms`), config.syncTimeoutMs);
@@ -300,6 +312,7 @@ async function cleanup() {
   phase = "cleanup";
   measuring = false;
   for (const client of clients) closeClient(client);
+  if (uncertainCreate) await recoverRoomIds();
   if (!rooms.length) return;
   // Collab debounces storage up to five seconds. Let close/unload writes settle
   // before deleting DB rows; otherwise a pending store can recreate a document.
@@ -324,43 +337,62 @@ async function cleanup() {
   }));
 }
 
+function roomRecords() {
+  return rooms.map((room) => ({
+    ...(room.snapshot ?? {
+      id: room.id, attempted: room.clients.length,
+      synced: room.clients.filter((client) => client.synced).length,
+      failed: room.clients.filter((client) => client.failure).length,
+      sent: room.sent, received: room.received, expected: room.sent * (config.people - 1),
+      expectedFromSyncedPeers: room.sent * Math.max(0, room.initiallySynced - 1),
+      missing: Math.max(0, room.sent * (config.people - 1) - room.received),
+      latency: summary(room.latency),
+    }),
+    deleted: room.deleted === true,
+  }));
+}
+
+function connectionStats() {
+  const snapshots = children.flatMap((child) => child.snapshot ? [child.snapshot] : []);
+  const failures = coordinator ? snapshots.flatMap((snapshot) => snapshot.connections.failures)
+    : clients.filter((client) => client.failure).map((client) => ({ id: client.id, reason: client.failure }));
+  const attempted = coordinator ? snapshots.reduce((sum, snapshot) => sum + snapshot.connections.attempted, 0) : clients.length;
+  return {
+    planned: config ? config.rooms * config.people : 0, attempted,
+    active: coordinator ? snapshots.reduce((sum, snapshot) => sum + snapshot.connections.active, 0) : clients.filter((client) => client.synced && !client.closed).length,
+    synced: coordinator ? snapshots.reduce((sum, snapshot) => sum + snapshot.connections.synced, 0) : clients.filter((client) => client.synced).length,
+    failed: failures.length, failedPercent: attempted ? failures.length / attempted * 100 : 0, failures,
+  };
+}
+
 function buildReport() {
-  const failed = clients.filter((client) => client.failure).length;
+  const connections = connectionStats();
   const expected = sent * ((config?.people ?? 1) - 1);
   const stats = summary(latency);
-  const perRoom = rooms.map((room) => ({
-    id: room.id, attempted: room.clients.length,
-    synced: room.clients.filter((client) => client.synced).length,
-    failed: room.clients.filter((client) => client.failure).length,
-    sent: room.sent, received: room.received, expected: room.sent * (config.people - 1),
-    expectedFromSyncedPeers: room.sent * Math.max(0, room.initiallySynced - 1),
-    missing: Math.max(0, room.sent * (config.people - 1) - room.received),
-    latency: summary(room.latency), deleted: room.deleted === true,
-  }));
+  const perRoom = roomRecords();
   const worstRoom = perRoom.filter((room) => room.latency.samples)
     .sort((a, b) => b.latency.p95Ms - a.latency.p95Ms)[0];
   const reasons = [...errors, ...cleanupErrors];
   if (interrupted) reasons.push(`Interrupted by ${interrupted}`);
   if (!stats.samples) reasons.push("No peer updates were observed");
   if (config && stats.p95Ms !== null && stats.p95Ms >= config.targetP95Ms) reasons.push(`p95 must be under ${config.targetP95Ms} ms`);
-  if (clients.length && failed / clients.length > 0.01) reasons.push("More than 1% of attempted connections failed");
+  if (connections.attempted && connections.failed / connections.attempted > 0.01) reasons.push("More than 1% of attempted connections failed");
+  if (config && connections.attempted !== config.rooms * config.people) reasons.push("Not every planned connection was attempted");
   if (received !== expected) reasons.push(`${Math.max(0, expected - received)} missing peer deliveries (received ${received}, expected ${expected})`);
   const warnings = [];
-  if (lagSummary?.p99Ms > 50) warnings.push("Client event-loop p99 exceeds 50 ms: client scheduling can dominate these results. Reduce load per process or use more machines.");
+  if (lagSummary?.p99Ms > 50) warnings.push("Client event-loop p99 exceeds 50 ms: client scheduling can dominate these results. Increase WORKERS or use more machines.");
   return {
     runId, startedAt, finishedAt: new Date().toISOString(), config: config ?? null,
-    result: reasons.length ? "FAIL" : "PASS", reasons, warnings,
-    connections: {
-      planned: config ? config.rooms * config.people : 0, attempted: clients.length,
-      synced: clients.filter((client) => client.synced).length, failed,
-      failedPercent: clients.length ? failed / clients.length * 100 : 0,
-      failures: clients.filter((client) => client.failure).map((client) => ({ id: client.id, reason: client.failure })),
-    },
+    result: reasons.length ? "FAIL" : "PASS", reasons, warnings, connections,
     edits: { sent, editingSeconds: editingMs / 1000, sentPerSecond: editingMs ? sent / (editingMs / 1000) : 0 },
     updates: { received, expected, missing: Math.max(0, expected - received) },
     latency: stats, latencyHistogramMs: Object.fromEntries([...latency.bins].sort((a, b) => a[0] - b[0])),
     worstRoom: worstRoom ? { id: worstRoom.id, p95Ms: worstRoom.latency.p95Ms } : null,
-    eventLoop: lagSummary, rooms: perRoom, cleanupErrors,
+    eventLoop: lagSummary, workers: children.map((child) => ({
+      id: child.id, rooms: child.roomIds, phase: child.snapshot?.phase ?? "starting",
+      eventLoop: child.snapshot?.eventLoop ?? null, completed: child.final === true,
+      exitCode: child.exitCode ?? null, signal: child.signal ?? null,
+    })), rooms: perRoom, cleanupErrors,
   };
 }
 
@@ -378,36 +410,250 @@ function printReport(report) {
   for (const reason of report.reasons) console.error(`FAIL: ${reason}`);
 }
 
-try {
-  config = readConfig();
-  console.log(`Load ${runId}: ${config.rooms} rooms x ${config.people} people, ${config.seconds}s at ~${config.rate} edits/person/s; p95 < ${config.targetP95Ms} ms`);
+/** Recover creates whose HTTP response was lost, without touching unrelated account rooms. */
+async function recoverRoomIds() {
+  try {
+    const response = await request("/api/rooms");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const found = await response.json();
+    if (!Array.isArray(found)) throw new Error("Unexpected room list");
+    for (const room of found) {
+      if (roomNames.has(room.name) && /^[A-Z0-9]{6}$/.test(room.id) && !["E2ETST", "TEAM22"].includes(room.id) && !rooms.some((known) => known.id === room.id)) {
+        rooms.push({ id: room.id, clients: [], sent: 0, received: 0, initiallySynced: 0, latency: histogram() });
+      }
+    }
+  } catch {
+    cleanupErrors.push("Could not reconcile room creation responses; check rooms named with this run ID");
+  }
+}
+
+function startProgress() {
   let lastReceived = 0;
   let lastTime = performance.now();
   progressTimer = setInterval(() => {
     const now = performance.now();
-    const active = clients.filter((client) => client.synced && !client.closed).length;
-    console.log(`[${phase}] connections ${active}/${clients.length}, updates/s ${((received - lastReceived) * 1000 / (now - lastTime)).toFixed(0)}, running p95 ${msText(percentile(latency, 0.95))}`);
+    const connections = connectionStats();
+    console.log(`[${phase}] connections ${connections.active}/${connections.attempted}, updates/s ${((received - lastReceived) * 1000 / (now - lastTime)).toFixed(0)}, running p95 ${msText(percentile(latency, 0.95))}`);
     lastReceived = received;
     lastTime = now;
   }, 5000);
-  await signIn();
-  if (!stop.signal.aborted) await makeRooms();
-  if (!stop.signal.aborted) await ramp();
-  if (!stop.signal.aborted) await edit();
-} catch (error) {
-  errors.push(error.message);
-  stop.abort();
-} finally {
-  lag.disable();
-  await cleanup();
-  clearInterval(progressTimer);
 }
-const report = buildReport();
-try { await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`); }
-catch (error) {
-  report.result = "FAIL";
-  report.reasons.push(`Cannot write report: ${error.message}`);
+
+/** Cumulative snapshots replace earlier IPC data, avoiding duplicate counts. */
+function snapshot() {
+  return {
+    phase, connections: connectionStats(), sent, received, editingMs,
+    histogram: { bins: [...latency.bins], samples: latency.samples, max: latency.max, over1000: latency.over1000 },
+    eventLoop: lagSummary ?? (measuring && lag.count ? { p99Ms: lag.percentile(99) / 1e6, maxMs: lag.max / 1e6, samples: lag.count } : null),
+    rooms: roomRecords(), errors: [...errors], cleanupErrors: [...cleanupErrors],
+  };
 }
-printReport(report);
-console.log(`JSON report: ${fileURLToPath(reportPath)}`);
-process.exitCode = interrupted === "SIGINT" ? 130 : interrupted === "SIGTERM" ? 143 : report.result === "PASS" ? 0 : 1;
+
+function send(message) {
+  return new Promise((resolve) => {
+    if (!process.connected) return resolve(false);
+    process.send(message, (error) => { if (error) stop.abort(); resolve(!error); });
+  });
+}
+
+function waitForParent(type) {
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      process.off("message", onMessage);
+      stop.signal.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const onAbort = () => finish(null);
+    const onMessage = (message) => { if (message?.type === type) finish(message); };
+    process.on("message", onMessage);
+    stop.signal.addEventListener("abort", onAbort, { once: true });
+    if (stop.signal.aborted) finish(null);
+  });
+}
+
+async function runWorker() {
+  if (typeof process.send !== "function") throw new Error("Load workers must be forked by the parent");
+  process.on("disconnect", () => stop.abort());
+  process.on("message", (message) => {
+    if (message?.type === "stop") { interrupted = message.signal ?? null; stop.abort(); }
+  });
+  const start = await waitForParent("start");
+  if (!start) return;
+  config = start.config;
+  cookie = start.cookie;
+  runId = start.runId;
+  for (const id of start.rooms) rooms.push({ id, clients: [], sent: 0, received: 0, initiallySynced: 0, latency: histogram() });
+  let sending = false;
+  const updates = setInterval(() => {
+    if (sending) return;
+    sending = true;
+    void send({ type: "stats", snapshot: snapshot() }).finally(() => { sending = false; });
+  }, 1000);
+  try {
+    await ramp();
+    // Register first so a fast parent cannot race the ready message.
+    const editing = waitForParent("edit");
+    await send({ type: "ready", snapshot: snapshot() });
+    if (await editing && !stop.signal.aborted) await edit();
+  } catch (error) {
+    errors.push(error.message);
+    stop.abort();
+  } finally {
+    lag.disable();
+    phase = "cleanup";
+    measuring = false;
+    for (const client of clients) closeClient(client);
+    clearInterval(updates);
+    await send({ type: "final", snapshot: snapshot() });
+    if (process.connected) process.disconnect();
+  }
+  process.exitCode = errors.length || cleanupErrors.length || interrupted ? 1 : 0;
+}
+
+function mergeWorkers() {
+  latency.bins.clear();
+  latency.samples = latency.max = latency.over1000 = 0;
+  sent = received = editingMs = 0;
+  const loops = [];
+  for (const child of children) {
+    const data = child.snapshot;
+    if (!data) continue;
+    sent += data.sent;
+    received += data.received;
+    editingMs = Math.max(editingMs, data.editingMs);
+    latency.samples += data.histogram.samples;
+    latency.max = Math.max(latency.max, data.histogram.max);
+    latency.over1000 += data.histogram.over1000;
+    for (const [ms, n] of data.histogram.bins) latency.bins.set(ms, (latency.bins.get(ms) ?? 0) + n);
+    if (data.eventLoop) loops.push(data.eventLoop);
+    for (const entry of data.rooms) {
+      const room = rooms.find((room) => room.id === entry.id);
+      if (room) room.snapshot = entry;
+    }
+  }
+  lagSummary = loops.length ? {
+    // p99 values cannot be averaged: retain the worst worker and its own values.
+    p99Ms: Math.max(...loops.map((loop) => loop.p99Ms ?? 0)),
+    maxMs: Math.max(...loops.map((loop) => loop.maxMs ?? 0)),
+    samples: loops.reduce((sum, loop) => sum + loop.samples, 0), aggregation: "worst-worker",
+  } : null;
+}
+
+function messageChild(child, message) {
+  if (child.process.connected) child.process.send(message, () => {});
+}
+
+async function runCoordinator() {
+  coordinator = true;
+  let shutdownTimer;
+  let deadline;
+  const stopChildren = () => {
+    for (const child of children) messageChild(child, { type: "stop", signal: interrupted });
+    shutdownTimer ??= setTimeout(() => {
+      for (const child of children) if (!child.exited) child.process.kill("SIGKILL");
+    }, 10_000);
+    shutdownTimer.unref();
+  };
+  stop.signal.addEventListener("abort", stopChildren, { once: true });
+  try {
+    await signIn();
+    if (!stop.signal.aborted) await makeRooms();
+    if (stop.signal.aborted) return;
+    phase = "connecting";
+    // Parent owns room creation and knows every ID before any worker can crash.
+    for (let i = 0; i < config.workers; i++) {
+      const assigned = rooms.filter((_room, index) => index % config.workers === i).map((room) => room.id);
+      const child = { id: i + 1, roomIds: assigned, ready: false, final: false, exited: false };
+      child.process = fork(fileURLToPath(import.meta.url), ["--load-worker"], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
+      children.push(child);
+      child.done = new Promise((resolve) => {
+        child.process.on("message", (message) => {
+          if (message?.snapshot) { child.snapshot = message.snapshot; mergeWorkers(); }
+          if (message?.type === "ready") {
+            child.ready = true;
+            if (children.length === config.workers && children.every((item) => item.ready) && !stop.signal.aborted) {
+              phase = "editing";
+              for (const item of children) messageChild(item, { type: "edit" });
+            }
+          }
+          if (message?.type === "final") child.final = true;
+        });
+        child.process.on("error", (error) => {
+          errors.push(`Worker ${child.id} could not run (${error.code ?? error.name})`);
+          stop.abort();
+        });
+        const exited = (code, signal) => {
+          if (child.exited) return;
+          child.exited = true;
+          child.exitCode = code;
+          child.signal = signal;
+          if (code !== 0 || !child.final) {
+            errors.push(`Worker ${child.id} exited ${signal ?? code ?? "unexpectedly"}; its latest snapshot may be incomplete`);
+            stop.abort();
+          }
+          resolve();
+        };
+        child.process.on("exit", exited);
+        // A failed spawn emits error/close without exit; it still must settle cleanup.
+        child.process.on("close", exited);
+      });
+      messageChild(child, { type: "start", runId, cookie, rooms: assigned, config: { ...config, rooms: assigned.length, workers: 1 } });
+    }
+    deadline = setTimeout(() => {
+      errors.push("Load workers exceeded their setup/edit/drain deadline");
+      stop.abort();
+    }, (config.rampSeconds + config.syncTimeoutMs / 1000 + config.seconds + config.drainSeconds + 60) * 1000);
+    deadline.unref();
+    await Promise.all(children.map((child) => child.done));
+  } finally {
+    if (children.some((child) => !child.exited)) {
+      stop.abort();
+      stopChildren();
+      await Promise.all(children.map((child) => child.done));
+    }
+    clearTimeout(deadline);
+    clearTimeout(shutdownTimer);
+    stop.signal.removeEventListener("abort", stopChildren);
+    mergeWorkers();
+    for (const child of children) {
+      for (const error of child.snapshot?.errors ?? []) errors.push(`Worker ${child.id}: ${error}`);
+      for (const error of child.snapshot?.cleanupErrors ?? []) cleanupErrors.push(`Worker ${child.id}: ${error}`);
+    }
+  }
+}
+
+async function main() {
+  try {
+    config = readConfig();
+    console.log(`Load ${runId}: ${config.rooms} rooms x ${config.people} people, ${config.seconds}s at ~${config.rate} edits/person/s; ${config.workers} worker(s); p95 < ${config.targetP95Ms} ms`);
+    startProgress();
+    if (config.workers > 1) await runCoordinator();
+    else {
+      await signIn();
+      if (!stop.signal.aborted) await makeRooms();
+      if (!stop.signal.aborted) await ramp();
+      if (!stop.signal.aborted) await edit();
+    }
+  } catch (error) {
+    errors.push(error.message);
+    stop.abort();
+  } finally {
+    lag.disable();
+    await cleanup();
+    clearInterval(progressTimer);
+  }
+  const report = buildReport();
+  try { await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`); }
+  catch (error) {
+    report.result = "FAIL";
+    report.reasons.push(`Cannot write report: ${error.message}`);
+  }
+  printReport(report);
+  console.log(`JSON report: ${fileURLToPath(reportPath)}`);
+  process.exitCode = interrupted === "SIGINT" ? 130 : interrupted === "SIGTERM" ? 143 : report.result === "PASS" ? 0 : 1;
+}
+
+if (worker) {
+  try { await runWorker(); }
+  catch { process.exitCode = 1; }
+} else await main();

@@ -1,7 +1,9 @@
 /** Exercise delivery safety, retry accounting and organisation scoping without making network calls. */
-import { ForbiddenException } from "@nestjs/common";
+import { ConflictException, ForbiddenException } from "@nestjs/common";
 import { schema, type DbHandle } from "@codechatter/db";
 import { WebhookPatch } from "@codechatter/contracts";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { sql, type SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Env } from "../config/env.js";
@@ -25,13 +27,13 @@ const delivery: Delivery = {
   id: "019b76da-a800-7000-8000-000000000002", webhookId: hook.id, event: "room.create",
   payload: { id: "event", event: "room.create", createdAt: now.toISOString(), org: { id: "org" }, actor: null, target: null, data: {} },
   status: "pending", attempts: 0, nextAttemptAt: now, lastStatusCode: null, lastError: null, lastResponse: null,
-  attemptLog: [], createdAt: now, deliveredAt: null,
+  attemptLog: [], createdAt: now, deliveredAt: null, lockedBy: null, lockedUntil: null,
 };
 
 function query(rows: unknown[]) {
   const q = {
     from: vi.fn(() => q), where: vi.fn(() => q), orderBy: vi.fn(() => q), limit: vi.fn(() => q),
-    innerJoin: vi.fn(() => q), for: vi.fn(async () => rows),
+    innerJoin: vi.fn(() => q), for: vi.fn(() => q), getSQL: () => sql`select 1`,
     then: Promise.resolve(rows).then.bind(Promise.resolve(rows)),
   };
   return q;
@@ -42,17 +44,50 @@ function setup(selectRows: unknown[][] = [], overrides: Partial<Env> = {}) {
   const sets: Record<string, unknown>[] = [];
   const inserted: unknown[] = [];
   const returns: unknown[][] = [];
+  const claims: Record<string, unknown>[] = [];
+  const predicates: SQL[] = [];
+  const cleanupLimits: number[] = [];
+  const deleted: unknown[][] = [];
+  const acknowledgements: Array<Error | undefined> = [];
+  const workerRows = selectRows[0]?.some((row) => Boolean((row as { delivery?: unknown }).delivery))
+    ? selectRows.shift() as Array<{ hook: Hook; delivery: Delivery }> : [];
+  let inTransaction = false;
   const db = {
-    select: vi.fn(() => { const q = query(selectRows.shift() ?? []); selected.push(q); return q; }),
+    select: vi.fn((fields?: Record<string, unknown>) => {
+      const idOnly = fields && Object.keys(fields).length === 1 && fields.id === schema.webhookDeliveries.id;
+      const q = query(idOnly ? [] : selectRows.shift() ?? workerRows.map((row) => row.hook));
+      if (idOnly) {
+        const limit = q.limit;
+        q.limit = vi.fn((n: number) => { if (n === 1000) cleanupLimits.push(n); return limit(); });
+      }
+      selected.push(q); return q;
+    }),
     selectDistinctOn: vi.fn(() => { const q = query(selectRows.shift() ?? []); selected.push(q); return q; }),
     insert: vi.fn(() => ({ values: vi.fn((value: unknown) => { inserted.push(value); return { returning: vi.fn(async () => returns.shift() ?? [hook]), then: Promise.resolve().then.bind(Promise.resolve()) }; }) })),
-    update: vi.fn(() => ({ set: vi.fn((value: Record<string, unknown>) => { sets.push(value); return { where: vi.fn(() => ({ returning: vi.fn(async () => returns.shift() ?? [delivery]), then: Promise.resolve().then.bind(Promise.resolve()) })) }; }) })),
-    delete: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn(async () => [{ id: hook.id }]) })) })),
-    transaction: vi.fn(async (callback: (tx: DbHandle["db"]) => Promise<unknown>) => callback(db as unknown as DbHandle["db"])),
+    update: vi.fn((table: unknown) => ({ set: vi.fn((value: Record<string, unknown>) => {
+      const claim = typeof value.lockedBy === "string";
+      (claim ? claims : sets).push(value);
+      return { where: vi.fn((predicate: SQL) => {
+        predicates.push(predicate);
+        const failure = !claim && value.attemptLog ? acknowledgements.shift() : undefined;
+        const promise = failure ? Promise.reject(failure) : Promise.resolve();
+        // Attach rejection handling immediately; the caller still observes the rejected await.
+        void promise.catch(() => {});
+        return {
+          returning: vi.fn(async () => claim ? workerRows.map((row) => ({ ...row.delivery, lockedBy: value.lockedBy, lockedUntil: new Date(Date.now() + 60_000) })) : returns.shift() ?? [table === schema.webhooks ? hook : delivery]),
+          then: promise.then.bind(promise),
+        };
+      }) };
+    }) })),
+    delete: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn(async () => deleted.shift() ?? []) })) })),
+    transaction: vi.fn(async (callback: (tx: DbHandle["db"]) => Promise<unknown>) => {
+      inTransaction = true;
+      try { return await callback(db as unknown as DbHandle["db"]); } finally { inTransaction = false; }
+    }),
   };
   const env = { NODE_ENV: "test", BETTER_AUTH_SECRET: key, WEBHOOKS_ALLOW_PRIVATE: false, ...overrides } as Env;
   const service = new WebhooksService({ db } as unknown as DbHandle, env);
-  return { service, db, selected, sets, inserted, returns };
+  return { service, db, selected, sets, inserted, returns, claims, predicates, cleanupLimits, deleted, acknowledgements, inTransaction: () => inTransaction };
 }
 
 beforeEach(() => vi.clearAllMocks());

@@ -35,6 +35,8 @@ export interface ServerToClientEvents {
   "run:exit": (exit: RunExit) => void;
   /** To one person, wherever they are signed in (their own channel). */
   "notification:new": (notification: NotificationItem) => void;
+  /** An interview in this room changed: read it again (GET rooms/:id/interview). */
+  "interview:changed": () => void;
 }
 
 export interface ClientToServerEvents {

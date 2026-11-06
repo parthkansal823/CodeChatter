@@ -218,6 +218,9 @@ export const webhookDeliveries = pgTable(
     status: text().$type<"pending" | "delivered" | "failed">().notNull().default("pending"),
     attempts: integer().notNull().default(0),
     nextAttemptAt: timestamp({ withTimezone: true }).defaultNow(),
+    /** A worker owns this delivery only until its short, recoverable lease expires. */
+    lockedBy: text(),
+    lockedUntil: timestamp({ withTimezone: true }),
     lastStatusCode: integer(),
     lastError: text(),
     lastResponse: text(),
@@ -233,7 +236,8 @@ export const webhookDeliveries = pgTable(
     createdAt: timestamp({ withTimezone: true, precision: 3 }).notNull().defaultNow(),
     deliveredAt: timestamp({ withTimezone: true }),
   },
-  (t) => [index().on(t.status, t.nextAttemptAt), index().on(t.webhookId, t.createdAt.desc(), t.id.desc())],
+  (t) => [index().on(t.status, t.nextAttemptAt), index().on(t.webhookId, t.createdAt.desc(), t.id.desc()),
+    index("webhook_deliveries_claim_idx").on(t.nextAttemptAt, t.id, t.lockedUntil).where(sql`${t.status} = 'pending'`)],
 );
 
 /**

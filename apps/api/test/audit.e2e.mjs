@@ -70,6 +70,7 @@ const one = person();
 const two = person();
 let roomId;
 let needsCleanup = false;
+let streamingRoomId;
 try {
   const signIn = (call, email) => call("/api/auth/sign-in/email", { method: "POST", body: { email, password: "codechatter123" } });
   const owner = await signIn(one, "test1@codechatter.local");
@@ -159,9 +160,31 @@ try {
   }
   const invalidExport = await one(`${audit}/export.csv?limit=1`);
   check("exportRejectsPaging", invalidExport.status === 400, invalidExport.status);
+
+  // One disposable room creates enough real audit entries to cross a 1,000-row CSV page.
+  const streamingRoom = await one("/api/rooms", { method: "POST", body: { name: "Audit streaming export e2e" } });
+  streamingRoomId = streamingRoom.json?.id;
+  if (streamingRoom.status !== 201 || !streamingRoomId) throw new Error("The streaming export room could not be created.");
+  const updateCount = 1_001;
+  for (let index = 0; index < updateCount; index++) {
+    const updated = await one(`/api/rooms/${streamingRoomId}`, { method: "PATCH", body: { description: `CSV page fixture ${index}` } });
+    if (updated.status !== 200) throw new Error(`Streaming export fixture update ${index} returned ${updated.status}.`);
+    if ((index + 1) % 250 === 0) console.log(`Created ${index + 1}/${updateCount} streaming export events`);
+  }
+  const streamingFilter = new URLSearchParams({ room: streamingRoomId, action: "room.update" });
+  const streamed = await one(`${audit}/export.csv?${streamingFilter}`, { accept: "text/csv" });
+  const streamedRows = csvRows(streamed.text);
+  const descriptions = streamedRows.slice(1).map((row) => { try { return JSON.parse(row[7]).description; } catch { return null; } });
+  check("csvStreamsMoreThanOnePage", streamed.status === 200 && streamedRows.length === updateCount + 1 && streamedRows.slice(1).every((row) => row[3] === "room.update" && row[5] === streamingRoomId));
+  check("csvPageBoundaryHasNoMissingOrDuplicateEvents", new Set(descriptions).size === updateCount && Array.from({ length: updateCount }, (_, index) => `CSV page fixture ${index}`).every((description) => descriptions.includes(description)));
+  check("completeCsvIsNotMarkedTruncated", !streamed.headers.has("x-audit-truncated") && !streamed.text.includes("# Stopped at") && !streamed.text.includes("# Export failed"));
 } catch (error) {
   check("flowCompletes", false, error instanceof Error ? error.message : String(error));
 } finally {
+  if (streamingRoomId) {
+    const cleanup = await one(`/api/rooms/${streamingRoomId}`, { method: "DELETE" }).catch(() => null);
+    check("streamingTestRoomCleanedUp", cleanup?.status === 204 || cleanup?.status === 404, cleanup?.status ?? "request failed");
+  }
   if (needsCleanup && roomId) {
     const cleanup = await one(`/api/rooms/${roomId}`, { method: "DELETE" }).catch(() => null);
     check("testRoomCleanedUp", cleanup?.status === 204 || cleanup?.status === 404, cleanup?.status ?? "request failed");

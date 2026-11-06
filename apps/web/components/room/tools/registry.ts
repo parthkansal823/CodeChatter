@@ -1,7 +1,7 @@
-import type { RoomAction } from "@codechatter/contracts";
+import type { RoomAction, RoomSummary } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import type { LucideIcon } from "lucide-react";
-import { Activity, Boxes, Database, NotebookPen, NotebookText, PenTool, Presentation, Send, ShieldAlert, Sparkles, Workflow } from "lucide-react";
+import { Activity, Boxes, ClipboardList, Database, NotebookPen, NotebookText, PenTool, Presentation, Send, ShieldAlert, Sparkles, Workflow } from "lucide-react";
 import type { ComponentType } from "react";
 
 /** What every room tool receives from the workspace. */
@@ -24,7 +24,7 @@ export type RoomTool = {
    */
   placement: "side" | "main";
   /** Hide the tool from roles that can't use it (default: everyone who can view the room). */
-  visible?: (can: (action: RoomAction) => boolean) => boolean;
+  visible?: (can: (action: RoomAction) => boolean, room: Pick<RoomSummary, "kind" | "role">) => boolean;
   /** Lazily loaded, so tools don't weigh down the room's first load. */
   load: () => Promise<{ default: ComponentType<RoomToolProps> }>;
 };
@@ -35,7 +35,9 @@ export type RoomTool = {
  * entry here. The activity bar, side panel and main area pick it up.
  */
 export const ROOM_TOOLS: RoomTool[] = [
-  { id: "ai", label: "AI", icon: Sparkles, placement: "side", load: () => import("./ai/ai-panel") },
+  { id: "interview", label: "Interview", icon: ClipboardList, placement: "side", visible: (_can, room) => room.kind === "interview", load: () => import("./interview/interview-tool") },
+  // AI help is off for the candidate during an interview (the API refuses it, too).
+  { id: "ai", label: "AI", icon: Sparkles, placement: "side", visible: (_can, room) => room.role !== "candidate", load: () => import("./ai/ai-panel") },
   { id: "notes", label: "Notes", icon: NotebookPen, placement: "side", load: () => import("./notes/notes-tool") },
   { id: "activity", label: "Activity", icon: Activity, placement: "side", load: () => import("./activity/activity-tool") },
   { id: "dependencies", label: "Dependencies", icon: ShieldAlert, placement: "side", load: () => import("./dependencies/dependencies-tool") },

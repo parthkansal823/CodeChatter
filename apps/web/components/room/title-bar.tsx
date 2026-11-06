@@ -146,7 +146,7 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
         )}
         {actions}
         <CallButton />
-        <ForkButton />
+        {room.kind !== "interview" && <ForkButton />}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

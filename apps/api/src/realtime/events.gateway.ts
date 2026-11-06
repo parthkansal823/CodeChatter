@@ -106,6 +106,11 @@ export class EventsGateway implements OnGatewayInit {
     this.server.to(channel(roomId)).emit("chat:message", message);
   }
 
+  /** An interview in this room changed: everyone reads it again, each seeing what their role may. */
+  interviewChanged(roomId: string): void {
+    this.server.to(channel(roomId)).emit("interview:changed");
+  }
+
   @SubscribeMessage("chat:send")
   async send(@ConnectedSocket() socket: RoomSocket, @MessageBody() body: unknown): Promise<Ack<ChatMessage>> {
     const input = SendMessageInput.safeParse(body);

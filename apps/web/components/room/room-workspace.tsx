@@ -86,6 +86,7 @@ import { startCommentAt } from "@/components/room/code-comments/editor-comments"
 import { getActiveEditor } from "@/components/room/editor/active-editor";
 import { usePresentMode } from "@/components/room/editor/present";
 import { PresentBanner } from "@/components/room/present-banner";
+import { InterviewBanner } from "@/components/room/tools/interview/interview-banner";
 import { CallDock } from "@/components/room/call/call-dock";
 import { requestCheckpoint } from "@/components/room/history/checkpoints";
 import { useRoomRepo } from "@/components/room/source-control/use-repo";
@@ -152,6 +153,10 @@ function Workspace() {
     startSearch(room.id, options);
   };
   const [right, setRight] = useSidePanel(room.id);
+  // An interview room opens on the question.
+  useEffect(() => {
+    if (room.kind === "interview") setRight((current) => current ?? "interview");
+  }, [room.kind, setRight]);
   // The side panel's tabs scroll sideways when there are many; keep the chosen one in view.
   const sideTabs = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -165,7 +170,7 @@ function Workspace() {
   useOpenAiOnRequest(() => setRight(AI_TOOL_ID));
 
   // Plug-in tools (components/room/tools/registry.ts).
-  const tools = ROOM_TOOLS.filter((tool) => tool.visible?.(can) ?? true);
+  const tools = ROOM_TOOLS.filter((tool) => tool.visible?.(can, room) ?? true);
   const sideTools = tools.filter((tool) => tool.placement === "side");
   const mainTools = tools.filter((tool) => tool.placement === "main");
   const [mainToolId, setMainToolId] = useState<string | null>(null);
@@ -550,6 +555,7 @@ function Workspace() {
           ],
         }}
       />
+      {room.kind === "interview" && <InterviewBanner onOpen={() => setRight("interview")} />}
       <div className="flex min-h-0 flex-1">
         {/* Activity bar: your code first, then the room's apps, terminals at the foot. Chat, People and AI open from the title bar. */}
         {!zen && (

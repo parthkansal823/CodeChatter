@@ -86,11 +86,11 @@ export function useFileText(fileId: string): string {
   return useMemo(() => textOf(doc, fileId)?.toString() ?? "", [doc, fileId, tick]);
 }
 
-/** A Markdown file, rendered with document-sized type (a README, not a chat message). */
-export function MarkdownBody({ text }: { text: string }) {
+/** A Markdown file, rendered with document-sized type (a README, not a chat message). `compact` is for a narrow panel. */
+export function MarkdownBody({ text, compact = false }: { text: string; compact?: boolean }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <article className="mx-auto max-w-3xl px-8 py-6 text-sm">
+      <article className={compact ? "p-3 text-sm" : "mx-auto max-w-3xl px-8 py-6 text-sm"}>
         <Markdown remarkPlugins={remarkPlugins} components={components}>
           {text}
         </Markdown>

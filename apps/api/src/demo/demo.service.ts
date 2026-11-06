@@ -1,7 +1,9 @@
 import { ensurePersonalOrg, hashPassword, type Auth, type AuthSession } from "@codechatter/auth";
 import { schema, type DbHandle } from "@codechatter/db";
-import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import { and, inArray, like, lt } from "drizzle-orm";
+import { HttpException, HttpStatus, Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
+import { and, eq, inArray, like, lt, notExists } from "drizzle-orm";
+import { fromNodeHeaders } from "better-auth/node";
+import type { Request, Response } from "express";
 import type { Redis } from "ioredis";
 import { randomBytes, randomInt } from "node:crypto";
 
@@ -16,10 +18,14 @@ export { GUEST_DOMAIN };
 const ANIMALS = ["Otter", "Falcon", "Lynx", "Heron", "Panda", "Koala", "Orca", "Fox", "Ibis", "Yak", "Gecko", "Puffin"];
 const GUEST_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
+type GuestAccount = { id: string; email: string; password: string; name: string; orgId: string; user: { id: string; name: string; email: string; image?: string | null } };
+
 /**
  * "Try the demo": a guest account and a guided-tour room in one click, no
  * email. Guests are ordinary users with a marked email domain, so every
  * permission check applies to them unchanged; they are deleted after a day.
+ * Interview candidates without an account get one too (interviews/), so the
+ * cleanup runs even where the demo is off.
  */
 @Injectable()
 export class DemoService implements OnModuleInit, OnModuleDestroy {
@@ -39,7 +45,6 @@ export class DemoService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
-    if (!this.enabled) return;
     this.sweeper = setInterval(() => void this.sweep(), 60 * 60 * 1000);
     void this.sweep();
   }
@@ -49,17 +54,16 @@ export class DemoService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** At most `max` new guests per IP per hour (a demo, not free accounts). */
-  async allow(ip: string, max = 5): Promise<boolean> {
-    const key = `demo:ip:${ip}`;
+  async allow(ip: string, max = 5, scope = "demo"): Promise<boolean> {
+    const key = `${scope}:ip:${ip}`;
     const count = await this.redis.incr(key);
     if (count === 1) await this.redis.expire(key, 3600);
     return count <= max;
   }
 
-  /** Create a guest and their tour room; returns the credentials to sign in with. */
-  async createGuest(): Promise<{ email: string; password: string; name: string; roomId: string }> {
+  /** A guest account and nothing else; returns the credentials to sign in with. */
+  async createGuestAccount(name: string): Promise<GuestAccount> {
     const ctx = await this.auth.$context;
-    const name = `Guest ${ANIMALS[randomInt(ANIMALS.length)]}`;
     const email = `guest-${randomBytes(6).toString("hex")}@${GUEST_DOMAIN}`;
     const password = randomBytes(18).toString("base64url");
     // Through Better Auth's own adapter, like the dev seed: same ids, hooks
@@ -67,7 +71,23 @@ export class DemoService implements OnModuleInit, OnModuleDestroy {
     const user = await ctx.internalAdapter.createUser({ name, email, emailVerified: true }, { method: "admin" });
     await ctx.internalAdapter.linkAccount({ userId: user.id, providerId: "credential", accountId: user.id, password: await hashPassword(password) });
     const orgId = await ensurePersonalOrg(this.handle.db, user);
+    return { id: user.id, email, password, name, orgId, user };
+  }
 
+  /** Sign in exactly like the sign-in form does, and pass Better Auth's session cookies through to the browser. */
+  async signIn(guest: Pick<GuestAccount, "email" | "password">, req: Request, res: Response): Promise<void> {
+    const signIn = await this.auth.api.signInEmail({
+      body: { email: guest.email, password: guest.password },
+      headers: fromNodeHeaders(req.headers),
+      asResponse: true,
+    });
+    if (!signIn.ok) throw new HttpException("Couldn't sign you in. Try again.", HttpStatus.SERVICE_UNAVAILABLE);
+    for (const cookie of signIn.headers.getSetCookie()) res.append("set-cookie", cookie);
+  }
+
+  /** Create a guest and their tour room; returns the credentials to sign in with. */
+  async createGuest(): Promise<{ email: string; password: string; name: string; roomId: string }> {
+    const { id, email, password, name, orgId, user } = await this.createGuestAccount(`Guest ${ANIMALS[randomInt(ANIMALS.length)]}`);
     const session = { user: { ...user, image: user.image ?? null }, session: { activeOrganizationId: orgId } } as unknown as AuthSession;
     const room = await this.rooms.create(session, {
       name: "Welcome to CodeChatter",
@@ -76,18 +96,29 @@ export class DemoService implements OnModuleInit, OnModuleDestroy {
       visibility: "private",
       joinPolicy: "invite",
     });
-    this.logger.log(`demo guest ${user.id} with room ${room.id}`);
+    this.logger.log(`demo guest ${id} with room ${room.id}`);
     return { email, password, name, roomId: room.id };
   }
 
-  /** Delete guests older than a day, with their personal workspace and rooms (cascade). */
+  /** Delete guests older than a day, with their personal workspace and rooms (cascade). A candidate waiting for or in an interview stays. */
   private async sweep(): Promise<void> {
     try {
       const db = this.handle.db;
       const stale = await db
         .select({ id: schema.user.id })
         .from(schema.user)
-        .where(and(like(schema.user.email, `%@${GUEST_DOMAIN}`), lt(schema.user.createdAt, new Date(Date.now() - GUEST_LIFETIME_MS))));
+        .where(
+          and(
+            like(schema.user.email, `%@${GUEST_DOMAIN}`),
+            lt(schema.user.createdAt, new Date(Date.now() - GUEST_LIFETIME_MS)),
+            notExists(
+              db
+                .select({ id: schema.interviews.id })
+                .from(schema.interviews)
+                .where(and(eq(schema.interviews.candidateUserId, schema.user.id), inArray(schema.interviews.status, ["scheduled", "live"]))),
+            ),
+          ),
+        );
       if (stale.length === 0) return;
       const ids = stale.map((u) => u.id);
       await db.delete(schema.organization).where(inArray(schema.organization.slug, ids.map((id) => `u-${id}`)));

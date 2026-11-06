@@ -162,11 +162,11 @@ function OrganisationAudit({ org }: { org: { id: string; name: string } }) {
         title="Audit log"
         description={`What happened in ${org.name}: who did what, and when.`}
         actions={filterError ? <Button size="sm" variant="outline" disabled><Download /> Download CSV</Button> : (
-          <Button size="sm" variant="outline" asChild><a href={`${base}/export.csv${query ? `?${query}` : ""}`} download title="Download up to 10,000 matching events"><Download /> Download CSV</a></Button>
+          <Button size="sm" variant="outline" asChild><a href={`${base}/export.csv${query ? `?${query}` : ""}`} download title="Download up to 100,000 matching events"><Download /> Download CSV</a></Button>
         )}
       />
       <div className="grid gap-4 px-6 py-6 sm:px-8">
-        <section aria-label="Audit filters" className="grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <section aria-label="Audit filters" className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="grid min-w-0 gap-1.5"><label htmlFor="audit-action" className="text-xs font-medium">Action</label>
             <Select value={filters.action ? `action:${filters.action}` : "all"} onValueChange={(value) => update("action", value === "all" ? "" : value.slice(7))}>
               <SelectTrigger id="audit-action" size="sm" className="w-full"><SelectValue placeholder="Every action" /></SelectTrigger>
@@ -179,11 +179,11 @@ function OrganisationAudit({ org }: { org: { id: string; name: string } }) {
               <SelectContent><SelectItem value="all">Every person</SelectItem>{actors.data?.actors.map((actor) => <SelectItem key={actor.id} value={`person:${actor.id}`}>{actor.name ? `${actor.name} (${actor.email})` : actor.email}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5"><label htmlFor="audit-room" className="text-xs font-medium">Room</label><Input id="audit-room" value={filters.room} maxLength={6} placeholder="Every room" aria-invalid={roomInvalid} aria-describedby={filterError ? "audit-filter-error" : undefined} className="h-7 font-mono text-xs uppercase" onChange={(event) => update("room", event.target.value.toUpperCase())} /></div>
-          <div className="grid gap-1.5"><label htmlFor="audit-from" className="text-xs font-medium">From</label><Input id="audit-from" type="date" value={filters.from} max={filters.to || undefined} className="h-7 text-xs" onChange={(event) => update("from", event.target.value)} /></div>
-          <div className="grid gap-1.5"><label htmlFor="audit-to" className="text-xs font-medium">To</label><Input id="audit-to" type="date" value={filters.to} min={filters.from || undefined} className="h-7 text-xs" onChange={(event) => update("to", event.target.value)} /></div>
+          <div className="grid min-w-0 gap-1.5"><label htmlFor="audit-room" className="text-xs font-medium">Room</label><Input id="audit-room" value={filters.room} maxLength={6} placeholder="Every room" aria-invalid={roomInvalid} aria-describedby={filterError ? "audit-filter-error" : undefined} className="h-8 font-mono text-xs uppercase" onChange={(event) => update("room", event.target.value.toUpperCase())} /></div>
+          <div className="grid min-w-0 gap-1.5"><label htmlFor="audit-from" className="text-xs font-medium">From</label><Input id="audit-from" type="date" value={filters.from} max={filters.to || undefined} className="h-8 text-xs" onChange={(event) => update("from", event.target.value)} /></div>
+          <div className="grid min-w-0 gap-1.5"><label htmlFor="audit-to" className="text-xs font-medium">To</label><Input id="audit-to" type="date" value={filters.to} min={filters.from || undefined} className="h-8 text-xs" onChange={(event) => update("to", event.target.value)} /></div>
         </section>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Button size="xs" variant="ghost" disabled={!Object.values(filters).some(Boolean)} onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button><span>Dates use your local time. CSV includes up to 10,000 events.</span></div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Button size="xs" variant="ghost" disabled={!Object.values(filters).some(Boolean)} onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button><span>Dates use your local time. CSV streams up to 100,000 events; a final line marks exports that reach the cap or fail.</span></div>
         {filterError && <p id="audit-filter-error" role="status" className="text-xs text-muted-foreground">{filterError}</p>}
         {(actions.isError || actors.isError) && <div role="alert" className="flex flex-wrap items-center gap-2 text-xs"><p>{errorMessage(actions.error ?? actors.error, "Couldn't load the filter choices. Try again.")}</p><Button size="xs" variant="outline" onClick={() => { void actions.refetch(); void actors.refetch(); }}>Try again</Button></div>}
         {!filterError && events.isError && <div role="alert" className="flex flex-wrap items-center gap-2 text-xs"><p>{errorMessage(events.error, "Couldn't load the audit log. Try again.")}</p><Button size="xs" variant="outline" onClick={() => void events.refetch()}>Try again</Button></div>}

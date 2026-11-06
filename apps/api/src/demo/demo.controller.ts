@@ -1,19 +1,13 @@
-import type { Auth } from "@codechatter/auth";
-import { Controller, HttpCode, HttpException, HttpStatus, Inject, NotFoundException, Post, Req, Res } from "@nestjs/common";
-import { fromNodeHeaders } from "better-auth/node";
+import { Controller, HttpCode, HttpException, HttpStatus, NotFoundException, Post, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 
 import { Public } from "../auth/public.decorator.js";
-import { AUTH } from "../infra/tokens.js";
 import { DemoService } from "./demo.service.js";
 
 @Controller("demo")
 @Public()
 export class DemoController {
-  constructor(
-    private readonly demo: DemoService,
-    @Inject(AUTH) private readonly auth: Auth,
-  ) {}
+  constructor(private readonly demo: DemoService) {}
 
   /**
    * One click from the landing page: a guest account, signed in, with a
@@ -27,15 +21,7 @@ export class DemoController {
       throw new HttpException("Too many demo rooms from your network. Try again in an hour, or create an account.", HttpStatus.TOO_MANY_REQUESTS);
     }
     const guest = await this.demo.createGuest();
-    // Sign in exactly like the sign-in form does, and pass Better Auth's
-    // session cookies through to the browser.
-    const signIn = await this.auth.api.signInEmail({
-      body: { email: guest.email, password: guest.password },
-      headers: fromNodeHeaders(req.headers),
-      asResponse: true,
-    });
-    if (!signIn.ok) throw new HttpException("The demo couldn't start. Try again.", HttpStatus.SERVICE_UNAVAILABLE);
-    for (const cookie of signIn.headers.getSetCookie()) res.append("set-cookie", cookie);
+    await this.demo.signIn(guest, req, res);
     return { roomId: guest.roomId, name: guest.name };
   }
 }

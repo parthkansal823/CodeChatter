@@ -56,6 +56,7 @@ export const ScheduleInterviewInput = z.object({
   sendEmail: z.boolean().default(false),
 });
 export type ScheduleInterviewInput = z.input<typeof ScheduleInterviewInput>;
+export type ScheduleInterviewData = z.output<typeof ScheduleInterviewInput>;
 
 export const INTERVIEW_STATUSES = ["scheduled", "live", "finished", "cancelled"] as const;
 export type InterviewStatus = (typeof INTERVIEW_STATUSES)[number];
@@ -154,10 +155,10 @@ export type InterviewInvitation = {
   used: boolean;
 };
 
-export const JoinInterviewInput = z.object({ token: z.string().min(16).max(200) });
-/** Without an account, a guest account is made for the candidate, as "Try the demo" does: the browser signs in with these, then claims the link. */
-export type InterviewGuest = { email: string; password: string; name: string };
-export type JoinedInterview = { roomId: string; interviewId: string };
+export const InterviewId = z.uuid();
+export const InterviewToken = z.string().min(16).max(200);
+/** Who used the link. `waiting`: it hasn't started, so they aren't in the room yet. */
+export type JoinedInterview = { roomId: string; interviewId: string; waiting: boolean };
 
 export const ExtendInterviewInput = z.object({ minutes: z.number().int().min(1).max(120) });
 
