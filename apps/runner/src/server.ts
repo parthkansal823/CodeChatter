@@ -6,7 +6,7 @@ import {
   DuckdbTarget,
   GitRunnerRequest,
   INSTALLS_MINUTES,
-  JudgeInput,
+  JudgeRunnerInput,
   KubeRequest,
   QueryInput,
   RoomCode,
@@ -178,7 +178,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     const route = `${req.method} ${match[2]}`;
 
     if (route === "POST judge") {
-      const body = JudgeInput.safeParse(await readJson(req));
+      const body = JudgeRunnerInput.safeParse(await readJson(req));
       if (!body.success) return json(res, 400, { error: body.error.issues[0]?.message ?? "Invalid request." });
       const session = rooms.get(roomId);
       res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-store" });
@@ -190,7 +190,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
         await session.sync.waitFor(body.data.stateVector);
         await session.sync.flush();
         if (findByPath(session.sync.doc, body.data.path)?.kind !== "file") emit({ type: "error", message: `${body.data.path} doesn't exist any more.` });
-        else for await (const event of judge(session.sandbox, body.data.path, body.data.cases, body.data.timeLimitMs)) {
+        else for await (const event of body.data.isolated ? session.judgeIsolated(body.data.path, body.data.cases, body.data.timeLimitMs) : judge(session.sandbox, body.data.path, body.data.cases, body.data.timeLimitMs)) {
           if (res.destroyed) break;
           session.touch();
           emit(event);

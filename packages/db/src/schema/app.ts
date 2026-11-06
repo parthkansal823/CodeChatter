@@ -287,3 +287,112 @@ export const githubTokens = pgTable("github_tokens", {
   sealed: text().notNull(),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Interview questions, in an organisation's bank. `tests` holds hidden cases too, so
+ * these rows never reach a candidate: they get a snapshot's visible part through the API.
+ */
+export const interviewQuestions = pgTable(
+  "interview_questions",
+  {
+    id: uuidv7Pk(),
+    orgId: text()
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    /** Markdown, shown to the candidate. */
+    prompt: text().notNull().default(""),
+    /** The file the tests run. */
+    file: text().notNull(),
+    starterFiles: jsonb().$type<Array<{ path: string; content: string }>>().notNull(),
+    tests: jsonb().$type<Array<{ id: string; input: string; expected: string; hidden: boolean }>>().notNull().default([]),
+    rubric: jsonb().$type<Array<{ id: string; label: string }>>().notNull().default([]),
+    durationMinutes: integer().notNull().default(60),
+    timeLimitMs: integer().notNull().default(2000),
+    createdBy: text().references(() => user.id, { onDelete: "set null" }),
+    archivedAt: timestamp({ withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index().on(t.orgId, t.updatedAt.desc())],
+);
+
+/**
+ * One interview: its room, a snapshot of the question (later edits to the bank don't
+ * change it), the single-use candidate link, the server's timer and the private
+ * scorecard. The room's own edit log (doc_updates) is the source for its replay.
+ */
+export const interviews = pgTable(
+  "interviews",
+  {
+    id: uuidv7Pk(),
+    orgId: text()
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    roomId: text()
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    questionId: uuid().references(() => interviewQuestions.id, { onDelete: "set null" }),
+    /** The question as it was when the interview was scheduled, hidden tests and rubric included. */
+    question: jsonb()
+      .$type<{
+        title: string;
+        prompt: string;
+        file: string;
+        starterFiles: Array<{ path: string; content: string }>;
+        tests: Array<{ id: string; input: string; expected: string; hidden: boolean }>;
+        rubric: Array<{ id: string; label: string }>;
+        timeLimitMs: number;
+      }>()
+      .notNull(),
+    candidateName: text().notNull(),
+    candidateEmail: text(),
+    interviewerId: text().references(() => user.id, { onDelete: "set null" }),
+    status: text().$type<"scheduled" | "live" | "finished" | "cancelled">().notNull().default("scheduled"),
+    scheduledAt: timestamp({ withTimezone: true }),
+    durationMinutes: integer().notNull(),
+    startedAt: timestamp({ withTimezone: true }),
+    /** When the server closes the interview: the timer browsers count down to. */
+    endsAt: timestamp({ withTimezone: true }),
+    finishedAt: timestamp({ withTimezone: true }),
+    /** SHA-256 of the candidate's link; the token itself is never stored. */
+    candidateTokenHash: text().notNull(),
+    /** Who used the link. Set once: that's what makes it single-use. */
+    candidateUserId: text().references(() => user.id, { onDelete: "set null" }),
+    candidateJoinedAt: timestamp({ withTimezone: true }),
+    /** Private to interviewers. */
+    scorecard: jsonb()
+      .$type<{ scores: Array<{ id: string; score: number | null; note: string }>; overall: number | null; recommendation: "yes" | "maybe" | "no" | null; notes: string }>()
+      .notNull()
+      .default({ scores: [], overall: null, recommendation: null, notes: "" }),
+    ...timestamps,
+  },
+  (t) => [
+    index().on(t.orgId, t.createdAt.desc()),
+    uniqueIndex().on(t.roomId),
+    uniqueIndex().on(t.candidateTokenHash),
+    index("interviews_due_idx").on(t.endsAt).where(sql`${t.status} = 'live'`),
+  ],
+);
+
+/** Each time the tests ran in an interview, with every case's result. Hidden cases' details stay with interviewers. */
+export const interviewRuns = pgTable(
+  "interview_runs",
+  {
+    id: uuidv7Pk(),
+    interviewId: uuid()
+      .notNull()
+      .references(() => interviews.id, { onDelete: "cascade" }),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    path: text().notNull(),
+    /** Set when the program didn't compile. */
+    compileError: text(),
+    results: jsonb()
+      .$type<Array<{ id: string; hidden: boolean; verdict: string; stdout: string; stderr: string; timeMs: number }>>()
+      .notNull()
+      .default([]),
+    passed: integer().notNull().default(0),
+    total: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.interviewId, t.createdAt.desc())],
+);

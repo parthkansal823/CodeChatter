@@ -62,7 +62,9 @@ export function persistenceExtension(handle: DbHandle, instance: string): Extens
       const room = await tx.query.rooms.findFirst({ where: eq(schema.rooms.id, parsed.roomId), columns: { templateId: true } });
       // A room made from a GitHub repository starts with its files instead of a template's.
       const repo = await tx.query.roomRepos.findFirst({ where: eq(schema.roomRepos.roomId, parsed.roomId), columns: { files: true } });
-      const files = repo ? (JSON.parse(gunzipSync(repo.files).toString("utf8")) as Array<{ path: string; content: string }>) : templateFiles(room?.templateId);
+      // An interview's room starts with its question's files.
+      const interview = repo ? null : await tx.query.interviews.findFirst({ where: eq(schema.interviews.roomId, parsed.roomId), columns: { question: true } });
+      const files = interview ? interview.question.starterFiles : repo ? (JSON.parse(gunzipSync(repo.files).toString("utf8")) as Array<{ path: string; content: string }>) : templateFiles(room?.templateId);
       const seeded = new Y.Doc();
       initDoc(seeded, room?.templateId ?? "blank", files);
       const update = Y.encodeStateAsUpdate(seeded);

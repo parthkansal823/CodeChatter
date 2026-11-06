@@ -142,6 +142,14 @@ export const JudgeInput = z.object({
 });
 export type JudgeInput = z.infer<typeof JudgeInput>;
 
+/**
+ * What the runner takes from the API. `isolated` runs the tests in a throwaway container
+ * (judge-box.ts), for inputs the room mustn't see. Only the API can ask for it: the
+ * browser's route takes JudgeInput, without this field.
+ */
+export const JudgeRunnerInput = JudgeInput.extend({ isolated: z.boolean().default(false) });
+export type JudgeRunnerInput = z.input<typeof JudgeRunnerInput>;
+
 export type JudgeVerdict = "passed" | "failed" | "error" | "timeout" | "ran";
 
 /** Newline-delimited JSON streamed while tests run. */

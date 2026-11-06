@@ -9,6 +9,7 @@ export * from "./git.js";
 export * from "./github.js";
 export * from "./history.js";
 export * from "./http-studio.js";
+export * from "./interviews.js";
 export * from "./kubernetes.js";
 export * from "./notifications.js";
 export * from "./permissions.js";

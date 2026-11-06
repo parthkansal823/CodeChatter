@@ -518,7 +518,36 @@ Tests:
 ## 10. Hardening and launch ⬜
 
 - ⬜ **Sandbox and browser security:** gVisor runtime, CSP with nonces, and a separate origin for previews.
-- ⬜ **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups. The metrics and dashboards are handed to ChatGPT (`docs/handoff/chatgpt-8-metrics.md`), and so are nightly backups with a restore drill (`docs/handoff/chatgpt-11-backups.md`).
+- 🟡 **Operations:** OpenTelemetry traces, Prometheus metrics, dashboards, and nightly backups.
+  - ✅ **Metrics and dashboards** (2026-11-06), written by ChatGPT. `docs/metrics.md` covers them.
+    - **What's measured:**
+      - API: requests and latency by route pattern, Socket.IO connections, chat messages (`apps/api/src/metrics`);
+      - collab: connections, documents, updates, bytes, store time (`extensions/metrics.ts`);
+      - runner: Runs by language and outcome, run time, sandboxes, terminals (`metrics.ts`);
+      - Node's own numbers for all three.
+    - **Private:**
+      - `/metrics` is on each service's own port, outside the auth guard, with its own check.
+      - Anything that came through a proxy is refused (any `X-Forwarded-*` header).
+      - The token is compared in constant time. Without one, development allows loopback only, and production refuses everything.
+      - Labels hold route patterns and languages, never room codes, paths or emails.
+    - **To see it:** `docker compose -f infra/compose.metrics.yaml up -d` starts Prometheus (:9090) and Grafana (:3300), both on this machine only, with the dashboard and 3 alert rules (5xx rate, collab store p95, Run failure rate).
+    - **Checked here:**
+      - typechecks and tests (API 554, runner 61);
+      - `promtool` on the rules and their unit tests;
+      - all 3 targets up in Prometheus, with real data;
+      - every dashboard panel has data;
+      - 401 without the token, and nothing through Caddy even with it;
+      - no room codes or emails in labels.
+    - **Fixed here:**
+      - the two ratio panels' axes ran to 10000%, so they're now fixed at 0–100%;
+      - production Compose didn't pass `METRICS_TOKEN` to the services.
+    - **Installing `prom-client`** made pnpm keep two copies of drizzle (it brings in `@opentelemetry/api`, drizzle's optional peer), giving 315 + 65 type errors. `@opentelemetry/api` at the workspace root fixed it.
+    - ⬜ **Next:**
+      - `prom-client` was deprecated in August 2026 for `@prometheus-io/client`;
+      - `METRICS_TOKEN` and scraping in the Helm chart;
+      - collab's store p95 reached 2.3 s during the end-to-end suites on this laptop, so it's worth watching on a real server.
+  - 🟡 **Nightly backups** with a restore drill: handed to ChatGPT (`docs/handoff/chatgpt-11-backups.md`).
+  - ⬜ **OpenTelemetry traces.**
 - ✅ **Load test:** 50 rooms × 10 people, with 95% of updates delivered in under 150 ms. Written by ChatGPT. It's `apps/collab/test/load.mjs`, a Node script with the real Hocuspocus client, because k6 can't speak Yjs.
   - **What it does:**
     - It makes its own rooms (never E2ETST or TEAM22).
@@ -544,8 +573,19 @@ Tests:
     - **Node 20 warnings:** checkout, setup-node and pnpm/action-setup moved to `@v5`, which run on Node 24.
     - **images** hadn't run yet (it waits for checks). The web image builds here as CI builds it (`next build` compiles in 42 s), and that build stage also makes the api, collab and runner outputs.
 
+  - **Green on GitHub** since `47b3e71` (2026-11-05).
+  - **End-to-end tests in CI** (2026-11-06): `.github/workflows/e2e.yml`, apart from CI so a flaky run can't hold it up. `docs/ci.md` covers it.
+    - It starts the dev infrastructure on one runner, builds the sandbox's base image (sharing a cache with the `images` job), migrates and seeds, starts the dev servers, compiles the pages the tests open, and runs `scripts/e2e-ci.mjs`.
+    - **29 suites:** 13 for the runner, collab and the API, and 16 in the browser. They need neither the full image, nor a paid AI key, nor real GitHub. All 29 pass here, with no retries, in about 7 minutes.
+    - **Failures** become annotations on the run, with a table on its page; logs and screenshots are kept as artifacts.
+    - **Found on the way:**
+      - suites run back to back trip the 10-a-minute sign-in limit, so the script clears only those counters in the dev Valkey before each suite (the limit itself stays, and `auth-flow.e2e.mjs` checks it);
+      - the browser tests load Playwright from `spikes/s1-editor`, which the root install doesn't install, so the workflow installs it;
+      - `isolation.e2e.mjs` flagged the read-only template cache (`cc-dev-warm`), and now allows it;
+      - `apps/collab/test/collab.e2e.mjs` is from the first spike and expects files E2ETST doesn't have, so it's left out.
+
   Still to do:
-  - end-to-end tests aren't in CI yet (they need the sandbox, so Docker and the dev stack).
+  - the workflow's first run on GitHub.
 - ⬜ **Cutover from v1:** move the data from MongoDB, then delete `client/` and `server/`.
 - ⬜ **Security review:** a final pass over everything above.
 

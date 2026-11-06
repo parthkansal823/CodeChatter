@@ -39,6 +39,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies from the lockfile
         run: pnpm install --frozen-lockfile
+      # The browser tests load playwright-core from here (apps/web/test/browser.mjs); this
+      # folder is outside the pnpm workspace. It drives the Edge the image comes with.
+      - name: Install the browser tests' Playwright
+        run: npm ci --prefix spikes/s1-editor --ignore-scripts --no-audit --no-fund
       - name: Check that Edge is there
         run: microsoft-edge --version
       - name: Write .env with secrets made for this run

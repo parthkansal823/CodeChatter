@@ -10,6 +10,7 @@ import { accessExtension } from "./extensions/access.js";
 import { checkpointsExtension } from "./extensions/checkpoints.js";
 import { metricsExtension } from "./extensions/metrics.js";
 import { persistenceExtension } from "./extensions/persistence.js";
+import { revocationExtension } from "./extensions/revocation.js";
 
 /**
  * Real-time document server (Hocuspocus 4). Runs as N instances behind Caddy
@@ -52,6 +53,7 @@ const server = new Server({
   extensions: [
     metricsExtension(env),
     new RedisExtension({ createClient: () => new Redis(env.VALKEY_URL) }),
+    revocationExtension(env.VALKEY_URL),
     accessExtension({ auth, db: handle.db, origins, serviceSecret: env.SERVICE_SECRET }),
     persistenceExtension(handle, instance),
     checkpointsExtension(handle),

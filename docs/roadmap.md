@@ -10,21 +10,21 @@ This page is the path from start to launch: the stages in the order they're buil
 
 Both this page and pending.md are updated after every finished piece.
 
-## Where we are (2026-11-05)
+## Where we are (2026-11-06)
 
 - **Done:**
   - the foundations, the sandbox and most of a full IDE (steps 1–3);
   - pro editing, including real git in the sandbox (step 7);
   - collaboration, apart from TURN over TLS (step 6).
 - **In progress:**
-  - **hardening for launch** (step 10): metrics, backups, CI;
+  - **hardening for launch** (step 10): backups, security, accessibility;
   - **teams** (step 8): members, invitations, account security;
   - **platform** (step 9): follow-ups.
 
   These are mostly with ChatGPT, through the prompts in `docs/handoff/`.
 - **Next:**
-  - end-to-end tests in CI (step 10);
-  - interview mode (step 11), then the recruiter kit's video (step 12).
+  - interview mode (step 11), which I'm building now;
+  - then the recruiter kit's video (step 12).
 
 ```mermaid
 flowchart TD
@@ -154,8 +154,9 @@ flowchart TD
 *Goal: safe, observable and tested enough to run for real.* Details: §10.
 
 - ✅ Load test: 500 live connections, p95 under 150 ms (follow-up: ChatGPT, prompt 13)
-- 🟡 Operations: Prometheus metrics and Grafana (ChatGPT, prompt 8); nightly backups (prompt 11); traces ⬜
-- 🟡 GitHub Actions CI: lint, types, tests, image builds, vulnerability scan; end-to-end tests in CI ⬜
+- 🟡 Operations: Prometheus metrics and Grafana ✅; nightly backups (ChatGPT, prompt 11); traces ⬜
+- ✅ GitHub Actions CI: lint, types, tests, image builds, vulnerability scan (green on GitHub)
+- 🟡 End-to-end tests in CI: 29 suites pass here; first run on GitHub to come
 - ⬜ Sandbox and browser security (gVisor, CSP nonces); accessibility (axe, Lighthouse)
 - ⬜ Cutover from v1; a final security review
 

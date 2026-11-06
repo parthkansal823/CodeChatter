@@ -5,7 +5,8 @@
 #   docker compose --env-file infra/.env.production -f infra/compose.yaml up -d --build
 #
 # Caddy publishes HTTP/HTTPS; LiveKit publishes media and TURN. Postgres and
-# Valkey are reachable from the app containers alone.
+# Valkey are reachable from the app containers alone. Metrics (docs/metrics.md) are
+# refused unless METRICS_TOKEN is set, and Caddy never forwards them.
 name: codechatter
 
 x-build: &build
@@ -67,6 +68,7 @@ services:
     build: { <<: *build, target: api }
     environment:
       <<: [*server-env, *object-store]
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:-}
@@ -89,6 +91,7 @@ services:
     build: { <<: *build, target: collab }
     environment:
       <<: *server-env
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     depends_on:
       migrate: { condition: service_completed_successfully }
       valkey: { condition: service_healthy }
@@ -110,6 +113,7 @@ services:
     build: { <<: *build, target: runner }
     environment:
       <<: *object-store
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       NODE_ENV: production
       SERVICE_SECRET: ${SERVICE_SECRET:?set SERVICE_SECRET}
       COLLAB_INTERNAL_URL: ws://collab:4100

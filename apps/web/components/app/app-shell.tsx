@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Compass, LayoutGrid, Menu, Settings, Users, Workflow } from "lucide-react";
+import { Compass, LayoutGrid, Menu, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useState, type ReactNode } from "react";
@@ -24,9 +24,7 @@ export function useMe(): Me {
 const NAV = [
   { href: "/dashboard", label: "Rooms", icon: LayoutGrid },
   { href: "/explore", label: "Explore", icon: Compass },
-  { href: "/automations", label: "Automations", icon: Workflow },
   { href: "/interviews", label: "Interviews", icon: Users },
-  { href: "/agent", label: "Agent runs", icon: Bot },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

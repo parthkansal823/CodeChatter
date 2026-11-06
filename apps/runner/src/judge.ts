@@ -29,7 +29,7 @@ export function normalizeOutput(text: string): string {
 type ExecResult = { stdout: string; stderr: string; exitCode: number | null; timeMs: number };
 
 /** One non-interactive exec: stdout and stderr captured separately (capped), exit code, wall time. */
-async function capture(sandbox: RoomSandbox, script: string, path: string, env: string[]): Promise<ExecResult> {
+async function capture(sandbox: Pick<RoomSandbox, "exec">, script: string, path: string, env: string[]): Promise<ExecResult> {
   const started = Date.now();
   // No stdin at all: ending a hijacked stdin closes the whole connection, and the
   // input already travels in $CC_INPUT.
@@ -61,7 +61,7 @@ async function capture(sandbox: RoomSandbox, script: string, path: string, env: 
  * verdict as it finishes. Cases without an expected output just show what
  * the program printed ("custom input").
  */
-export async function* judge(sandbox: RoomSandbox, path: string, cases: JudgeCase[], timeLimitMs: number): AsyncGenerator<JudgeEvent> {
+export async function* judge(sandbox: Pick<RoomSandbox, "exec">, path: string, cases: JudgeCase[], timeLimitMs: number): AsyncGenerator<JudgeEvent> {
   const plan = judgePlanFor(path);
   if (!plan) {
     yield { type: "error", message: `CodeChatter can't test ${path} yet.` };

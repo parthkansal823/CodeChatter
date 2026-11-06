@@ -57,6 +57,13 @@
       "when": 1793810260236,
       "tag": "0007_fearless_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793930764542,
+      "tag": "0008_flimsy_sphinx",
+      "breakpoints": true
     }
   ]
 }

@@ -256,6 +256,17 @@ export class DocSync {
     await agent.request({ op: "write", path, content: object.body.toString("base64"), encoding: "base64" }, 60_000);
   }
 
+  /** Every file of the room as bytes (binary ones from the object store), for a copy outside the sandbox. */
+  async exportFiles(): Promise<Array<{ path: string; data: Buffer }>> {
+    const { files, blobs } = this.snapshot();
+    const out: Array<{ path: string; data: Buffer }> = [...files].map(([path, text]) => ({ path, data: Buffer.from(text, "utf8") }));
+    for (const [path, blob] of blobs) {
+      const object = await this.store?.get(blobKey(this.roomId, blob.sha256)).catch(() => null);
+      if (object) out.push({ path, data: object.body });
+    }
+    return out;
+  }
+
   private schedule(): void {
     if (!this.agent) return;
     if (this.timer) clearTimeout(this.timer);

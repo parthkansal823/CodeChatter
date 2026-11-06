@@ -1,13 +1,15 @@
 import { objectStoreFromEnv } from "@codechatter/auth/s3";
 import type Docker from "dockerode";
 
-import type { SandboxStatus } from "@codechatter/contracts";
+import type { JudgeCase, JudgeEvent, SandboxStatus } from "@codechatter/contracts";
 
 import { databaseEnv, databasePassword, Databases } from "./databases.js";
 import { DockerDatabases } from "./docker-databases.js";
 import { KubeDatabases } from "./kube-databases.js";
 import { DocSync } from "./doc-sync.js";
 import { Egress, LABEL_UNTIL, type PackageProxy } from "./egress.js";
+import { judge } from "./judge.js";
+import { JudgeBox } from "./judge-box.js";
 import { KubeEgress } from "./kube-egress.js";
 import type { Env } from "./env.js";
 import { log } from "./log.js";
@@ -44,13 +46,13 @@ export class RoomSession {
   private readying: Promise<void> | null = null;
 
   constructor(
-    docker: Docker,
+    private readonly docker: Docker,
     readonly roomId: string,
     private readonly env: Env,
     private readonly databases: Databases,
-    kube: Kube | null,
+    private readonly kube: Kube | null,
     /** The image this room's sandbox runs now (the owner's pick, or the server's default). */
-    image: () => string = () => env.SANDBOX_IMAGE,
+    private readonly image: () => string = () => env.SANDBOX_IMAGE,
   ) {
     // Kubernetes takes the room's settings from its Secret (kube-sandbox.ts); Docker gets them with each exec.
     this.sandbox = kube ? new KubeSandbox(kube, roomId, env, image) : new Sandbox(docker, roomId, env, databaseEnv(databasePassword(env.SERVICE_SECRET, roomId)), image);
@@ -68,6 +70,23 @@ export class RoomSession {
       this.tunnels.closeAll();
       this.ports = [];
     };
+  }
+
+  /**
+   * Run tests in a throwaway container with a copy of the room's files (judge-box.ts), so
+   * inputs the room mustn't see leave nothing behind. Docker only, so far.
+   */
+  async *judgeIsolated(path: string, cases: JudgeCase[], timeLimitMs: number): AsyncGenerator<JudgeEvent> {
+    if (this.kube) {
+      yield { type: "error", message: "Hidden tests need the Docker driver for now: this server runs sandboxes on Kubernetes." };
+      return;
+    }
+    const box = await JudgeBox.open(this.docker, this.env, this.roomId, this.image(), await this.sync.exportFiles());
+    try {
+      yield* judge(box, path, cases, timeLimitMs);
+    } finally {
+      await box.close();
+    }
   }
 
   /**

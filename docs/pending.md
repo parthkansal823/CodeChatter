@@ -9,26 +9,26 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 🟡 means started, ⬜ not started.
 
-## In progress (2026-11-05)
+## In progress (2026-11-06)
 
-- 🟡 **ChatGPT 8, metrics.**
-  - Done: collab and runner `/metrics`, behind `METRICS_TOKEN`, not public; `prom-client` 15.1.3 is installed.
-  - Still coming: the API's `/metrics`, the Grafana dashboards, and the docs.
+- 🟡 **Claude:** interview mode (step 11).
 - ✅ Just finished by Claude:
+  - end-to-end tests in CI (waiting for their first run on GitHub);
+  - metrics and dashboards checked (ChatGPT 8);
   - real git in the sandbox (step 7);
   - binary files, and deleting a room's stored files with the room.
 
 ## Up next, in order
 
 1. **ChatGPT**, one prompt at a time, each checked before the next: **13** (follow-ups) → **9** (teams) → **10** (account security) → **11** (backups) → **12** (TURN over TLS).
-2. **Claude:** end-to-end tests in CI (step 10), once CI's first run on GitHub is green.
-3. **Claude:** interview mode (step 11), with the interviewer and candidate room roles (step 8).
-4. **You:** record the README's GIF and 2-minute video (step 12).
-5. Then step 10's security and accessibility passes, and the cutover from v1, before launch.
+2. **Claude:** interview mode (step 11), with the interviewer and candidate room roles (step 8).
+3. **You:** record the README's GIF and 2-minute video (step 12).
+4. Then step 10's security and accessibility passes, and the cutover from v1, before launch.
 
 ## Your actions
 
-- **Commit and push** what's uncommitted, then check that CI's run on GitHub is green.
+- **Commit and push** what's uncommitted. That also starts the new **End-to-end** workflow; I read its result from GitHub, so just tell me when it's pushed.
+- **Untrack the last Codex files:** `git rm -r --cached .codex apps/web/AGENTS.md`, then commit. They stay on your disk.
 - **Before deploying:**
   - rotate every v1 secret (`server/.env`);
   - add the Google OAuth callback (`http://localhost:8080/api/auth/callback/google`);
@@ -147,12 +147,13 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Step 10 · Hardening and launch
 
-- 🟡 Prometheus metrics and Grafana dashboards (**ChatGPT 8**, in progress)
 - 🟡 Nightly backups and a restore drill (**ChatGPT 11**)
 - ⬜ OpenTelemetry traces
-- 🟡 CI:
-  - a first green run on GitHub (**you**, push);
-  - end-to-end tests in CI (**Claude**).
+- 🟡 End-to-end tests in CI: the workflow's first run on GitHub (**you** push, **Claude** reads the result)
+- ⬜ Metrics, later:
+  - `METRICS_TOKEN` and scraping in the Helm chart;
+  - move from `prom-client` to `@prometheus-io/client`.
+- ⬜ `apps/collab/test/collab.e2e.mjs`: rewrite it for today's E2ETST, or delete it (`checkpoints` and `notes-access` cover most of it)
 - 🟡 Follow-ups (**ChatGPT 13**):
   - the audit log's CSV streamed with no silent cap;
   - the filter labels lined up;
