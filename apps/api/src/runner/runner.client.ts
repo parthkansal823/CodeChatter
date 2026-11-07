@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
+import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, FlowInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
   RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
@@ -235,6 +235,14 @@ export class RunnerClient {
   async lakehouse(roomId: string, input: LakehouseInput, user: RunnerUser): Promise<unknown> {
     const response = await this.call(`/rooms/${roomId}/lakehouse`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
     if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't read the lakehouse.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response.json();
+  }
+
+  /** A room's dbt project (apps/runner/src/flow.ts). */
+  async flow(roomId: string, input: FlowInput, user: RunnerUser): Promise<unknown> {
+    const response = await this.call(`/rooms/${roomId}/flow`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't read the project.");
     if (!response.ok) throw new RunnerUnavailableError();
     return response.json();
   }

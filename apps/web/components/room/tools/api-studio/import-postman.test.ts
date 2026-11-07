@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { resolveRequest, withQuery } from "../../../../../../packages/contracts/src/http-studio/request";
 import { IMPORT_TEXT_LIMIT } from "./import-openapi";
 import { parsePostman } from "./import-postman";
+import { variableLookup } from "./local-store";
 
 const collection = (extra: Record<string, unknown> = {}) => ({ info: { name: "Pet collection", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" }, item: [{ name: "Health", request: { method: "GET", url: "https://api.example.test/health" } }], ...extra });
 const parse = (value: unknown) => parsePostman(JSON.stringify(value));
@@ -173,4 +174,16 @@ test("raw URL-derived query rows keep their existing URI encoding", () => {
   const url = new URL(result.input.url);
   assert.equal(url.searchParams.get("q"), "a&b#c");
   assert.equal(url.searchParams.get("name&= #界"), "界%2F");
+});
+
+test("dynamic placeholders preserve send-time generation and unsupported ones remain visibly missing", () => {
+  const plan = parse(collection({ item: [{ request: { method: "GET", url: "https://example.test/{{$randomUUID}}/{{$unknownDynamic}}" } }] }));
+  assert.equal(plan.variables.some((variable) => variable.key === "$randomUUID"), false);
+  assert.deepEqual(plan.variables.find((variable) => variable.key === "$unknownDynamic"), { key: "$unknownDynamic", value: "", secret: false, enabled: false });
+  const lookup = variableLookup({ id: "fixture", name: plan.name, order: 0, variables: plan.variables.map((variable, index) => ({ ...variable, id: String(index) })) }, {});
+  const request = plan.requests[0]!;
+  const resolved = resolveRequest({ ...request, url: withQuery(request.url, request.params) }, lookup);
+  assert.match(resolved.input.url, /^https:\/\/example\.test\/[0-9a-f-]{36}\/\{\{\$unknownDynamic\}\}$/);
+  assert.deepEqual(resolved.missing, ["$unknownDynamic"]);
+  assert.ok(plan.warnings.some((warning) => warning.includes("Unsupported dynamic variables need manual values")));
 });

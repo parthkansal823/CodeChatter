@@ -1,0 +1,8 @@
+# Where dbt keeps a room's data, for a project with no profile of its own: one DuckDB file in the room's home, not in its files.
+codechatter:
+  target: room
+  outputs:
+    room:
+      type: duckdb
+      path: "{{ env_var('HOME') }}/flow/warehouse.duckdb"
+      threads: 1

@@ -202,7 +202,9 @@ flowchart TD
 - ✅ Traces: every AI call from a room with its tokens and time, what was said for those allowed to read it, and sent on to tools like Jaeger, Langfuse or Phoenix
 - ✅ Explain this data: on a query's results or a pandas table, DuckDB works out the numbers and the AI explains them
 - ✅ A lakehouse as Databricks does it: Spark, Delta Lake and MLflow in notebooks, and a tool showing tables, every version, and runs
-- ⬜ A visual Flow as Dataiku does it; a layout for researchers
+- ✅ A visual Flow as Dataiku does it: datasets and recipes on a chart, on real dbt and DuckDB, with data checks and a profile of each dataset
+- ✅ AutoML recipes in the Flow: FLAML tries models and keeps the best, scored on rows it never saw, and logged to MLflow on the full image
+- ⬜ A layout for researchers
 - ⬜ Suggestion mode, room branches, live authorship, session replay, smarter calls
 - ⬜ Test explorer, profiler, package search, room secrets, deploy previews
 - ⬜ Ask the codebase, AI team, natural-language terminal, generated tests and docs, AI code review

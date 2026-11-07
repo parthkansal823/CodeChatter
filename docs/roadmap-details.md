@@ -694,6 +694,50 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/web/test/lakehouse.e2e.mjs` (24 checks in a browser, with the real example notebook and only one failure stood in for: the numbers at the old version are checked)
 - `a11y.e2e.mjs` includes the tool with a table and runs
 
+### The Flow: datasets and recipes on a chart ✅
+
+**What:** a Flow tool that shows a room's data as Dataiku does: datasets as boxes and the recipes that make them as circles, joined by arrows, with what ran, warned and failed lit up on it. It's the owner's "Dataiku jaisa", without being a copy of Dataiku, a paid product: underneath it's a real **dbt project** in the room's files, which **dbt Core** reads and builds on **DuckDB** in the sandbox. So a project made here runs anywhere dbt does, and `dbt build` works in the room's terminal, and the tool sees what it did.
+
+**What it does:**
+- **The chart:** comes from dbt's own manifest, laid out by dagre, drawn by React Flow, in `components/flowchart/flowchart.tsx`, which Pipelines and Automations are to use too. Each thing on it is a real button, which says what it is, how it went and what it's made from to a screen reader.
+- **Building:** everything, or one dataset with what it's made from, or with what's made from it. It carries on if the tool closes, shows each step as it happens to anyone who has the tool open, and can be stopped.
+- **A dataset:** its rows (with Explain this data), a profile from DuckDB (empty values, distinct values, range, average, commonest values), and its checks.
+- **Checks, for data quality:** dbt's own tests. Those in YAML are shown in plain words, and new ones are made from the screen, each as one SQL file in `tests/`. A file can't clash with what a project's YAML already says about a dataset, which dbt refuses, and removing it is deleting it. A check that fails holds back what's made after it, a warning doesn't, and the rows that broke it can be read.
+- **Recipes:** filter, group and join, chosen from the data's real columns, or blank SQL or Python. Each is a file written as anyone would write it, and the tool opens the code of any recipe. A CSV of up to 2 MB can be added as data.
+- **AutoML:** "predict a column" is a Python recipe using **FLAML**: choose the column, what to learn from and how long to try, and it tries LightGBM, XGBoost, random forests and extra trees and keeps the best. It holds back a quarter of the rows, says how it did on those in the build's log, and makes a dataset of every row with its prediction and whether it was held back. On the full image the run goes to MLflow, so it shows in the Lakehouse tool's Experiments.
+- **What's out of date:** a dataset whose recipe has changed since it was built, and whatever's made from it.
+- **Earlier builds:** the last 20, with what dbt said.
+- **An example project** in `orders-flow/`, with one check that warns on purpose.
+
+**Where:**
+- **Sandbox:** `sandbox/image/flow.py` (read, build, stop, data), `sandbox/image/dbt` (dbt for the room: what it makes goes in `~/flow` rather than the room's files, and it has no telemetry or version check), `sandbox/image/flow-profiles.yml`, `sandbox/image/flow-requirements.txt` (pinned by hash), a `flow` stage in the Dockerfile, in both images. `sandbox/image/automl-requirements.txt` and an `automl` stage for FLAML and its neighbours, in a folder Python looks in last, so whatever a room installs comes first.
+- **Runner and API:** `apps/runner/src/flow.ts`, `POST /rooms/:id/flow`, `POST /api/rooms/:id/flow`; `packages/contracts/src/flow.ts`.
+- **Web:** `components/flowchart/flowchart.tsx`, `tools/flow/` (`flow-tool.tsx`, `dataset-panel.tsx`, `new-recipe.tsx`, `model.ts`, `example.ts`), and `tools/data-rows.tsx`, the rows the Lakehouse tool now shares.
+
+**How a build runs:** `flow.py` starts a copy of itself in its own session and returns. That copy runs dbt with its log as JSON, and keeps `~/flow/live.json` up to date, which is what `status` reads, so it's cheap to ask and every viewer sees the same thing. It's asked to stop by a file, as the one asking runs in a jail of its own and can't signal it. A build whose sandbox went away is noticed by its heartbeat going quiet. The tool asks every second while something's building and every 8 seconds otherwise; asking doesn't wake a sleeping room or keep it awake, but a build going on does.
+
+**What was checked, and decided:**
+- **Licences:** dbt Core, dbt-duckdb and what they bring, 57 packages in all, are Apache-2.0, MIT, BSD or similar; React Flow and dagre are MIT. elkjs, the other layout library, is EPL or GPL, so it isn't used. FLAML, scikit-learn, LightGBM and XGBoost are MIT, BSD or Apache-2.0.
+- **Size:** 180 MB on the images for dbt. `dbt-core-experimental-parser`, a 170 MB program for a parser that's off unless asked for, is left out of the list. 85 MB for AutoML, as it uses the numpy, scipy and pandas the images already have, and XGBoost's CPU build. The dev image is now 3.74 GB and the full one 10.8 GB.
+- **Limits, measured:** dbt peaks at about 230 MB, inside a 768 MB sandbox and the jail with no network, and a small project builds in about 5 seconds and is read in about 4 on one CPU. AutoML peaked at about 200 MB training on 2,000 rows. The Flow and AutoML are on the default image, so rooms don't need the full one.
+- **dbt v2** is what dbt now suggests for new installs. This stays on dbt Core 1.12: no DuckDB adapter for v2 could be confirmed, and Python recipes need dbt-duckdb (`docs/pending.md`).
+
+**Who may:** needs `code.run` to look and build, as dbt runs the room's code, and `files.edit` to make recipes and checks. Not for interview rooms. A dataset's name, which goes to dbt, can't be a flag or a selector, and has to be one dbt knows before it's read, on a read-only connection.
+
+**Found by using it, and fixed:**
+- **All the boxes in one place:** dagre writes each position onto the object it's given, and they shared one.
+- **Clicks that did nothing:** React Flow turns clicks off on a node that can't be selected or dragged, and each one's button is how it's selected.
+- **"A build is already running" just after one finished:** a build says it's over a moment before it lets go. Building now waits for that moment.
+- **A check's form with no column chosen,** when the columns came after it opened.
+
+**Not included:** using a trained model on new rows (in `docs/pending.md`), `dbt deps`, as rooms have no internet for dbt's package hub, and more than one project on a chart: a room with several shows the one nearest the top, and says so. Not tried on the Kubernetes driver, though it uses the same sandbox calls as the rest.
+
+**Tests:**
+- `packages/contracts/src/flow.test.ts`, `apps/web/components/room/tools/flow/model.test.ts` (28)
+- `apps/runner/test/flow.e2e.mjs` (84 checks on real dbt, DuckDB and FLAML, against numbers worked out in the test: the graph, a build, a Python recipe with pandas, a profile, kept rows, partial builds, what's out of date, recipes that fail, a check holding things back, a build from a terminal, stopping, a build that went away, a project dbt can't read, a recipe that learns a rule, and what a request can't do)
+- `apps/web/test/flow.e2e.mjs` (81 checks in a browser with real dbt, two people watching a build, an AutoML recipe made from the form, trained, and checked on rows it never saw and in MLflow, and two failures stood in for)
+- `a11y.e2e.mjs` includes the chart, a dataset's rows, profile and checks, a failed recipe, a new one and an AutoML one
+
 ### Explain this data ✅
 
 **What:** a button on a query's results and on a notebook's table. A model shown rows guesses at sums and averages and only sees a few of them, so DuckDB works out the numbers and the model explains them.

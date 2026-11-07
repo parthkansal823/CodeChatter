@@ -12,6 +12,7 @@ import {
   INSTALLS_MINUTES,
   JudgeRunnerInput,
   KubeRequest,
+  FlowInput,
   LakehouseInput,
   McpInput,
   QueryInput,
@@ -47,6 +48,7 @@ import { log, messageOf } from "./log.js";
 import { configureRunnerCollectors, serveMetrics } from "./metrics.js";
 import { DataSummaryError, summarizeData } from "./data-summary.js";
 import { EvalError, runEvals } from "./evals.js";
+import { askFlow, FlowError } from "./flow.js";
 import { askLakehouse, LakehouseError } from "./lakehouse.js";
 import { callMcp } from "./mcp.js";
 import { RagError, searchCodebase } from "./rag.js";
@@ -89,6 +91,7 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   POST /rooms/:id/databases/:kind/query   { query } QueryResult (the console)
  *   GET  /rooms/:id/databases/:kind/tables  DatabaseTable[] (the table browser)
  *   POST /rooms/:id/lakehouse                LakehouseInput      a room's Delta tables and MLflow runs
+ *   POST /rooms/:id/flow                     FlowInput           a room's dbt project: its graph, builds and data
  *   POST /rooms/:id/data-summary             DataSummaryInput    DataSummary (DuckDB's numbers for a table)
  *   POST /rooms/:id/mcp                      McpInput            McpOutput (the MCP Inspector in the sandbox)
  *   POST /rooms/:id/rag                      RagRunnerInput      CodebaseHits (a search of the room's files)
@@ -191,6 +194,8 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (mcp && req.method === "POST") return handleMcp(req, res, mcp[1]!);
     const lakehouse = /^\/rooms\/([A-Z0-9]{6})\/lakehouse$/.exec(url.pathname);
     if (lakehouse && req.method === "POST") return handleLakehouse(req, res, lakehouse[1]!);
+    const flow = /^\/rooms\/([A-Z0-9]{6})\/flow$/.exec(url.pathname);
+    if (flow && req.method === "POST") return handleFlow(req, res, flow[1]!);
     const dataSummary = /^\/rooms\/([A-Z0-9]{6})\/data-summary$/.exec(url.pathname);
     if (dataSummary && req.method === "POST") return handleDataSummary(req, res, dataSummary[1]!);
     const rag = /^\/rooms\/([A-Z0-9]{6})\/rag$/.exec(url.pathname);
@@ -510,6 +515,33 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     } catch (error) {
       if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
       if (error instanceof LakehouseError) return json(res, 422, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** A room's dbt project (flow.ts). */
+  async function handleFlow(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    const claims = authorize(req, roomId);
+    if (!claims) return json(res, 401, { error: "Not allowed." });
+    const input = FlowInput.safeParse(await readJson(req));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a request." });
+    const by = claims.name ?? "";
+    try {
+      // The tool asks this all the time it's open. Looking doesn't wake a room or keep it awake, but a build going on does.
+      if (input.data.op === "status") {
+        const running = rooms.peek(roomId);
+        if (!running?.sandbox.agent?.alive) return json(res, 200, { state: "idle", id: null, nodes: {}, log: [] });
+        const live = await askFlow(running.sandbox, input.data, by);
+        if ((live as { state?: string }).state === "running") running.touch();
+        return json(res, 200, live);
+      }
+      const session = rooms.get(roomId);
+      session.touch();
+      await session.ready();
+      return json(res, 200, await askFlow(session.sandbox, input.data, by));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      if (error instanceof FlowError) return json(res, 422, { error: error.message });
       throw error;
     }
   }

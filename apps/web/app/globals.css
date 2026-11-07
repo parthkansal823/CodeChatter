@@ -336,3 +336,11 @@
     }
   }
 }
+
+/* The flowchart (components/flowchart/flowchart.tsx): React Flow's credit, in our colours. */
+.cc-flowchart .react-flow__attribution {
+  background: transparent;
+}
+.cc-flowchart .react-flow__attribution a {
+  color: var(--muted-foreground);
+}

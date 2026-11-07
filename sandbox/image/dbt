@@ -1,0 +1,19 @@
+#!/bin/sh
+# dbt for this room, from the folder it's in, so it doesn't change what the room's Python imports. The Flow tool (image/flow.py) runs this
+# as well, so a build from a terminal and one from the tool are the same. What dbt makes goes in ~/flow rather than the room's files, it
+# sends nothing anywhere, and a project with no profile of its own uses the room's DuckDB file.
+export PYTHONPATH="/usr/local/lib/codechatter/flow${PYTHONPATH:+:$PYTHONPATH}"
+export DBT_TARGET_PATH="${DBT_TARGET_PATH:-$HOME/flow/target}"
+export DBT_LOG_PATH="${DBT_LOG_PATH:-$HOME/flow/logs}"
+export DBT_STORE_FAILURES="${DBT_STORE_FAILURES:-true}"
+export DBT_SEND_ANONYMOUS_USAGE_STATS=false
+export DBT_VERSION_CHECK=false
+# A recipe that logs with MLflow logs where the Lakehouse tool looks, and never into the room's files.
+export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-file://$HOME/lakehouse/mlruns}"
+export GIT_PYTHON_REFRESH=quiet
+if [ -z "${DBT_PROFILES_DIR:-}" ] && [ ! -f profiles.yml ] && [ ! -f "$HOME/.dbt/profiles.yml" ]; then
+  export DBT_PROFILES_DIR=/usr/local/lib/codechatter/flow-profile
+  export DBT_PROFILE="${DBT_PROFILE:-codechatter}"
+fi
+mkdir -p "$HOME/flow"
+exec python3 -c 'import sys; from dbt.cli.main import cli; sys.exit(cli())' "$@"

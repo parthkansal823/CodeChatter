@@ -33,6 +33,7 @@ const SUITES = [
     ["analysis-runner", "analysis"],
     ["mcp-runner", "mcp"],
     ["data-summary-runner", "data-summary"],
+    ["flow-runner", "flow"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -74,6 +75,7 @@ const SUITES = [
     "explain-data",
     "traces",
     "mcp",
+    "flow",
     "a11y",
     "interview-recording",
     "csp",

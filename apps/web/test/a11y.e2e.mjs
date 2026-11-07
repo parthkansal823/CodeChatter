@@ -129,7 +129,7 @@ try {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
     }
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
@@ -193,6 +193,62 @@ try {
     await step(page, `${theme} room, a lakehouse table and its versions`, () => lakehouse.getByRole("group", { name: "Versions of gold" }).waitFor({ timeout: 15_000 }));
     await lakehouse.getByRole("button", { name: "Experiments" }).click();
     await step(page, `${theme} room, a lakehouse's runs`, () => lakehouse.getByRole("group", { name: "MLflow runs" }).waitFor({ timeout: 15_000 }));
+    // The Flow tool: its chart with each kind of result, a dataset's rows, profile and checks, a recipe, a new recipe and a failed build. What dbt says is stood in for.
+    const ran = (status, failures = null, message = null) => ({ status, at: 1794037625000, ms: 12, failures, message });
+    const flowDataset = (name, over) => ({ id: `model.p.${name}`, kind: "model", name, language: "sql", file: `flow/models/${name}.sql`, description: "", materialized: "table", dependsOn: [], result: ran("success"), changed: false, ...over });
+    const flowLive = { state: "failed", id: "20261107-1", by: "Test One", startedAt: 1794037625000, finishedAt: 1794037630000, nodes: {}, counts: { done: 3, warned: 1, failed: 1, skipped: 1 }, message: "It stopped.", log: ["1 of 2 OK", "2 of 2 ERROR"] };
+    await page.route("**/api/rooms/*/flow", (route) => {
+      const { op } = route.request().postDataJSON();
+      const answers = {
+        graph: {
+          project: { path: "flow", name: "orders", others: 1 },
+          problem: "Parsing Error in schema.yml",
+          live: flowLive,
+          datasets: [
+            flowDataset("raw", { id: "seed.p.raw", kind: "seed", language: null, file: "flow/seeds/raw.csv", materialized: "seed" }),
+            flowDataset("clean", { dependsOn: ["seed.p.raw"], description: "One row for each order." }),
+            flowDataset("totals", { dependsOn: ["model.p.clean"], language: "python", result: ran("error", null, "It went wrong.") }),
+            flowDataset("after", { dependsOn: ["model.p.totals"], result: ran("skipped") }),
+            flowDataset("unbuilt", { dependsOn: ["model.p.clean"], result: null }),
+            flowDataset("shop.orders", { id: "source.p.shop.orders", kind: "source", language: null, materialized: null, result: null }),
+          ],
+          checks: [
+            { id: "test.p.a", name: "a", rule: "not_null", column: "amount", values: null, severity: "warn", of: "model.p.clean", file: "flow/models/schema.yml", result: ran("warn", 1) },
+            { id: "test.p.b", name: "clean__city__unique", rule: null, column: null, values: null, severity: "error", of: "model.p.clean", file: "flow/tests/clean__city__unique.sql", result: ran("pass", 0) },
+            { id: "test.p.c", name: "never_run", rule: null, column: null, values: null, severity: "error", of: "model.p.clean", file: "flow/tests/never_run.sql", result: null },
+          ],
+        },
+        status: flowLive,
+        runs: { runs: [{ ...flowLive, log: undefined }] },
+        run: flowLive,
+        preview: { name: "clean", columns: ["city", "amount"], types: ["VARCHAR", "DOUBLE"], rows: [["Pune", "10"], ["Agra", null]], truncated: false, built: true },
+        failures: { name: "test.p.a", columns: ["city", "amount"], types: ["VARCHAR", "DOUBLE"], rows: [["Agra", null]], truncated: false, built: true },
+        profile: { name: "clean", built: true, rows: 2, columns: [{ name: "city", type: "VARCHAR", nulls: 0, distinct: 2, min: "Agra", max: "Pune", mean: null, std: null, q25: null, q50: null, q75: null, top: [{ value: "Pune", count: 1 }] }, { name: "amount", type: "DOUBLE", nulls: 50, distinct: 1, min: "10", max: "10", mean: "10", std: null, q25: "10", q50: "10", q75: "10", top: [] }] },
+      };
+      return route.fulfill({ json: answers[op] });
+    });
+    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Flow", exact: true }).click();
+    const flow = page.getByRole("region", { name: "Flow" });
+    const flowDetails = flow.getByRole("complementary", { name: "Details" });
+    await step(page, `${theme} room, the Flow chart and a failed build`, () => flow.getByRole("button", { name: /^Dataset clean,/ }).waitFor({ timeout: 20_000 }));
+    await flow.getByRole("button", { name: /^Dataset clean,/ }).click();
+    await step(page, `${theme} room, a dataset's rows`, () => flowDetails.getByRole("group", { name: "Rows of clean" }).waitFor({ timeout: 15_000 }));
+    await flowDetails.getByRole("button", { name: "Profile" }).click();
+    await step(page, `${theme} room, a dataset's profile`, () => flowDetails.getByRole("region", { name: "Its profile" }).waitFor({ timeout: 15_000 }));
+    await flowDetails.getByRole("button", { name: /^Checks/ }).click();
+    await flowDetails.getByRole("button", { name: /^The rows that broke/ }).click();
+    await step(page, `${theme} room, a dataset's checks and the rows that broke one`, () => flowDetails.getByRole("group", { name: /^Rows of amount/ }).waitFor({ timeout: 15_000 }));
+    await flowDetails.getByRole("button", { name: "Add a check" }).click();
+    await step(page, `${theme} room, adding a check`, () => flowDetails.getByRole("form", { name: "Add a check" }).waitFor({ timeout: 5000 }));
+    await flowDetails.getByRole("button", { name: "Cancel" }).click();
+    await flow.getByRole("button", { name: /^Python recipe that makes totals/ }).click();
+    await step(page, `${theme} room, a recipe that failed`, () => flowDetails.getByRole("region", { name: "The recipe for totals" }).waitFor({ timeout: 5000 }));
+    await flow.getByRole("button", { name: /^Dataset clean,/ }).click();
+    await flowDetails.getByRole("button", { name: "New recipe from this" }).click();
+    await step(page, `${theme} room, a new recipe`, () => flowDetails.getByRole("form", { name: "New recipe" }).getByLabel("Column", { exact: true }).waitFor({ timeout: 15_000 }));
+    await flowDetails.getByRole("form", { name: "New recipe" }).getByLabel("What it does").selectOption("automl");
+    await step(page, `${theme} room, an AutoML recipe`, () => flowDetails.getByRole("form", { name: "New recipe" }).getByLabel("Column to predict").waitFor({ timeout: 5000 }));
+    await page.unroute("**/api/rooms/*/flow");
     // The numbers under an Explain this data answer, from a conversation already in this browser.
     const numbers = { engine: "DuckDB 1.5.6", rows: 3, duplicates: 1, columns: [{ name: "age", type: "BIGINT", nullPercent: 0, unique: 3, min: "1", max: "9", mean: "4", std: "2", q25: "2", q50: "3", q75: "6", outliers: 0, top: [] }], correlations: [{ a: "age", b: "pay", r: 0.9 }] };
     await page.evaluate(([room, summary]) => sessionStorage.setItem(`cc-ai:${room}`, JSON.stringify({ mode: "data", entries: [{ id: "q", role: "user", content: "Explain this data.", mode: "data" }, { id: "a", role: "assistant", content: "An answer.", mode: "data", status: "done", numbers: summary }] })), [ROOM, numbers]);

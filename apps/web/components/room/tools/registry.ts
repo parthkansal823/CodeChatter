@@ -1,7 +1,7 @@
 import type { RoomAction, RoomSummary } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import type { LucideIcon } from "lucide-react";
-import { Activity, Boxes, ClipboardList, Database, FlaskConical, NotebookPen, NotebookText, PenTool, Plug, Presentation, ScanSearch, Send, ShieldAlert, Sparkles, Warehouse, Workflow } from "lucide-react";
+import { Activity, Boxes, ClipboardList, Database, FlaskConical, GitFork, NotebookPen, NotebookText, PenTool, Plug, Presentation, ScanSearch, Send, ShieldAlert, Sparkles, Warehouse, Workflow } from "lucide-react";
 import type { ComponentType } from "react";
 
 /** What every room tool receives from the workspace. */
@@ -91,6 +91,15 @@ export const ROOM_TOOLS: RoomTool[] = [
     // It reads in the sandbox, and an interview isn't the place for it.
     visible: (can, room) => can("code.run") && room.kind !== "interview",
     load: () => import("./lakehouse/lakehouse-tool"),
+  },
+  {
+    id: "flow",
+    label: "Flow",
+    icon: GitFork,
+    placement: "main",
+    // dbt runs the room's recipes in the sandbox, and an interview isn't the place for it.
+    visible: (can, room) => can("code.run") && room.kind !== "interview",
+    load: () => import("./flow/flow-tool"),
   },
   {
     id: "kubernetes",

@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 
 import { useFileTree } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
-import { ExplainDataButton } from "@/components/room/tools/ai/explain-data";
+import { DataRows } from "@/components/room/tools/data-rows";
 import type { RoomToolProps } from "@/components/room/tools/registry";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,45 +31,8 @@ function useAsk() {
 }
 
 function Rows({ preview }: { preview: LakehousePreview }) {
-  return (
-    <section aria-label="Its rows" className="grid gap-1">
-      <div tabIndex={0} role="group" aria-label={`Rows of ${preview.table}`} className="max-h-96 overflow-auto rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <table className="w-max min-w-full border-collapse font-mono text-xs">
-          <caption className="sr-only">
-            {preview.table}
-            {preview.version !== null && `, version ${preview.version}`}
-          </caption>
-          <thead className="sticky top-0 bg-chrome">
-            <tr>
-              {preview.columns.map((column) => (
-                <th key={column} scope="col" className="border-b px-2 py-1 text-left font-medium">
-                  {column}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {preview.rows.map((row, index) => (
-              <tr key={index} className="even:bg-muted/30">
-                {row.map((value, cell) => (
-                  <td key={cell} className="max-w-80 truncate border-b px-2 py-1">
-                    {value === null ? <span className="text-muted-foreground italic">NULL</span> : value}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <p>
-          {preview.truncated ? `The first ${preview.rows.length} rows.` : `${preview.rows.length} ${preview.rows.length === 1 ? "row" : "rows"}.`}
-          {preview.version !== null && ` As it was at version ${preview.version}.`}
-        </p>
-        {preview.rows.length > 0 && <ExplainDataButton table={{ columns: preview.columns, rows: preview.rows, source: "query", complete: !preview.truncated }} />}
-      </div>
-    </section>
-  );
+  const version = preview.version !== null;
+  return <DataRows name={preview.table} caption={version ? `${preview.table}, version ${preview.version}` : preview.table} columns={preview.columns} rows={preview.rows} truncated={preview.truncated} note={version ? `As it was at version ${preview.version}.` : undefined} />;
 }
 
 function TableView({ table }: { table: LakehouseTable }) {

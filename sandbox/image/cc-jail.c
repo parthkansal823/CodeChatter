@@ -67,6 +67,8 @@ int main(int argc, char **argv) {
     allow(ruleset, "/etc", READ, handled);
     // Debian keeps Haskell's package database here (the full image).
     allow(ruleset, "/var/lib/ghc", READ, handled);
+    // TeX Live's prebuilt formats, on Debian. Without them, every LaTeX build fails before it starts.
+    allow(ruleset, "/var/lib/texmf", READ, handled);
     allow(ruleset, "/proc", READ, handled);
     allow(ruleset, "/sys", READ, handled);
     // Terminals open /dev/ptmx and /dev/pts/*; programs write to /dev/null.

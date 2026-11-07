@@ -169,6 +169,32 @@ RUN set -eu; \
     ln -s /usr/local/lib/codechatter/mcp-inspector/node_modules/.bin/mcp-inspector /out/bin/mcp-inspector; \
     ./node_modules/.bin/mcp-inspector --version
 
+# The Flow tool (apps/runner/src/flow.ts): dbt Core with its DuckDB adapter, pinned by hash, in a folder of their own so they don't change
+# what the room's Python imports. DuckDB and pandas are the image's. No version check and no telemetry (image/dbt). Its programs in bin go, as
+# dbt runs from image/dbt. dbt-core-experimental-parser is left out of the list: a 170 MB program for a parser that's off unless it's asked for.
+FROM debian:trixie-slim AS flow
+COPY image/flow-requirements.txt /tmp/flow-requirements.txt
+RUN set -eu; \
+    apt-get update; apt-get install -y --no-install-recommends python3-pip; rm -rf /var/lib/apt/lists/*; \
+    target=/out/lib/codechatter/flow; \
+    pip install --no-cache-dir --break-system-packages --retries 10 --resume-retries 10 --timeout 120 --no-deps --only-binary :all: --require-hashes --target "$target" -r /tmp/flow-requirements.txt; \
+    rm -rf "$target/bin"; \
+    PYTHONPATH="$target" python3 -c "import dbt.cli.main"
+COPY image/flow.py /out/lib/codechatter/flow.py
+COPY image/flow-profiles.yml /out/lib/codechatter/flow-profile/profiles.yml
+COPY --chmod=755 image/dbt /out/bin/dbt
+
+# AutoML recipes in the Flow tool: FLAML with scikit-learn, LightGBM and XGBoost's CPU build, pinned by hash, on the numpy, scipy and pandas the
+# images already have, which is why it's 85 MB rather than 300. In a folder Python looks in last, so whatever a room installs comes first.
+FROM debian:trixie-slim AS automl
+COPY image/automl-requirements.txt /tmp/automl-requirements.txt
+RUN set -eu; \
+    apt-get update; apt-get install -y --no-install-recommends python3-pip; rm -rf /var/lib/apt/lists/*; \
+    target=/out/lib/codechatter/automl; \
+    pip install --no-cache-dir --break-system-packages --retries 10 --resume-retries 10 --timeout 120 --no-deps --only-binary :all: --require-hashes --target "$target" -r /tmp/automl-requirements.txt; \
+    rm -rf "$target/bin"; \
+    mkdir /pth; echo /usr/local/lib/codechatter/automl > /pth/codechatter-automl.pth
+
 # The lakehouse (apps/runner/src/lakehouse.ts), for the full image, as it needs Java: Spark, Delta Lake and MLflow, pinned by
 # hash, in a folder of their own that Python looks in last, so they don't change what the room's Python imports. Delta Lake's
 # jars go in with Spark's, checked against the SHA-256 worked out when they were pinned (and Maven Central's SHA-1 then), so
@@ -204,6 +230,9 @@ COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
 COPY --from=analysis /out/ /usr/local/
 COPY --from=evals /out/ /usr/local/
 COPY --from=mcpinspector /out/ /usr/local/
+COPY --from=flow /out/ /usr/local/
+COPY --from=automl /out/ /usr/local/
+COPY --from=automl /pth/ /usr/lib/python3/dist-packages/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -295,6 +324,9 @@ COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
 COPY --from=analysis /out/ /usr/local/
 COPY --from=evals /out/ /usr/local/
 COPY --from=mcpinspector /out/ /usr/local/
+COPY --from=flow /out/ /usr/local/
+COPY --from=automl /out/ /usr/local/
+COPY --from=automl /pth/ /usr/lib/python3/dist-packages/
 COPY --from=lakehouse /out/ /usr/local/
 RUN echo /usr/local/lib/codechatter/lakehouse > /usr/lib/python3/dist-packages/codechatter-lakehouse.pth
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail

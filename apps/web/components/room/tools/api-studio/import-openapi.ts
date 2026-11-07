@@ -163,7 +163,20 @@ export class ImportBuilder {
     this.plan.variables = [...this.variables.values()];
     // Every unresolved placeholder gets a visible row in the new environment.
     for (const request of this.plan.requests) {
-      for (const match of JSON.stringify(request).matchAll(/\{\{\s*([^{}\s]+)\s*\}\}/g)) if (!match[1]!.startsWith("$")) this.variable(match[1]);
+      for (const match of JSON.stringify(request).matchAll(/\{\{\s*([^{}\s]+)\s*\}\}/g)) {
+        const name = match[1]!;
+        if (["$timestamp", "$isoTimestamp", "$randomUUID", "$guid", "$randomInt"].includes(name)) {
+          this.warn("Supported dynamic variables get fresh values when you send a request.");
+          continue;
+        }
+        const existing = this.variables.has(name);
+        this.variable(name);
+        if (name.startsWith("$") && !existing) {
+          const variable = this.variables.get(name);
+          if (variable) variable.enabled = false;
+          this.warn("Unsupported dynamic variables need manual values. Configure and enable their environment rows before sending.");
+        }
+      }
     }
     this.plan.variables = [...this.variables.values()];
     if (this.plan.counts.remoteRefs) this.warn("Remote references were skipped. Import never fetches them.");
