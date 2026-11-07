@@ -1,10 +1,11 @@
 "use client";
 
 import { Check, Copy, FileDiff } from "lucide-react";
-import { createContext, use, useState } from "react";
+import { createContext, use, useState, type ReactNode } from "react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { openRoomFile } from "@/components/room/editor/editor-opener";
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,35 @@ type Apply = {
 // on each streamed word.
 const ApplyContext = createContext<Apply>({ applyBlocked: null });
 
+/** The room's files, so a path in an answer can be opened: the same reason as above for reading it from context. */
+const FilesContext = createContext<readonly string[]>([]);
+
+/** A path as an answer wrote it, with its line if any, against the room's files: exact, or the end of just one path. */
+export function resolveRoomPath(written: string, paths: readonly string[]): { path: string; line: number } | null {
+  const match = /^(?:\.\/)?([^\s:]+?)(?::(\d+))?(?::\d+)?$/.exec(written.trim());
+  if (!match) return null;
+  const wanted = match[1]!;
+  const found = paths.includes(wanted) ? [wanted] : paths.filter((path) => path.endsWith(`/${wanted}`));
+  return found.length === 1 ? { path: found[0]!, line: match[2] ? Number(match[2]) : 1 } : null;
+}
+
+function InlineCode({ children }: { children?: ReactNode }) {
+  const paths = use(FilesContext);
+  const place = typeof children === "string" ? resolveRoomPath(children, paths) : null;
+  const look = "rounded-sm bg-muted px-1 py-px font-mono text-[0.85em]";
+  if (!place) return <code className={look}>{children}</code>;
+  return (
+    <button
+      type="button"
+      className={cn(look, "underline decoration-border underline-offset-2 hover:decoration-foreground")}
+      title={`Open ${place.path}`}
+      onClick={() => openRoomFile(place.path, { startLine: place.line, startColumn: 1, endLine: place.line, endColumn: 1 })}
+    >
+      {children}
+    </button>
+  );
+}
+
 const components: Components = {
   pre: ({ node }: ExtraProps) => {
     const code = (node as HastNode | undefined)?.children?.find((child) => child.tagName === "code");
@@ -36,7 +66,7 @@ const components: Components = {
     const language = (Array.isArray(classes) ? classes : []).map(String).find((c) => c.startsWith("language-"))?.slice(9) ?? "";
     return <CodeBlock language={language} code={hastText(code).replace(/\n$/, "")} />;
   },
-  code: ({ children }) => <code className="rounded-sm bg-muted px-1 py-px font-mono text-[0.85em]">{children}</code>,
+  code: ({ children }) => <InlineCode>{children}</InlineCode>,
   a: ({ children, href }) => (
     <a href={href} target="_blank" rel="noopener noreferrer" className="underline decoration-border underline-offset-4 hover:decoration-foreground">
       {children}
@@ -50,9 +80,10 @@ const components: Components = {
 };
 
 const remarkPlugins = [remarkGfm];
+const NO_PATHS: readonly string[] = [];
 
 /** An AI answer: GitHub-flavoured Markdown in the AI face, code blocks with Copy and Apply. */
-export function AiMarkdown({ text, onApply, applyBlocked }: Apply & { text: string }) {
+export function AiMarkdown({ text, onApply, applyBlocked, paths = NO_PATHS }: Apply & { text: string; paths?: readonly string[] }) {
   return (
     <div
       className={cn(
@@ -65,9 +96,11 @@ export function AiMarkdown({ text, onApply, applyBlocked }: Apply & { text: stri
       )}
     >
       <ApplyContext value={{ ...(onApply && { onApply }), applyBlocked }}>
-        <Markdown remarkPlugins={remarkPlugins} components={components}>
-          {text}
-        </Markdown>
+        <FilesContext value={paths}>
+          <Markdown remarkPlugins={remarkPlugins} components={components}>
+            {text}
+          </Markdown>
+        </FilesContext>
       </ApplyContext>
     </div>
   );

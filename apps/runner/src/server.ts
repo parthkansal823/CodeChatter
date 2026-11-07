@@ -28,6 +28,7 @@ import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
 
+import { analyseRoom } from "./analysis.js";
 import { checkRoom } from "./check.js";
 import { devStatus, startDev, stopDev } from "./dev-server.js";
 import { GitError, runGit } from "./git.js";
@@ -86,6 +87,7 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   POST /rooms/:id/sqlite/tables|query|preview   { path, … } one file's tables, a query, a table's first rows
  *   GET  /rooms/:id/sqlite/dump?path=     a backup as SQL, streamed
  *   POST /rooms/:id/sqlite/load?path=     SQL (the body, or &file= one of the room's) run into it
+ *   POST /rooms/:id/analysis              RoomAnalysis: real analysis tools over the room, in its sandbox (analysis.ts)
  *   POST /rooms/:id/check                 RoomCheck: the project-wide checkers over the room's files (check.ts)
  *   POST /rooms/:id/git                   { request, author? } git in the sandbox: status, init, stage, unstage, discard, commit, show, log, branches, checkout (git.ts)
  *   GET  /rooms/:id/duckdb                DuckdbListing: DuckDB files and data files (CSV, Parquet, JSON) in the sandbox (duckdb.ts)
@@ -165,6 +167,8 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (sqlite) return handleSqlite(req, res, url, sqlite[1]!, sqlite[2]);
     const check = /^\/rooms\/([A-Z0-9]{6})\/check$/.exec(url.pathname);
     if (check && req.method === "POST") return handleCheck(req, res, check[1]!);
+    const analysis = /^\/rooms\/([A-Z0-9]{6})\/analysis$/.exec(url.pathname);
+    if (analysis && req.method === "POST") return handleAnalysis(req, res, analysis[1]!);
     const gitRoute = /^\/rooms\/([A-Z0-9]{6})\/git$/.exec(url.pathname);
     if (gitRoute && req.method === "POST") return handleGit(req, res, gitRoute[1]!);
     const duckdb = /^\/rooms\/([A-Z0-9]{6})\/duckdb(?:\/(tables|query|preview))?$/.exec(url.pathname);
@@ -434,6 +438,20 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
   }
 
   /** The room's SQLite files, read in its sandbox (sqlite.ts). The API has checked who may look and who may query. */
+  /** The Analysis tool's report on the whole room (analysis.ts). */
+  async function handleAnalysis(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      return json(res, 200, await analyseRoom(session));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
   /** A check of the whole room with the project-wide checkers in its sandbox (check.ts), for the Problems tab. */
   async function handleCheck(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
     if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });

@@ -49,8 +49,10 @@ export class SourceControlService {
     return row;
   }
 
-  async info(roomId: string, userId: string): Promise<RoomRepo> {
-    const row = await this.row(roomId);
+  /** Null for a room that isn't linked, which is most of them. */
+  async info(roomId: string, userId: string): Promise<RoomRepo | null> {
+    const [row] = await this.handle.db.select().from(schema.roomRepos).where(eq(schema.roomRepos.roomId, roomId));
+    if (!row) return null;
     const { login } = await this.github.connection(userId);
     return {
       owner: row.owner,

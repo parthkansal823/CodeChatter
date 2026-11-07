@@ -72,7 +72,12 @@ export class AnthropicProvider implements AiProvider {
       ];
     }
     const stream = this.client.messages.stream(
-      { model: this.settings.model, max_tokens: this.settings.maxTokens ?? 16_000, system: request.system, messages },
+      {
+        model: request.tuning?.model ?? this.settings.model,
+        max_tokens: request.tuning?.maxTokens ?? this.settings.maxTokens ?? 16_000,
+        ...(request.system && { system: request.system }),
+        messages,
+      },
       { signal },
     );
     for await (const event of stream) {
@@ -189,10 +194,11 @@ export class OpenAiCompatibleProvider implements AiProvider {
 
   async *stream(request: ModelRequest, signal: AbortSignal): AsyncGenerator<StreamPiece> {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: request.system },
+      ...(request.system ? [{ role: "system" as const, content: request.system }] : []),
       ...request.messages.map((turn): OpenAI.Chat.ChatCompletionMessageParam => ({ role: turn.role, content: turn.content })),
     ];
     const last = messages.at(-1)!;
+    const maxTokens = request.tuning?.maxTokens ?? this.settings.maxTokens;
     if (request.image && last.role === "user") {
       last.content = [
         { type: "text", text: last.content as string },
@@ -201,12 +207,13 @@ export class OpenAiCompatibleProvider implements AiProvider {
     }
     const stream = await this.client.chat.completions.create(
       {
-        model: this.settings.model,
+        model: request.tuning?.model ?? this.settings.model,
         messages,
         stream: true,
-        // Only OpenAI itself is sure to accept this; other servers get an estimate unless they report usage unasked.
-        ...(!this.settings.baseURL && { stream_options: { include_usage: true } }),
-        ...(this.settings.maxTokens && { max_tokens: this.settings.maxTokens }),
+        // OpenAI and Ollama accept this; other servers get an estimate unless they report usage unasked.
+        ...((!this.settings.baseURL || this.settings.provider === "ollama") && { stream_options: { include_usage: true } }),
+        ...(maxTokens && { max_tokens: maxTokens }),
+        ...(request.tuning?.temperature !== undefined && { temperature: request.tuning.temperature }),
         ...(request.json && { response_format: { type: "json_object" as const } }),
         // Thinking first made a local model about four times slower, for answers no better here.
         ...(this.settings.provider === "ollama" && { reasoning_effort: "none" as const }),

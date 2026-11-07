@@ -34,15 +34,64 @@ async function instrument(context, withoutTurn = false) {
     const Native = window.RTCPeerConnection;
     const connections = new Set();
     const connectedOnce = new WeakMap();
+    const gatheredTypes = new WeakMap();
+    const iceErrors = new WeakMap();
+    const localCandidates = new WeakMap();
+    const remoteCandidates = new WeakMap();
+    const checkingPairs = new WeakMap();
+    const observeCandidates = (connection, value, target) => {
+      for (const line of String(value ?? "").split(/\r?\n/)) {
+        const parts = line.replace(/^a=/, "").trim().split(/\s+/);
+        if (!parts[0]?.startsWith("candidate:") || parts[6] !== "typ") continue;
+        const address = parts[4].toLowerCase();
+        const scope = address === "::1" || /^127\./.test(address) ? "loopback"
+          : /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.|f[cd]|fe80:)/.test(address) ? "private"
+            : /\.local$/.test(address) ? "mdns" : "public";
+        target.get(connection).add(JSON.stringify({ type: parts[7], scope, port: Number(parts[5]) }));
+      }
+    };
     const cleanConfiguration = (configuration) => withoutTurn ? { ...configuration, iceServers: [] } : configuration;
     class ObservedPeerConnection extends Native {
       constructor(configuration, constraints) {
         super(cleanConfiguration(configuration), constraints);
         connections.add(this);
         connectedOnce.set(this, false);
+        gatheredTypes.set(this, new Set());
+        iceErrors.set(this, []);
+        localCandidates.set(this, new Set());
+        remoteCandidates.set(this, new Set());
+        checkingPairs.set(this, new Map());
+        const sampler = setInterval(async () => {
+          if (this.connectionState === "closed") { clearInterval(sampler); return; }
+          const reports = await this.getStats().catch(() => new Map());
+          for (const pair of reports.values()) if (pair.type === "candidate-pair") checkingPairs.get(this).set(pair.id, {
+            state: pair.state,
+            nominated: Boolean(pair.nominated),
+            requestsSent: pair.requestsSent ?? 0,
+            responsesReceived: pair.responsesReceived ?? 0,
+            bytesSent: pair.bytesSent ?? 0,
+            bytesReceived: pair.bytesReceived ?? 0,
+          });
+        }, 500);
+        this.addEventListener("icecandidate", (event) => {
+          if (event.candidate?.type) gatheredTypes.get(this).add(event.candidate.type);
+          observeCandidates(this, event.candidate?.candidate, localCandidates);
+        });
+        this.addEventListener("icecandidateerror", (event) => {
+          const scheme = /^(turns?|stuns?):/.exec(event.url ?? "")?.[1] ?? "unknown";
+          iceErrors.get(this).push({ code: Number(event.errorCode), scheme });
+        });
         this.addEventListener("connectionstatechange", () => { if (this.connectionState === "connected") connectedOnce.set(this, true); });
       }
       setConfiguration(configuration) { return super.setConfiguration(cleanConfiguration(configuration)); }
+      setRemoteDescription(description) {
+        observeCandidates(this, description?.sdp, remoteCandidates);
+        return super.setRemoteDescription(description);
+      }
+      addIceCandidate(candidate) {
+        observeCandidates(this, candidate?.candidate, remoteCandidates);
+        return super.addIceCandidate(candidate);
+      }
     }
     window.RTCPeerConnection = ObservedPeerConnection;
     Object.defineProperty(window, "__codechatterRelayStats", {
@@ -53,6 +102,13 @@ async function instrument(context, withoutTurn = false) {
         return {
           policy: connection.getConfiguration().iceTransportPolicy,
           state: connection.connectionState,
+          iceState: connection.iceConnectionState,
+          hasTurn: (connection.getConfiguration().iceServers ?? []).some((server) => (Array.isArray(server.urls) ? server.urls : [server.urls]).some((url) => /^turns?:/.test(url))),
+          gathered: [...gatheredTypes.get(connection)],
+          iceErrors: iceErrors.get(connection),
+          localCandidates: [...localCandidates.get(connection)].map((value) => JSON.parse(value)),
+          remoteCandidates: [...remoteCandidates.get(connection)].map((value) => JSON.parse(value)),
+          checkingPairs: [...checkingPairs.get(connection).values()],
           connectedOnce: connectedOnce.get(connection),
           pairs: selected.map((pair) => ({
             local: reports.get(pair.localCandidateId)?.candidateType,
@@ -74,7 +130,14 @@ async function leave(page) {
 }
 
 async function run() {
-  const launched = await launch({ args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
+  // The local server deliberately advertises 127.0.0.1. Chromium otherwise
+  // excludes loopback adapters from its peer-connection network list.
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(BASE).hostname);
+  const launched = await launch({ args: [
+    "--use-fake-ui-for-media-stream",
+    "--use-fake-device-for-media-stream",
+    ...(loopback ? ["--allow-loopback-in-peer-connection"] : []),
+  ] });
   browser = launched.browser;
   errors = launched.errors;
   stage = "sign-in";
@@ -89,11 +152,13 @@ async function run() {
   }
   const a = one.page;
   const b = two.page;
-  stage = "forced-relay call";
+  stage = "sender forced-relay join";
   await a.getByRole("button", { name: "Call", exact: true }).click();
   await dock(a).getByText("Just you in the call", { exact: true }).waitFor({ timeout: 30_000 });
+  stage = "receiver forced-relay join";
   await b.getByRole("button", { name: "Join call (1)", exact: true }).click();
   await dock(b).getByText("2 in the call", { exact: true }).waitFor({ timeout: 30_000 });
+  await dock(a).getByText("2 in the call", { exact: true }).waitFor({ timeout: 30_000 });
   verify("two people joined with the relay query", await dock(a).getByText("2 in the call", { exact: true }).isVisible());
   await dock(a).getByRole("button", { name: "Turn your camera on", exact: true }).click();
   const video = dock(b).getByRole("list", { name: "People in the call" }).getByRole("group", { name: /^test1/ }).locator("video");
@@ -127,7 +192,7 @@ async function run() {
   await blocked.getByRole("button", { name: "Call", exact: true }).click();
   verify("removing TURN prevents a relay-only call from connecting", await until(async () => {
     const connections = await relayStats(blocked);
-    return connections.length > 0 && connections.every((connection) => connection.policy === "relay") && connections.every((connection) => !connection.connectedOnce && connection.pairs.length === 0);
+    return connections.length > 0 && connections.every((connection) => connection.policy === "relay" && !connection.hasTurn) && connections.every((connection) => !connection.connectedOnce && connection.pairs.length === 0);
   }, 25_000) && await dock(blocked).count() === 0);
   // Wait for the actual failed join, rather than accepting a moment while ICE
   // is merely negotiating. The history also catches any temporary direct path.
@@ -136,7 +201,10 @@ async function run() {
 }
 
 try { await run(); }
-catch (error) { check("relay flow completes", false, `${stage}: ${error?.name ?? "Error"}`); }
+catch (error) {
+  check("relay flow completes", false, `${stage}: ${error?.name ?? "Error"}`);
+  for (const page of pages) console.log(`Sanitized relay diagnostics: ${JSON.stringify(await relayStats(page).catch(() => []))}`);
+}
 finally {
   for (const page of pages) await leave(page);
   await browser?.close();

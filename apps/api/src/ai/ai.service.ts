@@ -1,4 +1,4 @@
-import type { AiStatus, AiTokenCount, AiUsage } from "@codechatter/contracts";
+import type { AiPromptModels, AiStatus, AiTokenCount, AiUsage } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { and, count, eq, gte, like, max, min, notLike } from "drizzle-orm";
@@ -7,7 +7,7 @@ import type { Redis } from "ioredis";
 import type { Env } from "../config/env.js";
 import { DB, ENV, VALKEY } from "../infra/tokens.js";
 import { MessagesService } from "../messages/messages.service.js";
-import { aiStatus, ollamaUrl, resolveAiSetup, type AiSetup } from "./ai.config.js";
+import { aiStatus, ollamaUrl, playableModels, resolveAiSetup, type AiSetup } from "./ai.config.js";
 import { COMPLETION } from "./complete.js";
 import { createProvider, type AiProvider } from "./providers.js";
 import { RateLimiter, type RateDecision } from "./rate-limit.js";
@@ -66,6 +66,20 @@ export class AiService {
     }
     this.local = { at: Date.now(), value };
     return value;
+  }
+
+  async promptModels(): Promise<AiPromptModels> {
+    const local = await this.localOllama();
+    const anthropic = this.setup.provider === "anthropic";
+    return {
+      models: playableModels(this.setup, this.env, local?.models ?? []),
+      default: this.setup.settings ? this.setup.model : null,
+      // Current Claude models refuse sampling settings, and it has no JSON switch.
+      temperature: !anthropic,
+      json: !anthropic,
+      oneAtATime: this.setup.provider === "ollama",
+      contextChars: this.contextChars,
+    };
   }
 
   status(): AiStatus {

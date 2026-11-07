@@ -94,6 +94,24 @@ try {
     await page.getByRole("tree", { name: "Files" }).waitFor({ timeout: 60_000 });
     await settle(page);
     await audit(page, `${theme} room`);
+    if (theme === "light") {
+      // What axe can't check: open files can be reached and closed from the keyboard.
+      const files = page.getByRole("tree", { name: "Files" }).locator('[role="treeitem"]:not([aria-expanded])');
+      await files.nth(0).click();
+      await files.nth(1).click();
+      const openFiles = page.getByRole("tablist", { name: "Open files" }).getByRole("tab");
+      const before = await openFiles.count();
+      const selected = () => page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { selected: true }).getAttribute("title");
+      const from = await selected();
+      await page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { selected: true }).focus();
+      await page.keyboard.press("ArrowLeft");
+      await sleep(300);
+      check("arrowKeysMoveBetweenOpenFiles", (await selected()) !== from, from);
+      check("focusMovesWithThem", await page.evaluate(() => document.activeElement?.getAttribute("role") === "tab" && document.activeElement?.getAttribute("aria-selected") === "true"));
+      await page.keyboard.press("Delete");
+      await sleep(300);
+      check("deleteClosesAnOpenFile", (await openFiles.count()) === before - 1, `${before} then ${await openFiles.count()}`);
+    }
     await step(page, `${theme} room, Share`, () => page.getByRole("button", { name: "Share" }).click());
     await page.keyboard.press("Escape");
     const sidePanel = page.getByRole("tablist", { name: "Side panel" });
@@ -104,13 +122,14 @@ try {
     }
     const panelTabs = page.getByRole("tablist", { name: "Panel" });
     const openPanel = page.getByRole("button", { name: "Output and terminals", exact: true });
-    if (await openPanel.count()) await openPanel.click();
+    // Not a click: in development, Next's own badge sits on top of this button.
+    if (await openPanel.count()) await openPanel.dispatchEvent("click");
     await page.getByRole("button", { name: "Hide output and terminals" }).waitFor({ timeout: 10_000 });
     for (const tab of ["Output", "Problems", "Tests", "Ports"]) {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Databases", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Analysis", "Databases", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
     }
     await context.close();

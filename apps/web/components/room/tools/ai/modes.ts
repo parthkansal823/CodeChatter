@@ -93,4 +93,12 @@ export const MODES: Record<AiMode, ModeInfo> = {
     starters: ["Catch me up on what happened", "What did people decide?", "What still needs doing?"],
     attach: { file: false, selection: false, run: false, paths: false },
   },
+  project: {
+    label: "Project review",
+    description: "Runs the Analysis tools over the whole project, then reviews it: how it's put together, the risks, and what to fix first. Secrets are left out.",
+    placeholder: "Ask about the project, or press Enter",
+    fallbackPrompt: "Review this project: how it's put together, the risks, and what to fix first.",
+    starters: ["Review this project", "What should we fix first?", "How is this project put together?"],
+    attach: { file: false, selection: false, run: false, paths: false },
+  },
 };

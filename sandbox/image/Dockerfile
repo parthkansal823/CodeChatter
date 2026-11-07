@@ -105,6 +105,32 @@ ARG DUCKDB_VERSION=1.5.6
 ARG DUCKDB_SHA256=644f54ce99b3b61844bc9a3fe80e0aecb1ea4084b1fffc4396d1569db6111679
 RUN apt-get update  && apt-get install -y --no-install-recommends python3-pip  && rm -rf /var/lib/apt/lists/*  && echo "duckdb==${DUCKDB_VERSION} --hash=sha256:${DUCKDB_SHA256}" > /tmp/duckdb.txt  && pip install --no-cache-dir --break-system-packages --no-deps --only-binary :all: --require-hashes --target /out -r /tmp/duckdb.txt  && PYTHONPATH=/out python3 -c "import duckdb; print(duckdb.__version__)"
 
+# Code analysis (apps/runner/src/analysis.ts): scc and gitleaks, checked against the SHA-256 their releases
+# publish, and lizard and bandit with their dependencies pinned by hash, in a folder of their own so they
+# don't change what the room's Python imports.
+FROM debian:trixie-slim AS analysis
+ARG TARGETARCH
+ARG SCC_VERSION=4.1.0
+ARG GITLEAKS_VERSION=8.30.1
+COPY image/analysis-requirements.txt /tmp/analysis-requirements.txt
+RUN set -eu; \
+    apt-get update; apt-get install -y --no-install-recommends curl ca-certificates python3-pip; rm -rf /var/lib/apt/lists/*; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) scc=x86_64; scc_sha=c7328436d3027f4357d3d7853f7dc3ac2bbcb4ca08f1adad91a27c593884079b; leaks=x64; leaks_sha=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb;; \
+      arm64) scc=arm64; scc_sha=6e0d2a1f8d3540ba7df185477dec40bb7340f1b214bfd303147de5cad2bd7b8b; leaks=arm64; leaks_sha=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080;; \
+      *) echo "No analysis tools for ${TARGETARCH}"; exit 1;; \
+    esac; \
+    get() { curl -fsSL --retry 5 --retry-all-errors "$@"; }; \
+    get -o /tmp/scc.tgz "https://github.com/boyter/scc/releases/download/v${SCC_VERSION}/scc_Linux_${scc}.tar.gz"; \
+    echo "${scc_sha}  /tmp/scc.tgz" | sha256sum -c -; \
+    get -o /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${leaks}.tar.gz"; \
+    echo "${leaks_sha}  /tmp/gitleaks.tgz" | sha256sum -c -; \
+    mkdir -p /out/bin /out/lib/codechatter; \
+    tar xzf /tmp/scc.tgz -C /out/bin scc; \
+    tar xzf /tmp/gitleaks.tgz -C /out/bin gitleaks; \
+    pip install --no-cache-dir --break-system-packages --require-hashes --target /out/lib/codechatter/analysis -r /tmp/analysis-requirements.txt
+COPY image/gitleaks.toml /out/lib/codechatter/gitleaks.toml
+
 # The base image: what every room gets by default.
 FROM core AS base
 # clangd, the C and C++ language server (apps/runner/src/lsp.ts); its own layer.
@@ -114,6 +140,7 @@ COPY --from=lsp /out/ /usr/local/
 COPY --from=jsdebug /out/js-debug /usr/local/lib/js-debug
 COPY image/js-debug-bridge.mjs /usr/local/lib/codechatter/js-debug-bridge.mjs
 COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
+COPY --from=analysis /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -202,6 +229,7 @@ COPY --from=lsp /out/ /usr/local/
 COPY --from=jsdebug /out/js-debug /usr/local/lib/js-debug
 COPY image/js-debug-bridge.mjs /usr/local/lib/codechatter/js-debug-bridge.mjs
 COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
+COPY --from=analysis /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).

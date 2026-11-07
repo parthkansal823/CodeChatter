@@ -14,6 +14,7 @@ const PLACE: Record<string, string> = {
   pages: "Docs",
   page: "Docs",
   api: "API Studio",
+  prompts: "Prompts",
   designs: "Design",
   design: "Design",
   boards: "the whiteboard",

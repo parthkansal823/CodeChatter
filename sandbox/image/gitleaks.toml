@@ -1,0 +1,6 @@
+# gitleaks' own rules, without what isn't the project's (apps/runner/src/analysis.ts).
+[extend]
+useDefault = true
+
+[allowlist]
+paths = ['''(^|/)(node_modules|\.git|dist|build|target|\.next|\.venv|venv|__pycache__|vendor|coverage)/''']

@@ -1,5 +1,6 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, DevServerStatus, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import type { DatabaseKind, DatabaseStatus, DevServerStatus, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, RoomAnalysis,
+  RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
@@ -227,6 +228,14 @@ export class RunnerClient {
     }
     if (!response.ok) throw new RunnerUnavailableError();
     return response;
+  }
+
+  /** The Analysis tool's report on the whole room, from real tools in its sandbox (runner: analysis.ts). */
+  async analysis(roomId: string, user: RunnerUser): Promise<RoomAnalysis> {
+    const response = await this.call(`/rooms/${roomId}/analysis`, { method: "POST", headers: this.headers(roomId, user), body: "{}" });
+    if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The sandbox isn't available.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as RoomAnalysis;
   }
 
   /** Check the whole room with the project-wide checkers in its sandbox (runner: check.ts). */

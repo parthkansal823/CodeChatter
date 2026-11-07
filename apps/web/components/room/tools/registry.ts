@@ -1,7 +1,7 @@
 import type { RoomAction, RoomSummary } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import type { LucideIcon } from "lucide-react";
-import { Activity, Boxes, ClipboardList, Database, NotebookPen, NotebookText, PenTool, Presentation, Send, ShieldAlert, Sparkles, Workflow } from "lucide-react";
+import { Activity, Boxes, ClipboardList, Database, NotebookPen, NotebookText, PenTool, Presentation, ScanSearch, Send, ShieldAlert, Sparkles, Workflow } from "lucide-react";
 import type { ComponentType } from "react";
 
 /** What every room tool receives from the workspace. */
@@ -49,6 +49,15 @@ export const ROOM_TOOLS: RoomTool[] = [
     load: () => import("./docs/docs-tool"),
   },
   { id: "api", label: "API", icon: Send, placement: "main", load: () => import("./api-studio/api-studio") },
+  {
+    id: "analysis",
+    label: "Analysis",
+    icon: ScanSearch,
+    placement: "main",
+    // It runs tools in the sandbox, and an interview isn't the place for it.
+    visible: (can, room) => can("code.run") && room.kind !== "interview",
+    load: () => import("./analysis/analysis-tool"),
+  },
   {
     id: "databases",
     label: "Databases",

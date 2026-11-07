@@ -864,10 +864,11 @@ function Workspace() {
                 collapsedSize={0}
                 defaultSize={0}
                 minSize={140}
+                style={panelOpen ? undefined : { overflow: "hidden" }}
                 onResize={(size) => setPanelOpen(size.inPixels > 0)}
               >
-                {/* Closed, it has no height but keeps running: inert, so focus and screen readers can't land on what can't be seen. */}
-                <div inert={!panelOpen} className="h-full">
+                {/* Closed, it has no height but keeps running: hidden, so focus and screen readers can't land on what can't be seen. */}
+                <div className={panelOpen ? "h-full" : "invisible h-full"}>
                 <BottomPanel
                   tab={panelTab}
                   file={activeFile}

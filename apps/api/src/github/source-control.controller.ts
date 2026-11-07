@@ -79,9 +79,12 @@ export class SourceControlController {
   }
 
   @Get()
-  async info(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string) {
+  async info(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string, @Res({ passthrough: true }) res: Response) {
     await this.rooms.require(roomId, session.user.id, "room.view");
-    return this.sourceControl.info(roomId, session.user.id);
+    const repo = await this.sourceControl.info(roomId, session.user.id);
+    // Not being linked is no error: a 404 would put one in the browser's console for every room opened.
+    if (!repo) res.status(204);
+    return repo ?? undefined;
   }
 
   /** The base's files, [{ path, content }], gzipped as stored; x-repo-commit says which commit they are. */

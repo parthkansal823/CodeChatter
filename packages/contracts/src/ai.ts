@@ -8,7 +8,7 @@ import { WorkspacePath } from "./run.js";
  * and the context it chose to attach.
  */
 
-export const AI_MODES = ["assistant", "explain-error", "tutor", "interviewer", "complexity", "screenshot", "edit", "agent", "summary"] as const;
+export const AI_MODES = ["assistant", "explain-error", "tutor", "interviewer", "complexity", "screenshot", "edit", "agent", "summary", "project"] as const;
 export type AiMode = (typeof AI_MODES)[number];
 
 /**
@@ -29,6 +29,15 @@ export const AI_LIMITS = {
   extraFiles: 6,
   extraFileChars: 40_000,
   changesChars: 20_000,
+  /** Project review: what's sent is limited by these, then cut to the model's context by the server. */
+  projectFacts: 60,
+  projectFactChars: 1_500,
+  projectTree: 800,
+  projectFiles: 12,
+  projectFileChars: 20_000,
+  projectOutlines: 150,
+  projectOutlineLines: 16,
+  projectOutlineLineChars: 200,
 } as const;
 
 export const AI_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
@@ -73,6 +82,18 @@ export const AiChatInput = z.object({
         .object({
           minutes: z.number().int().min(5).max(24 * 60).default(60),
           changes: z.string().max(AI_LIMITS.changesChars).default(""),
+        })
+        .optional(),
+      /** Project mode: what the browser gathered (ai-analysis.ts). The server cuts it to fit, and takes out secrets again. */
+      project: z
+        .object({
+          counts: z.object({ files: z.number().int().min(0), lines: z.number().int().min(0) }),
+          facts: z.array(z.string().max(AI_LIMITS.projectFactChars)).max(AI_LIMITS.projectFacts),
+          tree: z.array(WorkspacePath.max(AI_LIMITS.pathChars)).max(AI_LIMITS.projectTree),
+          files: z.array(z.object({ path: WorkspacePath, text: z.string().max(AI_LIMITS.projectFileChars) })).max(AI_LIMITS.projectFiles),
+          outlines: z
+            .array(z.object({ path: WorkspacePath, lines: z.array(z.string().max(AI_LIMITS.projectOutlineLineChars)).max(AI_LIMITS.projectOutlineLines) }))
+            .max(AI_LIMITS.projectOutlines),
         })
         .optional(),
       image: z
@@ -124,6 +145,9 @@ export type AiStatus = {
   ollama: { url: string; models: string[] } | null;
 };
 
+/** How long one answer took, as this server saw it: until the first word, and until the last. */
+export type AiTiming = { firstMs: number; totalMs: number };
+
 /** Tokens one answer used. `estimated` when the provider didn't report them (counted from characters). */
 export type AiTokenCount = { inputTokens: number; outputTokens: number; estimated: boolean };
 export type AiUsageTotals = AiTokenCount & { requests: number };
@@ -150,7 +174,7 @@ export type AiUsage = {
  */
 export type AiStreamEvent =
   | { type: "delta"; text: string }
-  | { type: "done"; stop: "end" | "length" | "refusal"; usage?: AiTokenCount }
+  | { type: "done"; stop: "end" | "length" | "refusal"; usage?: AiTokenCount; timing?: AiTiming }
   | { type: "error"; message: string };
 
 /*

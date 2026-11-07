@@ -13,6 +13,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 - ✅ Checked: ChatGPT's prompt 11 (nightly backups and the restore drill), prompt 10 (account security: profile, password, two-factor, active sessions), prompt 9 (teams: `/orgs/new`, members, `/invite/<id>`) and prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
 - ✅ Just finished by Claude:
+  - accessibility: no axe violations on 93 screens, open files reachable by keyboard, and Lighthouse 90+ on the marketing page (`apps/web/test/a11y.e2e.mjs`);
   - signing out a device now ends what it has open, at once: the live document, chat, terminals, language servers and the debugger;
   - the AI's review, further: signals worked out by code, checked quotes, reviewing a whole batch, and a real model (`gemma4:e4b`, in Docker: `pnpm ai:up:gpu`);
   - recording assessments (webcam and screen, with consent) and the AI's review of a sitting, which points and suggests questions and never decides (step 11);
@@ -29,8 +30,8 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **12** (TURN over TLS), which only matters once it's deployed.
-2. **Claude:** accessibility, gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
+1. **ChatGPT**, one prompt at a time, each checked before the next: **14** (API Studio: OpenAPI and Postman import, axios) → **15** (task board) → **16** (appearance, notifications and connected accounts). **12** (TURN over TLS) can wait: it only matters once it's deployed.
+2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
 ## Your actions
@@ -88,7 +89,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ **API studio:**
   - multipart and OAuth 2.0;
   - a cookies tab;
-  - OpenAPI and Postman import, and axios snippets;
+  - OpenAPI and Postman import, and axios snippets (**ChatGPT 14**);
   - a mock server;
   - a WebSocket and SSE tester.
 - ⬜ **Design canvas:**
@@ -134,7 +135,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ Teams, later: a guest role, auto-join by email domain, organisation templates and policies
 - ⬜ What signing out doesn't end yet: a video call the device is in (LiveKit knows a person, not a sign-in, so removing them would drop their other devices too), and a dev server's preview, whose own cookie lasts 12 hours and is checked against the room, not the sign-in. Both end when the person loses access to the room. Worth closing in the final security review.
 - ⬜ A two-factor code can be used again until it expires (about 30 seconds): Better Auth doesn't remember used ones. Someone would need the password and that code at that moment. Worth closing in the final security review.
-- ⬜ Account, later: pages for appearance, notifications and connected accounts
+- 🟡 Account, later: pages for appearance, notifications and connected accounts (**ChatGPT 16**)
 - ⬜ Rooms, later: more than one owner, and handing a room to someone else
 - ⬜ Usage dashboard: runs, AI tokens and sandbox minutes, with quotas
 - ⬜ Instance admin: users, rooms, health
@@ -165,7 +166,6 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - `METRICS_TOKEN` and scraping in the Helm chart;
   - move from `prom-client` to `@prometheus-io/client`.
 - ⬜ Sandbox security: the gVisor runtime
-- ⬜ Accessibility: an axe audit with no violations; Lighthouse 90+ on marketing pages
 - ⬜ Cutover from v1: move the data from MongoDB, then delete `client/` and `server/`
 - ⬜ A final security review
 
@@ -193,7 +193,15 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 ## Step 13 · Advanced features
 
 - ⬜ **For researchers** (the owner's idea, 2026-11-06): a layout that opens on notebooks, data, documents and PDFs, which all exist already. LaTeX and citations after that, as they need new tools in the sandbox image.
-- ⬜ **AI analysis** (the owner's idea, 2026-11-06): a review of the whole project from the AI panel (architecture, risks, what to fix first), and "explain this data" for notebooks and databases. It goes with "Ask the codebase".
+- ⬜ **Opengrep in the Analysis tool:** only once its rules' licence is checked. Semgrep's rules don't allow SaaS use, so it may need rules of our own.
+- ⬜ **AI engineering tools** (the owner's idea, 2026-11-07, **Claude**), in this order:
+  - Prompt Playground: one prompt against several models side by side, with tokens and speed, kept in the room;
+  - Evals: test cases with assertions, a pass rate, and what changed from the last run;
+  - AI gateway: code in the sandbox calls the room's model through an OpenAI-style address, with no key in the room and the person's limit applying;
+  - RAG: "ask the codebase" with embeddings and citations, and a view of what it retrieved;
+  - MCP Inspector: list and call the tools of an MCP server running in the sandbox;
+  - Traces: each AI call's prompt, tokens and time.
+- ⬜ **Explain this data** (**Claude**): a button on query results and notebook output, with the numbers worked out by DuckDB's `SUMMARIZE` and pandas, not by the model.
 - ⬜ **Together:** suggestion mode, room branches, live authorship, session recording and replay, smarter calls (captions, AI notes)
 - ⬜ **Developer tools:**
   - a test explorer with coverage;
@@ -217,7 +225,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ Public profile and portfolio
 - ⬜ Code and algorithm visualizer, with AI narration
 - ⬜ Code tours
-- ⬜ A task board, with TODO and FIXME comments as cards
+- 🟡 A task board, with TODO and FIXME comments as cards (**ChatGPT 15**)
 - ⬜ Math (KaTeX) and Mermaid inside the Markdown preview
 - ⬜ VS Code extension: join a room from VS Code
 - ⬜ More interface languages: Hindi first

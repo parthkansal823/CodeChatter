@@ -30,6 +30,7 @@ const SUITES = [
     ["network", "network"],
     ["sandbox-binary-files", "blobs"],
     ["sandbox-git-runner", "git"],
+    ["analysis-runner", "analysis"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -61,6 +62,8 @@ const SUITES = [
     "org-rules",
     "account-security",
     "sign-out-device",
+    "analysis",
+    "a11y",
     "interview-recording",
     "csp",
     "history",

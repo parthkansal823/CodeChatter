@@ -48,6 +48,7 @@ async function run() {
   await dock(a).getByText("Just you in the call", { exact: true }).waitFor({ timeout: 30_000 });
   await b.getByRole("button", { name: "Join call (1)", exact: true }).click();
   await dock(b).getByText("2 in the call", { exact: true }).waitFor({ timeout: 30_000 });
+  await dock(a).getByText("2 in the call", { exact: true }).waitFor({ timeout: 30_000 });
   verify("two people joined for screen sharing", await dock(a).getByText("2 in the call", { exact: true }).isVisible());
   stage = "automatic test-tab capture";
   await a.evaluate((title) => {

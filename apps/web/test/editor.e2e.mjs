@@ -120,7 +120,8 @@ await people.waitFor({ timeout: 5_000 });
 await people.getByRole("option", { name: "test2" }).click();
 check("followBanner", await ok(a.getByText(/Following test2/).waitFor({ timeout: 5_000 })));
 // test1 closes its tab of the file first, so the one that opens is test2's doing.
-await a.getByRole("tab", { name: extraTab }).getByRole("button", { name: /Close/ }).click().catch(() => {});
+await a.getByRole("tab", { name: extraTab }).focus().catch(() => {});
+await a.keyboard.press("Delete");
 const theirFile = b.getByRole("tree", { name: "Files" }).getByText(extra, { exact: true });
 await theirFile.click();
 check("followOpensTheirFile", await ok(a.getByRole("tab", { name: extraTab }).waitFor({ timeout: 10_000 })), extra);

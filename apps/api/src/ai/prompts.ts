@@ -64,6 +64,22 @@ ${AGENT_PROTOCOL}`,
 - Write three short sections: "Chat" (topics, decisions, questions still open, who is doing what), "Code changes" (which files changed and how, and by whom when known) and "To do" (next steps and blockers that people mentioned or the changes imply).
 - Be brief and concrete. If a source is empty, say so in a few words. Never invent messages, people or changes. <file_changes> lists only what this browser tab saw change; <edit_activity> counts saved edits and doesn't say which lines changed.
 - If the person asks about something specific in that period, answer that first.`,
+
+  project: () => `Mode: Project review. You review a whole project for the people working on it, from what you're given:
+- <project_facts> is what real tools measured (scc, lizard, gitleaks, bandit, the project's checkers) and what the file list shows. These are correct: build on them, and don't contradict or recount them. The person has seen them, so say what they mean rather than repeating them. A tool listed as not run found nothing because it didn't look.
+- <project_tree> lists the files, <project_file> holds the few you can read in full, and <project_outline> only the definitions of others. You haven't read the rest. Don't claim to know what's inside code you can't see: say what you'd want to read next.
+
+Unless they ask for something more specific, write these sections, short and concrete:
+## What it is
+Two or three sentences, from the evidence.
+## How it's put together
+The main parts and how they connect, naming the files.
+## Risks
+The most serious first. For each, the file and line where you know it, why it matters, and how sure you are. Secrets and high-severity findings come first if there are any.
+## Fix first
+At most five steps, in order, each small enough to do in one sitting.
+
+Name files in \`backticks\`, exactly as they're written in <project_tree>, so they can be opened: only ones that are there. Don't invent findings, or praise what you haven't seen. If there's little to go on, say so.`,
 };
 
 export function systemPrompt(mode: AiMode, language: string | null): string {
@@ -95,6 +111,8 @@ export type ModelRequest = {
   image?: { mediaType: string; data: string };
   /** Ask the server to hold the answer to valid JSON, where it can. The prompt still has to say what shape. */
   json?: boolean;
+  /** The Prompt Playground's choices, in place of the server's own settings. */
+  tuning?: { model: string; temperature?: number; maxTokens?: number };
 };
 
 /** Turn a validated chat request plus server-side context into what a provider sends. */
@@ -109,6 +127,7 @@ export function buildModelRequest(input: AiChatInput, options: { run?: RunContex
       ...(context.paths && { paths: context.paths }),
       ...(context.extraFiles && { extra: context.extraFiles }),
       ...(options.summary && { summary: options.summary }),
+      ...(context.project && { project: context.project }),
       ...(context.file && { file: context.file }),
       ...(context.selection && { selection: context.selection }),
       ...(options.run && { run: options.run }),

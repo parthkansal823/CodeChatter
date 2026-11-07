@@ -58,76 +58,109 @@ Start with **2 vCPU, 4 GB RAM, 40 GB disk, Ubuntu 24.04**. It builds the images 
 
 ## Calls (video and voice)
 
-Production Compose includes LiveKit `v1.13.11`. Caddy handles signalling at `/livekit`
-and strips that prefix; browsers send media directly to LiveKit. There is one LiveKit
-instance, without a separate Redis service for calls.
+Production uses LiveKit `v1.13.11`, direct media, TURN/UDP, and TURN/TLS on public
+TCP 443. Caddy keeps the website on that same port: its layer-4 listener wrapper
+matches the TURN hostname by TLS SNI, terminates its TLS and forwards the stream
+to LiveKit. Other connections continue through the existing HTTPS routes.
+`infra/docker/caddy.Dockerfile` builds Caddy 2.11 with caddy-l4 pinned to commit
+`8e984fe3cfd65719a13339ded5a91b48e6d0cf7e`; the standard image lacks this module.
 
-Add these values to `infra/.env.production` before starting the stack:
+Add an A record for **`turn.<DOMAIN>` to the website server's IP**. Add AAAA only
+if IPv6 reaches it too. Use a DNS-only record, not a generic HTTP/CDN proxy.
+Both names need public 80/443 reachability for Caddy's certificate issuance and
+renewal. Caddy manages both certificates; no certificate files go into LiveKit.
+
+Set these in `infra/.env.production`:
 
 ```dotenv
 LIVEKIT_URL=wss://code.example.com/livekit
 LIVEKIT_API_KEY=codechatter-production
 LIVEKIT_API_SECRET=replace-with-a-separate-generated-secret
+# Optional; defaults to turn.${DOMAIN}. Keep it distinct from DOMAIN.
+TURN_DOMAIN=turn.code.example.com
 ```
 
-Use your real domain. `LIVEKIT_URL` can be omitted in Compose, which defaults it to
-`wss://${DOMAIN}/livekit`. Generate the secret with `openssl rand -hex 32`; use a
-separate value from the app's other secrets and keep the key/secret on one line.
-Compose supplies the same pair to the API and to LiveKit through `LIVEKIT_KEYS`
-(`key: secret`). The checked-in LiveKit config contains no credentials. The key and
-secret are required by this Compose stack, so a missing value fails configuration
-instead of starting an unauthenticated or mismatched call service.
+Generate a separate secret and keep key/secret on one line. Compose sets
+`LIVEKIT_KEYS` and the same TURN hostname in both services. LiveKit receives
+`LIVEKIT_TURN_DOMAIN` through its pinned version's generated environment flag;
+YAML does not expand variables. `LIVEKIT_URL` defaults to `wss://${DOMAIN}/livekit`.
+The production API does not issue call tokens with missing LiveKit settings.
 
-Open these inbound ports on the server and its cloud firewall:
+Caddy sends PROXYv2 with the decrypted stream, preserving the client's address.
+LiveKit trusts only Caddy's fixed 172.30.250.2/32 on the dedicated `turn-proxy`
+network. Its internal 5349 listener uses `external_tls: true`, while browsers are
+given **`turns:turn.<DOMAIN>:443?transport=tcp`**. Host 5349 is not published. If the
+172.30.250.0/29 subnet overlaps your network, change its subnet and Caddy address
+in Compose and the matching trusted /32 in `infra/livekit/livekit.yaml` together.
 
-| Port | Purpose |
+| Public port | Purpose |
 | --- | --- |
-| TCP 80 | Caddy certificate issuance and HTTPS redirects |
-| TCP 443 | HTTPS and WebSocket signalling, including `/livekit` |
-| UDP 443 | Caddy HTTP/3 |
+| TCP 80 | Certificate validation and HTTPS redirect |
+| TCP 443 | Website HTTPS/WSS and TURN/TLS, selected by hostname |
+| UDP 443 | Website HTTP/3 |
 | TCP 7881 | Direct WebRTC TCP fallback |
-| UDP 7882 | Direct WebRTC media on one muxed port |
-| UDP 3478 | LiveKit's built-in TURN relay listener |
+| UDP 7882 | Direct media |
+| UDP 3478 | Existing TURN/UDP |
 
-Port 7880 stays inside Docker. Keep the mappings one-to-one if the host is behind
-NAT. LiveKit discovers the server's public IP (`rtc.use_external_ip: true`), which
-must be reachable on the published media/TURN ports. Caddy does not carry that
-traffic. The embedded TURN relay's allocation sockets stay inside the LiveKit
-network namespace; do not expose the default UDP 30000–40000 relay range publicly.
+Keep NAT mappings one-to-one. LiveKit discovers its public media IP; it must be
+reachable. Embedded relay allocation sockets remain inside the container; do not
+publish internal 30000?40000. A private media IP may need an explicit exact SFU
+/32 in `turn.allow_restricted_peer_cidrs`, never whole private ranges. Test the
+relay/hairpin path from outside.
 
-This first version uses **TURN over UDP**, without sharing Caddy's certificate
-storage. It helps with NAT traversal but cannot serve a network that blocks UDP
-and only allows HTTPS. Direct TCP 7881 is another fallback when that port is
-allowed. For HTTPS-only networks, add TURN/TLS on a separate public TCP 443 address
-or a suitable layer-4 endpoint; an HTTP reverse proxy is insufficient. The pinned
-LiveKit version advertises TURN/TLS on 443, so opening only 5349 would not solve it.
+Validate with test env values, then update during maintenance because replacing
+LiveKit interrupts active calls:
 
-Check the setup after deployment:
-
-```bash
-docker compose --env-file infra/.env.production -f infra/compose.yaml config --quiet
-dc up -d --build
-curl --fail https://code.example.com/livekit/    # OK
-dc logs --tail=50 livekit
+```sh
+docker compose --env-file /path/to/test.env -f infra/compose.yaml config --quiet
+docker build -f infra/docker/caddy.Dockerfile -t codechatter-caddy:2.11-l4-8e984fe .
+dc up -d --build caddy livekit
+curl --fail https://code.example.com/livekit/    # OK: signalling only
+openssl s_client -connect turn.code.example.com:443 -servername turn.code.example.com -verify_return_error </dev/null
 ```
 
-`config` without `--quiet` also validates the stack, but its output contains the
-resolved credentials. The `OK` response checks signalling, not media or TURN.
-In two browsers, sign in as room members and use **Call** in the room's title bar;
-check audio, video and screen sharing. Then repeat across different networks and
-inspect `chrome://webrtc-internals` or `edge://webrtc-internals`: a selected
-`relay` ICE candidate confirms TURN is actually carrying media. A direct local
-call alone does not prove the relay/NAT path. Docker bridge and cloud NAT rules
-must permit that path; test a forced-relay connection before relying on it.
+The TLS check needs the correct TURN hostname and a trusted certificate chain.
+It proves TLS, not authenticated media. `config` without `--quiet` prints resolved
+secrets. Check startup/certificate errors in the Caddy and LiveKit logs.
 
-When any of the three LiveKit settings is missing from a production API, it does
-not issue call tokens. Clicking **Call** shows: “Calls aren't set up on this server
-(LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET).” Existing chat, editing and
-code execution keep working. Production Compose requires the credentials up
-front; the Helm chart can disable the call service explicitly.
+For an **external relay check**, open `chrome://webrtc-internals` or
+`edge://webrtc-internals`, then join a call in two browsers on different networks.
+Repeat from an actual HTTPS-only network or a controlled client network allowing
+DNS and outbound TCP 443 while blocking UDP and TCP 7881. A working fallback has a
+selected/succeeded pair with local candidate `relay`, the TURN URL
+`turns:turn.code.example.com:443?transport=tcp`, relay protocol TLS when reported,
+and increasing media bytes/decoded video frames. Also share and stop a screen.
+A direct call, TLS handshake, or UDP relay alone does not prove that path. Strict
+HTTP CONNECT proxies or TLS inspection can still reject non-HTTP TURN traffic;
+test the real policy rather than assuming that every TCP 443 network permits it.
 
-For Kubernetes media addresses, NodePorts and the Docker Desktop demo, follow the
-[chart's calls instructions](../infra/helm/codechatter/README.md).
+### Development relay and screen-share tests
+
+Development TURN/UDP is bound to **127.0.0.1:3478**, with loopback RTC candidates
+and only peer 127.0.0.1/32 permitted. Check conflicts with
+`ss -lunp '( sport = :3478 )'` on Linux or
+`Get-NetUDPEndpoint -LocalPort 3478` in PowerShell. If occupied, change
+`turn.udp_port` in the dev LiveKit YAML and both 3478 values in that service's dev
+Compose mapping to the same unused port. Recreate only LiveKit:
+
+```sh
+docker compose -f infra/compose.dev.yaml up -d --no-deps --force-recreate livekit
+cd apps/web
+node test/call-relay.e2e.mjs
+node test/call-screen-share.e2e.mjs
+node test/call.e2e.mjs
+```
+
+`?callRelay=1` sets `iceTransportPolicy: relay` only in non-production builds.
+Production ignores it. Tests inject a wrapper around the public browser peer
+connection API; no app hook exposes room objects, tokens, addresses or ICE secrets.
+The relay test requires selected relays, media bytes and increasing decoded
+frames, then proves removal of TURN prevents a call. Screen-share tests use Edge
+automatic tab selection and verify remote frames and tile removal. These local
+UDP checks are separate from the external TURN/TLS check above.
+
+For Kubernetes certificates, the dedicated TURN 443 LoadBalancer, external TLS
+termination and renewal, see the [chart README](../infra/helm/codechatter/README.md).
 
 ## Updating
 

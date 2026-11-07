@@ -24,18 +24,22 @@ const LINES: Line[] = [
 ];
 const FULL = LINES.map((l) => l.text).join(" ");
 const END_MS = Math.max(...LINES.map((l) => l.startMs + l.text.length * l.msPerChar)) + 400;
+/** Below Tailwind's `sm`, matching `max-sm:` on the untyped text. */
+const PHONE_MAX_PX = 639;
 
 /**
  * The only unprompted motion on the site. Text is laid out at full length from
  * the first paint (untyped characters are transparent), so nothing reflows.
- * Without JS or with reduced motion, it renders already typed.
+ * Without JS or with reduced motion, it renders already typed. On a phone too:
+ * there, waiting for the page's largest text to be typed costs too much on a slow
+ * connection, and CSS shows it from the first paint, before any script has run.
  */
 export function LiveHeadline() {
   const [elapsed, setElapsed] = useState(0);
   const animate = !usePrefersReducedMotion();
 
   useEffect(() => {
-    if (!animate) return;
+    if (!animate || window.matchMedia(`(max-width: ${PHONE_MAX_PX}px)`).matches) return;
     const start = performance.now();
     let frame = 0;
     const tick = (now: number) => {
@@ -69,7 +73,7 @@ export function LiveHeadline() {
                 className={done && line.after === "fades" ? "opacity-0 transition-opacity duration-700" : undefined}
               />
             )}
-            <span className="lh-rest text-transparent">{line.text.slice(typed)}</span>
+            <span className="lh-rest text-transparent max-sm:text-inherit">{line.text.slice(typed)}</span>
           </span>
         );
       })}

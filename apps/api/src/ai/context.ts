@@ -1,4 +1,4 @@
-import { runnableLanguage, type RunSnapshot } from "@codechatter/contracts";
+import { redactSecrets, runnableLanguage, type ProjectDigest, type RunSnapshot } from "@codechatter/contracts";
 
 /** The room's last run, as the server found it (never taken from the browser). */
 export type RunContext =
@@ -13,6 +13,7 @@ export type ContextParts = {
   /** Files the person let the agent read. */
   extra?: Array<{ path: string; text: string }>;
   summary?: SummaryContext;
+  project?: ProjectDigest;
   file?: { path: string; text: string };
   selection?: { path: string; text: string; startLine: number; endLine: number };
   run?: RunContext;
@@ -97,6 +98,44 @@ function describeExit(snapshot: RunSnapshot): string {
 
 const attr = (value: string) => value.replace(/"/g, "'");
 
+/** A project's contents can't close the sections around them, and whatever the browser let through, no secret goes on from here. */
+const projectText = (text: string) => redactSecrets(text).replace(/<(\/?)\s*project_/gi, "<$1_project_");
+
+/** Most of the room goes on what was read in full; what's left, on outlines of the rest. */
+function projectSections(project: ProjectDigest, budget: number): string[] {
+  const sections: string[] = [];
+  let left = budget;
+  const fit = (text: string, share: number) => {
+    const cut = truncateMiddle(text, Math.max(0, Math.min(left, Math.floor(budget * share))));
+    left -= cut.text.length;
+    return cut;
+  };
+  const facts = fit(project.facts.map((fact) => `- ${projectText(fact)}`).join("\n"), 0.3);
+  sections.push(`<project_facts files="${project.counts.files}" lines="${project.counts.lines}">\n${facts.text || "(none)"}\n</project_facts>`);
+  const tree = fit(project.tree.map(projectText).join("\n"), 0.15);
+  sections.push(`<project_tree shown="${tree.omitted ? "some" : "all"}">\n${tree.text}\n</project_tree>`);
+  const reading = Math.floor(budget * 0.4);
+  let read = 0;
+  for (const file of project.files) {
+    const room = Math.min(reading - read, left);
+    if (room < 200) break;
+    const cut = truncateMiddle(projectText(file.text), Math.min(room, Math.max(1500, Math.floor(reading / Math.max(1, project.files.length)) * 2)));
+    sections.push(`<project_file path="${attr(projectText(file.path))}"${cut.omitted ? ` truncated="${cut.omitted}"` : ""}>\n${cut.text}\n</project_file>`);
+    read += cut.text.length;
+    left -= cut.text.length;
+  }
+  const outlines: string[] = [];
+  for (const outline of project.outlines) {
+    const text = `${projectText(outline.path)}\n${outline.lines.map((line) => `  ${projectText(line)}`).join("\n")}`;
+    if (text.length + 1 > left) break;
+    outlines.push(text);
+    left -= text.length + 1;
+  }
+  const more = project.outlines.length - outlines.length;
+  if (outlines.length) sections.push(`<project_outline files="${outlines.length}"${more ? ` not_shown="${more}"` : ""}>\n${outlines.join("\n")}\n</project_outline>`);
+  return sections;
+}
+
 /**
  * The room context as one block of tagged sections, placed before the
  * person's message. `budget` is the total characters for all of it; the
@@ -136,6 +175,8 @@ ${changes || "(this browser tab saw no file changes)"}
     );
     used += chat.length + activity.length + changes.length;
   }
+
+  if (parts.project) sections.push(...projectSections(parts.project, budget));
 
   if (parts.extra?.length) {
     const share = Math.max(1000, Math.floor((budget * 0.35) / parts.extra.length));

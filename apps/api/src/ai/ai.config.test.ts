@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { aiStatus, DEFAULT_ANTHROPIC_MODEL, resolveAiSetup, type AiEnv } from "./ai.config.js";
 import { AnthropicProvider, createProvider, OpenAiCompatibleProvider } from "./providers.js";
+import { playableModels } from "./ai.config.js";
 
 const env = (overrides: Partial<AiEnv> = {}): AiEnv => ({
   AI_PROVIDER: "none",
@@ -95,5 +96,23 @@ describe("resolveAiSetup", () => {
     const status = aiStatus(resolveAiSetup(e), e);
     expect(JSON.stringify(status)).not.toContain("sk-secret-value");
     expect(status).toMatchObject({ configured: true, provider: "anthropic", model: DEFAULT_ANTHROPIC_MODEL, limit: { requests: 30, windowSeconds: 600 } });
+  });
+});
+
+describe("the models the Prompt Playground may offer", () => {
+  const ollama = { settings: { provider: "ollama" as const, model: "a", apiKey: "ollama", vision: false }, model: "a" };
+  const paid = { settings: { provider: "openai" as const, model: "gpt-cheap", apiKey: "k", vision: false }, model: "gpt-cheap" };
+
+  it("is nothing while AI is off", () => {
+    expect(playableModels({ settings: null, model: null }, { AI_PLAYGROUND_MODELS: "x" }, ["y"])).toEqual([]);
+  });
+
+  it("with Ollama, is whatever's pulled, the server's own first", () => {
+    expect(playableModels(ollama, { AI_PLAYGROUND_MODELS: "" }, ["b", "a", "c"])).toEqual(["a", "b", "c"]);
+  });
+
+  it("with a paid provider, is only what the owner named", () => {
+    expect(playableModels(paid, { AI_PLAYGROUND_MODELS: "" }, ["costly"])).toEqual(["gpt-cheap"]);
+    expect(playableModels(paid, { AI_PLAYGROUND_MODELS: " gpt-other , gpt-cheap ," }, ["costly"])).toEqual(["gpt-cheap", "gpt-other"]);
   });
 });

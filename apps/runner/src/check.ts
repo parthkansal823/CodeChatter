@@ -15,7 +15,7 @@ const MAX_OUTPUT = 8 * 1024 * 1024;
 type Output = { code: number | null; stdout: string; stderr: string };
 
 /** A command in the sandbox, inside the jail like a Run, from `cwd` (a folder of the room's). */
-async function run(sandbox: RoomSandbox, cwd: string, command: string[]): Promise<Output> {
+export async function run(sandbox: RoomSandbox, cwd: string, command: string[]): Promise<Output> {
   const script = `cd "$1" || exit 1; shift; command -v "$1" >/dev/null || exit 127; exec timeout ${CHECK_SECONDS} "$@"`;
   const handle = await sandbox.exec([JAIL, "sh", "-c", script, "cc-check", cwd, ...command], { tty: false });
   const stdout = new Collector(MAX_OUTPUT);

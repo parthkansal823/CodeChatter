@@ -226,8 +226,9 @@ an HTTP/CDN proxy. Keep `externalTrafficPolicy: Local` to preserve client source
 addresses; a TCP proxy that rewrites them must send PROXY protocol v2, with
 `proxyProtocol: true` and narrowly scoped `trustedProxyCidrs`.
 
-If cert-manager is already installed, it can maintain the Secret. For example,
-create this Certificate with an existing, correctly configured ClusterIssuer:
+If cert-manager is already installed, its [Certificate resource](https://cert-manager.io/docs/usage/certificate/)
+can maintain the Secret. For example, create this Certificate with an existing,
+correctly configured ClusterIssuer:
 
 ```yaml
 apiVersion: cert-manager.io/v1

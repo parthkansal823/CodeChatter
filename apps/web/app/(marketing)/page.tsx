@@ -42,7 +42,10 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="mx-auto max-w-6xl px-5 py-12">
+      <section id="features" aria-labelledby="features-heading" className="mx-auto max-w-6xl px-5 py-12">
+        <h2 id="features-heading" className="sr-only">
+          What you can do
+        </h2>
         <Feature
           icon={<GitBranch className="size-4" />}
           title="Edit with anyone, live"

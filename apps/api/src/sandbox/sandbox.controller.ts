@@ -1,5 +1,5 @@
 import type { AuthSession } from "@codechatter/auth";
-import { INSTALLS_MINUTES, RoomCode, SandboxImageInput, type DevServerStatus, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
+import { INSTALLS_MINUTES, RoomCode, SandboxImageInput, type DevServerStatus, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Req, ServiceUnavailableException } from "@nestjs/common";
 import type { Request } from "express";
 import { z } from "zod";
@@ -147,6 +147,20 @@ export class SandboxController {
     await this.rooms.require(room, session.user.id, "code.run");
     try {
       return await this.runner.check(room, session.user);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
+  }
+
+  /** The Analysis tool (apps/runner/src/analysis.ts): it runs tools in the sandbox, like checking every file, so it needs Run rights. */
+  @Post("analysis")
+  @HttpCode(200)
+  async analysis(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string): Promise<RoomAnalysis> {
+    const room = this.room(roomId);
+    await this.rooms.require(room, session.user.id, "code.run");
+    try {
+      return await this.runner.analysis(room, session.user);
     } catch (error) {
       if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
       throw error;

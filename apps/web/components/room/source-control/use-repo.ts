@@ -23,11 +23,7 @@ export function useRoomRepo(): RoomRepo | null | undefined {
   const client = useQueryClient();
   const query = useQuery({
     queryKey: repoKey(room.id),
-    queryFn: () =>
-      api<RoomRepo>(`/api/rooms/${room.id}/repo`).catch((error: unknown) => {
-        if (error instanceof ApiError && error.status === 404) return null;
-        throw error;
-      }),
+    queryFn: async () => (await api<RoomRepo | undefined>(`/api/rooms/${room.id}/repo`)) ?? null,
     staleTime: 60_000,
   });
   useEffect(() => {

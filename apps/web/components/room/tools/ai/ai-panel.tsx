@@ -1,8 +1,8 @@
 "use client";
 
-import { AI_LIMITS, AI_MODES, parseAgentReply, type AiChatInput, type AiMode, type AiStatus } from "@codechatter/contracts";
+import { AI_LIMITS, AI_MODES, buildProjectDigest, parseAgentReply, pathsNotInProject, type AiChatInput, type AiMode, type AiStatus, type ProjectFile, type RoomAnalysis } from "@codechatter/contracts";
 import { flatten, listTree, textOf, type TreeNode } from "@codechatter/workspace-model";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquarePlus, RotateCw } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -70,11 +70,18 @@ function clipMiddle(text: string, max: number): string {
   return text.slice(0, head) + marker + text.slice(text.length - (max - marker.length - head));
 }
 
+/** Bigger than this, a file isn't read for a review: it's almost certainly not written by hand. */
+const PROJECT_FILE_CHARS = 1_000_000;
+/** A review shouldn't run the tools again for every question that follows it. */
+const ANALYSIS_STILL_FRESH_MS = 10 * 60_000;
+
 const actionSteps = (content: string): ActionStep[] =>
   parseAgentReply(content).flatMap((segment) => (segment.type === "action" ? [{ index: segment.index, action: segment.action }] : []));
 
 function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode | null }) {
   const { room, doc, provider, can, synced } = useRoom();
+  const queryClient = useQueryClient();
+  const [preparing, setPreparing] = useState(false);
   const run = useRun();
   const tree = useFileTree();
   const chat = useAiChat(room.id);
@@ -84,7 +91,8 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
   const [review, setReview] = useState<Review | null>(null);
   const [windowMinutes, setWindowMinutes] = useState(60);
   const selection = useSelectionRange(activeFile?.id ?? null);
-  const fileCount = useMemo(() => flatten(tree).filter((n) => n.kind === "file").length, [tree]);
+  const filePaths = useMemo(() => flatten(tree).filter((n) => n.kind === "file").map((n) => n.path), [tree]);
+  const fileCount = filePaths.length;
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const mode = chat.mode;
@@ -133,6 +141,18 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
       context.summary = { minutes: windowMinutes, changes: describeChanges(room.id, doc, windowMinutes) };
       labels.push(SUMMARY_WINDOWS.find(([minutes]) => minutes === windowMinutes)?.[1] ?? `Last ${windowMinutes} minutes`);
     }
+    if (forMode === "project") {
+      const files: ProjectFile[] = flatten(listTree(doc))
+        .filter((n) => n.kind === "file")
+        .map((n) => {
+          const content = n.blob ? undefined : textOf(doc, n.id);
+          return { path: n.path, text: content && content.length <= PROJECT_FILE_CHARS ? content.toString() : null };
+        });
+      const analysis = queryClient.getQueryData<RoomAnalysis>(["room-analysis", room.id]) ?? null;
+      context.project = buildProjectDigest(files, analysis);
+      labels.push(`${files.length} ${files.length === 1 ? "file" : "files"}`);
+      if (analysis) labels.push(`Analysis from ${new Date(analysis.at).toLocaleTimeString()}`);
+    }
     if (forMode === "edit" && activeFile && ytext) {
       target = {
         fileId: activeFile.id,
@@ -149,9 +169,28 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
     sendMode: AiMode,
     use: AiAttach,
     history: ChatEntry[] = chat.entries,
-    options: { auto?: boolean; extraPaths?: string[]; labels?: string[] } = {},
+    options: { auto?: boolean; extraPaths?: string[]; labels?: string[]; analysed?: boolean } = {},
   ) => {
-    if (chat.busy || !canChat) return;
+    if (chat.busy || preparing || !canChat) return;
+    // A review stands on what the tools found, so they run first. If they can't (no Run rights, no sandbox), it goes on without them, and the model is told nothing ran.
+    if (sendMode === "project" && !options.analysed) {
+      setPreparing(true);
+      void (can("code.run")
+        ? queryClient.fetchQuery({
+            queryKey: ["room-analysis", room.id],
+            queryFn: () => api<RoomAnalysis>(`/api/rooms/${room.id}/analysis`, { method: "POST" }),
+            staleTime: ANALYSIS_STILL_FRESH_MS,
+          })
+        : Promise.resolve()
+      )
+        .catch(() => toast.error("The analysis tools couldn't run, so this review is from the files alone."))
+        .finally(() => {
+          setPreparing(false);
+          // After the state above lands: `submit` checks it.
+          setTimeout(() => latest.current.submit(raw, sendMode, use, history, { ...options, analysed: true }));
+        });
+      return;
+    }
     const attached = !options.auto && image && status.vision ? image : null;
     const text = raw.trim() || MODES[sendMode].fallbackPrompt || (attached ? "What's in this image?" : "");
     if (!text) return;
@@ -259,7 +298,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
       : chat.busy
         ? "Wait for the answer to finish."
         : null;
-  const canSend = canChat && !chat.busy && Boolean(draft.trim() || MODES[mode].fallbackPrompt || image);
+  const canSend = canChat && !chat.busy && !preparing && Boolean(draft.trim() || MODES[mode].fallbackPrompt || image);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-panel">
@@ -323,12 +362,18 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
               currentMode={mode}
               onApply={activeFile ? applyToFile : undefined}
               applyBlocked={applyBlocked}
+              paths={filePaths}
               onRetry={() => retry(entry)}
               onStep={handleStep}
               setReview={setReview}
               patch={chat.patchEntry}
             />
           ))
+        )}
+        {preparing && (
+          <p role="status" className="mt-3 animate-pulse pl-3 font-ai text-sm text-muted-foreground">
+            Running the analysis tools over the project first…
+          </p>
         )}
       </div>
 
@@ -366,13 +411,14 @@ type EntryProps = {
   currentMode: AiMode;
   onApply: ((code: string) => void) | undefined;
   applyBlocked: string | null;
+  paths: readonly string[];
   onRetry: () => void;
   onStep: (entryId: string, index: number, state: StepState) => void;
   setReview: (review: Review | null) => void;
   patch: (id: string, patch: Partial<ChatEntry>) => void;
 };
 
-function Entry({ entry, first, currentMode, onApply, applyBlocked, onRetry, onStep, setReview, patch }: EntryProps) {
+function Entry({ entry, first, currentMode, onApply, applyBlocked, paths, onRetry, onStep, setReview, patch }: EntryProps) {
   if (entry.role === "user") {
     const attached = [...(entry.context ?? []), ...(entry.image ? ["Image"] : [])];
     return (
@@ -391,6 +437,8 @@ function Entry({ entry, first, currentMode, onApply, applyBlocked, onRetry, onSt
   const ending = entry.status ? ENDINGS[entry.status] : undefined;
   const code = entry.mode === "edit" && entry.status === "done" ? firstCodeBlock(entry.content) : null;
   const thinking = <p className="animate-pulse font-ai text-sm text-muted-foreground">Thinking…</p>;
+  // A model that hasn't read a file may still name one that sounds right.
+  const madeUp = entry.mode === "project" && !streaming ? pathsNotInProject(entry.content, paths) : [];
   return (
     <div className="mt-3">
       <div className="mb-0.5 flex items-baseline gap-2 pl-3">
@@ -408,7 +456,13 @@ function Entry({ entry, first, currentMode, onApply, applyBlocked, onRetry, onSt
             text={entry.content}
             {...(entry.mode !== "edit" && onApply && { onApply })}
             applyBlocked={streaming ? "Wait for the answer to finish." : applyBlocked}
+            paths={paths}
           />
+        )}
+        {madeUp.length > 0 && (
+          <p className="mt-2 text-xs text-brand-text">
+            Not in this project, so don&apos;t rely on what it says about them: <span className="font-mono">{madeUp.join(", ")}</span>
+          </p>
         )}
         {code !== null && <EditCard entry={entry} code={code} setReview={setReview} patch={(p) => patch(entry.id, p)} />}
         {ending && <p className="mt-1 text-xs text-muted-foreground">{ending}</p>}

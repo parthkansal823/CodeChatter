@@ -1,4 +1,7 @@
 export * from "./ai.js";
+export * from "./ai-analysis.js";
+export * from "./prompts.js";
+export * from "./analysis.js";
 export * from "./audit.js";
 export * from "./blobs.js";
 export * from "./chat.js";

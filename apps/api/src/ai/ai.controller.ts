@@ -2,9 +2,11 @@ import type { AuthSession } from "@codechatter/auth";
 import {
   AiChatInput,
   AiCompleteInput,
+  AiPromptInput,
   can,
   RoomCode,
   type AiCompletion,
+  type AiPromptModels,
   type AiStatus,
   type AiStreamEvent,
   type AiTokenCount,
@@ -37,8 +39,8 @@ import { RunnerClient } from "../runner/runner.client.js";
 import { AiService } from "./ai.service.js";
 import { buildCompletionRequest, cleanCompletion, completionLimitMessage, completionTimeoutMs, completionUsage } from "./complete.js";
 import type { RunContext, SummaryContext } from "./context.js";
-import { buildModelRequest } from "./prompts.js";
-import { describeAiError, type StreamPiece } from "./providers.js";
+import { buildModelRequest, type ModelRequest } from "./prompts.js";
+import { describeAiError, type AiProvider, type StreamPiece } from "./providers.js";
 import { rateLimitMessage } from "./rate-limit.js";
 import { formatActivity, formatChat } from "./summary.js";
 import { estimateUsage } from "./usage.js";
@@ -80,24 +82,11 @@ export class AiController {
     @Body(new ZodPipe(AiChatInput)) input: AiChatInput,
     @Res() res: Response,
   ): Promise<void> {
-    const { role } = await this.rooms.require(roomId, session.user.id, "room.chat");
-    if (role === "candidate") {
-      // The interviewer decides, and sees when they used it.
-      if (!(await this.interviews.candidateMayUseAi(roomId))) throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
-      void this.interviews.noteAiUse(roomId).catch(() => {});
-    }
-    const provider = this.ai.provider;
-    if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");
+    const provider = await this.mayAsk(session, roomId);
     if (input.context.image && !provider.settings.vision) {
       throw new BadRequestException("This AI model can't read images. Remove the image and ask in words.");
     }
-
-    const limit = await this.ai.hit(session.user.id);
-    if (!limit.allowed) {
-      const { requests, windowSeconds } = this.ai.status().limit;
-      res.setHeader("Retry-After", String(limit.retryAfterSeconds));
-      throw new HttpException(rateLimitMessage(requests, windowSeconds, limit.retryAfterSeconds), HttpStatus.TOO_MANY_REQUESTS);
-    }
+    await this.countRequest(session, res);
 
     let run: RunContext | undefined;
     if (input.context.runOutput) {
@@ -120,7 +109,66 @@ export class AiController {
       };
     }
     const request = buildModelRequest(input, { ...(run && { run }), ...(summary && { summary }), contextChars: this.ai.contextChars });
+    await this.streamAnswer(session, roomId, provider, request, res);
+  }
 
+  /** The models the Prompt Playground may offer here. */
+  @Get("rooms/:roomId/ai/models")
+  async models(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string): Promise<AiPromptModels> {
+    await this.rooms.require(roomId, session.user.id, "room.chat");
+    return this.ai.promptModels();
+  }
+
+  /**
+   * One prompt exactly as it's written, for the Prompt Playground: nothing of ours goes with it. Streams like chat,
+   * and its model has to be one on offer, as a paid provider's other models would be on the owner's bill.
+   */
+  @Post("rooms/:roomId/ai/prompt")
+  async prompt(
+    @CurrentSession() session: AuthSession,
+    @Param("roomId", new ZodPipe(RoomCode)) roomId: string,
+    @Body(new ZodPipe(AiPromptInput)) input: AiPromptInput,
+    @Res() res: Response,
+  ): Promise<void> {
+    const provider = await this.mayAsk(session, roomId);
+    const offered = await this.ai.promptModels();
+    if (!offered.models.includes(input.model)) throw new BadRequestException(`This server doesn't offer the model "${input.model}".`);
+    await this.countRequest(session, res);
+    const request: ModelRequest = {
+      system: input.system,
+      messages: input.messages,
+      ...(input.json && offered.json && { json: true }),
+      tuning: {
+        model: input.model,
+        ...(input.temperature !== undefined && offered.temperature && { temperature: input.temperature }),
+        ...(input.maxTokens !== undefined && { maxTokens: input.maxTokens }),
+      },
+    };
+    await this.streamAnswer(session, roomId, provider, request, res);
+  }
+
+  /** The model to ask, if this person may ask it in this room. */
+  private async mayAsk(session: AuthSession, roomId: string): Promise<AiProvider> {
+    const { role } = await this.rooms.require(roomId, session.user.id, "room.chat");
+    if (role === "candidate") {
+      // The interviewer decides, and sees when they used it.
+      if (!(await this.interviews.candidateMayUseAi(roomId))) throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
+      void this.interviews.noteAiUse(roomId).catch(() => {});
+    }
+    const provider = this.ai.provider;
+    if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");
+    return provider;
+  }
+
+  private async countRequest(session: AuthSession, res: Response): Promise<void> {
+    const limit = await this.ai.hit(session.user.id);
+    if (limit.allowed) return;
+    const { requests, windowSeconds } = this.ai.status().limit;
+    res.setHeader("Retry-After", String(limit.retryAfterSeconds));
+    throw new HttpException(rateLimitMessage(requests, windowSeconds, limit.retryAfterSeconds), HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  private async streamAnswer(session: AuthSession, roomId: string, provider: AiProvider, request: ModelRequest, res: Response): Promise<void> {
     res.status(200);
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     // no-transform: compression by a proxy would hold chunks back.
@@ -134,6 +182,8 @@ export class AiController {
     const send = (event: AiStreamEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
     const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), HEARTBEAT_MS);
 
+    const started = Date.now();
+    let firstAt: number | null = null;
     let outputChars = 0;
     let recorded = false;
     const record = async (tokens: AiTokenCount): Promise<AiTokenCount> => {
@@ -146,6 +196,7 @@ export class AiController {
       let end: Extract<StreamPiece, { type: "stop" }> | null = null;
       for await (const piece of provider.stream(request, abort.signal)) {
         if (piece.type === "text") {
+          firstAt ??= Date.now();
           outputChars += piece.text.length;
           send({ type: "delta", text: piece.text });
         } else {
@@ -153,10 +204,12 @@ export class AiController {
         }
       }
       const usage = await record(end?.usage ? { ...end.usage, estimated: false } : estimateUsage(request, outputChars));
-      send({ type: "done", stop: end?.stop ?? "end", usage });
+      const now = Date.now();
+      send({ type: "done", stop: end?.stop ?? "end", usage, timing: { firstMs: (firstAt ?? now) - started, totalMs: now - started } });
     } catch (error) {
       if (!abort.signal.aborted) {
-        const message = describeAiError(error, provider.settings, Boolean(request.image));
+        const settings = request.tuning ? { ...provider.settings, model: request.tuning.model } : provider.settings;
+        const message = describeAiError(error, settings, Boolean(request.image));
         this.logger.warn(`AI request failed in room ${roomId}: ${error instanceof Error ? error.message : String(error)}`);
         if (message) send({ type: "error", message });
       }

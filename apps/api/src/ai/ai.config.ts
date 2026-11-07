@@ -128,6 +128,13 @@ export function resolveAiSetup(env: AiEnv): AiSetup {
   return off("none", null, `AI_PROVIDER must be ollama, anthropic, openai or none (it is "${provider.slice(0, 40)}").`);
 }
 
+/** What the Playground may offer: the server's model, the ones named for it, and what Ollama has pulled, since those cost nothing. */
+export function playableModels(setup: Pick<AiSetup, "settings" | "model">, env: Pick<Env, "AI_PLAYGROUND_MODELS">, pulled: readonly string[]): string[] {
+  if (!setup.settings) return [];
+  const named = env.AI_PLAYGROUND_MODELS.split(",").map((model) => model.trim()).filter(Boolean);
+  return [...new Set([...(setup.model ? [setup.model] : []), ...named, ...(setup.settings.provider === "ollama" ? pulled : [])])];
+}
+
 export function aiStatus(setup: AiSetup, env: Pick<AiEnv, "AI_RATE_LIMIT" | "AI_RATE_WINDOW_SECONDS">): AiStatus {
   return {
     configured: setup.settings !== null,

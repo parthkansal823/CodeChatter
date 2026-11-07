@@ -477,6 +477,15 @@ What's left is in `docs/pending.md` under step 11.
   - invitations, and auto-join by email domain
   - organisation templates and policies
 - ✅ **Room roles:** owner, editor, runner, viewer, interviewer, candidate. One permission matrix drives all of them, and interview mode (§7) gives the last two their use.
+- ✅ **Accessibility** (2026-11-07): `apps/web/test/a11y.e2e.mjs` runs axe's WCAG 2.2 AA rules on 93 screens: every kind of page, each room panel, tool and tab, in light and dark, and the main ones on a phone. It's in CI. Monaco, xterm and draw.io are other people's, so what's inside them is left out. No violations (97 of 97 checks, with three by keyboard).
+  - **Open files:** only the active tab could take focus, and nothing moved it, so a keyboard couldn't reach the others. Arrow keys, Home and End now move between them, and Delete closes one. The tab's close control is for the mouse alone, because a tab can't hold another control. So are terminals' tabs.
+  - **The bottom panel:** closed, it has no height but stays running, and keyboards and screen readers could land on what couldn't be seen. It's hidden while closed.
+  - **Targets:** file tree rows and the like went from 22px to 24px (`--row-h`), and small buttons to 24px.
+  - **Orange text:** `--brand` is 3:1 on white, too pale for small text. `text-brand-text` is the same orange, darker in the light theme. Icons keep the bright one.
+  - **Smaller:** "No files yet" and the like moved outside the tree, the New terminal button outside the tab list, and text-only scrolling areas take focus.
+- ✅ **Lighthouse on the marketing page** (2026-11-07), on the production image without a CDN. Performance, accessibility, best practices and SEO:
+  - phone, really throttled (`--throttling-method=devtools`): 92, 100, 100, 100; desktop, simulated: 98, 100, 100, 100. Lighthouse's simulated phone run says 86 for performance: it charges all the page's JavaScript to the largest text, though that text is painted first.
+  - How: the headline was typed by a script, so the largest text wasn't painted until it finished (5.3 s). On a phone, CSS now shows it from the first paint, with no typing; a desktop still types it. Only Mona Sans is preloaded, and its italic file is gone (100 KB, for the browser's slant). A heading level that was skipped is back.
 - ✅ **Nightly backups** (ChatGPT's prompt 11, checked 2026-11-07): `infra/backup/`, a `backup` service in `infra/compose.yaml`, a CronJob in the Helm chart, and `docs/deploy.md`, "Backups". A checked `pg_dump` every night at 03:00 in `BACKUP_TZ`, with a checksum, optionally to S3 and verified there; 7 daily, 4 weekly and 6 monthly kept; `restore` into a new database by default; `last-success` and `last-failure` for alerts.
   - Tests: `infra/backup/test-backup.sh` (Docker only, cleans up after itself). Checked by hand on real data: a copy of the dev database (46 MB, 28 tables, 15 migrations) restored into a throwaway Postgres, every table's rows matching but for a session written during it. The scheduler runs once after 03:00, not again after a restart, and carries on when the database is down, recording why. No password in logs, arguments or the volume.
 - ✅ **Settings pages** (ChatGPT's prompt 10, checked 2026-11-06): `/settings/account` has profile, password, two-factor sign-in (a secret and link to set up, on only once a code checks out, backup codes shown once) and where you're signed in, with Sign out for each device. `/two-factor` takes a backup code. In `apps/web/components/settings/account/`.
@@ -652,6 +661,38 @@ What's left is in `docs/pending.md` under step 11.
 - ⬜ **Security review:** a final pass over everything above.
 
 ## 11. Advanced features ⬜
+
+### Code analysis and the AI's project review ✅
+
+**What:** an Analysis tool that runs real tools over the room's files, and a review by the AI that starts from what they found. A model can't take in a whole project and guesses at numbers, so tools measure and the model explains.
+
+- **The tools**, in the sandbox image at pinned versions with checked downloads (a stage of `sandbox/image/Dockerfile`, Python's from `analysis-requirements.txt` with hashes):
+  - scc: lines and languages
+  - lizard: complexity of each function
+  - gitleaks: secrets, with `--redact=100`, and a config of its own in `gitleaks.toml`
+  - bandit: Python security, when there's Python
+  - pyright, ruff and tsc: through the existing Check all files
+- **Runner (`apps/runner/src/analysis.ts`):** they run inside the room's jail with no network and a time limit, one analysis at a time per room. The parsers keep named fields only, so a secret's value can't pass through, and bandit's password rules (which quote the value) get a fixed message. A tool that's missing, times out or fails says so in the report: it can't read as a clean project.
+- **API:** `POST /api/rooms/:id/analysis`, needs `code.run`.
+- **Tool (`tools/analysis/analysis-tool.tsx`):** tiles, then Secrets, Security, Errors and warnings, the most complex functions and Languages. Each place opens the file at that line. It stays for 30 minutes after closing, and isn't in interview rooms.
+- **Project review (`packages/contracts/src/ai-analysis.ts`, mode `project`):**
+  - **What's sent:** the tools' results as facts, what the file list shows (no tests, no README, no lockfile, no CI, generated files in the project), the tree, up to 12 key files (README, manifest, setup, entry points, then source) and outlines of the rest, cut to the model's context by the server.
+  - **Secrets:** `.env` and key files are never read. Anything shaped like a secret is taken out in the browser and again on the server. Only the file and rule go, from gitleaks.
+  - **Keeping the model honest:** it's told the facts are correct and which files it hasn't read. Paths in an answer open the file, and ones that aren't in the project are named underneath, so a made-up file is visible.
+  - **Running:** the panel runs the tools first if there's no result under 10 minutes old. Without rights or a sandbox it goes on from the files alone and says so.
+- **Also fixed:** `GET /api/rooms/:id/repo` answers 204 for a room that isn't linked to GitHub, instead of a 404 in the console of every room opened.
+
+**Rebuilding:** both sandbox images need it (`pnpm sandbox:build`, `pnpm sandbox:build:full`). Rooms on an older image get a note saying so, not a clean report.
+
+**Not included:** Opengrep, until its rules' licence is checked.
+
+**Tests:**
+- `apps/runner/src/analysis.test.ts` (parsers, from the tools' real output)
+- `packages/contracts/src/ai-analysis.test.ts`
+- `apps/api/src/ai/prompts.test.ts`: the project's sections, secrets the browser let through, a file trying to close its section, a small model's context
+- `apps/runner/test/analysis.e2e.mjs` (22 checks, a fresh random secret appears nowhere in the report) and `apps/web/test/analysis.e2e.mjs` (24, a stand-in model, checking what it's sent)
+- Tried against the real `gemma4:e4b`: about a minute, the right files and lines, no secret in the request or the answer, no invented file
+- `a11y.e2e.mjs` includes the tool (99 checks)
 
 ### Deeper collaboration
 

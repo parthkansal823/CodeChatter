@@ -267,7 +267,7 @@ try {
   check("gistNeedsToken", noTokenGist.status === 400 && /to make gists/.test(noTokenGist.json?.detail), noTokenGist.text);
 
   const blank = await call(`/api/rooms/E2ETST/repo`);
-  check("notLinked", blank.status === 404 || blank.status === 403, blank.text);
+  check("notLinked", blank.status === 204 || blank.status === 403, blank.text);
 } catch (error) {
   check("flowCompletes", false, error instanceof Error ? error.stack : String(error));
 } finally {

@@ -95,7 +95,7 @@ flowchart TD
 *Goal: help that understands the room.* Details: §4.
 
 - 🟡 Provider router: Ollama (local, free), Claude, any OpenAI-compatible server; per-organisation keys ⬜
-- ✅ AI panel: streamed answers with context chips and images. Modes: assistant, explain error, tutor, mock interviewer, complexity, screenshot to code, edit, agent, room summary
+- ✅ AI panel: streamed answers with context chips and images. Modes: assistant, explain error, tutor, mock interviewer, complexity, screenshot to code, edit, agent, room summary, project review
 - ✅ Inline completions; AI edit with review; Explain this error and Fix
 - ✅ The agent plans and proposes steps that wait for approve or skip
 - ⬜ AI diagram; agent auto-approve and retry loop; the agent's own typeface
@@ -161,7 +161,8 @@ flowchart TD
 - ✅ GitHub Actions CI: lint, types, tests, image builds, vulnerability scan (green on GitHub)
 - ✅ End-to-end tests in CI: green on GitHub, 39 suites in 15 minutes. 3 more go with the next push
 - ✅ Browser security: a nonce-based security policy, previews in a sandboxed frame, access that really ends when a room goes private or is deleted
-- ⬜ Sandbox security (gVisor); accessibility (axe, Lighthouse)
+- ✅ Accessibility: no axe violations across the app; Lighthouse 90+ on the marketing page
+- ⬜ Sandbox security (gVisor)
 - ⬜ Cutover from v1; a final security review
 
 ## Step 11 · Interviews and assessments ✅
@@ -192,6 +193,9 @@ flowchart TD
 *Goal: what most IDEs don't have.* Details: §11.
 
 - ✅ Multiplayer debugger; Problems panel, database playground and HTTP client (done in steps 3 and 5)
+- ✅ Code analysis with real tools (scc, lizard, gitleaks, bandit, the project's checkers), and the AI's project review written from their results
+- ⬜ AI engineering tools: Prompt Playground, Evals, AI gateway, RAG, MCP Inspector, Traces
+- ⬜ Explain this data; a layout for researchers
 - ⬜ Suggestion mode, room branches, live authorship, session replay, smarter calls
 - ⬜ Test explorer, profiler, package search, room secrets, deploy previews
 - ⬜ Ask the codebase, AI team, natural-language terminal, generated tests and docs, AI code review

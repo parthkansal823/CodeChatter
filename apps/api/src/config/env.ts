@@ -73,6 +73,8 @@ const Env = z.object({
   // turns AI off with a reason on GET /api/ai/status instead of stopping boot.
   AI_PROVIDER: z.string().trim().toLowerCase().optional().default("none"),
   AI_MODEL: z.string().trim().optional().default(""),
+  // More models the Prompt Playground may offer, comma-separated. A paid provider's would be on the owner's bill, so it's only these and AI_MODEL; with Ollama, whatever's pulled too.
+  AI_PLAYGROUND_MODELS: z.string().trim().optional().default(""),
   ANTHROPIC_API_KEY: z.string().trim().optional().default(""),
   OPENAI_API_KEY: z.string().trim().optional().default(""),
   /** Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Groq, Gemini, a local Ollama… */
