@@ -111,10 +111,10 @@ function TextEditor({ file, role }: Props) {
     editorRef.current?.updateOptions({ readOnly, readOnlyMessage: { value: notebook && can("files.edit") ? READ_ONLY_NOTEBOOK : READ_ONLY_ROOM } });
   }, [readOnly, ready, notebook, can]);
 
-  // Settings apply to every open editor as soon as they change.
+  // Settings apply to every open editor as soon as they change. A paragraph of LaTeX is one long line, so it always wraps.
   useEffect(() => {
-    editorRef.current?.updateOptions(monacoOptions(settings));
-  }, [settings, ready]);
+    editorRef.current?.updateOptions({ ...monacoOptions(settings), ...(name && /\.(?:tex|ltx)$/i.test(name) ? { wordWrap: "on" as const } : {}) });
+  }, [settings, ready, name]);
 
   // Show the file.
   useEffect(() => {

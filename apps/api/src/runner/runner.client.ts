@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, FlowInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
+import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, FlowInput, LatexInput, AutomationInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
   RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
@@ -243,6 +243,22 @@ export class RunnerClient {
   async flow(roomId: string, input: FlowInput, user: RunnerUser): Promise<unknown> {
     const response = await this.call(`/rooms/${roomId}/flow`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
     if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't read the project.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response.json();
+  }
+
+  /** A flow run by Activepieces' engine in the sandbox (apps/runner/src/automations.ts). */
+  async automations(roomId: string, input: AutomationInput, user: RunnerUser): Promise<unknown> {
+    const response = await this.call(`/rooms/${roomId}/automations`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't reach the automation.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response.json();
+  }
+
+  /** A .tex file built with TeX Live (apps/runner/src/latex.ts). */
+  async latex(roomId: string, input: LatexInput, user: RunnerUser): Promise<unknown> {
+    const response = await this.call(`/rooms/${roomId}/latex`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't run LaTeX.");
     if (!response.ok) throw new RunnerUnavailableError();
     return response.json();
   }

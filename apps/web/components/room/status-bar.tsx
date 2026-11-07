@@ -1,7 +1,7 @@
 "use client";
 
 import type { TreeNode } from "@codechatter/workspace-model";
-import { CircleAlert, Eye, Settings2, Sparkles, TriangleAlert } from "lucide-react";
+import { CircleAlert, Code2, Eye, GraduationCap, Settings2, Sparkles, TriangleAlert } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { getActiveEditor, useEditorInfo } from "@/components/room/editor/active-editor";
@@ -14,6 +14,7 @@ import { openPalette, openSettings } from "@/components/room/editor/ui-store";
 import { useAiSuggestionsAllowed } from "@/components/room/editor/use-inline-completions";
 import { usePeers } from "@/components/room/hooks";
 import { useRoom } from "@/components/room/room-context";
+import type { RoomLayout } from "@/components/room/room-layout";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,7 @@ const STATUS = {
 
 const ROLE = { owner: "Owner", editor: "Editor", runner: "Can run", viewer: "Viewer", interviewer: "Interviewer", candidate: "Candidate" } as const;
 
-export function StatusBar({ file, problems, onProblems }: { file: TreeNode | null; problems: Problem[]; onProblems: () => void }) {
+export function StatusBar({ file, problems, onProblems, layout, onLayout }: { file: TreeNode | null; problems: Problem[]; onProblems: () => void; layout: RoomLayout; onLayout: (next: RoomLayout) => void }) {
   const { status, room, can } = useRoom();
   const peers = usePeers();
   const info = useEditorInfo((state) => state.info);
@@ -46,6 +47,12 @@ export function StatusBar({ file, problems, onProblems }: { file: TreeNode | nul
       )}
       <span>{peers.length === 0 ? "Only you" : `${peers.length + 1} people`}</span>
       <ProblemCounts problems={problems} onClick={onProblems} />
+      {room.kind !== "interview" && (
+        <button type="button" onClick={() => onLayout(layout === "research" ? "code" : "research")} aria-label={layout === "research" ? "Research layout. Switch to the code layout" : "Code layout. Switch to the research layout"} title={layout === "research" ? "Switch to the code layout" : "Switch to the research layout: paper, PDF, references, notebooks and data"} className="flex h-full items-center gap-1 px-1.5 hover:bg-accent hover:text-foreground">
+          {layout === "research" ? <GraduationCap className="size-3" aria-hidden /> : <Code2 className="size-3" aria-hidden />}
+          {layout === "research" ? "Research" : "Code"}
+        </button>
+      )}
       <div className="ml-auto flex h-full items-center">
         {show && (
           <>

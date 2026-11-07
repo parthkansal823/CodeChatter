@@ -233,6 +233,38 @@ try {
   await b.keyboard.press("Escape");
   check("all imports remain passive until Send", sends === 0 && remoteFetches === 0);
 
+  // cURL stays one request at the top of the collection: no folder, and no environment unless a credential needs one.
+  stage = "curl";
+  const sharedNodes = observer.doc.getMap("nodes");
+  const sharedEnvs = observer.doc.getMap("environments");
+  const curlPath = `/curl-${stamp}`;
+  const [nodesBefore, envsBefore] = observer.counts();
+  const plainCurl = await preview(`curl -X POST http://localhost:${port}${curlPath} -d 'a=1'`);
+  await plainCurl.getByRole("button", { name: "Add to collection", exact: true }).click();
+  await plainCurl.waitFor({ state: "hidden" });
+  await until(() => observer.counts()[0] === nodesBefore + 1);
+  const added = [...sharedNodes.entries()].map(([id, node]) => [id, node.toJSON()]).filter(([, node]) => String(node.url ?? "").includes(curlPath));
+  check("a cURL command adds one request at the top, with no folder or environment", added.length === 1 && added[0][1].parentId === null && added[0][1].kind === "request" && observer.counts().join() === [nodesBefore + 1, envsBefore].join(), observer.counts());
+  const tokenPath = `/curl-token-${stamp}`;
+  const tokenCurl = await preview(`curl http://localhost:${port}${tokenPath} -H 'Authorization: Bearer ${discarded}'`);
+  check("its preview doesn't show the credential", !(await tokenCurl.getByRole("region", { name: "Import preview", exact: true }).textContent()).includes(discarded));
+  await tokenCurl.getByRole("button", { name: "Add to collection", exact: true }).click();
+  await tokenCurl.waitFor({ state: "hidden" });
+  await until(() => observer.counts()[1] === envsBefore + 1);
+  const shared = JSON.stringify([...sharedNodes.values()].map((node) => node.toJSON())) + JSON.stringify([...sharedEnvs.values()].map((env) => env.toJSON()));
+  check("a credential in cURL never reaches the shared document", !shared.includes(discarded));
+  const curlEnv = [...sharedEnvs.entries()].map(([id, env]) => [id, env.toJSON()]).find(([, env]) => env.name.includes(tokenPath));
+  const secretVariable = curlEnv?.[1].variables.find((variable) => variable.secret)?.key;
+  await a.getByRole("button", { name: "Manage environments", exact: true }).click();
+  const myEnvs = a.getByRole("dialog", { name: "Environments", exact: true });
+  await myEnvs.getByRole("navigation", { name: "Environments", exact: true }).getByText(curlEnv[1].name, { exact: true }).click();
+  const mine = await myEnvs.getByLabel(`Your value of ${secretVariable}`, { exact: true }).inputValue();
+  check("but stays on the device of whoever pasted it, so it still works", Boolean(secretVariable) && mine.includes(discarded));
+  await a.keyboard.press("Escape");
+  for (const [id, node] of sharedNodes.entries()) if (String(node.toJSON().url ?? "").includes(`/curl-`) && String(node.toJSON().url).includes(stamp)) sharedNodes.delete(id);
+  sharedEnvs.delete(curlEnv[0]);
+  await until(() => observer.counts().join() === [nodesBefore, envsBefore].join());
+
   stage = "sandbox echo server";
   await a.getByRole("button", { name: "Close API Studio", exact: true }).click();
   stage = "create sandbox server file";

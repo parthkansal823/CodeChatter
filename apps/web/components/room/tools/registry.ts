@@ -1,7 +1,7 @@
 import type { RoomAction, RoomSummary } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import type { LucideIcon } from "lucide-react";
-import { Activity, Boxes, ClipboardList, Database, FlaskConical, GitFork, NotebookPen, NotebookText, PenTool, Plug, Presentation, ScanSearch, Send, ShieldAlert, Sparkles, Warehouse, Workflow } from "lucide-react";
+import { Activity, BookMarked, Boxes, ClipboardList, Database, FlaskConical, GitFork, NotebookPen, NotebookText, PenTool, Plug, Presentation, ScanSearch, Send, ShieldAlert, Sparkles, Warehouse, Workflow } from "lucide-react";
 import type { ComponentType } from "react";
 
 /** What every room tool receives from the workspace. */
@@ -41,6 +41,8 @@ export const ROOM_TOOLS: RoomTool[] = [
   { id: "notes", label: "Notes", icon: NotebookPen, placement: "side", load: () => import("./notes/notes-tool") },
   { id: "activity", label: "Activity", icon: Activity, placement: "side", load: () => import("./activity/activity-tool") },
   { id: "dependencies", label: "Dependencies", icon: ShieldAlert, placement: "side", load: () => import("./dependencies/dependencies-tool") },
+  // Only shown in the Research layout, or in a room with a .bib file (room-workspace.tsx).
+  { id: "references", label: "References", icon: BookMarked, placement: "side", visible: (_can, room) => room.kind !== "interview", load: () => import("./references/references-tool") },
   {
     id: "docs",
     label: "Docs",
@@ -49,6 +51,7 @@ export const ROOM_TOOLS: RoomTool[] = [
     load: () => import("./docs/docs-tool"),
   },
   { id: "api", label: "API", icon: Send, placement: "main", load: () => import("./api-studio/api-studio") },
+  { id: "tasks", label: "Tasks", icon: ClipboardList, placement: "main", load: () => import("./tasks/tasks-tool") },
   {
     id: "analysis",
     label: "Analysis",

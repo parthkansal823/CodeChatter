@@ -30,7 +30,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **14** (API Studio: OpenAPI and Postman import, axios) → **15** (task board) → **16** (appearance, notifications and connected accounts).
+1. **ChatGPT**, one prompt at a time, each checked before the next: **15** (task board) → **16** (appearance, notifications and connected accounts).
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -89,7 +89,6 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ **API studio:**
   - multipart and OAuth 2.0;
   - a cookies tab;
-  - OpenAPI and Postman import, and axios snippets (**ChatGPT 14**);
   - a mock server;
   - a WebSocket and SSE tester.
 - ⬜ **Design canvas:**
@@ -145,15 +144,23 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ Dependencies:
   - a per-person rate limit;
   - a fade that shows the side tabs scroll.
-- ⬜ **Automations with Activepieces** (the owner's decision, 2026-11-07, **Claude**, with Pipelines):
-  - **Why not n8n:** its licence only lets it be given to others free of charge for non-commercial purposes, so a paid CodeChatter would need n8n's own licence. Activepieces is MIT outside its `ee` folders. Workflows don't move between the two, so this is chosen once.
-  - **n8n as the reference** (the owner's request, 2026-11-07): as complete as n8n, A to Z. Its features and how they behave are the checklist: the canvas, each run's history with the data at every step, retries, error handling, sub-flows, webhooks and schedules, expressions, versions, templates. **What's written here is our own code: nothing is copied from n8n's source or workflows**, as that would bring its licence (free and non-commercial only) with it, and undo the reason for choosing Activepieces.
-  - **To check first:** what its free edition includes, how far its builder can be embedded, its image's size and memory, and what it needs to run (database, queue).
-  - **How:** its official image unmodified, as a room service with the room's sign-in if it allows that, not a copy of its source here.
-  - **It needs the internet** for outside services, and rooms have none (ADR 0007): an owner's switch with limits and a security review come before that. Coding automations that stay inside the room work without it.
-  - **Shown as a flowchart, like n8n's** (the owner's request, 2026-11-07): boxes and arrows for each automation, what ran and what failed lit up on it, in the room and in the gallery. Activepieces lays steps out one after another, so this is a view of our own over its flows, and whether it can edit them as well as show them is to be checked. It uses the Flow tool's flowchart, `components/flowchart`, on React Flow and dagre.
-  - **CodeChatter's own steps, as an Activepieces piece:** when a room event happens (a file changes, a test fails, a push), run code or tests in the sandbox, ask the room's AI through the gateway, post in the room's chat, run a prompt's evals, ask the codebase.
-  - **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, writing release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the room to pick from. **Each is checked to import; each is run for real only where the service is available to try it on, and the gallery says which.**
+- ⬜ **Automations on Activepieces' real engine** (the owner's decision, 2026-11-07, with Pipelines; **Claude**):
+  - **What was tried, and why it's built this way:**
+    - **n8n:** its licence only lets it be given to others free of charge for non-commercial purposes. Its features are the checklist; nothing of it is copied.
+    - **Activepieces' builder embedded:** enterprise only, "From $36k a year". The owner doesn't want anything paid.
+    - **Its free edition as one service:** works, at 1.4 GB, but it refuses a second team project (402, "Maximum limit of 1 team project(s)"), so every room would share one project, and a flow in one room could reach another's credentials. Not acceptable.
+    - **Its engine and pieces, in each room's sandbox:** tried for real on 2026-11-07 and it works. `dist/packages/engine/main.js` from image `activepieces/activepieces:0.92.3-hotfix.2` (MIT, 633 KB), driven by a small host of ours, ran a webhook payload, code steps, a router, a loop and the real HTTP piece, with a failing step continuing, in 1.3 seconds and 176 MB, inside the jail with no network, with no Activepieces server.
+  - **How the host works** (the spike is the reference): a socket.io server on `/worker/ws`, checking `auth.connectionToken`; it forks the engine with `AP_SANDBOX_WS_PORT`, `AP_SANDBOX_WS_TOKEN`, `SANDBOX_ID`, `AP_EXECUTION_MODE=UNSANDBOXED` (the room's jail is the sandbox), `AP_BASE_CODE_DIRECTORY`, `AP_CUSTOM_PIECES_PATHS`; it emits `rpc` with `{method: "executeOperation", payload: {operationType: "EXECUTE_FLOW", operation}}`, and serves on loopback `PUT /v1/files/:id` (zstd; replies with `x-ap-file-read-url`), `POST /v1/engine/run-logs`, `POST /v1/engine/run-progress`, `/v1/store-entries`, `/v1/worker/app-connections/:name`. The run's step data comes back through the file. Pieces go in `pieces/<name>-<version>/node_modules/<name>`. Code steps are `codes/<flowVersionId>/<step>/index.js`, a module exporting `code`. Expressions read `{{step_1.output.x}}` and `{{trigger.output.body.x}}` in schema version 27.
+  - **To build, in order:**
+    1. The engine, a host, and pieces for coding (GitHub, GitLab, Slack, Discord, HTTP and so on), pinned from a lockfile, in the sandbox images.
+    2. Flows as files in the room, in Activepieces' own format, so they're edited together, versioned, and can leave.
+    3. The Automations tool: n8n-like flowchart (`components/flowchart`), steps edited from each piece's own description of its fields, a test run, and each run's history with the data at every step lit up on the chart.
+    4. Triggers: by hand, a webhook URL, a schedule, room events (a push, a failed test), and pieces' polling triggers. Retries and error handling come from the engine.
+    5. Secrets for a room, encrypted in the database, given to a run in memory only. A room's connections never leave its own sandbox.
+    6. The internet: rooms have none (ADR 0007), so an owner's switch and an allowlist per service, through the room's egress proxy, with limits and a security review first. Automations that stay inside the room work without it.
+    7. CodeChatter's own piece: run a command or tests in the sandbox, ask the room's AI through the gateway, post to the room's chat.
+    8. **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the tool. **Each is checked to load in the engine; each is run for real only where the service is available to try it on, and the gallery says which.**
+  - **n8n as the checklist** (the owner's request, 2026-11-07): the canvas, each run's history with the data at every step, retries, error handling, sub-flows, webhooks and schedules, expressions, versions, templates.
 - ⬜ **Pipelines, Jenkins-style** (the owner's idea, 2026-11-06): stages and steps in a file in the room, run in its sandbox, with live logs and a run history, started by hand, on a schedule or by a push. Our own rather than embedding Jenkins, which is heavy and hard to make safe for many rooms. Together with the terminals, ports, databases and Kubernetes panel, this is what "DevOps online" means here. The Flow tool's way of running things is there to build on: a build that carries on after the request, with its progress and history in files that any viewer's tool reads (`sandbox/image/flow.py`), and its chart.
 - ⬜ Workflow builder (n8n-style): triggers, actions, conditions, run history
 - ⬜ Public API with personal access tokens, and a `cc` CLI that syncs a folder with a room
@@ -201,7 +208,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 
 ## Step 13 · Advanced features
 
-- ⬜ **For researchers** (the owner's idea, 2026-11-06): a layout that opens on notebooks, data, documents and PDFs, which all exist already. LaTeX and citations after that, as they need new tools in the sandbox image.
+- ⬜ **More for researchers:** clicking in the PDF to go to that line of the paper (SyncTeX, which needs a PDF viewer of our own rather than the browser's), other LaTeX engines for Hindi and other scripts (XeLaTeX, chosen with `% !TEX program`), and citation styles to pick from. The layout, LaTeX and references themselves are done.
 - ⬜ **The AI gateway on Kubernetes:** run `apps/runner/test/gateway.e2e.mjs` on the Kubernetes driver. It hasn't been yet, as Docker Desktop's cluster doesn't have the sandbox images loaded. The agent channel it uses is the same on both drivers.
 - ⬜ **Opengrep in the Analysis tool:** only once its rules' licence is checked. Semgrep's rules don't allow SaaS use, so it may need rules of our own.
 - ⬜ **A connection to a real Databricks workspace,** for people who have one, once rooms have secrets. The lakehouse itself is done, with the same open-source tools.

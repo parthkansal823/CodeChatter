@@ -11,6 +11,7 @@ export type TemplateId =
   | "dsa"
   | "interview"
   | "tour"
+  | "research"
   | "kubernetes"
   | "react"
   | "fastapi"
@@ -36,6 +37,22 @@ export type TemplateId =
 export type TemplateFile = { path: string; content: string; tests?: Array<{ input: string; expected: string }> };
 
 const lines = (...rows: string[]) => rows.join("\n") + "\n";
+
+const RESEARCH_NOTEBOOK = JSON.stringify(
+  {
+    nbformat: 4,
+    nbformat_minor: 5,
+    metadata: { kernelspec: { display_name: "Python 3", language: "python", name: "python3" } },
+    cells: [
+      { id: "intro", cell_type: "markdown", metadata: {}, source: "# Analysis\n\nThis reads the data, fits a line, and saves the figure the paper uses. Run each cell in turn, then build the paper." },
+      { id: "read", cell_type: "code", metadata: {}, execution_count: null, outputs: [], source: 'from pathlib import Path\n\nimport matplotlib.pyplot as plt\nimport numpy as np\nimport pandas as pd\n\nroom = Path("/workspace")\ndata = pd.read_csv(room / "data" / "measurements.csv")\ndata.describe()' },
+      { id: "fit", cell_type: "code", metadata: {}, execution_count: null, outputs: [], source: 'slope, intercept = np.polyfit(data["dose"], data["response"], 1)\nr_squared = np.corrcoef(data["dose"], data["response"])[0, 1] ** 2\nprint(f"response = {slope:.2f} x dose + {intercept:.2f}, with R squared {r_squared:.3f}")' },
+      { id: "figure", cell_type: "code", metadata: {}, execution_count: null, outputs: [], source: 'fig, ax = plt.subplots(figsize=(5, 3))\nax.scatter(data["dose"], data["response"], label="Measured")\nax.plot(data["dose"], slope * data["dose"] + intercept, label="Fit")\nax.set_xlabel("Dose")\nax.set_ylabel("Response")\nax.legend()\nfig.tight_layout()\n\nfigures = room / "paper" / "figures"\nfigures.mkdir(parents=True, exist_ok=True)\nfig.savefig(figures / "results.png", dpi=150)' },
+    ],
+  },
+  null,
+  1,
+);
 
 export const TEMPLATE_FILES: Record<TemplateId, TemplateFile[]> = {
   blank: [
@@ -270,6 +287,97 @@ export const TEMPLATE_FILES: Record<TemplateId, TemplateFile[]> = {
     },
   ],
 
+  // A paper with its PDF beside it, its references, a notebook that makes its figure, and the data. It opens in the Research layout.
+  research: [
+    {
+      path: "README.md",
+      content: String.raw`# A research paper
+
+- **paper/main.tex** is the paper. Its PDF is beside it: press **Build**. It's real LaTeX, with biber for the references.
+- **paper/references.bib** is the references. The **References** tool shows them, cites them, and adds more by DOI or arXiv id.
+- **analysis/analysis.ipynb** reads the data and saves the figure the paper uses. Run its cells, then build again.
+- **data/measurements.csv** is the data.
+
+Everyone in the room edits the same paper, and sees the same PDF.
+`,
+    },
+    {
+      path: "paper/main.tex",
+      content: String.raw`\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[style=numeric,backend=biber]{biblatex}
+\usepackage{hyperref}
+\addbibresource{references.bib}
+
+\title{The title of your paper}
+\author{Your name}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+What you did, what you found, and why it matters, in a few sentences.
+\end{abstract}
+
+\section{Introduction}
+Neural networks learn from data~\cite{lecun2015deep}, and attention changed how they read sequences~\cite{vaswani2017attention}. Setting all of this in type has been a solved problem for a long time~\cite{knuth1984texbook}.
+
+\section{Results}
+The measurements in \texttt{data/measurements.csv} follow a straight line, which \texttt{analysis/analysis.ipynb} fits:
+\begin{equation}
+  y = a x + b.
+\end{equation}
+
+\begin{figure}[h]
+  \centering
+  \IfFileExists{figures/results.png}{\includegraphics[width=0.8\linewidth]{figures/results.png}}{\fbox{Run \texttt{analysis/analysis.ipynb} to make this figure.}}
+  \caption{Response against dose.}
+\end{figure}
+
+\printbibliography
+\end{document}
+`,
+    },
+    {
+      path: "paper/references.bib",
+      content: String.raw`@article{lecun2015deep,
+  title = {Deep learning},
+  author = {LeCun, Yann and Bengio, Yoshua and Hinton, Geoffrey},
+  journal = {Nature},
+  volume = {521},
+  number = {7553},
+  pages = {436--444},
+  year = {2015},
+  doi = {10.1038/nature14539},
+}
+
+@inproceedings{vaswani2017attention,
+  title = {Attention Is All You Need},
+  author = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Lukasz and Polosukhin, Ilya},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume = {30},
+  year = {2017},
+}
+
+@book{knuth1984texbook,
+  title = {The {TeX}book},
+  author = {Knuth, Donald E.},
+  publisher = {Addison-Wesley},
+  year = {1984},
+}
+`,
+    },
+    { path: "analysis/analysis.ipynb", content: RESEARCH_NOTEBOOK },
+    {
+      path: "data/measurements.csv",
+      content: "dose,response\n1,2.3\n2,4.1\n3,6.2\n4,7.8\n5,10.1\n6,12.2\n7,13.9\n8,16.1\n9,18.2\n10,19.8\n11,22.1\n12,23.9\n",
+    },
+  ],
   // The guided tour: what "Try the demo" opens. Every file shows one feature.
   tour: [
     {

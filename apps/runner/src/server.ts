@@ -12,8 +12,10 @@ import {
   INSTALLS_MINUTES,
   JudgeRunnerInput,
   KubeRequest,
+  AutomationInput,
   FlowInput,
   LakehouseInput,
+  LatexInput,
   McpInput,
   QueryInput,
   RagRunnerInput,
@@ -48,8 +50,10 @@ import { log, messageOf } from "./log.js";
 import { configureRunnerCollectors, serveMetrics } from "./metrics.js";
 import { DataSummaryError, summarizeData } from "./data-summary.js";
 import { EvalError, runEvals } from "./evals.js";
+import { askAutomations, AutomationError } from "./automations.js";
 import { askFlow, FlowError } from "./flow.js";
 import { askLakehouse, LakehouseError } from "./lakehouse.js";
+import { askLatex, LatexError } from "./latex.js";
 import { callMcp } from "./mcp.js";
 import { RagError, searchCodebase } from "./rag.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
@@ -92,6 +96,8 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   GET  /rooms/:id/databases/:kind/tables  DatabaseTable[] (the table browser)
  *   POST /rooms/:id/lakehouse                LakehouseInput      a room's Delta tables and MLflow runs
  *   POST /rooms/:id/flow                     FlowInput           a room's dbt project: its graph, builds and data
+ *   POST /rooms/:id/latex                    LatexInput          a .tex file built with TeX Live, its result and its PDF
+ *   POST /rooms/:id/automations              AutomationInput     a flow run by Activepieces' engine, its progress and its history
  *   POST /rooms/:id/data-summary             DataSummaryInput    DataSummary (DuckDB's numbers for a table)
  *   POST /rooms/:id/mcp                      McpInput            McpOutput (the MCP Inspector in the sandbox)
  *   POST /rooms/:id/rag                      RagRunnerInput      CodebaseHits (a search of the room's files)
@@ -196,6 +202,10 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (lakehouse && req.method === "POST") return handleLakehouse(req, res, lakehouse[1]!);
     const flow = /^\/rooms\/([A-Z0-9]{6})\/flow$/.exec(url.pathname);
     if (flow && req.method === "POST") return handleFlow(req, res, flow[1]!);
+    const automations = /^\/rooms\/([A-Z0-9]{6})\/automations$/.exec(url.pathname);
+    if (automations && req.method === "POST") return handleAutomations(req, res, automations[1]!);
+    const latex = /^\/rooms\/([A-Z0-9]{6})\/latex$/.exec(url.pathname);
+    if (latex && req.method === "POST") return handleLatex(req, res, latex[1]!);
     const dataSummary = /^\/rooms\/([A-Z0-9]{6})\/data-summary$/.exec(url.pathname);
     if (dataSummary && req.method === "POST") return handleDataSummary(req, res, dataSummary[1]!);
     const rag = /^\/rooms\/([A-Z0-9]{6})\/rag$/.exec(url.pathname);
@@ -542,6 +552,67 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     } catch (error) {
       if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
       if (error instanceof FlowError) return json(res, 422, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** A flow run by Activepieces' engine in the sandbox (automations.ts). */
+  async function handleAutomations(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    const claims = authorize(req, roomId);
+    if (!claims) return json(res, 401, { error: "Not allowed." });
+    const input = AutomationInput.safeParse(await readJson(req, 5 * 1024 * 1024));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a request." });
+    const by = claims.name ?? "";
+    try {
+      // The tool asks this all the time it's open. Looking doesn't wake a room or keep it awake, but a run going on does.
+      if (input.data.op === "status" || input.data.op === "runs") {
+        const running = rooms.peek(roomId);
+        if (!running?.sandbox.agent?.alive) return json(res, 200, input.data.op === "runs" ? { runs: [] } : { state: "idle", id: null, steps: {}, queued: 0 });
+        const answer = await askAutomations(running.sandbox, input.data, by);
+        if ((answer as { state?: string }).state === "running") running.touch();
+        return json(res, 200, answer);
+      }
+      const session = rooms.get(roomId);
+      session.touch();
+      await session.ready();
+      // Runs what's in the room at this moment, and what the person just changed: here first, then in the sandbox.
+      if (input.data.op === "run") {
+        if (input.data.stateVector) await session.sync.waitFor(input.data.stateVector);
+        await session.sync.flush();
+      }
+      return json(res, 200, await askAutomations(session.sandbox, input.data, by));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      if (error instanceof AutomationError) return json(res, 422, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** A .tex file built with TeX Live (latex.ts). */
+  async function handleLatex(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const input = LatexInput.safeParse(await readJson(req, 5 * 1024 * 1024));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a request." });
+    try {
+      // Reading what's been built doesn't wake a room or keep it awake: the pane asks all the time it's open, and anyone may look.
+      if (input.data.op !== "build") {
+        const running = rooms.peek(roomId);
+        if (!running?.sandbox.agent?.alive) {
+          if (input.data.op === "pdf") return json(res, 422, { error: "It can be read when the room's sandbox is running." });
+          return json(res, 200, { file: input.data.file, built: false, ok: false, at: null, ms: null, pages: null, bytes: null, pdfAt: null, problems: [], overfull: 0, log: "" });
+        }
+        return json(res, 200, await askLatex(running.sandbox, input.data));
+      }
+      const session = rooms.get(roomId);
+      session.touch();
+      await session.ready();
+      // Builds what's in the room at this moment, and what the person just typed: here first, then in the sandbox.
+      if (input.data.stateVector) await session.sync.waitFor(input.data.stateVector);
+      await session.sync.flush();
+      return json(res, 200, await askLatex(session.sandbox, input.data));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      if (error instanceof LatexError) return json(res, 422, { error: error.message });
       throw error;
     }
   }

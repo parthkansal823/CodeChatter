@@ -61,6 +61,8 @@ import { SandboxController } from "./sandbox/sandbox.controller.js";
 import { WebhooksController } from "./webhooks/webhooks.controller.js";
 import { WebhooksService } from "./webhooks/webhooks.service.js";
 import { DependenciesController } from "./dependencies/dependencies.controller.js";
+import { ReferencesController } from "./references/references.controller.js";
+import { ReferencesService } from "./references/references.service.js";
 import { DependenciesService } from "./dependencies/dependencies.service.js";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -78,7 +80,7 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, AiGatewayController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController, InterviewRecordingsController, InterviewAiReviewController],
+  controllers: [HealthController, MeController, GithubController, MetaController, ReferencesController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, AiGatewayController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController, InterviewRecordingsController, InterviewAiReviewController],
   providers: [
     AiService,
     AiTraces,
@@ -90,6 +92,7 @@ const dev = process.env.NODE_ENV !== "production";
     AuditService,
     WebhooksService,
     DependenciesService,
+    ReferencesService,
     CheckpointsService,
     NotificationsService,
     DemoService,

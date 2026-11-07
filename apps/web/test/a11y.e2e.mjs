@@ -129,7 +129,7 @@ try {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Tasks", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
     }
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
@@ -249,6 +249,43 @@ try {
     await flowDetails.getByRole("form", { name: "New recipe" }).getByLabel("What it does").selectOption("automl");
     await step(page, `${theme} room, an AutoML recipe`, () => flowDetails.getByRole("form", { name: "New recipe" }).getByLabel("Column to predict").waitFor({ timeout: 5000 }));
     await page.unroute("**/api/rooms/*/flow");
+    // An API import's preview. Nothing is added: it's cancelled.
+    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "API", exact: true }).click();
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    const importing = page.getByRole("dialog", { name: "Import", exact: true });
+    await importing.getByRole("textbox", { name: "cURL command or API document", exact: true }).fill(JSON.stringify({ openapi: "3.1.0", info: { title: "Audit", version: "1" }, servers: [{ url: "https://api.example.test" }], paths: { "/things/{id}": { get: { summary: "A thing", tags: ["Things"], security: [{ Bearer: [] }] } } }, components: { securitySchemes: { Bearer: { type: "http", scheme: "bearer" } } } }));
+    await step(page, `${theme} room, an API import's preview`, () => importing.getByRole("region", { name: "Import preview", exact: true }).waitFor({ timeout: 10_000 }));
+    await importing.getByRole("button", { name: "Cancel", exact: true }).click();
+    // The Research layout: a paper with problems in its build, and references. What LaTeX says is stood in for, and the files are deleted.
+    await page.route("**/api/rooms/*/latex", (route) => route.fulfill({ json: { file: `a11y_paper_${theme}.tex`, built: true, ok: false, at: 1794037625000, ms: 900, pages: 3, bytes: 1000, pdfAt: null, overfull: 1, log: "This is pdfTeX.", problems: [{ severity: "error", file: `a11y_paper_${theme}.tex`, line: 2, message: "Undefined control sequence.", context: "\\oops" }, { severity: "warning", file: null, line: null, message: "No \\author given", context: null }] } }));
+    await page.getByRole("button", { name: "Close API Studio", exact: true }).click();
+    const auditFiles = page.getByRole("tree", { name: "Files" });
+    for (const [name, text] of [[`a11y_refs_${theme}.bib`, "@book{knuth, title = {The TeXbook}, author = {Knuth, Donald E.}, year = {1984}, publisher = {Addison-Wesley}}"], [`a11y_paper_${theme}.tex`, "\\documentclass{article}\\begin{document}Hello.\\end{document}"]]) {
+      await page.getByRole("button", { name: "New file" }).click();
+      await page.getByPlaceholder("name.ext").fill(name);
+      await page.getByPlaceholder("name.ext").press("Enter");
+      await page.getByRole("tab", { name: new RegExp(name.replace(".", "\\.")) }).waitFor({ timeout: 15_000 });
+      await sleep(400);
+      await page.locator(".monaco-editor .view-lines").first().click();
+      await page.keyboard.insertText(text);
+      await sleep(400);
+    }
+    await page.getByRole("button", { name: /^Code layout/ }).click();
+    await step(page, `${theme} room, the Research layout with a paper's problems`, () => page.getByRole("region", { name: "PDF" }).getByRole("list", { name: "Problems in the build" }).waitFor({ timeout: 15_000 }));
+    await page.getByRole("region", { name: "PDF" }).getByRole("button", { name: "What LaTeX said" }).click();
+    await step(page, `${theme} room, what LaTeX said`, () => page.getByRole("region", { name: "PDF" }).getByLabel("What LaTeX said", { exact: true }).last().waitFor({ timeout: 5000 }));
+    await step(page, `${theme} room, the References tool`, async () => {
+      await page.getByRole("tablist", { name: "Side panel" }).getByRole("tab", { name: "References" }).click();
+      await page.getByRole("region", { name: "References" }).getByRole("list", { name: "References in this room" }).waitFor({ timeout: 15_000 });
+    });
+    await page.getByRole("button", { name: /^Research layout/ }).click();
+    await page.getByRole("region", { name: "PDF" }).getByRole("button", { name: "Close the PDF" }).click();
+    for (const name of [`a11y_refs_${theme}.bib`, `a11y_paper_${theme}.tex`]) {
+      await auditFiles.getByRole("treeitem", { name: new RegExp(`^${name.replace(".", "\\.")}`) }).focus();
+      await page.keyboard.press("Delete");
+      await sleep(500);
+    }
+    await page.unroute("**/api/rooms/*/latex");
     // The numbers under an Explain this data answer, from a conversation already in this browser.
     const numbers = { engine: "DuckDB 1.5.6", rows: 3, duplicates: 1, columns: [{ name: "age", type: "BIGINT", nullPercent: 0, unique: 3, min: "1", max: "9", mean: "4", std: "2", q25: "2", q50: "3", q75: "6", outliers: 0, top: [] }], correlations: [{ a: "age", b: "pay", r: 0.9 }] };
     await page.evaluate(([room, summary]) => sessionStorage.setItem(`cc-ai:${room}`, JSON.stringify({ mode: "data", entries: [{ id: "q", role: "user", content: "Explain this data.", mode: "data" }, { id: "a", role: "assistant", content: "An answer.", mode: "data", status: "done", numbers: summary }] })), [ROOM, numbers]);

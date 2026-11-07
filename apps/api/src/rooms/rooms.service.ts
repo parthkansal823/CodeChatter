@@ -163,6 +163,8 @@ export class RoomsService {
             name: input.name,
             description: input.description,
             templateId: repo ? "blank" : input.templateId,
+            // LaTeX comes with the full image, where a server offers both.
+            ...(input.templateId === "research" && !repo ? { settings: { sandboxImage: "full" } } : {}),
             visibility: input.visibility,
             joinPolicy: input.joinPolicy,
             inviteTokenHash: sha256(inviteToken),

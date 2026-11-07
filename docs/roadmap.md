@@ -107,7 +107,7 @@ flowchart TD
 
 - 🟡 **Docs** (like Notion): block editor, page tree, templates, comments, history, publish
 - 🟡 **Knowledge base** (like Obsidian): links, graph view, organising, code links
-- 🟡 **API studio** (like Postman): collections, request builder, environments, tests, cURL import, snippets
+- 🟡 **API studio** (like Postman): collections, request builder, environments, tests, cURL, OpenAPI and Postman import, snippets with axios
 - 🟡 **Design canvas** (like Figma): multiplayer vectors, layers, components, auto layout, export, CSS handoff
 - 🟡 **Diagrams** (draw.io): edited together live, in the app's look, with export. Production hosting ⬜
 - ⬜ **Messaging** (like Slack): channels, threads, huddles, bots, search
@@ -204,7 +204,7 @@ flowchart TD
 - ✅ A lakehouse as Databricks does it: Spark, Delta Lake and MLflow in notebooks, and a tool showing tables, every version, and runs
 - ✅ A visual Flow as Dataiku does it: datasets and recipes on a chart, on real dbt and DuckDB, with data checks and a profile of each dataset
 - ✅ AutoML recipes in the Flow: FLAML tries models and keeps the best, scored on rows it never saw, and logged to MLflow on the full image
-- ⬜ A layout for researchers
+- ✅ A layout for researchers: a paper in real LaTeX with its PDF beside it, references by DOI or arXiv id, notebooks and data
 - ⬜ Suggestion mode, room branches, live authorship, session replay, smarter calls
 - ⬜ Test explorer, profiler, package search, room secrets, deploy previews
 - ⬜ Ask the codebase, AI team, natural-language terminal, generated tests and docs, AI code review

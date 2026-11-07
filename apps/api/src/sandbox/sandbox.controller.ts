@@ -1,5 +1,5 @@
 import type { AuthSession } from "@codechatter/auth";
-import { can, DataSummaryInput, EvalInput, FlowInput, INSTALLS_MINUTES, LakehouseInput, McpInput, RoomCode, SandboxImageInput, type DataSummary, type DevServerStatus, type McpOutput, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
+import { can, DataSummaryInput, EvalInput, FlowInput, AutomationInput, INSTALLS_MINUTES, LatexInput, LakehouseInput, McpInput, RoomCode, SandboxImageInput, type DataSummary, type DevServerStatus, type McpOutput, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, HttpCode, Inject, Param, Post, Put, Req, Res, ServiceUnavailableException } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { z } from "zod";
@@ -177,6 +177,36 @@ export class SandboxController {
     if (room.kind === "interview") throw new ForbiddenException("This isn't available in an interview.");
     try {
       return await this.runner.flow(code, input, session.user);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
+  }
+
+  /** Automations (apps/runner/src/automations.ts): a run is the room's code in the sandbox, so it needs Run rights, and so does what it found, as a run's data can be anything. An interview isn't the place for it. */
+  @Post("automations")
+  @HttpCode(200)
+  async automations(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Body(new ZodPipe(AutomationInput)) input: AutomationInput): Promise<unknown> {
+    const code = this.room(roomId);
+    const { room } = await this.rooms.require(code, session.user.id, "code.run");
+    if (room.kind === "interview") throw new ForbiddenException("This isn't available in an interview.");
+    try {
+      return await this.runner.automations(code, input, session.user);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
+  }
+
+  /** LaTeX (apps/runner/src/latex.ts): building runs the room's files in the sandbox, so it needs Run rights. Anyone in the room may read the PDF. An interview isn't the place for it. */
+  @Post("latex")
+  @HttpCode(200)
+  async latex(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Body(new ZodPipe(LatexInput)) input: LatexInput): Promise<unknown> {
+    const code = this.room(roomId);
+    const { room } = await this.rooms.require(code, session.user.id, input.op === "build" ? "code.run" : "room.view");
+    if (room.kind === "interview") throw new ForbiddenException("This isn't available in an interview.");
+    try {
+      return await this.runner.latex(code, input, session.user);
     } catch (error) {
       if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
       throw error;

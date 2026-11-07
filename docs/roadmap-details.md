@@ -738,6 +738,46 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/web/test/flow.e2e.mjs` (81 checks in a browser with real dbt, two people watching a build, an AutoML recipe made from the form, trained, and checked on rows it never saw and in MLflow, and two failures stood in for)
 - `a11y.e2e.mjs` includes the chart, a dataset's rows, profile and checks, a failed recipe, a new one and an AutoML one
 
+### The Research layout: a paper, its PDF and its references ✅
+
+**What:** the owner's "researchers ke liye alag layout". A **Research** layout and a **Research paper** template: the paper in the editor, its real PDF beside it, its references in the side panel, with the notebooks and data it uses a click away. It looks like Overleaf, and two people can write the same paper at once.
+
+**What it does:**
+- **The layout** is each person's own, switched in the status bar or the command palette, and remembered for the room. It shows the apps research uses (Docs, Databases, Flow, Lakehouse, Diagrams, Whiteboard) and puts debugging out of the way. Nothing is taken away: the palette still has every tool. A room from the research template starts in it. Arriving at it opens the files, the references and the paper with its PDF, once; after that the room is the person's to arrange.
+- **LaTeX** is real TeX Live with `latexmk` and `biber`, in the sandbox's jail with no network, with TikZ, siunitx and journals' classes such as IEEE's and ACM's. Any `.tex` file offers its PDF, in any layout.
+  - **Which file to build:** `% !TEX root = ../main.tex` says, as other editors read it; a file with a `\documentclass` is its own paper; otherwise the nearest one that has one (`paper/model.ts`).
+  - **Mistakes** come back by file and line, with the line itself, the real error first and what follows from it left out. Pressing one goes there. The last good PDF stays while it's being fixed.
+  - **Build as I type** builds after a pause in a person's own typing. Everyone in the room sees the same PDF, within 5 seconds of anyone building it.
+  - What a build makes goes in `~/paper`, not the room's files.
+- **In the editor:** colours for LaTeX and BibTeX, which Monaco doesn't have, word wrap for LaTeX, and `\cite{` completing from the room's `.bib` files, with who wrote it and when.
+- **The References tool:** what's in the room's `.bib` files, as it would read in print, searchable. **Cite** puts `\cite{key}` where the cursor is, or copies it when no paper's open. **Add by DOI or arXiv id** fetches the real BibTeX, gives it a key nothing else has, and says if it's already there by its DOI, however the DOI is written. It shows in the Research layout, or in any room with a `.bib` file.
+- **The template:** `paper/main.tex`, `paper/references.bib`, `analysis/analysis.ipynb` (reads the data, fits a line, saves the figure) and `data/measurements.csv`. The paper says to run the notebook until the figure exists, then uses it.
+
+**Where:**
+- **Sandbox:** `sandbox/image/latex_build.py`, TeX Live in the full image's Dockerfile, and `cc-jail.c` lets the jail read `/var/lib/texmf`, where Debian keeps TeX's prebuilt formats.
+- **Runner and API:** `apps/runner/src/latex.ts`, `POST /api/rooms/:id/latex`; `apps/api/src/references/`, `POST /api/rooms/:id/references/lookup`; `packages/contracts/src/latex.ts`.
+- **Web:** `components/room/room-layout.ts`, `components/room/paper/` (`paper-pane.tsx`, `model.ts`), `components/room/editor/latex-language.ts`, `components/room/tools/references/` (`references-tool.tsx`, `bibtex.ts`), and the template in `packages/workspace-model/src/templates.ts`.
+
+**What was checked, and decided:**
+- **Only in the full image:** TeX Live adds about a gigabyte, and the default image is under 4 GB. A room from the research template asks for the full image where a server offers both, and a `.tex` file in a room on the base image says where LaTeX is.
+- **Limits, measured:** a paper with a bibliography builds in about 5 seconds the first time and under 1 after, peaking at 107 MB, in a 768 MB sandbox on one CPU. A build stops after 100 seconds.
+- **The BibTeX reader is our own and small.** LaTeX and biber do the real work; this only shows entries, and can't throw or hang on a half-typed file. A library would have been a new package for little.
+- **Who may:** building needs `code.run`, as it runs the room's files. Reading the result needs only `room.view`, and doesn't wake a sleeping room. A lookup needs `files.edit`, is limited to 30 a minute, and only a checked DOI or arXiv id reaches a request, sent only to known hosts, however it's redirected. Not for interview rooms. Shell escape stays off: `\write18` does nothing.
+- **Tried for real:** Crossref through doi.org and arXiv, old and new ids, and ones that don't exist.
+
+**Found by using it, and fixed:**
+- **Chapters in folders failed:** `\include{chapters/one}` writes `chapters/one.aux` beside what's made, and TeX won't make that folder. Each build mirrors the paper's folders first.
+- **A build could miss what was just typed,** as it only waited for the runner to have it, not the sandbox. It now waits for both.
+- **A missing package's real error came last,** after "Emergency stop". It now comes first, with those left out.
+
+**Not included:** going from a place in the PDF to its line, other engines such as XeLaTeX, and choosing a citation style from a list (it's a line in the paper): in `docs/pending.md`.
+
+**Tests:**
+- `packages/contracts/src/latex.test.ts`, `apps/api/src/references/references.service.test.ts` (7), `apps/web/components/room/paper/model.test.ts` and `tools/references/bibtex.test.ts` (24)
+- `apps/runner/test/latex.e2e.mjs` (41 checks with `SLOW=1`, on real TeX Live: a paper with chapters, biber, TikZ and siunitx, a real PDF, nothing in the room's files, what's just been typed, a typo, a missing package, a broken `.bib`, two at once, a journal's class, shell escape, a build that never ends, and what a request can't do)
+- `apps/web/test/research.e2e.mjs` (51 checks in a browser: the template, the layout, a real build, a mistake and going to it, as I type, citing, `\cite` completion, adding by DOI with the lookup stood in for, the notebook's figure in the paper, two people, and the code layout)
+- `a11y.e2e.mjs` includes the layout with a paper's problems, what LaTeX said and the References tool
+
 ### Explain this data ✅
 
 **What:** a button on a query's results and on a notebook's table. A model shown rows guesses at sums and averages and only sees a few of them, so DuckDB works out the numbers and the model explains them.
@@ -1127,7 +1167,7 @@ The **Docs** tool is in the room's activity bar. Browser test: `apps/web/test/do
 
 ### API studio (like Postman) 🟡
 
-The **API** tool in the activity bar. Browser test: `apps/web/test/api-studio.e2e.mjs` (7/7, two people).
+The **API** tool in the activity bar. Browser tests: `apps/web/test/api-studio.e2e.mjs` (8 checks, two people) and `api-studio-import.e2e.mjs` (27).
 
 - ✅ **Collections:** folders and requests in the room, edited together live.
 - 🟡 **Request builder:**
@@ -1148,8 +1188,17 @@ The **API** tool in the activity bar. Browser test: `apps/web/test/api-studio.e2
   - a collection runner, and history
 - 🟡 **Import and export:**
   - ✅ cURL import
-  - ✅ code snippets for curl, fetch, Python and Go
-  - ⬜ OpenAPI and Postman import, axios
+  - ✅ code snippets for curl, fetch, axios, Python and Go
+  - ✅ **OpenAPI 3.0 and 3.1, Swagger 2.0 and Postman v2.0 and v2.1 import** (prompt 14, ChatGPT, checked here):
+    - JSON or YAML, pasted or from a file, with the format worked out and a preview before anything changes. It all arrives in one new folder and one new environment, in one transaction, and never overwrites anything.
+    - **A file can come from a stranger:** nothing is fetched or sent while importing, remote references are counted and skipped, reference cycles and deep chains stop, `__proto__` and its like can't change anything, YAML aliases are refused, and there are limits of 5 MB, 2,000 requests and 200 levels. Scripts aren't imported. Credentials become secret variables with no value.
+    - **Tried on the real thing:** Swagger's own Petstore in YAML and in Swagger 2.0, as well as the tests' documents.
+    - **Changed when checking it:**
+      - `yaml` was imported through pnpm's own folder by a relative path, to avoid adding a package, which a different install could break. It's now a real dependency of the web app, at the version already in the lockfile.
+      - cURL had changed: each command made a folder and an environment, switched to that environment, and lost any token in it. It's one request at the top again, and a credential leaves the shared document for a secret variable with its value on the device of whoever pasted it, so the request still works for them.
+      - Secrets were found by letters anywhere in a name, so `keyword` lost its value. It's now by whole words.
+      - The whole preview was read aloud on each change; now just its first line.
+    - **Tests:** `import-openapi.test.ts` and `import-postman.test.ts` (27), snippets in `packages/contracts`, `a11y.e2e.mjs` includes the preview.
 - ⬜ **Mock server:** example responses served at a room URL, so the frontend can start before the backend.
 - ⬜ **WebSocket and Server-Sent Events** tester.
 

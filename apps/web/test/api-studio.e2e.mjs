@@ -54,6 +54,12 @@ check("metadataBlocked", await ok(response.getByText("Blocked for safety").waitF
 await a.screenshot({ path: process.env.SHOT ?? `${process.env.TEMP ?? "/tmp"}/api-studio.png` });
 // Stop the server so the sandbox is quiet for the next test.
 await a.getByRole("button", { name: /^Stop/ }).first().click().catch(() => {});
+// And take its file away.
+await a.getByRole("button", { name: "Close API Studio", exact: true }).click().catch(() => {});
+const made = a.getByRole("tree", { name: "Files", exact: true }).getByRole("treeitem", { name: serverFile, exact: true });
+await made.press("Delete").catch(() => {});
+await made.waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
+check("itsFileIsRemoved", (await made.count()) === 0);
 await browser.close();
 check("noPageErrors", errors.length === 0, errors.join(" | "));
 finish();

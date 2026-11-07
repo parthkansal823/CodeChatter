@@ -1,9 +1,10 @@
 "use client";
 
 import type { RoomSummary } from "@codechatter/contracts";
-import { flatten, isNotebookName, languageFor, textOf, type TreeNode } from "@codechatter/workspace-model";
+import { flatten, isNotebookName, languageFor, listTree, textOf, type TreeNode } from "@codechatter/workspace-model";
 import {
   BookOpen,
+  FileText,
   Columns2,
   Eye,
   FileCode2,
@@ -69,7 +70,12 @@ import { NotebookView } from "@/components/room/notebook/notebook-view";
 import { useFileTree, usePeers } from "@/components/room/hooks";
 import { PeoplePanel } from "@/components/room/people-panel";
 import { useRoomPeople } from "@/components/room/people/use-room-people";
+import { setReferenceSource } from "@/components/room/editor/reference-source";
 import { ensureMonaco } from "@/components/room/monaco-setup";
+import { isPaperName, isTexName, rootTexOf } from "@/components/room/paper/model";
+import { PaperPane } from "@/components/room/paper/paper-pane";
+import { appsFor, useRoomLayout } from "@/components/room/room-layout";
+import { parseBibtex } from "@/components/room/tools/references/bibtex";
 import { RoomProvider, useRoom } from "@/components/room/room-context";
 import { RunButton } from "@/components/room/run-button";
 import { canRunPath, RunProvider, useRun } from "@/components/room/run-context";
@@ -177,8 +183,14 @@ function Workspace() {
   const tools = ROOM_TOOLS.filter((tool) => tool.visible?.(can, room, { candidateAiOff }) ?? true);
   const assessment = useRoomInterview().data?.mode === "assessment";
   // The same panel, called what it is.
-  const sideTools = tools.filter((tool) => tool.placement === "side").map((tool) => (tool.id === "interview" && assessment ? { ...tool, label: "Assessment" } : tool));
+  const [layout, setLayout] = useRoomLayout(room);
+  const researching = layout === "research";
+  const hasBib = flatten(tree).some((node) => node.kind === "file" && /\.bib$/i.test(node.name));
+  const sideTools = tools
+    .filter((tool) => tool.placement === "side" && (tool.id !== "references" || researching || hasBib))
+    .map((tool) => (tool.id === "interview" && assessment ? { ...tool, label: "Assessment" } : tool));
   const mainTools = tools.filter((tool) => tool.placement === "main");
+  const shownApps = appsFor(layout, mainTools);
   const [mainToolId, setMainToolId] = useState<string | null>(null);
   const mainTool = tools.find((tool) => tool.id === mainToolId && tool.placement === "main") ?? null;
 
@@ -277,17 +289,48 @@ function Workspace() {
   // Live web preview, split beside the editor.
   const previewPanel = usePanelRef();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [paneShows, setPaneShows] = useState<"web" | "paper">("web");
   const hasHtml = useMemo(
     () => [...files.values()].some((n) => n.kind === "file" && /\.html?$/i.test(n.name)),
     [files],
   );
-  const openPreview = () => {
+  const openPane = (shows: "web" | "paper") => {
+    setPaneShows(shows);
     if (previewPanel.current?.isCollapsed()) {
       previewPanel.current.expand();
       previewPanel.current.resize("45%");
     }
   };
-  const togglePreview = () => (previewOpen ? previewPanel.current?.collapse() : openPreview());
+  const openPreview = () => openPane("web");
+  const togglePane = (shows: "web" | "paper") => (previewOpen && paneShows === shows ? previewPanel.current?.collapse() : openPane(shows));
+  const togglePreview = () => togglePane("web");
+
+  // \cite completes from the room's .bib files.
+  useEffect(() => {
+    setReferenceSource(() =>
+      flatten(listTree(doc))
+        .filter((node) => node.kind === "file" && !node.blob && /\.bib$/i.test(node.name))
+        .flatMap((node) => parseBibtex(textOf(doc, node.id)?.toString() ?? "")),
+    );
+    return () => setReferenceSource(null);
+  }, [doc]);
+
+  // Going to the Research layout sets the room out for it: the files, the references, and the paper with its PDF.
+  useEffect(() => {
+    if (!researching || !synced) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- arranging panels once, on arriving at the layout, and it can only be done once the room's files are here.
+    setSidebar("files");
+    setRight((current) => current ?? "references");
+    const all = [...files.values()].filter((node) => node.kind === "file" && !node.blob && isTexName(node.name));
+    const root = rootTexOf(all.map((node) => ({ path: node.path, text: textOf(doc, node.id)?.toString() ?? "" })), null);
+    const paper = all.find((node) => node.path === root);
+    if (paper) {
+      setMainToolId(null);
+      open(room.id, paper.id);
+      openPane("paper");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arriving at the layout: after that, the room is the person's to arrange.
+  }, [researching, synced]);
 
   const closeTerminal = (n: number) => {
     setTerminals(terminals.filter((i) => i !== n));
@@ -532,6 +575,12 @@ function Workspace() {
           },
         ]
       : []),
+    ...(room.kind === "interview"
+      ? []
+      : [
+          { id: "layout", label: researching ? "Switch to the code layout" : "Switch to the research layout", run: () => setLayout(researching ? "code" : "research") },
+          { id: "paper-pdf", label: "Show the paper's PDF", run: () => openPane("paper") },
+        ]),
     { id: "chat", label: "Open chat", run: () => setRight("chat") },
     { id: "people", label: "See who's here", run: () => setRight("people") },
     ...sideTools.map((tool) => ({
@@ -612,19 +661,21 @@ function Workspace() {
               <MessagesSquare className="size-[18px]" />
               {sidebar !== "comments" && <OpenCommentsCount />}
             </ActivityButton>
-            <ActivityButton
-              label="Run and debug"
-              active={sidebar === "debug"}
-              onClick={() => setSidebar(sidebar === "debug" ? null : "debug")}
-            >
-              <Bug className="size-[18px]" />
-              {debugging && sidebar !== "debug" && (
-                <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-brand" />
-              )}
-            </ActivityButton>
+            {!researching && (
+              <ActivityButton
+                label="Run and debug"
+                active={sidebar === "debug"}
+                onClick={() => setSidebar(sidebar === "debug" ? null : "debug")}
+              >
+                <Bug className="size-[18px]" />
+                {debugging && sidebar !== "debug" && (
+                  <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-brand" />
+                )}
+              </ActivityButton>
+            )}
             <span aria-hidden className="my-1 h-px w-6 bg-border" />
             <div role="group" aria-label="Apps" className="flex flex-col items-center gap-1">
-              {mainTools.map((tool) => {
+              {shownApps.map((tool) => {
                 const active = mainToolId === tool.id;
                 return (
                   <ActivityButton
@@ -722,11 +773,21 @@ function Workspace() {
                                   {PREVIEW_LABEL[previewKind]}
                                 </Button>
                               )}
+                              {activeFile && isPaperName(activeFile.name) && room.kind !== "interview" && (
+                                <Button
+                                  size="xs"
+                                  variant={previewOpen && paneShows === "paper" ? "secondary" : "ghost"}
+                                  aria-pressed={previewOpen && paneShows === "paper"}
+                                  onClick={() => togglePane("paper")}
+                                >
+                                  <FileText /> PDF
+                                </Button>
+                              )}
                               {hasHtml && (
                                 <Button
                                   size="xs"
-                                  variant={previewOpen ? "secondary" : "ghost"}
-                                  aria-pressed={previewOpen}
+                                  variant={previewOpen && paneShows === "web" ? "secondary" : "ghost"}
+                                  aria-pressed={previewOpen && paneShows === "web"}
                                   onClick={togglePreview}
                                 >
                                   <Globe2 /> Preview
@@ -847,12 +908,15 @@ function Workspace() {
                     minSize={260}
                     onResize={(size) => setPreviewOpen(size.inPixels > 0)}
                   >
-                    {previewOpen && (
-                      <WebPreview
-                        preferred={activeFile?.path ?? null}
-                        onClose={() => previewPanel.current?.collapse()}
-                      />
-                    )}
+                    {previewOpen &&
+                      (paneShows === "paper" ? (
+                        <PaperPane activeFile={activeFile} onClose={() => previewPanel.current?.collapse()} />
+                      ) : (
+                        <WebPreview
+                          preferred={activeFile?.path ?? null}
+                          onClose={() => previewPanel.current?.collapse()}
+                        />
+                      ))}
                   </ResizablePanel>
                 </ResizablePanelGroup>
               </ResizablePanel>
@@ -964,7 +1028,7 @@ function Workspace() {
           Leave Zen mode <span className="text-muted-foreground">Ctrl K Z</span>
         </Button>
       ) : (
-        <StatusBar file={activeFile} problems={problems} onProblems={() => showPanel("problems")} />
+        <StatusBar file={activeFile} problems={problems} onProblems={() => showPanel("problems")} layout={layout} onLayout={setLayout} />
       )}
       <EditorOverlays openFile={openFile} activeFile={activeFile} commands={roomCommands} />
       {taskPicker && (

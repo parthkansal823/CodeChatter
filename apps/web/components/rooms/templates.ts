@@ -14,6 +14,7 @@ import {
   FlaskConical,
   Gauge,
   Globe,
+  GraduationCap,
   Hexagon,
   Landmark,
   Layers,
@@ -186,6 +187,12 @@ export const TEMPLATES: Array<{ id: TemplateId; name: string; description: strin
     name: "Guided tour",
     description: "Every feature in one room: run, tests, preview, terminal, servers.",
     icon: Compass,
+  },
+  {
+    id: "research",
+    name: "Research paper",
+    description: "A LaTeX paper with its PDF beside it, references, a notebook and data.",
+    icon: GraduationCap,
   },
   {
     id: "kubernetes",

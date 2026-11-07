@@ -76,6 +76,7 @@ const SUITES = [
     "traces",
     "mcp",
     "flow",
+    "api-studio-import",
     "a11y",
     "interview-recording",
     "csp",

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { resolveRequest, withQuery } from "../../../../../../packages/contracts/src/http-studio/request";
-import { IMPORT_TEXT_LIMIT, ImportBuilder, importUrl, parseOpenApi } from "./import-openapi";
+import { IMPORT_TEXT_LIMIT, ImportBuilder, importUrl, parseOpenApi, secretName } from "./import-openapi";
 
 const openApi = (extra: Record<string, unknown> = {}) => ({ openapi: "3.1.0", info: { title: "Pet service", version: "1" }, paths: { "/health": { get: { summary: "Health" } } }, ...extra });
 const parse = (value: unknown) => parseOpenApi(JSON.stringify(value));
@@ -194,4 +194,23 @@ test("path baseUrl uses a unique alias without replacing the server variable", (
     assert.equal(result.input.url, "https://example.test/pets/abc");
     assert.ok(plan.warnings.some((warning) => warning.includes(`renamed to ${alias}`)));
   }
+});
+
+test("a secret is told by its words, not by letters that happen to be in it", () => {
+  for (const name of ["token", "apiToken", "access_token", "X-Auth-Token", "accesstoken", "key", "apiKey", "api_key", "X-API-Key", "APIKey", "secret", "client_secret", "password", "user-password", "pwd", "Authorization", "Cookie", "secretkey", "credentials"]) assert.equal(secretName(name), true, name);
+  for (const name of ["keyword", "keywords", "monkey", "tokenize", "secretary", "cookies_per_box", "q", "name", "author", "city", "passenger"]) assert.equal(secretName(name), false, name);
+});
+
+test("YAML comes through the yaml package, and its hostile features are refused", () => {
+  const plan = parseOpenApi(`openapi: 3.0.3
+info: { title: From YAML, version: "1" }
+servers: [{ url: "https://api.example.test/v1" }]
+paths:
+  /things:
+    get: { summary: List things, parameters: [{ name: keyword, in: query, schema: { type: string, example: shoes } }] }
+`);
+  assert.equal(plan.name, "From YAML");
+  assert.equal(plan.requests[0]!.name, "List things");
+  assert.equal(plan.requests[0]!.params[0]!.value, "shoes", "a search word is not a secret");
+  assert.throws(() => parseOpenApi("openapi: 3.0.3\nbomb: &a [1]\nmore: [*a, *a]\n"), /aliases/);
 });

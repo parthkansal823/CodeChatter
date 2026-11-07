@@ -13,11 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { focusUrlSoon } from "./collections-tree";
 import { ImportBuilder, importUrl, parseOpenApi, safeExample, type ImportPlan } from "./import-openapi";
 import { parsePostman } from "./import-postman";
+import { patchValues } from "./local-store";
 import { addRow, createEnvironment, createFolder, createRequest } from "./model";
 import { useStudio } from "./studio-context";
 
 const MAX_BYTES = 5 * 1024 * 1024;
-type Plan = Omit<ImportPlan, "format"> & { format: ImportPlan["format"] | "curl" };
+/** `own` is the credentials in a person's own cURL command, kept on their device so it still works. A stranger's file has none: those values are dropped. */
+type Plan = Omit<ImportPlan, "format"> & { format: ImportPlan["format"] | "curl"; own?: Record<string, string> };
 type Parsed = { value: Plan; error?: never } | { value?: never; error: string } | null;
 
 function nameFor(imported: CurlImport): string {
@@ -25,7 +27,7 @@ function nameFor(imported: CurlImport): string {
   catch { return `${imported.method} request`; }
 }
 
-/** Keep the existing cURL import, but move recognizable credentials to empty secret variables. */
+/** A cURL command is one request, as it always was. Credentials in it leave the shared document for secret variables, with their values on this device only. */
 function curlPlan(text: string): Plan {
   const value = parseCurl(text);
   const builder = new ImportBuilder(nameFor(value), "openapi");
@@ -43,7 +45,7 @@ function curlPlan(text: string): Plan {
   }
   builder.add({ folderId: null, name: builder.plan.name, method: value.method, url, headers, params, body, auth });
   if (value.warnings.length) builder.unsupported("Some cURL options, file fields or extra arguments were skipped. Review the imported request.");
-  return { ...builder.finish(), format: "curl" };
+  return { ...builder.finish(), format: "curl", own: Object.fromEntries(builder.taken) };
 }
 
 function parseInput(source: string): Parsed {
@@ -110,7 +112,7 @@ export function ImportDialog() {
 }
 
 function ImportPanel() {
-  const { doc, select, openDialog, canEdit, setEnvId } = useStudio();
+  const { doc, select, openDialog, canEdit, setEnvId, roomId, user } = useStudio();
   const [text, setText] = useState("");
   const [fileError, setFileError] = useState("");
   const [reading, setReading] = useState(false);
@@ -143,8 +145,9 @@ function ImportPanel() {
       const ordered = folderOrder(plan);
       let first: string | null = null;
       let environment = "";
+      const curl = plan.format === "curl";
       doc.transact(() => {
-        const top = createFolder(doc, plan.name);
+        const top = curl ? null : createFolder(doc, plan.name);
         const folders = new Map<string, string>();
         for (const folder of ordered) folders.set(folder.id, createFolder(doc, folder.name, folder.parentId === null ? top : folders.get(folder.parentId)!));
         for (const request of plan.requests) {
@@ -153,9 +156,12 @@ function ImportPanel() {
           for (const row of params) addRow(doc, id, "params", { ...row });
           first ??= id;
         }
-        environment = createEnvironment(doc, plan.name, plan.variables);
+        if (!curl || plan.variables.length) environment = createEnvironment(doc, plan.name, plan.variables);
       });
-      setEnvId(environment);
+      if (environment) {
+        setEnvId(environment);
+        if (plan.own) patchValues(roomId, user.id, environment, plan.own);
+      }
       select(first);
       openDialog(null);
       toast.success(`Imported ${plan.requests.length} ${plan.requests.length === 1 ? "request" : "requests"}.`);
@@ -168,17 +174,17 @@ function ImportPanel() {
     <>
       <div className="grid gap-2"><Label htmlFor="api-import-file">Choose an API file</Label><Input id="api-import-file" type="file" accept=".json,.yaml,.yml,.txt,application/json,application/yaml,text/yaml,text/plain" onChange={(event) => void chooseFile(event)} className="h-9 text-xs" /></div>
       <div className="grid gap-2"><Label htmlFor="api-import-text">cURL command or API document</Label><Textarea id="api-import-text" value={text} onChange={(event) => { readEpoch.current++; setReading(false); setFileError(""); setText(event.target.value); }} placeholder="Paste cURL, OpenAPI, Swagger or a Postman collection" spellCheck={false} className="max-h-48 min-h-28 font-mono text-xs md:text-xs" /></div>
-      <div aria-live="polite" aria-busy={waiting} className="grid min-h-10 gap-2">
+      <div aria-busy={waiting} className="grid min-h-10 gap-2">
         {waiting && <p role="status" className="text-muted-foreground">Reading the import...</p>}
         {fileError && <p role="alert" className="text-destructive">{fileError}</p>}
         {!waiting && parsed?.error && <p role="alert" className="text-destructive">{parsed.error}</p>}
         {!waiting && plan && <section aria-label="Import preview" className="grid gap-3 rounded-md border p-3">
-          <div><p className="font-medium">Detected {format}: {plan.name}</p><p className="text-xs text-muted-foreground">{plan.folders.length + 1} folders, {plan.requests.length} requests, {plan.variables.length} variables. A new folder and environment will be added. Existing items stay as they are.</p></div>
-          <p className="text-xs text-muted-foreground">No API request is sent while importing. Scripts are excluded. Recognized credentials become empty secret variables; review other values before sharing.</p>
+          <div><p role="status" className="font-medium">Detected {format}: {plan.name}</p><p className="text-xs text-muted-foreground">{plan.format === "curl" ? `One request, added at the top of the collection.${plan.variables.length ? " A new environment holds its secret variables." : ""}` : `${plan.folders.length + 1} folders, ${plan.requests.length} requests, ${plan.variables.length} variables. A new folder and environment will be added. Existing items stay as they are.`}</p></div>
+          <p className="text-xs text-muted-foreground">{plan.format === "curl" ? "No request is sent while importing. Credentials in it go into secret variables, and their values stay on this device only." : "No API request is sent while importing. Scripts are excluded. Recognized credentials become empty secret variables; review other values before sharing."}</p>
           {plan.folders.length > 0 && <details><summary className="min-h-6 cursor-pointer py-1">Folders ({plan.folders.length})</summary><ul className="max-h-32 overflow-y-auto pl-4 text-xs">{plan.folders.map((folder) => <li key={folder.id} className="py-0.5 break-words">{folderPath(folders, folder.id)}</li>)}</ul></details>}
           <details open><summary className="min-h-6 cursor-pointer py-1">Requests ({plan.requests.length})</summary><ul className="max-h-40 overflow-y-auto pl-4 text-xs">{plan.requests.map((request, index) => <li key={index} className="py-0.5 break-words"><span className="font-mono text-muted-foreground">{request.method}</span> {request.folderId && `${folderPath(folders, request.folderId)} / `}{request.name}</li>)}</ul></details>
-          {plan.variables.length > 0 && <details open><summary className="min-h-6 cursor-pointer py-1">Variables ({plan.variables.length})</summary><ul className="max-h-32 overflow-y-auto pl-4 text-xs">{plan.variables.map((variable) => <li key={variable.key} className="py-0.5 break-words"><span className="font-mono">{variable.key}</span>{variable.secret && " (secret)"}{!variable.value && " - needs a value"}</li>)}</ul><p className="mt-1 text-xs text-muted-foreground">Add missing values in Environments after importing. Secret values stay on each device.</p></details>}
-          <p className="text-xs text-muted-foreground">Skipped: {plan.counts.remoteRefs} remote references, {plan.counts.files} file fields, {plan.counts.scripts} requests with scripts, {plan.counts.secretValues} secret values, {plan.counts.unsupported} unsupported items. Stopped {plan.counts.cycles} cyclic or deep references; shortened {plan.counts.truncated} long values.</p>
+          {plan.variables.length > 0 && <details open><summary className="min-h-6 cursor-pointer py-1">Variables ({plan.variables.length})</summary><ul className="max-h-32 overflow-y-auto pl-4 text-xs">{plan.variables.map((variable) => <li key={variable.key} className="py-0.5 break-words"><span className="font-mono">{variable.key}</span>{variable.secret && " (secret)"}{!variable.value && !plan.own?.[variable.key] && " - needs a value"}</li>)}</ul><p className="mt-1 text-xs text-muted-foreground">Add missing values in Environments after importing. Secret values stay on each device.</p></details>}
+          {plan.format !== "curl" && <p className="text-xs text-muted-foreground">Skipped: {plan.counts.remoteRefs} remote references, {plan.counts.files} file fields, {plan.counts.scripts} requests with scripts, {plan.counts.secretValues} secret values, {plan.counts.unsupported} unsupported items. Stopped {plan.counts.cycles} cyclic or deep references; shortened {plan.counts.truncated} long values.</p>}
           {plan.warnings.length > 0 && <ul className="grid gap-1 text-xs text-muted-foreground">{plan.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
         </section>}
       </div>

@@ -1,6 +1,6 @@
 /** Parse bounded, untrusted OpenAPI JSON/YAML into plain import data without fetching or touching the shared document. */
-import { parseDocument } from "../../../../../../node_modules/.pnpm/node_modules/yaml/dist/index.js";
 import type { HttpMethod, KeyValue, RequestAuth, RequestBody } from "@codechatter/contracts";
+import { parseDocument } from "yaml";
 
 export type ImportFolder = { id: string; name: string; parentId: string | null };
 export type ImportVariable = { key: string; value: string; secret: boolean; enabled: boolean };
@@ -12,14 +12,20 @@ const BAD = new Set(["__proto__", "constructor", "prototype"]);
 const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
 export const IMPORT_TEXT_LIMIT = 5 * 1024 * 1024;
 const MAX_DEPTH = 200;
-const SECRET = /token|key|secret|password|authorization|cookie/i;
+// By whole words, so apiKey, api_key and X-Auth-Token count, and keyword, monkey and tokenize don't: their values are often what a request is for.
+const SECRET_WORD = /^(?:[a-z]*(?:token|secret|password|passwd|credential)s?|(?:api|access|auth|private|secret|client|session|signing|encryption)key|key|pwd|authorization|cookie)$/;
 const has = (value: Obj, key: string) => Object.hasOwn(value, key);
 export const record = (value: unknown): Obj | undefined => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Obj : undefined;
 export const array = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 export const string = (value: unknown): string => typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
 export const emptyImportBody = (): RequestBody => ({ mode: "none", text: "", form: [], query: "", variables: "" });
 export const emptyImportAuth = (): RequestAuth => ({ type: "none", token: "", username: "", password: "", key: "", value: "", in: "header" });
-export const secretName = (key: string) => SECRET.test(key);
+export const secretName = (key: string) =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some((word) => SECRET_WORD.test(word));
 const decodedQueryKey = (key: string): string => { try { return decodeURIComponent(key.replace(/\+/g, " ")); } catch { return key; } };
 
 /** Structured query fields are literals; the collection's row model stores raw URI spans. */
@@ -49,8 +55,6 @@ export function parseImportInput(text: string, yaml = false): unknown {
   catch {
     if (!yaml) throw new Error("That is not valid JSON. Choose a Postman collection JSON file.");
     try {
-      // yaml already belongs to monaco-yaml. The workspace's pnpm virtual-store
-      // path avoids adding a package or importing Monaco's networked worker.
       const doc = parseDocument(text, { schema: "core", version: "1.2", strict: true, uniqueKeys: true, prettyErrors: false });
       if (doc.errors.length || doc.warnings.length) throw new Error("InvalidYaml");
       value = doc.toJS({ maxAliasCount: 0 });
@@ -78,6 +82,8 @@ export class ImportBuilder {
   readonly plan: ImportPlan;
   private readonly variables = new Map<string, ImportVariable>();
   private readonly warned = new Set<string>();
+  /** The credentials taken out, by variable. Only a person's own cURL command keeps them, on their device: a plan never carries them. */
+  readonly taken = new Map<string, string>();
   private output = 0;
   private expanded = 0;
   private requestsSeen = 0;
@@ -127,7 +133,10 @@ export class ImportBuilder {
     if (!name || BAD.has(name) || /[{}]/.test(name)) { this.unsupported("Unsafe or unsupported variable names were skipped."); return ""; }
     const sensitive = secret || secretName(name);
     const raw = sensitive ? this.clip(value) : this.publicText(value);
-    if (sensitive && raw) this.plan.counts.secretValues++;
+    if (sensitive && raw) {
+      this.plan.counts.secretValues++;
+      this.taken.set(name, raw);
+    }
     const previous = this.variables.get(name);
     if (previous) {
       if (sensitive) { previous.secret = true; previous.value = ""; }

@@ -195,6 +195,22 @@ RUN set -eu; \
     rm -rf "$target/bin"; \
     mkdir /pth; echo /usr/local/lib/codechatter/automl > /pth/codechatter-automl.pth
 
+# Automations (apps/runner/src/automations.ts): Activepieces' real engine, one file from its official image at this digest, MIT like everything outside its ee folders, and its
+# pieces from a lockfile, so all their packages are checked against their hashes, with no install scripts. No Activepieces server: a small host of ours (image/automation/host.mjs)
+# drives the engine, in each room's own sandbox, so rooms stay apart and nothing runs when nothing's asked for. Pieces that won't load fail this build.
+FROM activepieces/activepieces:0.92.3-hotfix.2@sha256:3aa4093ca5774589a861703f20a22c250891fe31c56edb9a516a7deaeb04b165 AS apengine
+FROM node:24-slim AS automation
+COPY image/automation/package.json image/automation/package-lock.json image/automation/host.mjs image/automation/prepare.mjs /out/lib/codechatter/automation/
+COPY --from=apengine /usr/src/app/dist/packages/engine/main.js /out/lib/codechatter/automation/engine/main.js
+COPY image/automation.py /out/lib/codechatter/automation.py
+RUN set -eu; \
+    cd /out/lib/codechatter/automation; \
+    npm ci --omit=dev --no-audit --no-fund --ignore-scripts; \
+    rm -rf /root/.npm; \
+    echo '{"type":"commonjs"}' > engine/package.json; \
+    node prepare.mjs; \
+    rm prepare.mjs
+
 # The lakehouse (apps/runner/src/lakehouse.ts), for the full image, as it needs Java: Spark, Delta Lake and MLflow, pinned by
 # hash, in a folder of their own that Python looks in last, so they don't change what the room's Python imports. Delta Lake's
 # jars go in with Spark's, checked against the SHA-256 worked out when they were pinned (and Maven Central's SHA-1 then), so
@@ -233,6 +249,7 @@ COPY --from=mcpinspector /out/ /usr/local/
 COPY --from=flow /out/ /usr/local/
 COPY --from=automl /out/ /usr/local/
 COPY --from=automl /pth/ /usr/lib/python3/dist-packages/
+COPY --from=automation /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -316,6 +333,10 @@ COPY --chmod=755 image/jdtls image/google-java-format /usr/local/bin/
 # Composer and the PHP extensions Laravel needs (the Laravel template); Composer reads HTTPS_PROXY.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked     apt-get update  && apt-get install -y --no-install-recommends rustfmt clangd gopls rust-analyzer rust-src delve openjdk-25-jre-headless maven composer php-mbstring php-xml php-curl php-sqlite3 php-zip php-bcmath php-intl  && update-alternatives --set java /usr/lib/jvm/java-21-openjdk-amd64/bin/java  && java -version 2>&1 | grep -q '"21'
 COPY image/maven-settings.xml /etc/maven/settings.xml
+# LaTeX (apps/runner/src/latex.ts): TeX Live from Debian with latexmk and biber, and what papers usually ask for: TikZ, siunitx and journals' classes
+# such as IEEE's and ACM's. A layer of its own, as it's over a gigabyte, which is why it's only in the full image.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked     apt-get update  && apt-get install -y --no-install-recommends latexmk texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-bibtex-extra texlive-pictures texlive-science texlive-publishers biber lmodern
+COPY image/latex_build.py /usr/local/lib/codechatter/latex_build.py
 COPY --from=formatters /out/ /usr/local/bin/
 COPY --from=lsp /out/ /usr/local/
 COPY --from=jsdebug /out/js-debug /usr/local/lib/js-debug
@@ -327,6 +348,7 @@ COPY --from=mcpinspector /out/ /usr/local/
 COPY --from=flow /out/ /usr/local/
 COPY --from=automl /out/ /usr/local/
 COPY --from=automl /pth/ /usr/lib/python3/dist-packages/
+COPY --from=automation /out/ /usr/local/
 COPY --from=lakehouse /out/ /usr/local/
 RUN echo /usr/local/lib/codechatter/lakehouse > /usr/lib/python3/dist-packages/codechatter-lakehouse.pth
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
