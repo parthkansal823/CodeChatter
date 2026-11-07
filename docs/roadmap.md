@@ -157,7 +157,7 @@ flowchart TD
 *Goal: safe, observable and tested enough to run for real.* Details: §10.
 
 - ✅ Load test: 500 live connections, p95 under 150 ms, across several processes
-- 🟡 Operations: Prometheus metrics and Grafana ✅; nightly backups (ChatGPT, prompt 11); traces ⬜
+- 🟡 Operations: Prometheus metrics, Grafana and nightly backups ✅; traces ⬜
 - ✅ GitHub Actions CI: lint, types, tests, image builds, vulnerability scan (green on GitHub)
 - ✅ End-to-end tests in CI: green on GitHub, 39 suites in 15 minutes. 3 more go with the next push
 - ✅ Browser security: a nonce-based security policy, previews in a sandboxed frame, access that really ends when a room goes private or is deleted

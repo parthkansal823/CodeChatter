@@ -46,6 +46,7 @@
 
   /* The one colour: international orange */
   --brand: oklch(0.68 0.21 42); /* ≈ #FF5E1A */
+  --brand-text: oklch(0.54 0.18 42); /* the same orange, dark enough for small text on white (4.5:1) */
   --brand-foreground: oklch(0.145 0 0); /* black text on orange */
   --brand-muted: oklch(0.68 0.21 42 / 0.12);
   --ring: var(--brand);
@@ -101,7 +102,7 @@
   --term-bright-black: oklch(0.5 0 0);
 
   /* Density — the app is a tool */
-  --row-h: 22px;
+  --row-h: 24px;
   --control-h: 28px;
   --titlebar-h: 40px;
   --statusbar-h: 24px;
@@ -125,6 +126,7 @@
   --input: oklch(1 0 0 / 14%);
 
   --brand: oklch(0.72 0.19 45); /* ≈ #FF7A33, lifted for black */
+  --brand-text: var(--brand);
   --brand-foreground: oklch(0.145 0 0);
   --brand-muted: oklch(0.72 0.19 45 / 0.16);
 
@@ -201,6 +203,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-brand: var(--brand);
+  --color-brand-text: var(--brand-text);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-muted: var(--brand-muted);
   --color-destructive: var(--destructive);

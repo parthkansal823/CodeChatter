@@ -60,7 +60,7 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
           <TooltipTrigger asChild>
             <button
               onClick={copyCode}
-              className="rounded-sm px-1 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="hidden min-h-6 rounded-sm px-1 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground sm:block"
             >
               {room.id}
             </button>

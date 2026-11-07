@@ -75,10 +75,10 @@ export function InterviewBanner({ onOpen }: { onOpen: () => void }) {
       <Timer className="size-3.5 shrink-0 text-brand" />
       <span className="min-w-0 truncate">{message}</span>
       {recording && interview.status === "live" && (
-        <span role="status" className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground"><Circle className="size-2 fill-brand text-brand" /> Recording</span>
+        <span role="status" className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground"><Circle className="size-2 fill-brand text-brand-text" /> Recording</span>
       )}
       {left !== null && (
-        <span role="timer" aria-live="off" className={cn("shrink-0 font-mono font-medium tabular-nums", !recording && "ml-auto", left <= LAST_MINUTES && "text-brand")}>
+        <span role="timer" aria-live="off" className={cn("shrink-0 font-mono font-medium tabular-nums", !recording && "ml-auto", left <= LAST_MINUTES && "text-brand-text")}>
           {left <= 0 ? "Time's up" : `${formatCountdown(left)} left`}
         </span>
       )}

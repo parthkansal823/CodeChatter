@@ -2,6 +2,8 @@
 # Shared validation, S3 transport and GFS retention for backup and restore jobs.
 # Passwords stay in environment variables; command errors are classified safely.
 set -eu
+# failure_reason is consumed by each calling operation's EXIT trap.
+# shellcheck disable=SC2034
 fail() { failure_reason=$1; exit 1; }
 settings() {
   BACKUP_DIR=${BACKUP_DIR:-/backups}
@@ -40,6 +42,8 @@ valid_name() {
   [ "$checked_name" = "$1" ]
 }
 s3_settings() {
+  # Public result consumed by backup.sh and restore.sh.
+  # shellcheck disable=SC2034
   s3_enabled=false
   [ -n "${BACKUP_S3_URL:-}" ] || return 0
   [ -n "${BACKUP_S3_ACCESS_KEY:-}" ] && [ -n "${BACKUP_S3_SECRET_KEY:-}" ] || fail 'S3 URL requires both S3 credentials'
@@ -49,6 +53,8 @@ s3_settings() {
   case "$s3_path" in ''|/*|*[!a-zA-Z0-9._/-]*|*/../*|../*|*/..|*/./*|./*|*/.|*//*) fail 'invalid S3 bucket or prefix';; esac
   s3_bucket=${s3_path%%/*}
   case "$s3_bucket" in ''|*[!a-zA-Z0-9.-]*) fail 'invalid S3 bucket';; esac
+  # Public destination consumed by the two calling operations.
+  # shellcheck disable=SC2034
   s3_remote="ccbackup:$s3_path"
   RCLONE_CONFIG_CCBACKUP_TYPE=s3
   RCLONE_CONFIG_CCBACKUP_PROVIDER=AWS
@@ -61,8 +67,12 @@ s3_settings() {
   export RCLONE_CONFIG_CCBACKUP_TYPE RCLONE_CONFIG_CCBACKUP_PROVIDER
   export RCLONE_CONFIG_CCBACKUP_ACCESS_KEY_ID RCLONE_CONFIG_CCBACKUP_SECRET_ACCESS_KEY
   export RCLONE_CONFIG_CCBACKUP_REGION RCLONE_CONFIG_CCBACKUP_ENDPOINT RCLONE_CONFIG_CCBACKUP_FORCE_PATH_STYLE
+  # Public result consumed by the calling operation.
+  # shellcheck disable=SC2034
   s3_enabled=true
 }
+# The caller creates its private work_dir before using the transport.
+# shellcheck disable=SC2154
 s3() {
   rclone --config /dev/null --log-level ERROR --retries 3 --low-level-retries 3 \
     --contimeout 15s --timeout 2m "$@" 2>"$work_dir/transport-error"
@@ -73,7 +83,7 @@ retention_plan() {
   inventory=$1 keep=$2
   : >"$keep"
   sort -ru "$inventory" >"$work_dir/sorted-names"
-  daily=0 weekly=0 monthly=0 previous_day= newest=true
+  daily=0 weekly=0 monthly=0 previous_day='' newest=true
   while IFS= read -r candidate; do
     valid_name "$candidate" || continue
     if [ "$newest" = true ]; then printf '%s\n' "$candidate" >>"$keep"; newest=false; fi

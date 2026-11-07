@@ -257,7 +257,7 @@ export function BatchResultsPage({ id }: { id: string }) {
                 </TableCell>
                 <TableCell className="hidden tabular-nums md:table-cell">{row.answered} of {row.questions}</TableCell>
                 <TableCell>{row.startedAt ? <Flags row={row} /> : null}</TableCell>
-                <TableCell className="whitespace-nowrap text-muted-foreground">{row.aiToCheck === null ? "" : row.aiToCheck === 0 ? "Nothing to check" : <span className="font-medium text-brand">{row.aiToCheck} to check</span>}</TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">{row.aiToCheck === null ? "" : row.aiToCheck === 0 ? "Nothing to check" : <span className="font-medium text-brand-text">{row.aiToCheck} to check</span>}</TableCell>
                 <TableCell className="hidden sm:table-cell">{row.recommendation ? RECOMMENDATION_LABEL[row.recommendation] : ""}</TableCell>
                 <TableCell className="text-right">
                   <Button size="icon-sm" variant="ghost" asChild aria-label={`Open ${row.candidateName}'s room`}><Link href={`/rooms/${row.roomId}` as never}><ExternalLink /></Link></Button>

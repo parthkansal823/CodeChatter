@@ -1,4 +1,12 @@
 {{- /* One call server: signalling stays private; media and TURN bypass the edge. */ -}}
+{{- define "cc.livekitTurnDomain" -}}
+{{- $siteHost := regexFind "^https?://[^/:?#]+" .Values.url | trimPrefix "https://" | trimPrefix "http://" -}}
+{{- $domain := .Values.livekit.turn.tls.domain | default (printf "turn.%s" $siteHost) | lower -}}
+{{- if or (gt (len $domain) 253) (not (regexMatch "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$" $domain)) (regexMatch "^[0-9]+(\\.[0-9]+){3}$" $domain) -}}
+{{- fail "livekit.turn.tls.domain must be a DNS hostname without a scheme, path, port or wildcard (or set url to a valid origin for its turn.<host> default)" -}}
+{{- end -}}
+{{- $domain -}}
+{{- end -}}
 {{- define "cc.livekitConfig" -}}
 port: 7880
 rtc:
@@ -10,7 +18,21 @@ rtc:
 turn:
   enabled: {{ .Values.livekit.turn.enabled }}
   udp_port: {{ .Values.livekit.turn.udpPort }}
+  {{- if .Values.livekit.turn.tls.enabled }}
+  domain: {{ include "cc.livekitTurnDomain" . | quote }}
+  tls_port: {{ .Values.livekit.turn.tls.port }}
+  external_tls: {{ .Values.livekit.turn.tls.externalTls }}
+  proxy_protocol: {{ .Values.livekit.turn.tls.proxyProtocol }}
+  {{- if .Values.livekit.turn.tls.proxyProtocol }}
+  proxy_protocol_trusted_cidrs: {{- toYaml .Values.livekit.turn.tls.trustedProxyCidrs | nindent 4 }}
+  {{- end }}
+  {{- if not .Values.livekit.turn.tls.externalTls }}
+  cert_file: /etc/livekit-turn-tls/tls.crt
+  key_file: /etc/livekit-turn-tls/tls.key
+  {{- end }}
+  {{- else }}
   tls_port: 0
+  {{- end }}
   {{- with .Values.livekit.turn.allowRestrictedPeerCidrs }}
   allow_restricted_peer_cidrs: {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -20,6 +42,40 @@ logging:
 {{- if .Values.livekit.enabled }}
 {{- $component := dict "root" . "component" "livekit" }}
 {{- $service := .Values.livekit.media.service }}
+{{- $turnTLS := .Values.livekit.turn.tls }}
+{{- if $turnTLS.enabled }}
+{{- if not .Values.livekit.turn.enabled }}
+{{- fail "livekit.turn.tls.enabled requires livekit.turn.enabled" }}
+{{- end }}
+{{- if or (not (regexMatch "^[0-9]+$" (toString $turnTLS.port))) (lt (int $turnTLS.port) 1024) (gt (int $turnTLS.port) 65535) (eq (int $turnTLS.port) 7880) (eq (int $turnTLS.port) (int .Values.livekit.rtc.tcpPort)) }}
+{{- fail "livekit.turn.tls.port must be an unused TCP port from 1024 to 65535, distinct from signalling and rtc.tcpPort" }}
+{{- end }}
+{{- if ne $turnTLS.service.type "LoadBalancer" }}
+{{- fail "livekit.turn.tls.service.type must be LoadBalancer with public TCP 443; a NodePort alone cannot match LiveKit's advertised turns:443 endpoint" }}
+{{- end }}
+{{- if or (not (regexMatch "^[0-9]+$" (toString $turnTLS.service.port))) (ne (int $turnTLS.service.port) 443) }}
+{{- fail "livekit.turn.tls.service.port must be 443 because LiveKit 1.13.11 advertises turns:<domain>:443" }}
+{{- end }}
+{{- if not (has $turnTLS.service.externalTrafficPolicy (list "Local" "Cluster")) }}
+{{- fail "livekit.turn.tls.service.externalTrafficPolicy must be Local or Cluster" }}
+{{- end }}
+{{- if and (eq $turnTLS.service.externalTrafficPolicy "Cluster") (not $turnTLS.proxyProtocol) }}
+{{- fail "TURN TLS externalTrafficPolicy Cluster requires proxyProtocol and trustedProxyCidrs to preserve the original client address" }}
+{{- end }}
+{{- if $turnTLS.externalTls }}
+{{- if $turnTLS.secretName }}
+{{- fail "livekit.turn.tls.secretName must be empty with externalTls; the TLS load balancer owns the certificate" }}
+{{- end }}
+{{- if not $turnTLS.proxyProtocol }}
+{{- fail "externalTls requires a TLS load balancer sending PROXY protocol v2; enable livekit.turn.tls.proxyProtocol and set trustedProxyCidrs" }}
+{{- end }}
+{{- else if not $turnTLS.secretName }}
+{{- fail "livekit.turn.tls.secretName is required when LiveKit terminates TURN TLS" }}
+{{- end }}
+{{- if and $turnTLS.proxyProtocol (not $turnTLS.trustedProxyCidrs) }}
+{{- fail "livekit.turn.tls.proxyProtocol requires trustedProxyCidrs for the actual load balancer/proxy source addresses" }}
+{{- end }}
+{{- end }}
 {{- if not (has $service.type (list "LoadBalancer" "NodePort")) }}
 {{- fail "livekit.media.service.type must be LoadBalancer or NodePort so browsers can reach media" }}
 {{- end }}
@@ -72,6 +128,9 @@ spec:
             {{- if .Values.livekit.turn.enabled }}
             - { name: turn-udp, containerPort: {{ .Values.livekit.turn.udpPort }}, protocol: UDP }
             {{- end }}
+            {{- if $turnTLS.enabled }}
+            - { name: turn-tls, containerPort: {{ $turnTLS.port }}, protocol: TCP }
+            {{- end }}
           env:
             - name: LIVEKIT_KEYS
               valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" . }}, key: LIVEKIT_KEYS } }
@@ -81,11 +140,18 @@ spec:
           volumeMounts:
             - { name: config, mountPath: /etc/livekit, readOnly: true }
             - { name: tmp, mountPath: /tmp }
+            {{- if and $turnTLS.enabled (not $turnTLS.externalTls) }}
+            - { name: turn-tls, mountPath: /etc/livekit-turn-tls, readOnly: true }
+            {{- end }}
       volumes:
         - name: config
           configMap: { name: {{ .Release.Name }}-livekit }
         - name: tmp
           emptyDir: {}
+        {{- if and $turnTLS.enabled (not $turnTLS.externalTls) }}
+        - name: turn-tls
+          secret: { secretName: {{ $turnTLS.secretName | quote }}, defaultMode: 0440 }
+        {{- end }}
 ---
 # Signalling is reachable only through Caddy's /livekit route.
 apiVersion: v1
@@ -138,4 +204,25 @@ spec:
       nodePort: {{ . }}
       {{- end }}
     {{- end }}
+{{- if $turnTLS.enabled }}
+---
+# TURN has its own public TLS address; the website's HTTPS endpoint is unchanged.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-livekit-turn-tls
+  labels: {{- include "cc.componentLabels" $component | nindent 4 }}
+  {{- with $turnTLS.service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: {{ $turnTLS.service.externalTrafficPolicy }}
+  {{- with $turnTLS.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  selector: {{- include "cc.selector" $component | nindent 4 }}
+  ports:
+    - { name: turn-tls, port: 443, targetPort: turn-tls, protocol: TCP }
+{{- end }}
 {{- end }}

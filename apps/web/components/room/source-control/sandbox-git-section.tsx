@@ -453,7 +453,7 @@ function ChangeList({
                   aria-hidden
                   className={cn(
                     "w-3 shrink-0 text-center font-mono",
-                    change.conflict ? "text-destructive" : markLetter === "A" || markLetter === "?" ? "text-brand" : deleted ? "text-destructive" : "text-muted-foreground",
+                    change.conflict ? "text-destructive" : markLetter === "A" || markLetter === "?" ? "text-brand-text" : deleted ? "text-destructive" : "text-muted-foreground",
                   )}
                 >
                   {change.conflict ? "!" : markLetter === "?" ? "U" : markLetter}

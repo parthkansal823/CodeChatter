@@ -4,13 +4,14 @@
 set -eu
 umask 077
 failure_reason='initialisation failed'
-work_dir= target= published=false local_complete=false status_ready=false
+work_dir='' target='' published=false local_complete=false
+BACKUP_DIR=${BACKUP_DIR:-/backups}
 finish() {
   result=$?
   trap - 0 HUP INT TERM
   if [ "$result" -ne 0 ]; then
     if [ "$published" = true ] && [ "$local_complete" = false ]; then rm -f "$target" "$target.sha256"; fi
-    if [ "$status_ready" = true ]; then
+    if [ -d "$BACKUP_DIR" ] && [ -w "$BACKUP_DIR" ]; then
       printf '%s\n' "$failure_reason" >"$BACKUP_DIR/.last-failure.$$" && mv -f "$BACKUP_DIR/.last-failure.$$" "$BACKUP_DIR/last-failure" || :
     fi
     printf 'backup FAILED: %s\n' "$failure_reason" >&2
@@ -20,10 +21,11 @@ finish() {
 }
 trap finish 0
 trap 'failure_reason="interrupted"; exit 1' HUP INT TERM
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 . "$(dirname "$0")/common.sh"
 settings
 lock_operation
-status_ready=true
 work_dir=$(mktemp -d "$BACKUP_DIR/.backup.XXXXXXXX")
 started=$(date -u +%s)
 if [ -n "${BACKUP_TEST_NOW:-}" ]; then
@@ -65,7 +67,13 @@ else
   printf 'off-server DISABLED: backups are only on this server\n'
 fi
 failure_reason='local retention failed'
-find "$BACKUP_DIR" -maxdepth 1 -type f -name 'codechatter-*.dump' -printf '%f\n' >"$work_dir/local-inventory"
+: >"$work_dir/local-inventory"
+for archive in "$BACKUP_DIR"/codechatter-*.dump; do
+  [ -f "$archive" ] && [ -f "$archive.sha256" ] || continue
+  candidate=${archive##*/}
+  valid_name "$candidate" || continue
+  printf '%s\n' "$candidate" >>"$work_dir/local-inventory"
+done
 retention_plan "$work_dir/local-inventory" "$work_dir/local-keep"
 while IFS= read -r candidate; do
   valid_name "$candidate" || continue
@@ -76,12 +84,8 @@ done <"$work_dir/local-inventory"
 if [ "$s3_enabled" = true ]; then
   failure_reason='S3 retention listing failed'
   s3 lsf "$s3_remote" --files-only --max-depth 1 >"$work_dir/remote-objects"
-  : >"$work_dir/remote-inventory"
-  while IFS= read -r candidate; do
-    valid_name "$candidate" || continue
-    grep -Fxq "$candidate.sha256" "$work_dir/remote-objects" || continue
-    printf '%s\n' "$candidate" >>"$work_dir/remote-inventory"
-  done <"$work_dir/remote-objects"
+  awk '/[.]dump$/ {dump[$0]=1} /[.]dump[.]sha256$/ {sum[substr($0,1,length($0)-7)]=1} END {for (name in dump) if (sum[name]) print name}' \
+    "$work_dir/remote-objects" >"$work_dir/remote-inventory"
   retention_plan "$work_dir/remote-inventory" "$work_dir/remote-keep"
   failure_reason='S3 retention deletion failed'
   while IFS= read -r object; do

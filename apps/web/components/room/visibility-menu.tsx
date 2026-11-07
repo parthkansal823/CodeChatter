@@ -46,7 +46,7 @@ export function VisibilityMenu() {
       <DropdownMenuTrigger
         aria-label={`${current.label} room: change who can see it`}
         disabled={busy}
-        className="rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="grid size-6 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <Icon className="size-3.5" />
       </DropdownMenuTrigger>

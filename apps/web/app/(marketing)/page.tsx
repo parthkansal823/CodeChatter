@@ -128,7 +128,7 @@ function Feature({
 }
 
 const Frame = ({ children, className = "" }: { children: ReactNode; className?: string }) => (
-  <div className={`overflow-x-auto rounded-lg border bg-panel p-4 font-mono text-[12.5px] leading-[22px] whitespace-pre ${className}`}>
+  <div tabIndex={0} role="group" aria-label="Example" className={`overflow-x-auto rounded-lg border bg-panel p-4 font-mono text-[12.5px] leading-[22px] whitespace-pre ${className}`}>
     {children}
   </div>
 );
@@ -208,7 +208,7 @@ function AgentVisual() {
         <span className="select-none text-destructive">- </span>return subtotal + shipping;
       </div>
       <div className={`bg-brand-muted font-ai ${reveal}`} style={delay(1050)}>
-        <span className="select-none text-brand">+ </span>return subtotal + (subtotal &gt;= 50 ? 0 : shipping);
+        <span className="select-none text-brand-text">+ </span>return subtotal + (subtotal &gt;= 50 ? 0 : shipping);
       </div>
       <div className={`mt-3 flex gap-2 font-sans whitespace-normal ${reveal}`} style={delay(1400)}>
         <span className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">Accept</span>

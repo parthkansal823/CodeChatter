@@ -4,7 +4,7 @@
 set -eu
 umask 077
 failure_reason='initialisation failed'
-work_dir=
+work_dir=''
 finish() {
   result=$?
   trap - 0 HUP INT TERM
@@ -14,11 +14,13 @@ finish() {
 }
 trap finish 0
 trap 'failure_reason="interrupted"; exit 1' HUP INT TERM
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 . "$(dirname "$0")/common.sh"
 settings
 lock_operation
 work_dir=$(mktemp -d "$BACKUP_DIR/.restore.XXXXXXXX")
-live=false source_file=
+live=false source_file=''
 for argument do
   case "$argument" in
     --into-live) live=true;;
@@ -48,13 +50,15 @@ fi
 failure_reason='checksum verification failed'
 check_checksum "$archive"
 if [ "$live" = true ]; then
+  case "$PGDATABASE" in postgres|template0|template1) fail 'refusing to replace a maintenance database';; esac
   [ "${BACKUP_APP_STOPPED:-}" = yes ] || fail 'stop all app services and set BACKUP_APP_STOPPED=yes before live restore'
   printf 'Type the live database name (%s) to replace it: ' "$PGDATABASE" >&2
   IFS= read -r confirmation || fail 'live restore confirmation was not provided'
   [ "$confirmation" = "$PGDATABASE" ] || fail 'live restore confirmation did not match'
   target_database=$PGDATABASE
+  live_database=$PGDATABASE
   failure_reason='cannot check live database connections'
-  connections=$(PGDATABASE=postgres psql --no-password -X -qAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_stat_activity WHERE datname='$PGDATABASE' AND pid<>pg_backend_pid();" 2>"$work_dir/database-error")
+  connections=$(PGDATABASE=postgres psql --no-password -X -qAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_stat_activity WHERE datname='$live_database' AND pid<>pg_backend_pid();" 2>"$work_dir/database-error")
   [ "$connections" = 0 ] || fail 'live database still has connections; stop app services first'
   failure_reason='cannot replace live database; ensure app services are stopped'
   PGDATABASE=postgres dropdb --no-password --if-exists -- "$target_database" 2>"$work_dir/database-error"

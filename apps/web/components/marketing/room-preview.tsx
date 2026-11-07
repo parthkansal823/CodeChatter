@@ -68,7 +68,7 @@ export function RoomPreview() {
             </span>
             <span className="px-3 py-1.5 text-muted-foreground">coupons.ts</span>
           </div>
-          <pre className="overflow-x-auto px-0 pt-7 pb-3 font-mono text-[12.5px] leading-[22px]">
+          <pre tabIndex={0} role="group" aria-label="Example code" className="overflow-x-auto px-0 pt-7 pb-3 font-mono text-[12.5px] leading-[22px]">
             <Line n={1}>
               <K>import</K> {"{ z }"} <K>from</K> <S>{'"zod"'}</S>;
               <Caret slot={1} name="Parth" blink className="ml-px" />
@@ -150,7 +150,7 @@ export function RoomPreview() {
 function Line({ n, ai, children }: { n: number; ai?: boolean; children: ReactNode }) {
   return (
     <div className={`flex ${ai ? "bg-brand-muted font-ai" : ""}`}>
-      <span className="w-10 shrink-0 pr-3 text-right text-muted-foreground/60 select-none">{n}</span>
+      <span className="w-10 shrink-0 pr-3 text-right text-muted-foreground select-none">{n}</span>
       <span className="whitespace-pre">{children}</span>
     </div>
   );
@@ -159,4 +159,4 @@ const K = ({ children }: { children: ReactNode }) => <span className="text-muted
 const F = ({ children }: { children: ReactNode }) => <span className="font-medium">{children}</span>;
 const T = ({ children }: { children: ReactNode }) => <span className="italic">{children}</span>;
 const S = ({ children }: { children: ReactNode }) => <span className="text-foreground/65">{children}</span>;
-const N = ({ children }: { children: ReactNode }) => <span className="text-brand">{children}</span>;
+const N = ({ children }: { children: ReactNode }) => <span className="text-brand-text">{children}</span>;

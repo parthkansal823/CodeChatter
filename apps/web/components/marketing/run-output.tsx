@@ -108,7 +108,7 @@ function OutputRow({ line }: { line: OutputLine }) {
   if (line.kind === "command") {
     return (
       <div className="text-muted-foreground">
-        <span className="text-brand">❯</span> {line.text}
+        <span className="text-brand-text">❯</span> {line.text}
       </div>
     );
   }

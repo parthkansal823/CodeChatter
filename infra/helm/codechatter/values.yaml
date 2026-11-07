@@ -58,11 +58,30 @@ livekit:
     enableLoopbackCandidate: false
   turn:
     enabled: true
-    # UDP only: networks blocking UDP need a separate TURN/TLS setup (README.md).
     udpPort: 3478
     # TURN normally denies private/loopback peers. Permit only the call server's
     # exact IP/32 if it uses one of these addresses, never whole private networks.
     allowRestrictedPeerCidrs: []
+    # Opt in for production: a dedicated TCP 443 LoadBalancer, separate from the website.
+    tls:
+      enabled: false
+      # Empty: turn.<host from url>. Must match the public certificate and DNS record.
+      domain: ""
+      # The non-root pod listens here; LiveKit advertises public TCP 443 regardless.
+      port: 5349
+      # Existing kubernetes.io/tls Secret with tls.crt and tls.key for domain.
+      secretName: ""
+      # True only when a real TCP/TLS load balancer terminates TLS before the pod.
+      # Requires PROXY protocol v2 and explicit trusted proxy CIDRs; no Secret is mounted.
+      externalTls: false
+      proxyProtocol: false
+      trustedProxyCidrs: []
+      service:
+        type: LoadBalancer
+        port: 443
+        annotations: {}
+        externalTrafficPolicy: Local
+        loadBalancerIP: ""
   media:
     service:
       # Must support TCP and UDP. NodePort is an alternative; match its nodePorts

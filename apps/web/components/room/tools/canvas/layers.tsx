@@ -85,6 +85,11 @@ export function LayersPanel() {
       <div className="flex h-9 shrink-0 items-center border-b px-3">
         <h2 className="text-xs font-medium">Layers</h2>
       </div>
+      {top.length === 0 && (
+        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+          {readOnly ? "Nothing on this canvas yet." : "Shapes you draw appear here."}
+        </p>
+      )}
       <div
         role="tree"
         aria-label="Layers"
@@ -94,13 +99,7 @@ export function LayersPanel() {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) state.drop.set(null);
         }}
       >
-        {top.length === 0 ? (
-          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            {readOnly ? "Nothing on this canvas yet." : "Shapes you draw appear here."}
-          </p>
-        ) : (
-          <LayerList parentId={null} depth={0} state={state} />
-        )}
+        {top.length > 0 && <LayerList parentId={null} depth={0} state={state} />}
       </div>
     </aside>
   );

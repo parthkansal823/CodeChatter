@@ -142,7 +142,7 @@ function FocusTimer({ doc }: { doc: Y.Doc }) {
   return (
     <div role="group" aria-label="Focus timer" className="grid shrink-0 gap-1.5 border-b px-3 py-2">
       <div className="flex items-center gap-2">
-        <span className={cn("text-xs font-medium", state.phase === "focus" ? "text-brand" : "text-muted-foreground")}>
+        <span className={cn("text-xs font-medium", state.phase === "focus" ? "text-brand-text" : "text-muted-foreground")}>
           {state.phase === "focus" ? "Focus" : "Break"}
         </span>
         <span role="timer" aria-label="Time left" className="font-mono text-lg tabular-nums">

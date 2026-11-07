@@ -26,18 +26,31 @@ export function TabBar({
   return (
     <div className="flex h-9 shrink-0 border-b bg-chrome">
     <div role="tablist" aria-label="Open files" className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none]">
-      {tabs.map((tab) => {
+      {tabs.map((tab, index) => {
         const active = tab.id === activeId;
         return (
           <div
             key={tab.id}
             role="tab"
             aria-selected={active}
+            aria-keyshortcuts="Delete"
             tabIndex={active ? 0 : -1}
             title={tab.path}
             onClick={() => onSelect(tab.id)}
             onAuxClick={(e) => e.button === 1 && onClose(tab.id)}
-            onKeyDown={(e) => e.key === "Enter" && onSelect(tab.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Delete") return onClose(tab.id);
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                return onSelect(tab.id);
+              }
+              const to = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: tabs.length - 1 }[e.key];
+              if (to === undefined) return;
+              e.preventDefault();
+              const next = (to + tabs.length) % tabs.length;
+              onSelect(tabs[next]!.id);
+              (e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+            }}
             className={cn(
               "group relative flex max-w-52 shrink-0 cursor-pointer items-center gap-2 border-r pr-1.5 pl-3 text-sm select-none",
               active ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground",
@@ -46,20 +59,21 @@ export function TabBar({
             {active && <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-brand" />}
             <span className="truncate">{tab.name}</span>
             <Threads slots={threadsFor(tab.id)} className="h-3" />
-            <button
-              type="button"
-              aria-label={`Close ${tab.name}`}
+            {/* For the mouse. A tab can't hold a control, so the keyboard and screen readers close it with Delete. */}
+            <span
+              aria-hidden
+              title="Close (Delete)"
               onClick={(e) => {
                 e.stopPropagation();
                 onClose(tab.id);
               }}
               className={cn(
-                "rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground",
-                !active && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                "grid size-6 place-items-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground",
+                !active && "opacity-0 group-hover:opacity-100",
               )}
             >
               <X className="size-3.5" />
-            </button>
+            </span>
           </div>
         );
       })}

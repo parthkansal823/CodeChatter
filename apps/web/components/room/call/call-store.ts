@@ -69,7 +69,10 @@ export const useCall = create<State>()((set, get) => ({
           audio.clear();
           set({ room: null, roomId: null, status: "idle", version: get().version + 1 });
         });
-      await room.connect(url, token);
+      // A local relay drill must not silently succeed over a direct media path.
+      // Next replaces NODE_ENV at build time, so production ignores this query.
+      const relayOnly = process.env.NODE_ENV !== "production" && new URLSearchParams(window.location.search).get("callRelay") === "1";
+      await room.connect(url, token, relayOnly ? { rtcConfig: { iceTransportPolicy: "relay" } } : undefined);
       set({ room, status: "joined" });
       // Join with the microphone on; no microphone (or no permission) still joins, to listen.
       await room.localParticipant.setMicrophoneEnabled(true).catch(() => toast.message("Joined without a microphone: the browser has none, or wasn't allowed to use it."));

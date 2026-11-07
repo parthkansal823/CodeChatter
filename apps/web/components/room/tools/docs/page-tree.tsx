@@ -57,6 +57,9 @@ export function PageTree({ nodes, label, empty }: { nodes: PageNode[]; label: st
     if (!moved) toast.error("A page can't be moved inside itself.");
   };
 
+  // Beside the tree, not in it: a tree holds only tree items.
+  if (nodes.length === 0) return empty ? <p className="px-3 py-1 text-xs text-muted-foreground">{empty}</p> : null;
+
   return (
     <div role="tree" aria-label={label} onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropAt(null)}>
       {nodes.map((node) => (
@@ -72,7 +75,6 @@ export function PageTree({ nodes, label, empty }: { nodes: PageNode[]; label: st
           onDrop={drop}
         />
       ))}
-      {nodes.length === 0 && empty && <p className="px-3 py-1 text-xs text-muted-foreground">{empty}</p>}
     </div>
   );
 }

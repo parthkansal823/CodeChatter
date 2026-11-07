@@ -81,7 +81,7 @@ Set these in your values:
 
 ## Database backups
 
-Bundled Postgres gets a `backup` CronJob by default. It runs at 03:00 in `backup.timeZone` (UTC by default), with `concurrencyPolicy: Forbid`, one retry, a one-hour start deadline and a six-hour run deadline. Kubernetes 1.27 or newer is required for the native CronJob `timeZone` field. `backup.schedule`, the deadlines, resource limits and Job history limits are configurable. The container runs as UID/GID 70 with the chart's security settings, a read-only root, writable `/tmp` and a `10Gi` backup PVC.
+Bundled Postgres gets a `backup` CronJob by default. It runs at 03:00 in `backup.timeZone` (UTC by default), with `concurrencyPolicy: Forbid`, no automatic retry, a one-hour start deadline and a six-hour run deadline. Kubernetes 1.27 or newer is required for the native CronJob `timeZone` field. `backup.schedule`, the deadlines, resource limits and Job history limits are configurable. The container runs as UID/GID 70 with the chart's security settings, a read-only root, writable `/tmp` and a `10Gi` backup PVC.
 
 The extra image combines the Postgres 18 clients with pinned rclone 1.70.3. Build it with the command above. For a remote cluster, publish the image to your registry and set `backup.image` to that pinned image; the default pull policy is `IfNotPresent`. The chart's ConfigMap mounts the same four scripts as Compose: `entrypoint.sh`, `common.sh`, `backup.sh` and `restore.sh`. The Docker-only test checks that the embedded script bodies exactly match `infra/backup`.
 
@@ -120,6 +120,8 @@ kubectl create job --from=cronjob/codechatter-backup \
 ```
 
 Alert when `status.lastSuccessfulTime` is absent after the first scheduled run, or older than 26 hours. A Job completing successfully means its dump was verified, retention completed and any configured S3 upload succeeded. `/backups/last-success` holds a UTC epoch timestamp; `/backups/last-failure` holds a sanitized failure reason. Job failure alerts and the age check cover different failures: no scheduled Job cannot update the status files. See the [Kubernetes CronJob reference](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) for scheduling and history behavior.
+
+Backup names have UTC-minute precision. A second run in the same minute refuses to overwrite the first file, including a valid local dump left by an S3 failure. After fixing the cause, start a manual Job in a later UTC minute; the next scheduled run also creates a fresh dump. The CronJob does not retry a failed run automatically.
 
 Do a monthly scratch restore using the same Job template and PVC. Choose a real dump basename from the backup logs, or an `s3://bucket/prefix/codechatter-<timestamp>.dump` key. This creates a new `codechatter_restore_<stamp>` database; it does not replace `codechatter`:
 
@@ -183,8 +185,129 @@ livekit:
 
 Open TCP 30881, UDP 30882 and UDP 30478 on that node and direct them to the same ports without rewriting. With `externalTrafficPolicy: Local`, use the node hosting the LiveKit pod; if it moves, the advertised address and routing must follow. Production needs a stable node placement/address or a suitable LoadBalancer. A generic HTTP Ingress does not provide this media routing. The edge's separate HTTPS/TLS setup still needs its usual public HTTP/HTTPS ports.
 
-TURN is enabled with UDP only (`tls_port: 0`). It helps when a browser needs a relay but still permits UDP to the server. Networks blocking UDP need TURN over TCP/TLS; that is not provided by these values. Adding TURN/TLS on 443 needs a separate address or an L4 arrangement because the app's HTTPS edge already uses 443. The embedded relay's dynamic sockets are internal; this chart exposes the documented client-facing TURN port rather than an additional public relay range. LoadBalancer/NAT return routing must still be verified with a forced-relay browser call.
+### TURN over TLS for HTTPS-only networks
 
-After installing, check signalling with `curl https://code.example.com/livekit/` (or `curl http://localhost:8090/livekit/` for the demo); it should return `OK`. Then connect two browser sessions to the same room and test microphone, camera and screen sharing. An `OK` response verifies only signalling. Check the selected ICE pair in the browser's WebRTC diagnostics and repeat with a client forcing `iceTransportPolicy: "relay"` to exercise TURN. A direct call or a healthy pod does not verify relay connectivity.
+The default demo keeps TURN/UDP 3478 and leaves TLS disabled. For production,
+enable `livekit.turn.tls`: it makes a **separate TCP LoadBalancer on public 443**
+for TURN, while the website's edge/Ingress keeps its own HTTPS endpoint. A generic
+HTTP Ingress cannot proxy TURN. The pod listens on unprivileged port 5349 and
+LiveKit advertises `turns:turn.code.example.com:443?transport=tcp`; its pinned
+version always advertises 443 whenever embedded TURN TLS is enabled. UDP 3478
+remains available on the media Service.
+
+Provision an existing `kubernetes.io/tls` Secret containing `tls.crt` (full chain)
+and `tls.key`, valid for your TURN hostname. Use a trusted public certificate;
+browsers cannot click through a TURN certificate warning. The following values
+terminate TLS inside LiveKit, behind a TCP **passthrough** LoadBalancer:
+
+```yaml
+url: https://code.example.com
+livekit:
+  turn:
+    tls:
+      enabled: true
+      # Empty also derives turn.<host from url>; override for another DNS name.
+      domain: turn.code.example.com
+      secretName: codechatter-turn-tls
+      externalTls: false
+      service:
+        type: LoadBalancer
+        port: 443
+        externalTrafficPolicy: Local
+        annotations: {}             # Your provider's TCP passthrough settings.
+```
+
+Set the existing RTC public-address values above too. Add an `A` record for the
+TURN domain pointing to this **TURN LoadBalancer's** IPv4 address, or a DNS alias
+to its provider hostname. Add `AAAA` only if the full IPv6 path works. Open inbound
+TCP 443 to that LoadBalancer; the internal pod port 5349 need not be public. The
+TURN address can differ from the media and website addresses. Do not point it at
+an HTTP/CDN proxy. Keep `externalTrafficPolicy: Local` to preserve client source
+addresses; a TCP proxy that rewrites them must send PROXY protocol v2, with
+`proxyProtocol: true` and narrowly scoped `trustedProxyCidrs`.
+
+If cert-manager is already installed, it can maintain the Secret. For example,
+create this Certificate with an existing, correctly configured ClusterIssuer:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: { name: codechatter-turn, namespace: codechatter }
+spec:
+  secretName: codechatter-turn-tls
+  dnsNames: [turn.code.example.com]
+  issuerRef: { name: letsencrypt-production, kind: ClusterIssuer }
+```
+
+Choose an issuer/challenge reachable for that DNS name (DNS-01 avoids an HTTP
+challenge depending on the TURN-only endpoint). cert-manager is optional; the
+chart does not install it or a Certificate. Secret files mount read-only with
+mode 0440 and the pod's fsGroup 1000. LiveKit reads its certificate at startup:
+after renewal or Secret replacement, restart its Deployment, or use your existing
+Secret-change rollout automation. A rollout interrupts calls on this single
+LiveKit instance:
+
+```sh
+kubectl rollout restart deployment/codechatter-livekit -n codechatter
+```
+
+Alternatively, a provider's **TCP/TLS** LoadBalancer can own the certificate and
+terminate TLS before forwarding plain TCP to the pod. In that mode use these
+settings, plus the provider-specific certificate/listener annotations:
+
+```yaml
+livekit:
+  turn:
+    tls:
+      enabled: true
+      domain: turn.code.example.com
+      externalTls: true
+      secretName: ""                # Certificate belongs to the TLS load balancer.
+      proxyProtocol: true
+      trustedProxyCidrs: [192.0.2.10/32]   # Replace with actual proxy source CIDRs.
+      service:
+        type: LoadBalancer
+        port: 443
+        annotations: {}             # Configure TLS termination AND PROXY v2 here.
+```
+
+The annotation placeholders do not configure TLS by themselves. Confirm a real
+TLS listener/certificate and PROXY v2 header forwarding before enabling this mode;
+plain TCP on public 443 is not TURN over TLS. The trusted list identifies addresses
+that connect to the pod, not browser addresses. Restrict it to the actual proxy
+sources. LiveKit then reports the original client address in TURN responses;
+otherwise Firefox can reject a private proxy address. A direct connection without
+the required PROXY header is rejected. Keep public 443 mapped to `tls.port` (5349 by
+default); NodePort-only, mismatched public ports, missing Secrets, conflicting TLS
+modes and missing proxy trust fail chart rendering. `livekit.enabled: false`
+continues to remove all call resources, even if TLS settings remain in values.
+
+The embedded relay's dynamic sockets stay internal; no additional public relay
+range is exposed. Retain the exact restricted-peer CIDR exceptions needed by a
+private media address, as described above; do not allow whole private networks.
+
+### Check the external relay and screen share
+
+Check signalling with `curl https://code.example.com/livekit/` (or
+`curl http://localhost:8090/livekit/` for the demo); it should return `OK`. Check
+the TURN certificate from **outside** the cluster:
+
+```sh
+openssl s_client -connect turn.code.example.com:443 -servername turn.code.example.com -verify_return_error </dev/null
+```
+
+Expect a trusted chain valid for the TURN hostname and verification code 0. This
+checks TLS, not a TURN allocation. In two browser sessions, join a room and force
+relay using the development `?callRelay=1` switch, or a separately configured
+WebRTC probe with `iceTransportPolicy: "relay"`. The URL switch is deliberately
+ignored in production. Open `chrome://webrtc-internals` or
+`edge://webrtc-internals` before joining: the selected/succeeded candidate pair
+must use a local `relay` candidate. For the TLS path, inspect its TURN URL/relay
+protocol and require the `turns:` TCP 443 endpoint; a relay through UDP 3478 alone
+does not prove this TLS listener. Confirm decoded video frames/bytes increase,
+share a screen and confirm remote frames, then stop and confirm the remote tile
+disappears. Test from a network that blocks direct media and UDP. A selected
+`host`/`srflx` pair, a signalling `OK`, or a certificate handshake alone is not a
+successful forced-relay test.
 
 Validate the chart before installation with `helm lint infra/helm/codechatter` and `helm template codechatter infra/helm/codechatter`. Rendered Secrets contain credentials, so do not publish the output. Network choices follow the [LiveKit port reference](https://docs.livekit.io/home/self-hosting/ports-and-firewall/), [Kubernetes guidance](https://docs.livekit.io/home/self-hosting/kubernetes/) and the pinned [server configuration](https://github.com/livekit/livekit/blob/v1.13.11/config-sample.yaml).

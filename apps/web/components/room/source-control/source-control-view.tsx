@@ -433,7 +433,7 @@ function ChangeRow({
         className={cn(
           "w-3 shrink-0 text-center font-mono",
           change.kind === "added"
-            ? "text-brand"
+            ? "text-brand-text"
             : change.kind === "deleted"
               ? "text-destructive"
               : "text-muted-foreground",

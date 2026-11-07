@@ -88,7 +88,7 @@ export function BottomPanel({
       aria-label="Output and terminals"
       className="flex h-full min-h-0 flex-col border-t bg-background"
     >
-      <div className="flex h-8 shrink-0 items-stretch gap-1 border-b bg-chrome pr-1 pl-2">
+      <div className="flex h-8 shrink-0 items-stretch gap-2 border-b bg-chrome pr-1 pl-2">
         <div
           role="tablist"
           aria-label="Panel"
@@ -140,22 +140,23 @@ export function BottomPanel({
               <SquareTerminal className="size-3.5" /> Terminal {n}
             </PanelTabButton>
           ))}
-          {canTerminal && terminals.length < MAX_TERMINALS && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={onAddTerminal}
-                  aria-label="New terminal"
-                  className="flex items-center self-center rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>New terminal (Ctrl+`)</TooltipContent>
-            </Tooltip>
-          )}
         </div>
+        {/* Beside the tabs, not among them: a tab list holds only tabs. */}
+        {canTerminal && terminals.length < MAX_TERMINALS && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onAddTerminal}
+                aria-label="New terminal"
+                className="grid size-6 shrink-0 place-items-center self-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <Plus className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>New terminal (Ctrl+`)</TooltipContent>
+          </Tooltip>
+        )}
 
         <div className="ml-auto flex items-center gap-1">
           {tab === "output" && run.running && can("code.run") && (
@@ -227,7 +228,11 @@ function PanelTabButton({
         type="button"
         role="tab"
         aria-selected={selected}
+        aria-keyshortcuts={onClose ? "Delete" : undefined}
         onClick={onClick}
+        onKeyDown={(event) => {
+          if (event.key === "Delete") onClose?.();
+        }}
         className={cn(
           "flex items-center gap-1.5 text-xs font-medium whitespace-nowrap",
           selected ? "text-foreground" : "text-muted-foreground hover:text-foreground",
@@ -236,14 +241,15 @@ function PanelTabButton({
         {children}
       </button>
       {onClose && (
-        <button
-          type="button"
-          aria-label="Close terminal"
+        // For the mouse. A tab list holds only tabs, so the keyboard and screen readers close it with Delete.
+        <span
+          aria-hidden
+          title="Close (Delete)"
           onClick={onClose}
-          className="ml-1 rounded-sm p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
+          className="ml-1 cursor-pointer rounded-sm p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
         >
           <X className="size-3" />
-        </button>
+        </span>
       )}
       {selected && <span aria-hidden className="absolute inset-x-0 -bottom-px h-[2px] bg-brand" />}
     </div>

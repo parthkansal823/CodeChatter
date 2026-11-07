@@ -8,6 +8,13 @@ rtc:
   udp_port: 7882
   use_external_ip: false
   node_ip: 127.0.0.1
+  enable_loopback_candidate: true
+# Local-only TURN lets the relay browser test reach this same LiveKit process.
+turn:
+  enabled: true
+  udp_port: 3478
+  tls_port: 0
+  allow_restricted_peer_cidrs: [127.0.0.1/32]
 # The development key the API falls back to when .env names none (apps/api/src/calls). Never
 # use it anywhere real: production sets its own in the LiveKit config and LIVEKIT_* in .env.
 keys:

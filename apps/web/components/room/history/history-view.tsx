@@ -354,7 +354,7 @@ function DifferenceRow({ change, editable, onDiff, onRestore }: { change: Change
         title={since.label}
         className={cn(
           "w-3 shrink-0 text-center font-mono",
-          change.kind === "added" ? "text-brand" : change.kind === "deleted" ? "text-destructive" : "text-muted-foreground",
+          change.kind === "added" ? "text-brand-text" : change.kind === "deleted" ? "text-destructive" : "text-muted-foreground",
         )}
       >
         {since.letter}

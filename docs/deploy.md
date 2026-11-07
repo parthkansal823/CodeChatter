@@ -166,6 +166,10 @@ Postgres: these archives preserve their database references, not their object
 payloads. Protect that separate bucket with its own versioning/replication policy.
 This is a logical database backup, not continuous WAL archiving or point-in-time
 recovery. Recovery may lose changes since the last successful nightly dump.
+Keep matching production settings and encryption/authentication keys in a secure
+secret manager separately; the dump does not back up `.env.production`, container
+images or cluster-wide Postgres roles. A replacement server must recreate the
+`codechatter` database owner and use the original app encryption keys.
 
 The dump is written to a temporary filename, checked with `pg_restore --list`,
 then published with its checksum. A shared volume lock prevents backup/restore
@@ -196,9 +200,17 @@ are additional bucket settings; account for retained versions in storage costs.
 
 ```sh
 dc up -d --build backup
-dc run --rm --no-deps backup now
 dc logs --tail=30 backup
 ```
+
+For an immediate run when the scheduler is idle, use `dc run --rm --no-deps
+backup now`. A second run in the same UTC minute is refused instead of
+overwriting a completed archive. After fixing a failure, retry in a later minute.
+The scheduler checks the local clock every 30 seconds, catches up once after
+03:00 if it was down, and records each attempted calendar day before running.
+It keeps running after a failed attempt; alert on `last-failure` and retry manually.
+A skipped local hour during a time-zone change runs at the first observed time
+after 03:00; repeated hours do not duplicate that day's scheduled attempt.
 
 Without an S3 URL and credentials, archives stay on the `backups` Docker volume
 at `/backups`; the log explicitly says they are **not off the server**. Local-only
@@ -209,6 +221,10 @@ to local and S3 inventories. Override `BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY` 
 The current run and newest timestamp are protected even after a clock rollback;
 this can retain an extra archive. Each deletion is logged. Use one deployment
 as the writer of a given S3 prefix; the filesystem lock does not span clusters.
+Allow space for retained archives plus an extra dump-sized temporary copy used
+to verify S3 uploads. A scratch restore also needs room for a second database on
+the Postgres volume. Pruning happens after the new backup is safely published;
+a full disk fails the run rather than deleting old copies first.
 
 List completed local files without starting another scheduler:
 
@@ -255,9 +271,18 @@ and the backup scheduler; leave Postgres up. Coordinate a maintenance window:
 
 ```sh
 dc stop web api collab runner backup
-dc run --rm --no-deps -e BACKUP_APP_STOPPED=yes backup restore /backups/codechatter-YYYY-MM-DDTHHMMZ.dump --into-live
-# At the prompt, type exactly: codechatter
-# Continue only after a successful restore and plausible printed row counts.
+# Type codechatter at the prompt only after checking the selected archive.
+if dc run --rm --no-deps -e BACKUP_APP_STOPPED=yes backup restore /backups/codechatter-YYYY-MM-DDTHHMMZ.dump --into-live; then
+  printf '%s\n' 'Restore completed. Check the printed row counts before restarting writers.'
+else
+  printf '%s\n' 'Restore failed. Leave writers stopped and investigate.' >&2
+fi
+```
+
+After a successful restore, reviewed counts and any required schema migrations,
+restart access separately:
+
+```sh
 dc up -d web api collab runner backup
 ```
 

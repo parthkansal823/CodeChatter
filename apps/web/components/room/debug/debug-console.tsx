@@ -50,7 +50,7 @@ export function DebugConsole() {
                 : line.category === "console"
                   ? "text-muted-foreground"
                   : line.category === "input"
-                    ? "text-brand"
+                    ? "text-brand-text"
                     : undefined,
             )}
           >

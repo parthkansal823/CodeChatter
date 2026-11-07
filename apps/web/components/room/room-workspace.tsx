@@ -866,6 +866,8 @@ function Workspace() {
                 minSize={140}
                 onResize={(size) => setPanelOpen(size.inPixels > 0)}
               >
+                {/* Closed, it has no height but keeps running: inert, so focus and screen readers can't land on what can't be seen. */}
+                <div inert={!panelOpen} className="h-full">
                 <BottomPanel
                   tab={panelTab}
                   file={activeFile}
@@ -878,6 +880,7 @@ function Workspace() {
                   task={task}
                   onCloseTask={closeTask}
                 />
+                </div>
               </ResizablePanel>
             </ResizablePanelGroup>
           </ResizablePanel>

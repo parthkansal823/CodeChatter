@@ -131,6 +131,7 @@ export function CollectionsTree() {
           <Play />
         </Button>
       </div>
+      {rows.length === 0 && <p className="px-3 py-2 text-sm text-muted-foreground">Nothing here yet.</p>}
       <div
         role="tree"
         aria-label="Requests"
@@ -143,7 +144,6 @@ export function CollectionsTree() {
         onDragLeave={() => setDropTarget(null)}
         onDrop={(event) => onDrop(event, null)}
       >
-        {rows.length === 0 && <p className="px-3 py-2 text-sm text-muted-foreground">Nothing here yet.</p>}
         {rows.map((row) => {
           const { item, depth } = row;
           const selected = item.id === selectedId;

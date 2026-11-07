@@ -72,7 +72,7 @@ function VideoCall() {
   const callRoom = useCall((state) => state.roomId);
   const others = usePeers().filter((peer) => peer.inCall).length;
   if (status === "joined" && callRoom === room.id) {
-    return <span role="status" className="flex items-center gap-1.5 text-muted-foreground"><Video className="size-3.5 text-brand" /> {others ? "You're on video together" : "You're on video, and waiting for the other person"}</span>;
+    return <span role="status" className="flex items-center gap-1.5 text-muted-foreground"><Video className="size-3.5 text-brand-text" /> {others ? "You're on video together" : "You're on video, and waiting for the other person"}</span>;
   }
   return (
     <Button size="sm" variant="outline" disabled={status === "joining"} onClick={() => void useCall.getState().join(room.id)}>

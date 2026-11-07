@@ -41,16 +41,21 @@ x-object-store: &object-store
 
 services:
   caddy:
-    image: caddy:2.11-alpine
+    build: { context: .., dockerfile: infra/docker/caddy.Dockerfile }
+    image: codechatter-caddy:2.11-l4-8e984fe
     restart: unless-stopped
     ports: ["80:80", "443:443", "443:443/udp"]
     environment:
       DOMAIN: ${DOMAIN}
+      TURN_DOMAIN: ${TURN_DOMAIN:-turn.${DOMAIN}}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    networks:
+      default: {}
+      turn-proxy: { ipv4_address: 172.30.250.2 }
     depends_on:
       web: { condition: service_healthy }
       api: { condition: service_healthy }
@@ -105,8 +110,12 @@ services:
     command: ["--config", "/etc/livekit.yaml"]
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET}"
+      LIVEKIT_TURN_DOMAIN: ${TURN_DOMAIN:-turn.${DOMAIN}}
     ports: ["7881:7881/tcp", "7882:7882/udp", "3478:3478/udp"]
     volumes: ["./livekit/livekit.yaml:/etc/livekit.yaml:ro"]
+    networks:
+      default: {}
+      turn-proxy: { aliases: [livekit-turn] }
 
   # Run button and terminals: one sandbox container per room (ADR 0003). The
   # only service with the Docker socket; reachable only by the API.
@@ -199,3 +208,9 @@ volumes:
   pg-data:
   valkey-data:
   backups:
+
+# Narrow PROXY-protocol trust: Caddy has one fixed address on this isolated link.
+networks:
+  turn-proxy:
+    ipam:
+      config: [{ subnet: 172.30.250.0/29 }]

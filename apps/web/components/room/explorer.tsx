@@ -256,6 +256,11 @@ export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null
           )}
         </div>
       </div>
+      {tree.length === 0 && !draft && (
+        <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+          {editable ? "No files yet. Create one to start." : "This room has no files yet."}
+        </p>
+      )}
       <div
         role="tree"
         aria-label="Files"
@@ -271,11 +276,6 @@ export function Explorer({ activeFileId, onOpen }: { activeFileId: string | null
         {tree.map((node) => (
           <TreeRow key={node.id} node={node} depth={0} ctx={ctx} />
         ))}
-        {tree.length === 0 && !draft && (
-          <p className="px-4 py-6 text-center text-xs text-muted-foreground">
-            {editable ? "No files yet. Create one to start." : "This room has no files yet."}
-          </p>
-        )}
       </div>
     </div>
   );

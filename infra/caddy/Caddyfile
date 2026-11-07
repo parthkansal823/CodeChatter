@@ -4,6 +4,27 @@
 {
 	admin off
 	email {$ACME_EMAIL}
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				@turn tls sni {$TURN_DOMAIN}
+				route @turn {
+					tls
+					proxy {
+						proxy_protocol v2
+						upstream livekit-turn:5349
+					}
+				}
+			}
+			tls
+		}
+	}
+}
+
+# Enrol this hostname in Caddy's certificate manager. Its TCP traffic is handled
+# by the SNI wrapper above; HTTP-01 challenges still arrive on port 80.
+{$TURN_DOMAIN} {
+	respond "TURN endpoint" 404
 }
 
 {$DOMAIN} {
@@ -34,7 +55,7 @@
 		reverse_proxy collab:4100
 	}
 
-	# LiveKit signalling only; media and TURN use their own published ports.
+	# LiveKit signalling; TURN/TLS uses the SNI wrapper, TURN/UDP its published port.
 	handle_path /livekit* {
 		reverse_proxy livekit:7880
 	}

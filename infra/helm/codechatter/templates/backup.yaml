@@ -18,9 +18,340 @@ data:
   # BEGIN BACKUP SCRIPTS
   entrypoint.sh: |
     #!/bin/sh
-    # Refuse to run until the shared scripts have been embedded during development.
-    echo 'backup FAILED: backup scripts are not embedded' >&2
-    exit 1
+    # Run one-off operations or one backup per local calendar day after 03:00.
+    # Rechecking the clock avoids DST drift; the persisted attempt day survives restart.
+    set -eu
+    script_dir=$(CDPATH='' cd -- "$(dirname "$0")" && pwd)
+    case "${1:-schedule}" in
+      now) shift; [ "$#" -eq 0 ] || exit 2; exec "$script_dir/backup.sh";;
+      restore) shift; exec "$script_dir/restore.sh" "$@";;
+      schedule) [ "$#" -eq 0 ] || shift;;
+      *) printf 'usage: backup [schedule|now|restore <file> [--into-live]]\n' >&2; exit 2;;
+    esac
+    [ "$#" -eq 0 ] || exit 2
+    BACKUP_DIR=${BACKUP_DIR:-/backups}
+    BACKUP_TZ=${BACKUP_TZ:-UTC}
+    case "$BACKUP_TZ" in ''|/*|*..*|*[!a-zA-Z0-9_+/-]*) printf 'backup FAILED: invalid time zone\n' >&2; exit 1;; esac
+    [ -f "/usr/share/zoneinfo/$BACKUP_TZ" ] || { printf 'backup FAILED: unknown time zone\n' >&2; exit 1; }
+    export TZ="$BACKUP_TZ"
+    mkdir -p "$BACKUP_DIR"
+    trap 'exit 0' INT TERM
+    printf 'backup schedule: 03:00 in %s\n' "$BACKUP_TZ"
+    while :; do
+      today=$(date +%F)
+      hour=$(date +%H)
+      last_day=$(cat "$BACKUP_DIR/last-scheduled-day" 2>/dev/null || :)
+      if [ "$hour" -ge 3 ] && [ "$today" != "$last_day" ]; then
+        printf '%s\n' "$today" >"$BACKUP_DIR/.last-scheduled-day.$$"
+        mv -f "$BACKUP_DIR/.last-scheduled-day.$$" "$BACKUP_DIR/last-scheduled-day"
+        "$script_dir/backup.sh" || :
+      fi
+      sleep 30 & wait "$!" || :
+    done
+  common.sh: |
+    #!/bin/sh
+    # Shared validation, S3 transport and GFS retention for backup and restore jobs.
+    # Passwords stay in environment variables; command errors are classified safely.
+    set -eu
+    # failure_reason is consumed by each calling operation's EXIT trap.
+    # shellcheck disable=SC2034
+    fail() { failure_reason=$1; exit 1; }
+    settings() {
+      BACKUP_DIR=${BACKUP_DIR:-/backups}
+      PGHOST=${PGHOST:-postgres}
+      PGPORT=${PGPORT:-5432}
+      PGUSER=${PGUSER:-codechatter}
+      PGDATABASE=${PGDATABASE:-codechatter}
+      PGCONNECT_TIMEOUT=${PGCONNECT_TIMEOUT:-15}
+      BACKUP_KEEP_DAILY=${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY=${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_KEEP_MONTHLY=${BACKUP_KEEP_MONTHLY:-6}
+      case "$PGDATABASE" in ''|*[!a-zA-Z0-9_]*) fail 'invalid database name';; esac
+      case "$PGUSER" in ''|*[!a-zA-Z0-9_-]*) fail 'invalid database user';; esac
+      case "$PGHOST" in ''|*://*|*[!a-zA-Z0-9._:-]*) fail 'invalid database host';; esac
+      case "$PGPORT" in ''|*[!0-9]*) fail 'invalid database port';; esac
+      [ -n "${PGPASSWORD:-}" ] || fail 'PGPASSWORD is required'
+      for count in "$BACKUP_KEEP_DAILY" "$BACKUP_KEEP_WEEKLY" "$BACKUP_KEEP_MONTHLY"; do
+        case "$count" in ''|*[!0-9]*) fail 'retention counts must be nonnegative integers';; esac
+        [ "$count" -le 10000 ] || fail 'retention count is too large'
+      done
+      export PGHOST PGPORT PGUSER PGDATABASE PGCONNECT_TIMEOUT
+      export HOME=/tmp
+      mkdir -p "$BACKUP_DIR" || fail 'cannot create backup directory'
+    }
+    lock_operation() {
+      exec 9>"$BACKUP_DIR/.operation.lock"
+      flock -n 9 || fail 'another backup or restore is running'
+    }
+    valid_name() {
+      printf '%s\n' "$1" | grep -Eq '^codechatter-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4}Z\.dump$' || return 1
+      name_day=$(printf '%s' "$1" | cut -c13-22)
+      name_time=$(printf '%s' "$1" | cut -c24-27)
+      name_hour=$(printf '%s' "$name_time" | cut -c1-2)
+      name_minute=$(printf '%s' "$name_time" | cut -c3-4)
+      checked_name=$(date -u -d "$name_day $name_hour:$name_minute:00" '+codechatter-%Y-%m-%dT%H%MZ.dump' 2>/dev/null) || return 1
+      [ "$checked_name" = "$1" ]
+    }
+    s3_settings() {
+      # Public result consumed by backup.sh and restore.sh.
+      # shellcheck disable=SC2034
+      s3_enabled=false
+      [ -n "${BACKUP_S3_URL:-}" ] || return 0
+      [ -n "${BACKUP_S3_ACCESS_KEY:-}" ] && [ -n "${BACKUP_S3_SECRET_KEY:-}" ] || fail 'S3 URL requires both S3 credentials'
+      s3_url=${BACKUP_S3_URL%/}
+      case "$s3_url" in s3://*) ;; *) fail 'S3 URL must start with s3://';; esac
+      s3_path=${s3_url#s3://}
+      case "$s3_path" in ''|/*|*[!a-zA-Z0-9._/-]*|*/../*|../*|*/..|*/./*|./*|*/.|*//*) fail 'invalid S3 bucket or prefix';; esac
+      s3_bucket=${s3_path%%/*}
+      case "$s3_bucket" in ''|*[!a-zA-Z0-9.-]*) fail 'invalid S3 bucket';; esac
+      # Public destination consumed by the two calling operations.
+      # shellcheck disable=SC2034
+      s3_remote="ccbackup:$s3_path"
+      RCLONE_CONFIG_CCBACKUP_TYPE=s3
+      RCLONE_CONFIG_CCBACKUP_PROVIDER=AWS
+      [ -z "${BACKUP_S3_ENDPOINT:-}" ] || RCLONE_CONFIG_CCBACKUP_PROVIDER=Other
+      RCLONE_CONFIG_CCBACKUP_ACCESS_KEY_ID=$BACKUP_S3_ACCESS_KEY
+      RCLONE_CONFIG_CCBACKUP_SECRET_ACCESS_KEY=$BACKUP_S3_SECRET_KEY
+      RCLONE_CONFIG_CCBACKUP_REGION=${BACKUP_S3_REGION:-us-east-1}
+      RCLONE_CONFIG_CCBACKUP_ENDPOINT=${BACKUP_S3_ENDPOINT:-}
+      RCLONE_CONFIG_CCBACKUP_FORCE_PATH_STYLE=${BACKUP_S3_FORCE_PATH_STYLE:-true}
+      export RCLONE_CONFIG_CCBACKUP_TYPE RCLONE_CONFIG_CCBACKUP_PROVIDER
+      export RCLONE_CONFIG_CCBACKUP_ACCESS_KEY_ID RCLONE_CONFIG_CCBACKUP_SECRET_ACCESS_KEY
+      export RCLONE_CONFIG_CCBACKUP_REGION RCLONE_CONFIG_CCBACKUP_ENDPOINT RCLONE_CONFIG_CCBACKUP_FORCE_PATH_STYLE
+      # Public result consumed by the calling operation.
+      # shellcheck disable=SC2034
+      s3_enabled=true
+    }
+    # The caller creates its private work_dir before using the transport.
+    # shellcheck disable=SC2154
+    s3() {
+      rclone --config /dev/null --log-level ERROR --retries 3 --low-level-retries 3 \
+        --contimeout 15s --timeout 2m "$@" 2>"$work_dir/transport-error"
+    }
+    # Keep the newest file of each selected day, Sunday and first-of-month, plus
+    # the greatest timestamp and this run's file if the wall clock went backwards.
+    retention_plan() {
+      inventory=$1 keep=$2
+      : >"$keep"
+      sort -ru "$inventory" >"$work_dir/sorted-names"
+      daily=0 weekly=0 monthly=0 previous_day='' newest=true
+      while IFS= read -r candidate; do
+        valid_name "$candidate" || continue
+        if [ "$newest" = true ]; then printf '%s\n' "$candidate" >>"$keep"; newest=false; fi
+        [ "$candidate" != "${protected_name:-}" ] || printf '%s\n' "$candidate" >>"$keep"
+        day=$(printf '%s' "$candidate" | cut -c13-22)
+        [ "$day" != "$previous_day" ] || continue
+        previous_day=$day
+        if [ "$daily" -lt "$BACKUP_KEEP_DAILY" ]; then printf '%s\n' "$candidate" >>"$keep"; daily=$((daily + 1)); fi
+        weekday=$(date -u -d "$day" +%u)
+        if [ "$weekday" = 7 ] && [ "$weekly" -lt "$BACKUP_KEEP_WEEKLY" ]; then printf '%s\n' "$candidate" >>"$keep"; weekly=$((weekly + 1)); fi
+        if [ "${day##*-}" = 01 ] && [ "$monthly" -lt "$BACKUP_KEEP_MONTHLY" ]; then printf '%s\n' "$candidate" >>"$keep"; monthly=$((monthly + 1)); fi
+      done <"$work_dir/sorted-names"
+      sort -u "$keep" -o "$keep"
+    }
+    check_checksum() {
+      check_file=$1 check_base=${1##*/}
+      valid_name "$check_base" || fail 'unrecognized backup filename'
+      [ -f "$check_file.sha256" ] || fail 'checksum file is missing'
+      [ "$(wc -l <"$check_file.sha256" | tr -d ' ')" = 1 ] || fail 'invalid checksum file'
+      IFS=' ' read -r digest checksum_name <"$check_file.sha256" || fail 'invalid checksum file'
+      [ "${#digest}" = 64 ] || fail 'invalid checksum digest'
+      case "$digest" in *[!a-fA-F0-9]*) fail 'invalid checksum digest';; esac
+      [ "$checksum_name" = "$check_base" ] || fail 'checksum filename does not match'
+      actual_digest=$(sha256sum "$check_file" | cut -d ' ' -f1)
+      [ "$actual_digest" = "$digest" ] || fail 'checksum mismatch'
+      pg_restore --list "$check_file" >"$work_dir/archive-list" 2>"$work_dir/archive-error" || fail 'archive is not readable'
+    }
+  backup.sh: |
+    #!/bin/sh
+    # Publish a validated atomic Postgres archive and apply local/off-server retention.
+    # An exclusive volume lock and checksum-last upload protect overlapping runs.
+    set -eu
+    umask 077
+    failure_reason='initialisation failed'
+    work_dir='' target='' published=false local_complete=false
+    BACKUP_DIR=${BACKUP_DIR:-/backups}
+    finish() {
+      result=$?
+      trap - 0 HUP INT TERM
+      if [ "$result" -ne 0 ]; then
+        if [ "$published" = true ] && [ "$local_complete" = false ]; then rm -f "$target" "$target.sha256"; fi
+        if [ -d "$BACKUP_DIR" ] && [ -w "$BACKUP_DIR" ]; then
+          printf '%s\n' "$failure_reason" >"$BACKUP_DIR/.last-failure.$$" && mv -f "$BACKUP_DIR/.last-failure.$$" "$BACKUP_DIR/last-failure" || :
+        fi
+        printf 'backup FAILED: %s\n' "$failure_reason" >&2
+      fi
+      [ -z "$work_dir" ] || rm -rf "$work_dir"
+      exit "$result"
+    }
+    trap finish 0
+    trap 'failure_reason="interrupted"; exit 1' HUP INT TERM
+    # shellcheck source-path=SCRIPTDIR
+    # shellcheck source=common.sh
+    . "$(dirname "$0")/common.sh"
+    settings
+    lock_operation
+    work_dir=$(mktemp -d "$BACKUP_DIR/.backup.XXXXXXXX")
+    started=$(date -u +%s)
+    if [ -n "${BACKUP_TEST_NOW:-}" ]; then
+      [ "${BACKUP_TEST_MODE:-}" = 1 ] || fail 'fake date is only allowed in test mode'
+      stamp=$(date -u -d "$BACKUP_TEST_NOW" +%Y-%m-%dT%H%MZ 2>/dev/null) || fail 'invalid fake UTC date'
+    else
+      stamp=$(date -u +%Y-%m-%dT%H%MZ)
+    fi
+    protected_name="codechatter-$stamp.dump"
+    valid_name "$protected_name" || fail 'invalid UTC timestamp'
+    target="$BACKUP_DIR/$protected_name"
+    [ ! -e "$target" ] && [ ! -e "$target.sha256" ] || fail 'backup already exists for this UTC minute'
+    s3_settings
+    failure_reason='database dump failed'
+    pg_dump --no-password --format=custom --compress=9 --file="$work_dir/archive.part" 2>"$work_dir/database-error"
+    failure_reason='archive validation failed'
+    pg_restore --list "$work_dir/archive.part" >"$work_dir/archive-list" 2>"$work_dir/archive-error"
+    digest=$(sha256sum "$work_dir/archive.part" | cut -d ' ' -f1)
+    printf '%s  %s\n' "$digest" "$protected_name" >"$work_dir/checksum.part"
+    failure_reason='cannot publish local backup'
+    mv "$work_dir/archive.part" "$target"
+    published=true
+    mv "$work_dir/checksum.part" "$target.sha256"
+    local_complete=true
+    if [ "$s3_enabled" = true ]; then
+      failure_reason='S3 dump upload failed'
+      s3 copyto "$target" "$s3_remote/$protected_name"
+      failure_reason='S3 checksum upload failed'
+      s3 copyto "$target.sha256" "$s3_remote/$protected_name.sha256"
+      failure_reason='S3 uploaded checksum verification failed'
+      s3 copyto "$s3_remote/$protected_name.sha256" "$work_dir/remote.sha256"
+      cmp -s "$target.sha256" "$work_dir/remote.sha256" || fail 'S3 uploaded checksum differs'
+      failure_reason='S3 uploaded archive verification failed'
+      s3 copyto "$s3_remote/$protected_name" "$work_dir/remote.dump"
+      [ "$(sha256sum "$work_dir/remote.dump" | cut -d ' ' -f1)" = "$digest" ] || fail 'S3 uploaded archive differs'
+      rm -f "$work_dir/remote.dump"
+      printf 'off-server: dump and checksum uploaded and verified\n'
+    else
+      printf 'off-server DISABLED: backups are only on this server\n'
+    fi
+    failure_reason='local retention failed'
+    : >"$work_dir/local-inventory"
+    for archive in "$BACKUP_DIR"/codechatter-*.dump; do
+      [ -f "$archive" ] && [ -f "$archive.sha256" ] || continue
+      candidate=${archive##*/}
+      valid_name "$candidate" || continue
+      printf '%s\n' "$candidate" >>"$work_dir/local-inventory"
+    done
+    retention_plan "$work_dir/local-inventory" "$work_dir/local-keep"
+    while IFS= read -r candidate; do
+      valid_name "$candidate" || continue
+      grep -Fxq "$candidate" "$work_dir/local-keep" && continue
+      printf 'delete local: %s\n' "$candidate"
+      rm -f "$BACKUP_DIR/$candidate" "$BACKUP_DIR/$candidate.sha256"
+    done <"$work_dir/local-inventory"
+    if [ "$s3_enabled" = true ]; then
+      failure_reason='S3 retention listing failed'
+      s3 lsf "$s3_remote" --files-only --max-depth 1 >"$work_dir/remote-objects"
+      awk '/[.]dump$/ {dump[$0]=1} /[.]dump[.]sha256$/ {sum[substr($0,1,length($0)-7)]=1} END {for (name in dump) if (sum[name]) print name}' \
+        "$work_dir/remote-objects" >"$work_dir/remote-inventory"
+      retention_plan "$work_dir/remote-inventory" "$work_dir/remote-keep"
+      failure_reason='S3 retention deletion failed'
+      while IFS= read -r object; do
+        candidate=${object%.sha256}
+        valid_name "$candidate" || continue
+        grep -Fxq "$candidate" "$work_dir/remote-keep" && continue
+        printf 'delete S3: %s\n' "$object"
+        s3 deletefile "$s3_remote/$object"
+      done <"$work_dir/remote-objects"
+    fi
+    failure_reason='cannot write success status'
+    date -u +%s >"$BACKUP_DIR/.last-success.$$"
+    mv -f "$BACKUP_DIR/.last-success.$$" "$BACKUP_DIR/last-success"
+    rm -f "$BACKUP_DIR/last-failure"
+    size=$(wc -c <"$target" | tr -d ' ')
+    duration=$(( $(date -u +%s) - started ))
+    [ "$duration" -ge 0 ] || duration=0
+    printf 'backup ok: %s %s %ss\n' "$protected_name" "$size" "$duration"
+  restore.sh: |
+    #!/bin/sh
+    # Restore a checksum-verified archive into an empty scratch database by default.
+    # Live replacement requires stopped apps, no remaining sessions and typed consent.
+    set -eu
+    umask 077
+    failure_reason='initialisation failed'
+    work_dir=''
+    finish() {
+      result=$?
+      trap - 0 HUP INT TERM
+      [ "$result" -eq 0 ] || printf 'restore FAILED: %s\n' "$failure_reason" >&2
+      [ -z "$work_dir" ] || rm -rf "$work_dir"
+      exit "$result"
+    }
+    trap finish 0
+    trap 'failure_reason="interrupted"; exit 1' HUP INT TERM
+    # shellcheck source-path=SCRIPTDIR
+    # shellcheck source=common.sh
+    . "$(dirname "$0")/common.sh"
+    settings
+    lock_operation
+    work_dir=$(mktemp -d "$BACKUP_DIR/.restore.XXXXXXXX")
+    live=false source_file=''
+    for argument do
+      case "$argument" in
+        --into-live) live=true;;
+        --*) fail 'unknown restore option';;
+        *) [ -z "$source_file" ] || fail 'provide exactly one backup file'; source_file=$argument;;
+      esac
+    done
+    [ -n "$source_file" ] || fail 'usage: restore <file or S3 key> [--into-live]'
+    base=${source_file##*/}
+    valid_name "$base" || fail 'unrecognized backup filename'
+    if [ -f "$source_file" ]; then
+      archive=$source_file
+    elif [ -f "$BACKUP_DIR/$source_file" ]; then
+      archive="$BACKUP_DIR/$source_file"
+    else
+      s3_settings
+      [ "$s3_enabled" = true ] || fail 'backup file was not found and S3 is disabled'
+      case "$source_file" in
+        s3://*) [ "$source_file" = "$s3_url/$base" ] || fail 'S3 source must be in the configured backup prefix';;
+        */*) fail 'use a basename or a full configured S3 URL';;
+      esac
+      failure_reason='S3 restore download failed'
+      archive="$work_dir/$base"
+      s3 copyto "$s3_remote/$base.sha256" "$archive.sha256"
+      s3 copyto "$s3_remote/$base" "$archive"
+    fi
+    failure_reason='checksum verification failed'
+    check_checksum "$archive"
+    if [ "$live" = true ]; then
+      case "$PGDATABASE" in postgres|template0|template1) fail 'refusing to replace a maintenance database';; esac
+      [ "${BACKUP_APP_STOPPED:-}" = yes ] || fail 'stop all app services and set BACKUP_APP_STOPPED=yes before live restore'
+      printf 'Type the live database name (%s) to replace it: ' "$PGDATABASE" >&2
+      IFS= read -r confirmation || fail 'live restore confirmation was not provided'
+      [ "$confirmation" = "$PGDATABASE" ] || fail 'live restore confirmation did not match'
+      target_database=$PGDATABASE
+      live_database=$PGDATABASE
+      failure_reason='cannot check live database connections'
+      connections=$(PGDATABASE=postgres psql --no-password -X -qAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_stat_activity WHERE datname='$live_database' AND pid<>pg_backend_pid();" 2>"$work_dir/database-error")
+      [ "$connections" = 0 ] || fail 'live database still has connections; stop app services first'
+      failure_reason='cannot replace live database; ensure app services are stopped'
+      PGDATABASE=postgres dropdb --no-password --if-exists -- "$target_database" 2>"$work_dir/database-error"
+    else
+      suffix=$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
+      target_database=${BACKUP_RESTORE_DATABASE:-codechatter_restore_$(date -u +%Y%m%d%H%M%S)_$suffix}
+      case "$target_database" in codechatter_restore_?*) ;; *) fail 'scratch name must start with codechatter_restore_';; esac
+      case "$target_database" in *[!a-zA-Z0-9_]*) fail 'invalid scratch database name';; esac
+      [ "${#target_database}" -le 63 ] || fail 'scratch database name is too long'
+      [ "$target_database" != "$PGDATABASE" ] || fail 'scratch database must differ from live database'
+    fi
+    failure_reason='cannot create empty restore database (target must not exist)'
+    PGDATABASE=postgres createdb --no-password --template=template0 -- "$target_database" 2>"$work_dir/database-error"
+    failure_reason='archive restore failed; incomplete target retained for inspection'
+    pg_restore --no-password --exit-on-error --single-transaction --no-owner --no-privileges --dbname="$target_database" "$archive" 2>"$work_dir/database-error"
+    failure_reason='restored row count query failed'
+    for table in user rooms doc_snapshots checkpoints audit_events; do
+      count=$(PGDATABASE=$target_database psql --no-password -X -qAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.\"$table\";" 2>"$work_dir/database-error")
+      printf '%s: %s\n' "$table" "$count"
+    done
+    printf 'restore ok: %s into %s\n' "$base" "$target_database"
   # END BACKUP SCRIPTS
 ---
 apiVersion: v1
@@ -67,7 +398,7 @@ spec:
   startingDeadlineSeconds: {{ .Values.backup.startingDeadlineSeconds }}
   jobTemplate:
     spec:
-      backoffLimit: 1
+      backoffLimit: 0
       activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds }}
       template:
         metadata:

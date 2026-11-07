@@ -11,8 +11,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## In progress (2026-11-06)
 
-- 🟡 **ChatGPT:** prompt 11 (backups).
-- ✅ Checked: ChatGPT's prompt 10 (account security: profile, password, two-factor, active sessions), prompt 9 (teams: `/orgs/new`, members, `/invite/<id>`) and prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
+- ✅ Checked: ChatGPT's prompt 11 (nightly backups and the restore drill), prompt 10 (account security: profile, password, two-factor, active sessions), prompt 9 (teams: `/orgs/new`, members, `/invite/<id>`) and prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
 - ✅ Just finished by Claude:
   - signing out a device now ends what it has open, at once: the live document, chat, terminals, language servers and the debugger;
   - the AI's review, further: signals worked out by code, checked quotes, reviewing a whole batch, and a real model (`gemma4:e4b`, in Docker: `pnpm ai:up:gpu`);
@@ -30,9 +29,9 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **11** (backups) → **12** (TURN over TLS).
+1. **ChatGPT**, one prompt at a time, each checked before the next: **12** (TURN over TLS), which only matters once it's deployed.
 2. **Claude:** accessibility, gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
-3. **You:** record the README's GIF and 2-minute video (step 12).
+3. **Claude, at the very end:** a video explaining every feature (step 12).
 
 ## Your actions
 
@@ -43,7 +42,6 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - rotate every v1 secret (`server/.env`);
   - add the Google OAuth callback (`http://localhost:8080/api/auth/callback/google`);
   - choose hosting (`docs/deploy.md`).
-- **Record** the README's GIF and video. The script is in `docs/demo-script.md`.
 - **Later:** `prom-client` was deprecated in August 2026 in favour of `@prometheus-io/client`, so moving to it is a package change for you to approve. (Installing `prom-client` made pnpm keep two copies of drizzle; `@opentelemetry/api` at the root fixed that, with your OK.)
 
 ## Step 3 · A full IDE
@@ -154,7 +152,13 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Step 10 · Hardening and launch
 
-- 🟡 Nightly backups and a restore drill (**ChatGPT 11**)
+- ⏸️ **Deploying: put off by the owner (2026-11-06).** He'd rather not run other people's code on his own laptop, or look after a server, for now. Nothing's on the internet. When it comes back, a rehearsal found:
+  - `infra/compose.yaml` doesn't pass the `AI_*` settings to the API, so AI stays off in production;
+  - only sign-in and the AI have rate limits: there's none on the API as a whole;
+  - a Cloudflare Tunnel carries no UDP, so calls would need LiveKit Cloud, and Caddy would have to pass on `CF-Connecting-IP`, or everyone shares one sign-in limit;
+  - docker: `internal` networks publish no ports, and Caddy's image won't start with every capability dropped;
+  - a dev server's preview isn't routed in production (`PREVIEW_ORIGIN`, a wildcard host).
+- ⬜ Backups, later: `restore --into-live` drops the live database before restoring it. The file has been checked by then, but restoring beside it and renaming would leave nothing at risk. And a backup that fails isn't tried again until the next day.
 - ⬜ OpenTelemetry traces
 - ⬜ End-to-end tests in CI: `new-room`, the first browser suite, has needed its retry in both runs we've read (it crashes on its first try, then passes). Worth finding out why.
 - ⬜ Metrics, later:
@@ -184,7 +188,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 
 ## Step 12 · Recruiter kit
 
-- ⬜ The README's GIF and 2-minute video (**you** record them; `docs/demo-script.md`)
+- ⬜ **The very last piece** (**Claude**; the owner's request, 2026-11-06): a good video explaining every feature and how it all fits together, made once the features are done. Recorded from the real app, driven by a script. `docs/demo-script.md` is a starting point, and the README's GIF can come from the same recording.
 
 ## Step 13 · Advanced features
 
