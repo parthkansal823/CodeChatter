@@ -10,6 +10,7 @@ import {
   INSTALLS_MINUTES,
   JudgeRunnerInput,
   KubeRequest,
+  McpInput,
   QueryInput,
   RagRunnerInput,
   RoomCode,
@@ -42,6 +43,7 @@ import { judge } from "./judge.js";
 import { log, messageOf } from "./log.js";
 import { configureRunnerCollectors, serveMetrics } from "./metrics.js";
 import { EvalError, runEvals } from "./evals.js";
+import { callMcp } from "./mcp.js";
 import { RagError, searchCodebase } from "./rag.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
 import type { RoomRegistry } from "./room-session.js";
@@ -81,6 +83,7 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   DELETE /rooms/:id/databases/:kind       deletes its data
  *   POST /rooms/:id/databases/:kind/query   { query } QueryResult (the console)
  *   GET  /rooms/:id/databases/:kind/tables  DatabaseTable[] (the table browser)
+ *   POST /rooms/:id/mcp                      McpInput            McpOutput (the MCP Inspector in the sandbox)
  *   POST /rooms/:id/rag                      RagRunnerInput      CodebaseHits (a search of the room's files)
  *   POST /rooms/:id/evals                    EvalInput           NDJSON EvalEvents (promptfoo in the sandbox)
  *   POST /rooms/:id/databases/:kind/preview { name, schema? } QueryResult
@@ -177,6 +180,8 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (check && req.method === "POST") return handleCheck(req, res, check[1]!);
     const analysis = /^\/rooms\/([A-Z0-9]{6})\/analysis$/.exec(url.pathname);
     if (analysis && req.method === "POST") return handleAnalysis(req, res, analysis[1]!);
+    const mcp = /^\/rooms\/([A-Z0-9]{6})\/mcp$/.exec(url.pathname);
+    if (mcp && req.method === "POST") return handleMcp(req, res, mcp[1]!);
     const rag = /^\/rooms\/([A-Z0-9]{6})\/rag$/.exec(url.pathname);
     if (rag && req.method === "POST") return handleRag(req, res, rag[1]!);
     const evals = /^\/rooms\/([A-Z0-9]{6})\/evals$/.exec(url.pathname);
@@ -458,6 +463,23 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       session.touch();
       await session.ready();
       return json(res, 200, await analyseRoom(session));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** A call to an MCP server in the sandbox (mcp.ts). It reads .mcp.json, so it waits for the edits this browser has seen. */
+  async function handleMcp(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const input = McpInput.safeParse(await readJson(req));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a call." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      if (input.data.stateVector) await session.sync.waitFor(input.data.stateVector);
+      return json(res, 200, await callMcp(session.sandbox, input.data));
     } catch (error) {
       if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
       throw error;

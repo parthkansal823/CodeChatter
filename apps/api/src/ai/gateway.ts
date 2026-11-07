@@ -23,6 +23,8 @@ const pick = (from: Record<string, unknown>, fields: readonly string[]) => Objec
 export function chooseModel(asked: unknown, offered: readonly string[], fallback: string | null): string | GatewayFailure {
   const name = asked === undefined || asked === "default" ? fallback : asked;
   if (typeof name !== "string" || !name) return invalid('Say which model: "default" is this room\'s.');
+  // To Ollama, a name without a tag means its :latest, and that's how it lists them.
+  if (offered.includes(`${name}:latest`) && !offered.includes(name)) return `${name}:latest`;
   if (!offered.includes(name)) return { status: 404, message: `This server doesn't offer the model "${name.slice(0, 100)}". It offers: ${offered.join(", ")}.`, type: "invalid_request_error", code: "model_not_found" };
   return name;
 }

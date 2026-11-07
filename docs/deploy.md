@@ -87,10 +87,12 @@ YAML does not expand variables. `LIVEKIT_URL` defaults to `wss://${DOMAIN}/livek
 The production API does not issue call tokens with missing LiveKit settings.
 
 Caddy sends PROXYv2 with the decrypted stream, preserving the client's address.
-LiveKit trusts only Caddy's fixed 172.30.250.2/32 on the dedicated `turn-proxy`
+The dedicated network fixes Caddy at 172.30.250.2 and LiveKit at 172.30.250.3,
+so startup order cannot consume the proxy's reserved address.
+LiveKit trusts only Caddy's 172.30.250.2/32 on the dedicated `turn-proxy`
 network. Its internal 5349 listener uses `external_tls: true`, while browsers are
 given **`turns:turn.<DOMAIN>:443?transport=tcp`**. Host 5349 is not published. If the
-172.30.250.0/29 subnet overlaps your network, change its subnet and Caddy address
+172.30.250.0/29 subnet overlaps your network, change its subnet and both addresses
 in Compose and the matching trusted /32 in `infra/livekit/livekit.yaml` together.
 
 | Public port | Purpose |
@@ -137,7 +139,10 @@ test the real policy rather than assuming that every TCP 443 network permits it.
 ### Development relay and screen-share tests
 
 Development TURN/UDP is bound to **127.0.0.1:3478**, with loopback RTC candidates
-and only peer 127.0.0.1/32 permitted. Check conflicts with
+and only peer 127.0.0.1/32 permitted. `advertise_internal_ip: true` preserves native
+interface candidates alongside Docker's loopback mapping, supporting both direct
+published-port traffic and TURN's in-container media path.
+The loopback-only fixture is for browsers on this machine. Check conflicts with
 `ss -lunp '( sport = :3478 )'` on Linux or
 `Get-NetUDPEndpoint -LocalPort 3478` in PowerShell. If occupied, change
 `turn.udp_port` in the dev LiveKit YAML and both 3478 values in that service's dev
@@ -154,7 +159,9 @@ node test/call.e2e.mjs
 `?callRelay=1` sets `iceTransportPolicy: relay` only in non-production builds.
 Production ignores it. Tests inject a wrapper around the public browser peer
 connection API; no app hook exposes room objects, tokens, addresses or ICE secrets.
-The relay test requires selected relays, media bytes and increasing decoded
+For loopback BASE URLs, the relay test also uses Chromium's
+`--allow-loopback-in-peer-connection`; it enables that local adapter without
+changing candidates or the relay policy. The relay test requires selected relays, media bytes and increasing decoded
 frames, then proves removal of TURN prevents a call. Screen-share tests use Edge
 automatic tab selection and verify remote frames and tile removal. These local
 UDP checks are separate from the external TURN/TLS check above.

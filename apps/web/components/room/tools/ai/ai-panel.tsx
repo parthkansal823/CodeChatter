@@ -174,7 +174,8 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
     history: ChatEntry[] = chat.entries,
     options: { auto?: boolean; extraPaths?: string[]; labels?: string[]; analysed?: boolean; hits?: CodebaseHits } = {},
   ) => {
-    if (chat.busy || preparing || !canChat) return;
+    // What the search or the tools just found carries on past `preparing`, which may not have caught up yet.
+    if (chat.busy || (preparing && !options.hits && !options.analysed) || !canChat) return;
     // A review stands on what the tools found, so they run first. If they can't (no Run rights, no sandbox), it goes on without them, and the model is told nothing ran.
     if (sendMode === "project" && !options.analysed) {
       setPreparing(true);

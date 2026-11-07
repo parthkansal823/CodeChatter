@@ -124,7 +124,7 @@ try {
   check("theAuthFileIsSearched", Boolean(named(secrets, "auth.py")), JSON.stringify(secrets.passages.map((hit) => hit.path)));
   check("aTokenNeverComesBack", !everything.includes(GITHUB_TOKEN));
   check("norAWeakPassword", !everything.includes(WEAK_PASSWORD));
-  check("itSaysWhereOneWas", named(secrets, "auth.py")?.text.includes("[removed"), named(secrets, "auth.py")?.text);
+  check("itSaysWhereOneWas", secrets.passages.some((hit) => hit.path === `${dir}/auth.py` && hit.text.includes("[removed")), JSON.stringify(secrets.passages.filter(inDir)));
   check("theFunctionBesideItIsStillThere", (await ask("compare a password with the stored hash")).passages.some((hit) => hit.path === `${dir}/auth.py` && hit.text.includes("check_login")));
   const fromEnv = await ask("API_SECRET");
   check("dotEnvIsNotRead", !JSON.stringify(fromEnv).includes(IN_ENV) && !fromEnv.passages.some((hit) => hit.path.endsWith(".env")), JSON.stringify(fromEnv.passages.map((hit) => hit.path)));

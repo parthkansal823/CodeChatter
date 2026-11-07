@@ -46,7 +46,7 @@ Uninstall with `helm uninstall codechatter -n codechatter`, then delete the room
 | web | Next.js | the edge |
 | api | NestJS: REST, auth, Socket.IO, terminals, previews | the edge and web |
 | collab | Hocuspocus: the shared documents | the edge, and the runner as a peer |
-| livekit | calls, with built-in TURN over UDP | signalling through the edge (`/livekit`); media and TURN through a separate LoadBalancer |
+| livekit | calls, with built-in TURN/UDP and optional TURN/TLS | signalling through the edge (`/livekit`); media and optional TLS relay use their own LoadBalancers |
 | runner | each room's sandbox, databases and package proxy, on this cluster | the API only |
 | postgres, valkey | the app's data | the app |
 | backup | verified nightly Postgres dumps, retained on a PVC and optionally S3 | the CronJob; no public service |

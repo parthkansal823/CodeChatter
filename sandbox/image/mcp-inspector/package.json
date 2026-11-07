@@ -1,0 +1,9 @@
+{
+  "name": "codechatter-mcp-inspector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The MCP tool's official MCP Inspector, for the sandbox image. Its lockfile checks all its packages against their hashes.",
+  "dependencies": {
+    "@modelcontextprotocol/inspector": "2.14.0"
+  }
+}

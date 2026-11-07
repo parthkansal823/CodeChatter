@@ -155,6 +155,18 @@ RUN set -eu; \
     ln -s /usr/local/lib/codechatter/promptfoo/node_modules/.bin/promptfoo /out/bin/promptfoo; \
     ./node_modules/.bin/promptfoo --version
 
+# The MCP tool (apps/runner/src/mcp.ts): the official MCP Inspector, from a lockfile so that all its packages are
+# checked against their hashes, with no install scripts. Only its command line is used.
+FROM node:24-slim AS mcpinspector
+COPY image/mcp-inspector/package.json image/mcp-inspector/package-lock.json /out/lib/codechatter/mcp-inspector/
+RUN set -eu; \
+    cd /out/lib/codechatter/mcp-inspector; \
+    npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \
+    rm -rf /root/.npm; \
+    mkdir -p /out/bin; \
+    ln -s /usr/local/lib/codechatter/mcp-inspector/node_modules/.bin/mcp-inspector /out/bin/mcp-inspector; \
+    ./node_modules/.bin/mcp-inspector --version
+
 # The base image: what every room gets by default.
 FROM core AS base
 # clangd, the C and C++ language server (apps/runner/src/lsp.ts); its own layer.
@@ -166,6 +178,7 @@ COPY image/js-debug-bridge.mjs /usr/local/lib/codechatter/js-debug-bridge.mjs
 COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
 COPY --from=analysis /out/ /usr/local/
 COPY --from=evals /out/ /usr/local/
+COPY --from=mcpinspector /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -256,6 +269,7 @@ COPY image/js-debug-bridge.mjs /usr/local/lib/codechatter/js-debug-bridge.mjs
 COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
 COPY --from=analysis /out/ /usr/local/
 COPY --from=evals /out/ /usr/local/
+COPY --from=mcpinspector /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).

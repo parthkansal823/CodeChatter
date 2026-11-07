@@ -115,7 +115,7 @@ services:
     volumes: ["./livekit/livekit.yaml:/etc/livekit.yaml:ro"]
     networks:
       default: {}
-      turn-proxy: { aliases: [livekit-turn] }
+      turn-proxy: { ipv4_address: 172.30.250.3, aliases: [livekit-turn] }
 
   # Run button and terminals: one sandbox container per room (ADR 0003). The
   # only service with the Docker socket; reachable only by the API.

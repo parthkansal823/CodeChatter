@@ -662,6 +662,36 @@ What's left is in `docs/pending.md` under step 11.
 
 ## 11. Advanced features ⬜
 
+### Ask the codebase (RAG) ✅
+
+**What:** a mode in the AI panel. A question is searched for in the room's files first, and the model answers from what's found, citing each place. A model can't hold a whole project, and answers from what it can't see are guesses.
+
+- **Search (`sandbox/image/codebase_search.py`, in the sandbox, inside the jail):**
+  - **Passages:** lizard finds whole functions where it knows the language, with overlapping windows of lines for the rest, and documents too.
+  - **Index:** a DuckDB file in the room's home, so it outlives the sandbox. Only files whose hash changed are read again, and a removed file goes.
+  - **By meaning:** an embedding for each passage, compared by cosine similarity. It's the room's model through the AI gateway, so the sandbox still has no network and no key.
+  - **By words:** DuckDB's BM25 (`fts`, baked into the image, as sandboxes can't download it), with the words inside identifiers, so `parseConfig` is found by "parse config".
+  - **Together:** reciprocal rank fusion, as the two kinds of score can't be compared.
+- **Secrets:** `.env` and key files are never read, and neither are installed packages. gitleaks runs over changed files first, and lines it finds are replaced before anything is stored or sent. If it can't run, nothing is read. Secret-shaped text is taken out again in the sandbox, and once more on the server.
+- **Embedding model:** `AI_EMBEDDING_MODEL`, or with Ollama, a pulled model with "embed" in its name (`nomic-embed-text` here). Those are left out of the Playground, as they can't answer a prompt. Without one, or if it fails, it searches by words and says so. Changing the model embeds everything again.
+- **The answer:** the prompt says to answer only from the passages, to say when they don't answer it, and to cite `path:line`.
+  - Citations open the file.
+  - A file that isn't there, or a place it wasn't shown (`citationsNotShown`), is flagged under the answer.
+  - "What it read" shows each passage, how it was found, and opens it.
+- **Who may:** `POST /api/rooms/:id/ai/retrieve` needs both `code.run` and `room.chat`, and isn't for interview rooms. The mode isn't offered otherwise.
+- **Also fixed:** the AI panel could drop a question when what it waited for finished before its "preparing" state had caught up.
+
+**Rebuilding:** both sandbox images need it.
+
+**Not included:** code-aware parsing beyond functions (classes as units, say), and re-ranking with a second model.
+
+**Tests:**
+- `packages/contracts/src/rag.test.ts`, `apps/runner/src/rag.test.ts`, `apps/api/src/ai/prompts.test.ts`, `gateway.test.ts`, `ai.config.test.ts`
+- `apps/runner/test/rag.e2e.mjs` (23 checks with real embeddings: an identifier found first, a meaning found with no word in common, fresh secrets and `.env` appearing nowhere, only changed files read again, a removed file gone, no model, a wrong model and recovering, two searches in turn)
+- `apps/web/test/ask-codebase.e2e.mjs` (27 checks, search and model stood in for)
+- Tried from a browser through to `gemma4:e4b` and `nomic-embed-text`: the search took 2 seconds, the answer about a minute, and the planted key wasn't in what was sent
+- `a11y.e2e.mjs` includes what it read
+
 ### Evals ✅
 
 **What:** "Test it" in the Prompts tool. Say what a good answer looks like, and check it every time the prompt changes. The checking is done by **promptfoo**, the standard open-source tool for this, in the room's sandbox, through the AI gateway.

@@ -31,6 +31,7 @@ const SUITES = [
     ["sandbox-binary-files", "blobs"],
     ["sandbox-git-runner", "git"],
     ["analysis-runner", "analysis"],
+    ["mcp-runner", "mcp"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -67,6 +68,8 @@ const SUITES = [
     "analysis",
     "prompts",
     "evals",
+    "ask-codebase",
+    "mcp",
     "a11y",
     "interview-recording",
     "csp",

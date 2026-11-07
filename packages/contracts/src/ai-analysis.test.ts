@@ -150,7 +150,7 @@ describe("paths in an answer", () => {
   });
 
   it("accepts the real ones, however they're written", () => {
-    for (const fine of ["`src/app/main.py`", "`./src/app/main.py`", "`main.py`", "`app/main.py`", "`src/app`", "`src/app/`", "`src/app/main.py:12`", "`README.md`"]) {
+    for (const fine of ["`src/app/main.py`", "`./src/app/main.py`", "`main.py`", "`app/main.py`", "`src/app`", "`src/app/`", "`src/app/main.py:12`", "`src/app/main.py:5-16`", "`README.md`"]) {
       expect(pathsNotInProject(fine, known)).toEqual([]);
     }
   });

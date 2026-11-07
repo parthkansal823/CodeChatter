@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, CodebaseHits, DevServerStatus, EvalInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, RoomAnalysis,
+import type { DatabaseKind, DatabaseStatus, CodebaseHits, DevServerStatus, EvalInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, McpInput, McpOutput, RoomAnalysis,
   RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
@@ -231,6 +231,14 @@ export class RunnerClient {
   }
 
   /** The Analysis tool's report on the whole room, from real tools in its sandbox (runner: analysis.ts). */
+  /** A call to an MCP server in the sandbox (apps/runner/src/mcp.ts). */
+  async mcp(roomId: string, input: McpInput, user: RunnerUser): Promise<McpOutput> {
+    const response = await this.call(`/rooms/${roomId}/mcp`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The sandbox isn't available.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as McpOutput;
+  }
+
   /** What a search of the room's files found (apps/runner/src/rag.ts). */
   async retrieve(roomId: string, input: RagRunnerInput, user: RunnerUser): Promise<CodebaseHits> {
     const response = await this.call(`/rooms/${roomId}/rag`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });

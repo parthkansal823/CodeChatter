@@ -27,6 +27,11 @@ describe("which model", () => {
     expect(chooseModel(undefined, offered, "gemma")).toBe("gemma");
   });
 
+  it("takes a name without its tag, as Ollama does", () => {
+    expect(chooseModel("nomic-embed-text", ["nomic-embed-text:latest"], "gemma")).toBe("nomic-embed-text:latest");
+    expect(chooseModel("nomic-embed-text:v2", ["nomic-embed-text:latest"], "gemma")).toMatchObject({ status: 404 });
+  });
+
   it("refuses one that isn't, and says what there is", () => {
     const failure = chooseModel("gpt-very-expensive", offered, "gemma");
     expect(failure).toMatchObject({ status: 404, code: "model_not_found" });

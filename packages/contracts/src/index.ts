@@ -3,6 +3,7 @@ export * from "./ai-analysis.js";
 export * from "./prompts.js";
 export * from "./evals.js";
 export * from "./rag.js";
+export * from "./mcp.js";
 export * from "./analysis.js";
 export * from "./audit.js";
 export * from "./blobs.js";

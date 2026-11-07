@@ -175,7 +175,7 @@ export function pathsNotInProject(answer: string, known: readonly string[]): str
   const folders = new Set(known.flatMap((path) => path.split("/").slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join("/"))));
   const unknown = new Set<string>();
   for (const match of answer.matchAll(/`([^`\n]+)`/g)) {
-    const raw = match[1]!.trim().replace(/^\.\//, "").replace(/:\d+(?::\d+)?$/, "");
+    const raw = match[1]!.trim().replace(/^\.\//, "").replace(/:\d+(?:[:-]\d+)?$/, "");
     if (/\s/.test(raw) || /^[a-z]+:|[(){}=<>,;'"$*]/.test(raw)) continue;
     const looksLikePath = raw.includes("/") ? /^[\w@.-]+(\/[\w@.-]+)+\/?$/.test(raw) : SOURCE.test(raw) || README.test(raw) || MANIFEST.test(raw) || SETUP.test(raw) || /\.(json|ya?ml|toml|md|html|css)$/i.test(raw);
     if (!looksLikePath) continue;

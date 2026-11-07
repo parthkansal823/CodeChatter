@@ -35,7 +35,7 @@ const FilesContext = createContext<readonly string[]>([]);
 
 /** A path as an answer wrote it, with its line if any, against the room's files: exact, or the end of just one path. */
 export function resolveRoomPath(written: string, paths: readonly string[]): { path: string; line: number } | null {
-  const match = /^(?:\.\/)?([^\s:]+?)(?::(\d+))?(?::\d+)?$/.exec(written.trim());
+  const match = /^(?:\.\/)?([^\s:]+?)(?::(\d+)(?:[:-]\d+)?)?$/.exec(written.trim());
   if (!match) return null;
   const wanted = match[1]!;
   const found = paths.includes(wanted) ? [wanted] : paths.filter((path) => path.endsWith(`/${wanted}`));

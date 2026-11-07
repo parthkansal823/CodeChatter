@@ -9,6 +9,8 @@ rtc:
   use_external_ip: false
   node_ip: 127.0.0.1
   enable_loopback_candidate: true
+  # Preserve native interface candidates as well as Docker's loopback mapping.
+  advertise_internal_ip: true
 # Local-only TURN lets the relay browser test reach this same LiveKit process.
 turn:
   enabled: true

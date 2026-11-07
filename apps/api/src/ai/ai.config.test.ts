@@ -127,4 +127,5 @@ describe("the models the Prompt Playground may offer", () => {
     expect(embeddingModelOf(paid, { AI_EMBEDDING_MODEL: "" }, ["x-embed"])).toBeNull();
     expect(embeddingModelOf(paid, { AI_EMBEDDING_MODEL: "text-embedding-3-small" }, [])).toBe("text-embedding-3-small");
     expect(embeddingModelOf({ settings: null }, { AI_EMBEDDING_MODEL: "x" }, [])).toBeNull();
+  });
 });

@@ -1,7 +1,7 @@
 import type { RoomAction, RoomSummary } from "@codechatter/contracts";
 import type { TreeNode } from "@codechatter/workspace-model";
 import type { LucideIcon } from "lucide-react";
-import { Activity, Boxes, ClipboardList, Database, FlaskConical, NotebookPen, NotebookText, PenTool, Presentation, ScanSearch, Send, ShieldAlert, Sparkles, Workflow } from "lucide-react";
+import { Activity, Boxes, ClipboardList, Database, FlaskConical, NotebookPen, NotebookText, PenTool, Plug, Presentation, ScanSearch, Send, ShieldAlert, Sparkles, Workflow } from "lucide-react";
 import type { ComponentType } from "react";
 
 /** What every room tool receives from the workspace. */
@@ -66,6 +66,15 @@ export const ROOM_TOOLS: RoomTool[] = [
     // Trying models isn't part of an interview, whatever the interviewer decides about the AI panel.
     visible: (can, room) => can("room.chat") && room.kind !== "interview",
     load: () => import("./prompts/prompts-tool"),
+  },
+  {
+    id: "mcp",
+    label: "MCP",
+    icon: Plug,
+    placement: "main",
+    // It starts programs in the sandbox, and an interview isn't the place for it.
+    visible: (can, room) => can("code.run") && room.kind !== "interview",
+    load: () => import("./mcp/mcp-tool"),
   },
   {
     id: "databases",

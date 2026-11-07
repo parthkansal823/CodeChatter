@@ -145,6 +145,15 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ Dependencies:
   - a per-person rate limit;
   - a fade that shows the side tabs scroll.
+- ⬜ **Automations with Activepieces** (the owner's decision, 2026-11-07, **Claude**, with Pipelines):
+  - **Why not n8n:** its licence only lets it be given to others free of charge for non-commercial purposes, so a paid CodeChatter would need n8n's own licence. Activepieces is MIT outside its `ee` folders. Workflows don't move between the two, so this is chosen once.
+  - **n8n as the reference** (the owner's request, 2026-11-07): as complete as n8n, A to Z. Its features and how they behave are the checklist: the canvas, each run's history with the data at every step, retries, error handling, sub-flows, webhooks and schedules, expressions, versions, templates. **What's written here is our own code: nothing is copied from n8n's source or workflows**, as that would bring its licence (free and non-commercial only) with it, and undo the reason for choosing Activepieces.
+  - **To check first:** what its free edition includes, how far its builder can be embedded, its image's size and memory, and what it needs to run (database, queue).
+  - **How:** its official image unmodified, as a room service with the room's sign-in if it allows that, not a copy of its source here.
+  - **It needs the internet** for outside services, and rooms have none (ADR 0007): an owner's switch with limits and a security review come before that. Coding automations that stay inside the room work without it.
+  - **Shown as a flowchart, like n8n's** (the owner's request, 2026-11-07): boxes and arrows for each automation, what ran and what failed lit up on it, in the room and in the gallery. Activepieces lays steps out one after another, so this is a view of our own over its flows, and whether it can edit them as well as show them is to be checked. One flowchart component, shared with the Flow and Pipelines. React Flow (`@xyflow/react`, MIT) is the likely tool, which needs asking first as a new package, or the room's own canvas engine.
+  - **CodeChatter's own steps, as an Activepieces piece:** when a room event happens (a file changes, a test fails, a push), run code or tests in the sandbox, ask the room's AI through the gateway, post in the room's chat, run a prompt's evals, ask the codebase.
+  - **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, writing release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the room to pick from. **Each is checked to import; each is run for real only where the service is available to try it on, and the gallery says which.**
 - ⬜ **Pipelines, Jenkins-style** (the owner's idea, 2026-11-06): stages and steps in a file in the room, run in its sandbox, with live logs and a run history, started by hand, on a schedule or by a push. Our own rather than embedding Jenkins, which is heavy and hard to make safe for many rooms. Together with the terminals, ports, databases and Kubernetes panel, this is what "DevOps online" means here.
 - ⬜ Workflow builder (n8n-style): triggers, actions, conditions, run history
 - ⬜ Public API with personal access tokens, and a `cc` CLI that syncs a folder with a room
@@ -195,8 +204,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ **For researchers** (the owner's idea, 2026-11-06): a layout that opens on notebooks, data, documents and PDFs, which all exist already. LaTeX and citations after that, as they need new tools in the sandbox image.
 - ⬜ **The AI gateway on Kubernetes:** run `apps/runner/test/gateway.e2e.mjs` on the Kubernetes driver. It hasn't been yet, as Docker Desktop's cluster doesn't have the sandbox images loaded. The agent channel it uses is the same on both drivers.
 - ⬜ **Opengrep in the Analysis tool:** only once its rules' licence is checked. Semgrep's rules don't allow SaaS use, so it may need rules of our own.
-- 🟡 **AI engineering tools** (the owner's idea, 2026-11-07, **Claude**; the Prompt Playground, AI gateway and Evals are done), in this order:
-  - RAG: "ask the codebase" with embeddings and citations, and a view of what it retrieved;
+- 🟡 **AI engineering tools** (the owner's idea, 2026-11-07, **Claude**; the Prompt Playground, AI gateway, Evals and Ask the codebase are done), in this order:
   - MCP Inspector: list and call the tools of an MCP server running in the sandbox;
   - Traces: each AI call's prompt, tokens and time.
 - ⬜ **Explain this data** (**Claude**): a button on query results and notebook output, with the numbers worked out by DuckDB's `SUMMARIZE` and pandas, not by the model.

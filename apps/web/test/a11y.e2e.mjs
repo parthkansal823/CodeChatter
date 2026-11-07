@@ -129,7 +129,7 @@ try {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Analysis", "Prompts", "Databases", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Analysis", "Prompts", "MCP", "Databases", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
     }
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
@@ -156,6 +156,21 @@ try {
     await step(page, `${theme} room, a prompt's evals and a result`, () => prompts.getByRole("region", { name: "This result" }).waitFor({ timeout: 15_000 }));
     await prompts.getByRole("button", { name: "Delete this prompt" }).click();
     await prompts.getByRole("button", { name: "Delete", exact: true }).click();
+    // Ask the codebase, with what it read showing. The search and the model are stood in for.
+    await page.route("**/api/rooms/*/ai/retrieve", (route) => route.fulfill({ json: { passages: [{ path: "README.md", start: 1, end: 2, name: "", text: "# Hello", score: 0.03, found: "both" }], index: { files: 1, chunks: 1, changed: 0, embedded: 0, waiting: 0, ms: 1, model: null }, note: "Searched by words only: this server has no embedding model." } }));
+    await page.route("**/api/rooms/*/ai/chat", (route) => {
+      const events = [{ type: "delta", text: "See `README.md:1` and `README.md:50`." }, { type: "done", stop: "end", usage: { inputTokens: 5, outputTokens: 5, estimated: false } }];
+      return route.fulfill({ status: 200, contentType: "text/event-stream", body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") });
+    });
+    await sidePanel.getByRole("tab", { name: /^AI/ }).click();
+    await page.getByRole("combobox", { name: "AI mode" }).click();
+    await page.getByRole("option", { name: "Ask the codebase" }).click();
+    const question = page.getByPlaceholder("Where do we handle failed logins?");
+    await question.fill("Where is it?");
+    await question.press("Enter");
+    await page.getByText(/What it read/).waitFor({ timeout: 15_000 });
+    await step(page, `${theme} room, what the AI read`, () => page.getByText(/What it read/).click());
+    await page.getByRole("button", { name: "New conversation" }).click();
     await context.close();
   }
 

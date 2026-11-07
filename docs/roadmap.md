@@ -197,7 +197,8 @@ flowchart TD
 - ✅ Prompt Playground: a prompt written together, tried on several models and settings side by side, with tokens and speed, and its runs kept
 - ✅ AI gateway: code in a room's sandbox calls its model through OpenAI's format, with real SDKs, no key in the room and no network
 - ✅ Evals with promptfoo: a prompt's test cases, checked on every column, with a pass rate and what changed from the last run
-- ⬜ AI engineering tools: RAG, MCP Inspector, Traces
+- ✅ Ask the codebase: answers from a search of the room's files, by meaning and by words, citing each place and showing what it read
+- ⬜ AI engineering tools: MCP Inspector, Traces
 - ⬜ Explain this data; a lakehouse as Databricks does it (Spark, Delta Lake, MLflow); a layout for researchers
 - ⬜ Suggestion mode, room branches, live authorship, session replay, smarter calls
 - ⬜ Test explorer, profiler, package search, room secrets, deploy previews

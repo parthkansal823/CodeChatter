@@ -1,5 +1,5 @@
 import type { AuthSession } from "@codechatter/auth";
-import { can, EvalInput, INSTALLS_MINUTES, RoomCode, SandboxImageInput, type DevServerStatus, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
+import { can, EvalInput, INSTALLS_MINUTES, McpInput, RoomCode, SandboxImageInput, type DevServerStatus, type McpOutput, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, HttpCode, Inject, Param, Post, Put, Req, Res, ServiceUnavailableException } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { z } from "zod";
@@ -147,6 +147,21 @@ export class SandboxController {
     await this.rooms.require(room, session.user.id, "code.run");
     try {
       return await this.runner.check(room, session.user);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
+  }
+
+  /** The MCP tool (apps/runner/src/mcp.ts): it starts programs in the sandbox, so it needs Run rights, and an interview isn't the place for it. */
+  @Post("mcp")
+  @HttpCode(200)
+  async mcp(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Body(new ZodPipe(McpInput)) input: McpInput): Promise<McpOutput> {
+    const code = this.room(roomId);
+    const { room } = await this.rooms.require(code, session.user.id, "code.run");
+    if (room.kind === "interview") throw new ForbiddenException("The MCP tool isn't available in an interview.");
+    try {
+      return await this.runner.mcp(code, input, session.user);
     } catch (error) {
       if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
       throw error;
