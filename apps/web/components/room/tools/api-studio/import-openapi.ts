@@ -20,6 +20,24 @@ export const string = (value: unknown): string => typeof value === "string" ? va
 export const emptyImportBody = (): RequestBody => ({ mode: "none", text: "", form: [], query: "", variables: "" });
 export const emptyImportAuth = (): RequestAuth => ({ type: "none", token: "", username: "", password: "", key: "", value: "", in: "header" });
 export const secretName = (key: string) => SECRET.test(key);
+const decodedQueryKey = (key: string): string => { try { return decodeURIComponent(key.replace(/\+/g, " ")); } catch { return key; } };
+
+/** Structured query fields are literals; the collection's row model stores raw URI spans. */
+export function encodeStructuredQuery(row: KeyValue): KeyValue {
+  const encode = (value: string): string => {
+    const literal = (part: string): string => {
+      try { return encodeURIComponent(part); }
+      catch { return encodeURIComponent(new TextDecoder().decode(new TextEncoder().encode(part))); }
+    };
+    let text = "", previous = 0;
+    for (const match of value.matchAll(/\{\{\s*([^{}\s]+)\s*\}\}/g)) {
+      text += literal(value.slice(previous, match.index)) + match[0];
+      previous = match.index + match[0].length;
+    }
+    return text + literal(value.slice(previous));
+  };
+  return { key: encode(row.key), value: encode(row.value), enabled: row.enabled };
+}
 
 /** Limit text before parsing; JSON/YAML exception messages never reveal input excerpts. */
 export function parseImportInput(text: string, yaml = false): unknown {
@@ -83,6 +101,21 @@ export class ImportBuilder {
   }
   warn(message: string) { this.warned.add(message); }
   unsupported(message = "Unsupported fields or request methods were skipped.") { this.plan.counts.unsupported++; this.warn(message); }
+  publicText(value: unknown, limit = 8192): string {
+    let raw = this.clip(value, limit);
+    if (!/^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(raw)) return raw;
+    raw = raw.replace(/^((?:[a-z][a-z0-9+.-]*:)?\/\/)([^/?#]*)@/i, (_all, prefix: string) => { this.plan.counts.secretValues++; this.warn("Credentials embedded in URLs were discarded."); return prefix; });
+    const at = raw.indexOf("?");
+    if (at < 0) return raw;
+    const params: string[] = [];
+    // A URL stored inside a variable cannot depend on recursively resolved
+    // secret placeholders. Remove its credential query rows altogether.
+    for (const part of raw.slice(at + 1).split("&")) {
+      if (secretName(decodedQueryKey(part.split("=", 1)[0]!))) { this.plan.counts.secretValues++; this.warn("Credential query fields in URL values were removed. Configure them on the request before sending."); }
+      else params.push(part);
+    }
+    return raw.slice(0, at) + (params.length ? `?${params.join("&")}` : "");
+  }
   folder(name: unknown, parentId: string | null): string {
     if (this.plan.folders.length >= 2000) throw new Error("That file has more than 2,000 folders. Split it into smaller files.");
     const id = `folder-${this.plan.folders.length + 1}`;
@@ -93,7 +126,7 @@ export class ImportBuilder {
     const name = this.clip(key, 128).replace(/\s/g, "_");
     if (!name || BAD.has(name) || /[{}]/.test(name)) { this.unsupported("Unsafe or unsupported variable names were skipped."); return ""; }
     const sensitive = secret || secretName(name);
-    const raw = this.clip(value);
+    const raw = sensitive ? this.clip(value) : this.publicText(value);
     if (sensitive && raw) this.plan.counts.secretValues++;
     const previous = this.variables.get(name);
     if (previous) {
@@ -108,7 +141,7 @@ export class ImportBuilder {
     return this.variable(placeholder?.[1] ?? fallback, placeholder ? "" : raw, true);
   }
   value(key: string, value: unknown): string {
-    return secretName(key) ? this.credential(value, key) : this.clip(value);
+    return secretName(key) ? this.credential(value, key) : this.publicText(value);
   }
   row(key: unknown, value: unknown, enabled = true): KeyValue | undefined {
     const name = this.clip(key, 256).replace(/[\r\n]/g, "");
@@ -148,7 +181,7 @@ export class ImportBuilder {
 export function importUrl(builder: ImportBuilder, input: unknown): { url: string; params: KeyValue[]; credentials: boolean } {
   let url = builder.clip(input, 8192);
   let credentials = false;
-  url = url.replace(/^(https?:\/\/)([^/?#]*)@/i, (_all, protocol: string) => { credentials = true; builder.plan.counts.secretValues++; return protocol; });
+  url = url.replace(/^((?:[a-z][a-z0-9+.-]*:)?\/\/)([^/?#]*)@/i, (_all, protocol: string) => { credentials = true; builder.plan.counts.secretValues++; return protocol; });
   if (credentials) builder.warn("Credentials embedded in URLs were discarded.");
   const hashAt = url.indexOf("#");
   if (hashAt !== -1) { url = url.slice(0, hashAt); builder.unsupported("URL fragments were removed."); }
@@ -160,6 +193,8 @@ export function importUrl(builder: ImportBuilder, input: unknown): { url: string
     const eq = entry.indexOf("=");
     const key = eq === -1 ? entry : entry.slice(0, eq);
     const row = builder.row(key, eq === -1 ? "" : entry.slice(eq + 1));
+    const decodedKey = decodedQueryKey(key);
+    if (row && secretName(decodedKey) && !secretName(key)) row.value = builder.credential(eq === -1 ? "" : entry.slice(eq + 1), decodedKey);
     if (row) params.push(row);
   }
   return { url: url.slice(0, queryAt), params, credentials };
@@ -181,7 +216,7 @@ export function multipartBody(builder: ImportBuilder, rows: KeyValue[]): { body:
 export function safeExample(builder: ImportBuilder, value: unknown, depth = 0, seen = new Set<unknown>()): unknown {
   builder.tick();
   if (depth > 64 || seen.has(value)) { builder.plan.counts.cycles++; return null; }
-  if (typeof value === "string") return builder.clip(value, 65_536);
+  if (typeof value === "string") return builder.publicText(value, 65_536);
   if (value === null || typeof value === "number" || typeof value === "boolean") return value;
   if (!value || typeof value !== "object") return null;
   const next = new Set(seen).add(value);
@@ -291,7 +326,10 @@ export function parseOpenApi(text: string): ImportPlan {
     let missingDefault = false;
     baseUrl = builder.clip(server?.url, 8192).replace(/\{([^{}]+)\}/g, (_whole, key: string) => {
       const value = record(record(server?.variables)?.[key]);
-      if (value && has(value, "default")) return builder.clip(value.default);
+      if (value && has(value, "default")) {
+        if (secretName(key)) { builder.credential(value.default, key); missingDefault = true; builder.warn("A server URL template contains a credential; baseUrl needs a value."); return ""; }
+        return builder.publicText(value.default);
+      }
       missingDefault = true;
       builder.warn("A server URL template has no default; baseUrl needs a value.");
       return "";
@@ -306,6 +344,14 @@ export function parseOpenApi(text: string): ImportPlan {
   const folder = (name: unknown) => { const label = builder.clip(name, 120) || "Untagged"; let id = folders.get(label); if (!id) { id = builder.folder(label, null); folders.set(label, id); } return id; };
   for (const tag of array(document.tags)) if (record(tag)?.name) folder(record(tag)!.name);
   const securitySchemes = swagger ? record(document.securityDefinitions) ?? {} : record(record(document.components)?.securitySchemes) ?? {};
+  // Reserve aliases against every path placeholder before processing operations,
+  // including names that appear later in the file.
+  const pathNames = new Set<string>(["baseUrl"]);
+  for (const path of Object.keys(record(document.paths) ?? {})) {
+    for (const match of path.replace(/\0/g, "").slice(0, 7000).matchAll(/\{([^{}]+)\}/g)) pathNames.add(match[1]!.replace(/\0/g, "").slice(0, 128).replace(/\s/g, "_"));
+  }
+  let baseUrlPathAlias = "pathBaseUrl";
+  for (let suffix = 2; pathNames.has(baseUrlPathAlias); suffix++) baseUrlPathAlias = `pathBaseUrl${suffix}`;
   const applySecurity = (requirements: unknown, headers: KeyValue[], params: KeyValue[]): RequestAuth => {
     const auth = emptyImportAuth();
     const alternatives = array(requirements);
@@ -319,7 +365,7 @@ export function parseOpenApi(text: string): ImportPlan {
       else if (scheme.type === "basic" || (scheme.type === "http" && string(scheme.scheme).toLowerCase() === "basic")) { auth.type = "basic"; auth.username = builder.variable("username", "", true); auth.password = builder.variable("password", "", true); }
       else if (scheme.type === "apiKey" && (scheme.in === "header" || scheme.in === "query")) {
         const row = builder.row(scheme.name, builder.variable(name, "", true));
-        if (row) (scheme.in === "header" ? headers : params).push(row);
+        if (row) (scheme.in === "header" ? headers : params).push(scheme.in === "query" ? encodeStructuredQuery(row) : row);
       } else builder.unsupported("Unsupported security schemes were skipped; add their credentials manually.");
     }
     return auth;
@@ -347,7 +393,9 @@ export function parseOpenApi(text: string): ImportPlan {
       const templatePath = builder.clip(path, 7000).replace(/\{([^{}]+)\}/g, (_whole, key: string) => {
         const parameter = parameters.get(`path:${key}`);
         const schema = resolve(parameter?.schema) ?? parameter;
-        return builder.variable(key, schema?.example ?? schema?.default ?? "", secretName(key));
+        const normalized = key.replace(/\0/g, "").slice(0, 128).replace(/\s/g, "_");
+        if (normalized === "baseUrl") builder.warn(`Path parameter baseUrl was renamed to ${baseUrlPathAlias} to keep the server URL.`);
+        return builder.variable(normalized === "baseUrl" ? baseUrlPathAlias : key, parameter?.example ?? schema?.example ?? schema?.default ?? "", secretName(key));
       });
       for (const parameter of parameters.values()) {
         const key = builder.clip(parameter.name, 256);
@@ -356,7 +404,7 @@ export function parseOpenApi(text: string): ImportPlan {
         if (parameter.in === "query" || parameter.in === "header") {
           if ((parameter.in === "query" ? params : headers).length >= (parameter.in === "query" ? 256 : 63)) { builder.unsupported("Extra parameter rows were skipped."); continue; }
           const row = builder.row(key, typeof value === "object" ? JSON.stringify(safeExample(builder, value)) : value, parameter.required === true);
-          if (row) { if (parameter.in === "header") row.value = row.value.replace(/[\r\n]/g, ""); (parameter.in === "query" ? params : headers).push(row); }
+          if (row) { if (parameter.in === "header") row.value = row.value.replace(/[\r\n]/g, ""); (parameter.in === "query" ? params : headers).push(parameter.in === "query" ? encodeStructuredQuery(row) : row); }
         } else if (swagger && parameter.in === "body") { body = { ...body, mode: "json", text: JSON.stringify(explicitExample(parameter), null, 2) }; }
         else if (swagger && parameter.in === "formData") {
           if (parameter.type === "file") builder.plan.counts.files++;

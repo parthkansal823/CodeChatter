@@ -1,7 +1,7 @@
 /** Read bounded Postman v2 collections as plain import data, excluding scripts, files and shared credential values. */
 import type { KeyValue, RequestAuth, RequestBody } from "@codechatter/contracts";
 
-import { ImportBuilder, array, emptyImportAuth, emptyImportBody, importUrl, multipartBody, parseImportInput, record, safeExample, string, type ImportPlan } from "./import-openapi";
+import { ImportBuilder, array, emptyImportAuth, emptyImportBody, encodeStructuredQuery, importUrl, multipartBody, parseImportInput, record, safeExample, string, type ImportPlan } from "./import-openapi";
 
 type Obj = Record<string, unknown>;
 
@@ -52,7 +52,7 @@ export function parsePostman(text: string): ImportPlan {
       const row = builder.row(item.key, item.value, item.disabled !== true);
       if (!row) continue;
       if (kind === "header") row.value = row.value.replace(/[\r\n]/g, "");
-      rows.push(row);
+      rows.push(kind === "query" ? encodeStructuredQuery(row) : row);
       if (rows.length >= (kind === "header" ? 63 : 256)) { if (source.length > rows.length) builder.unsupported("Extra parameter rows were skipped."); break; }
     }
     return rows;
@@ -89,7 +89,7 @@ export function parsePostman(text: string): ImportPlan {
         // Expansion errors must propagate, not fall back to the unsanitized raw body.
         return { ...out, mode: "json", text: JSON.stringify(safeExample(builder, parsed), null, 2) };
       }
-      return { ...out, mode: "text", text: raw };
+      return { ...out, mode: "text", text: builder.publicText(raw, 512 * 1024) };
     }
     if (body.mode === "urlencoded") return { ...out, mode: "form", form: rowList(body.urlencoded, "form") };
     if (body.mode === "formdata") {

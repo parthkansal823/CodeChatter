@@ -604,7 +604,7 @@ export default function PromptsTool({ close }: RoomToolProps) {
       ) : connection?.synced ? (
         <Workspace doc={connection.doc} models={models.data} problem={off} close={close} />
       ) : (
-        <div className="grid gap-2 p-4" aria-label="Opening Prompts" aria-busy>
+        <div role="status" className="grid gap-2 p-4" aria-label="Opening Prompts" aria-busy>
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-2/3" />

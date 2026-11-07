@@ -129,7 +129,7 @@ try {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Analysis", "Prompts", "MCP", "Databases", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
     }
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
@@ -177,6 +177,22 @@ try {
     await page.getByText(/What it read/).waitFor({ timeout: 15_000 });
     await step(page, `${theme} room, what the AI read`, () => page.getByText(/What it read/).click());
     await page.getByRole("button", { name: "New conversation" }).click();
+    // The Lakehouse tool with a table and its versions, and runs. What it reads is stood in for.
+    await page.route("**/api/rooms/*/lakehouse", (route) => {
+      const { op } = route.request().postDataJSON();
+      const answers = {
+        overview: { tables: [{ name: "gold", version: 1, versions: 2, rows: 2, columns: [{ name: "city", type: "VARCHAR" }, { name: "total", type: "DOUBLE" }], bytes: 4096, at: 1794037625000, problem: null }] },
+        history: { commits: [{ version: 1, at: 1794037625000, operation: "UPDATE", rowsWritten: null, rowsChanged: 1, engine: "Spark" }, { version: 0, at: 1794037600000, operation: "WRITE", rowsWritten: 2, rowsChanged: null, engine: "Spark" }] },
+        preview: { table: "gold", version: null, columns: ["city", "total"], rows: [["Pune", "10"], ["Agra", null]], truncated: false },
+        runs: { runs: [{ id: "r", name: "first", experiment: "e", status: "FINISHED", at: 1794037625000, ms: 10, params: { alpha: "0.5" }, metrics: { rmse: 0.1 } }] },
+      };
+      return route.fulfill({ json: answers[op] });
+    });
+    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Lakehouse", exact: true }).click();
+    const lakehouse = page.getByRole("region", { name: "Lakehouse" });
+    await step(page, `${theme} room, a lakehouse table and its versions`, () => lakehouse.getByRole("group", { name: "Versions of gold" }).waitFor({ timeout: 15_000 }));
+    await lakehouse.getByRole("button", { name: "Experiments" }).click();
+    await step(page, `${theme} room, a lakehouse's runs`, () => lakehouse.getByRole("group", { name: "MLflow runs" }).waitFor({ timeout: 15_000 }));
     // The numbers under an Explain this data answer, from a conversation already in this browser.
     const numbers = { engine: "DuckDB 1.5.6", rows: 3, duplicates: 1, columns: [{ name: "age", type: "BIGINT", nullPercent: 0, unique: 3, min: "1", max: "9", mean: "4", std: "2", q25: "2", q50: "3", q75: "6", outliers: 0, top: [] }], correlations: [{ a: "age", b: "pay", r: 0.9 }] };
     await page.evaluate(([room, summary]) => sessionStorage.setItem(`cc-ai:${room}`, JSON.stringify({ mode: "data", entries: [{ id: "q", role: "user", content: "Explain this data.", mode: "data" }, { id: "a", role: "assistant", content: "An answer.", mode: "data", status: "done", numbers: summary }] })), [ROOM, numbers]);

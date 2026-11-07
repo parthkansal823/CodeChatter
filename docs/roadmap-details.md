@@ -667,6 +667,33 @@ What's left is in `docs/pending.md` under step 11.
 
 ## 11. Advanced features ⬜
 
+### The lakehouse ✅
+
+**What:** the open-source tools Databricks is built on, in the room: **Apache Spark** to process data, **Delta Lake** for tables with versions, and **MLflow** to track experiments. Databricks itself is a paid cloud service that can't run in a room. This is its way of working, not its product: there are no clusters, jobs or Unity Catalog, and Spark runs on one machine.
+
+- **In notebooks and scripts:** `from lakehouse import session` (`sandbox/image/lakehouse.py`) gives a Spark session set up for a sandbox: its heap fits the room's memory, it listens only on this machine, and Delta Lake is on. A room under 650 MB is told what to change. Tables and MLflow runs stay in the room's home (`~/lakehouse`), so they outlive the sandbox, and big files don't sync into everyone's editor. Spark keeps its list of tables in memory, so each new session lists them again from disk.
+- **The tool (`tools/lakehouse/lakehouse-tool.tsx`, `POST /api/rooms/:id/lakehouse`):**
+  - **Tables:** rows, columns, size, and every version with what made it. Any version opens, which is Delta Lake's time travel, and a preview can go to Explain this data.
+  - **Experiments:** MLflow's runs side by side, with whatever settings and results any of them logged.
+  - **It doesn't start Spark,** which takes most of a minute on one CPU. `sandbox/image/lakehouse_info.py` reads tables with DuckDB's Delta extension, each history from the table's own commit log, and runs through MLflow's client, in about a second.
+  - **"Open an example notebook"** goes from messy data to clean tables (bronze, silver, gold), changes one and reads the old version, and logs runs.
+- **The image:** the full image only, as Spark needs Java: pinned by hash (`sandbox/image/lakehouse-requirements.txt`), in a folder Python looks in last so it can't change what the room's Python imports, with Delta Lake's jars checked by SHA-256 so nothing downloads at run time. It adds about 1.2 GB. A room on the base image is told to choose the full one.
+- **Limits, measured:** at 768 MB and one CPU, Spark and Delta Lake peaked at 699 MB of 768 in a throwaway container, which is tight beside a notebook kernel. The default `SANDBOX_MEMORY_MB` is 768, and it's 2048 on this machine, where the example notebook takes about a minute. On one CPU Spark is slow, and it's for learning and small data, not big jobs.
+- **Who may:** needs `code.run`, and isn't for interview rooms. A table's name has to be a folder directly in the warehouse.
+- **Found by testing it twice in a row, and fixed:**
+  - **Deleting a notebook left its kernel running,** and with Spark in it, that held 600 MB until the sandbox stopped. The next notebook's Spark was killed for lack of memory, which looked like a notebook that's stuck. Kernels now stop when their file is deleted, or a folder holding it is (`notebooks.ts`, tested in `notebooks.e2e.mjs`).
+  - **A room short of memory now gets a reason:** `session()` checks what's free, says what to stop, and sizes its heap to fit.
+  - **A write killed before its first commit** left a folder that stopped Spark starting in that room at all. It's now skipped, and the tool says what's wrong with it.
+  - **The tool looks again each time it opens,** as a notebook changes things while it's closed.
+
+**Not included:** a connection to a real Databricks workspace (in `docs/pending.md`), MLflow's own web page (`mlflow-skinny` doesn't have one), and tables going with a room when it's forked, as they're in its home and not its files.
+
+**Tests:**
+- `packages/contracts/src/lakehouse.test.ts`
+- `apps/runner/test/lakehouse.e2e.mjs` (32 checks on the full image, inside the jail with no network: Spark, changes, an old version, a new session finding a table, MLflow; what the tool reads; names trying to leave the warehouse; nothing landing in the room's files)
+- `apps/web/test/lakehouse.e2e.mjs` (24 checks in a browser, with the real example notebook and only one failure stood in for: the numbers at the old version are checked)
+- `a11y.e2e.mjs` includes the tool with a table and runs
+
 ### Explain this data ✅
 
 **What:** a button on a query's results and on a notebook's table. A model shown rows guesses at sums and averages and only sees a few of them, so DuckDB works out the numbers and the model explains them.

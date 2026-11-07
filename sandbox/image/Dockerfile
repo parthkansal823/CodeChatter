@@ -169,6 +169,29 @@ RUN set -eu; \
     ln -s /usr/local/lib/codechatter/mcp-inspector/node_modules/.bin/mcp-inspector /out/bin/mcp-inspector; \
     ./node_modules/.bin/mcp-inspector --version
 
+# The lakehouse (apps/runner/src/lakehouse.ts), for the full image, as it needs Java: Spark, Delta Lake and MLflow, pinned by
+# hash, in a folder of their own that Python looks in last, so they don't change what the room's Python imports. Delta Lake's
+# jars go in with Spark's, checked against the SHA-256 worked out when they were pinned (and Maven Central's SHA-1 then), so
+# nothing needs downloading at run time. DuckDB's Delta extension reads the tables without starting Spark.
+FROM debian:trixie-slim AS lakehouse
+ARG DUCKDB_VERSION=1.5.6
+COPY image/lakehouse-requirements.txt /tmp/lakehouse-requirements.txt
+RUN set -eu; \
+    apt-get update; apt-get install -y --no-install-recommends curl ca-certificates python3-pip; rm -rf /var/lib/apt/lists/*; \
+    target=/out/lib/codechatter/lakehouse; \
+    pip install --no-cache-dir --break-system-packages --retries 10 --resume-retries 10 --timeout 120 --require-hashes --target "$target" -r /tmp/lakehouse-requirements.txt; \
+    get() { curl -fsSL --retry 5 --retry-all-errors "$@"; }; \
+    maven=https://repo1.maven.org/maven2/io/delta; \
+    get -o "$target/pyspark/jars/delta-spark_2.13-4.0.0.jar" "$maven/delta-spark_2.13/4.0.0/delta-spark_2.13-4.0.0.jar"; \
+    echo "538511702aae0ef6973a6a70af3d4543c9009f8edbed786a00737e2d3cd7f04e  $target/pyspark/jars/delta-spark_2.13-4.0.0.jar" | sha256sum -c -; \
+    get -o "$target/pyspark/jars/delta-storage-4.0.0.jar" "$maven/delta-storage/4.0.0/delta-storage-4.0.0.jar"; \
+    echo "9bdb9fb450f1e119eba53feb427f331b0d09072d26485b8273883ad72c9a2e1d  $target/pyspark/jars/delta-storage-4.0.0.jar" | sha256sum -c -; \
+    pip install --no-cache-dir --break-system-packages --no-deps --only-binary :all: --target /tmp/duckdb "duckdb==${DUCKDB_VERSION}"; \
+    PYTHONPATH=/tmp/duckdb python3 -c "import duckdb; c = duckdb.connect(config={'extension_directory': '$target/duckdb-extensions'}); c.execute('INSTALL delta'); c.execute('LOAD delta')"; \
+    rm -rf "$target/bin"
+COPY image/lakehouse.py /out/lib/codechatter/lakehouse/lakehouse.py
+COPY image/lakehouse_info.py /out/lib/codechatter/lakehouse_info.py
+
 # The base image: what every room gets by default.
 FROM core AS base
 # clangd, the C and C++ language server (apps/runner/src/lsp.ts); its own layer.
@@ -272,6 +295,8 @@ COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
 COPY --from=analysis /out/ /usr/local/
 COPY --from=evals /out/ /usr/local/
 COPY --from=mcpinspector /out/ /usr/local/
+COPY --from=lakehouse /out/ /usr/local/
+RUN echo /usr/local/lib/codechatter/lakehouse > /usr/lib/python3/dist-packages/codechatter-lakehouse.pth
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).

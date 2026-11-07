@@ -156,6 +156,25 @@ try {
   const down = await call("shutdown");
   await settled(() => kernelOf(nb).state === "off", 10_000);
   record("shutsDown", down.status === 200 && kernelOf(nb).state === "off", `${down.status} ${kernelOf(nb).state}`);
+
+  // Deleting a notebook stops its kernel: nothing else would, and with Spark in it that's a lot of the room's memory held for nothing.
+  const lastCell = cell("import os\nprint('KERNEL', os.getpid())");
+  await call("run", { cellIds: [lastCell], stateVector: stateVector() });
+  await settled(() => outputs(lastCell).some((o) => o.output_type === "stream"));
+  const kernelPid = /KERNEL (\d+)/.exec(outputs(lastCell).map((o) => o.text ?? "").join(""))?.[1];
+  const alive = async (pid) => {
+    const script = `${dir}/alive-${Date.now()}.sh`;
+    createFileAtPath(doc, script, `[ -d /proc/${pid} ] && echo ALIVE || echo GONE\n`, null);
+    await sleep(1000);
+    const res = await fetch(`${RUNNER}/rooms/${ROOM}/runs`, { method: "POST", headers: { authorization: token(), "content-type": "application/json" }, body: JSON.stringify({ path: script, stateVector: stateVector() }), signal: AbortSignal.timeout(60_000) });
+    return /ALIVE/.test(await res.text());
+  };
+  record("theKernelIsRunning", Boolean(kernelPid) && (await alive(kernelPid)), kernelPid);
+  trash(doc, fileId);
+  await settled(() => kernelOf(nb).state === "off", 15_000);
+  record("deletingANotebookSaysItsKernelStopped", kernelOf(nb).state === "off", kernelOf(nb).state);
+  await sleep(1500);
+  record("itsKernelIsReallyGone", !(await alive(kernelPid)), kernelPid);
 } finally {
   const folder = findByPath(doc, dir);
   if (folder) trash(doc, folder.id);

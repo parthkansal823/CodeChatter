@@ -4,10 +4,8 @@
  */
 import { CodebasePassage, type CodebaseHits, type RagRunnerInput } from "@codechatter/contracts";
 
-import { Collector, ended } from "./databases.js";
-import { JAIL } from "./plans.js";
 import type { RoomSession } from "./room-session.js";
-import { exitCodeOnceEnded } from "./sandbox.js";
+import { lastLine, runScript } from "./sandbox-script.js";
 
 const SCRIPT = "/usr/local/lib/codechatter/codebase_search.py";
 /** The API's connection gives up at 300: it stops here first, with most of the index done, and carries on when asked again. */
@@ -37,22 +35,11 @@ export function parseHits(output: string): CodebaseHits {
 const queues = new WeakMap<RoomSession, Promise<unknown>>();
 
 async function search(session: RoomSession, input: RagRunnerInput): Promise<CodebaseHits> {
-  const request = Buffer.from(JSON.stringify(input), "utf8");
-  // The exec's stdin can't be closed on its own on every Docker, so the request is read by its size.
-  const script = `[ -f ${SCRIPT} ] || { echo "cc-rag: missing" >&2; exit 127; }; head -c "$1" | timeout ${SEARCH_SECONDS} python3 ${SCRIPT}`;
-  const handle = await session.sandbox.exec([JAIL, "sh", "-c", script, "cc-rag", String(request.length)], { tty: false, stdin: true });
-  const stdout = new Collector(MAX_OUTPUT);
-  const stderr = new Collector(16 * 1024);
-  handle.demux(stdout, stderr);
-  const finished = ended(handle.stream);
-  handle.stream.write(request);
-  await finished;
-  const code = await exitCodeOnceEnded(handle);
-  handle.stream.destroy();
-  if (code === 127 && stderr.text().includes("cc-rag: missing")) throw new RagError("This room's sandbox can't search yet: its image needs rebuilding (pnpm sandbox:build).");
-  if (code === 124) throw new RagError(`The search took longer than ${SEARCH_SECONDS} seconds and was stopped. Ask again to carry on.`);
-  if (code !== 0) throw new RagError(`The search couldn't run: ${stderr.text().trim().split("\n").at(-1)?.slice(0, 300) || `exit code ${code}`}`);
-  return parseHits(stdout.text());
+  const done = await runScript(session.sandbox, SCRIPT, input, { seconds: SEARCH_SECONDS, maxOutput: MAX_OUTPUT });
+  if (done.missing) throw new RagError("This room's sandbox can't search yet: its image needs rebuilding (pnpm sandbox:build).");
+  if (done.code === 124) throw new RagError(`The search took longer than ${SEARCH_SECONDS} seconds and was stopped. Ask again to carry on.`);
+  if (done.code !== 0) throw new RagError(`The search couldn't run: ${lastLine(done.stderr) || `exit code ${done.code}`}`);
+  return parseHits(done.stdout);
 }
 
 export function searchCodebase(session: RoomSession, input: RagRunnerInput): Promise<CodebaseHits> {

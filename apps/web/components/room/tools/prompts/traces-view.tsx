@@ -88,7 +88,7 @@ export function TracesView() {
         </Button>
       </div>
       {traces.isPending && (
-        <div className="grid gap-2" aria-label="Loading the calls" aria-busy>
+        <div role="status" className="grid gap-2" aria-label="Loading the calls" aria-busy>
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-32 w-full" />
         </div>

@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { resolveRequest, withQuery } from "../../../../../../packages/contracts/src/http-studio/request";
 import { IMPORT_TEXT_LIMIT } from "./import-openapi";
 import { parsePostman } from "./import-postman";
 
@@ -87,6 +88,13 @@ test("JSON without a language hint is sanitized; invalid JSON is skipped and exp
   assert.throws(() => parse(collection({ item: Array.from({ length: 10 }, () => ({ request: { method: "POST", url: "https://example.test", body: { mode: "raw", raw, options: { raw: { language: "json" } } } } })) })), /too much expansion/);
 });
 
+test("URL-shaped public variables and examples discard credentials without nested secret placeholders", () => {
+  const plan = parse(collection({ variable: [{ key: "baseUrl", value: "https://alice:private-url-pass@example.test?api%5Fkey=private-url-key&q=public" }], item: [{ request: { method: "POST", url: "{{baseUrl}}/pets", body: { mode: "raw", raw: JSON.stringify({ link: "https://alice:private-example-pass@example.test?token=private-example-token&q=ok" }) } } }] }));
+  assert.equal(plan.variables.find((variable) => variable.key === "baseUrl")!.value, "https://example.test?q=public");
+  assert.deepEqual(JSON.parse(plan.requests[0]!.body.text), { link: "https://example.test?q=ok" });
+  assert.ok(!JSON.stringify(plan).includes("private-"));
+});
+
 test("multipart remains genuine multipart text; files are counted, disabled fields excluded and boundary collisions avoided", () => {
   const plan = parse(collection({ item: [{ name: "Upload", event: [{ script: { exec: ["dangerous-code()"] } }], request: { method: "POST", url: "https://example.test/upload", header: [{ key: "Content-Type", value: "multipart/form-data" }], body: { mode: "formdata", formdata: [
     { key: "caption", type: "text", value: "photo\r\n--CodeChatterImport0" }, { key: "hidden", type: "text", value: "excluded", disabled: true }, { key: "attachment", type: "file", src: "C:/private/photo.png" },
@@ -139,4 +147,30 @@ test("invalid and oversized collections fail plainly; excessive requests, nestin
   const plan = parse(collection({ item: [{ request: { method: "TRACE", url: "https://example.test" } }, { request: "https://example.test" }] }));
   assert.equal(plan.requests.length, 1);
   assert.equal(plan.counts.unsupported, 1);
+});
+
+test("structured Postman query fields encode literal spans and preserve variable placeholders through resolution", () => {
+  const plan = parse(collection({ item: [{ request: { method: "GET", url: { raw: "https://example.test/pets", query: [
+    { key: "q", value: "a&b#c" }, { key: "name&= #界", value: "a&{{phrase}}#界%2F" }, { key: "off", value: "not included", disabled: true },
+  ] } } }] }));
+  const request = plan.requests[0]!;
+  const result = resolveRequest({ ...request, url: withQuery(request.url, request.params) }, (key) => key === "phrase" ? "ready" : undefined);
+  const url = new URL(result.input.url);
+  assert.equal(url.searchParams.get("q"), "a&b#c");
+  assert.equal(url.searchParams.get("name&= #界"), "a&ready#界%2F");
+  assert.equal(url.searchParams.has("off"), false);
+  assert.equal(url.hash, "");
+  assert.equal([...url.searchParams].length, 2);
+  assert.match(request.params[1]!.value, /\{\{phrase\}\}/);
+});
+
+test("raw URL-derived query rows keep their existing URI encoding", () => {
+  const original = "https://example.test/pets?q=a%26b%23c&name%26%3D%20%23%E7%95%8C=%E7%95%8C%252F";
+  const plan = parse(collection({ item: [{ request: { method: "GET", url: original } }] }));
+  const request = plan.requests[0]!;
+  const result = resolveRequest({ ...request, url: withQuery(request.url, request.params) }, () => undefined);
+  assert.equal(result.input.url, original);
+  const url = new URL(result.input.url);
+  assert.equal(url.searchParams.get("q"), "a&b#c");
+  assert.equal(url.searchParams.get("name&= #界"), "界%2F");
 });

@@ -6,6 +6,7 @@ export * from "./rag.js";
 export * from "./mcp.js";
 export * from "./traces.js";
 export * from "./data-summary.js";
+export * from "./lakehouse.js";
 export * from "./analysis.js";
 export * from "./audit.js";
 export * from "./blobs.js";

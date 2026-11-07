@@ -5,7 +5,10 @@ import {
   cellType,
   clearOutputs,
   findCell,
+  flatten,
   kernelOf,
+  listTree,
+  maps,
   notebookOf,
   notebooks,
   pathOf,
@@ -67,6 +70,8 @@ export class NotebookKernels {
       }
       this.schedule();
     });
+    // A notebook that's deleted, or in a folder that is, has no use for its kernel, and with Spark in it that's a lot of memory.
+    maps(doc).nodes.observeDeep(() => this.stopDeleted());
     // Notebooks edited while the runner was away catch up once the files have arrived,
     // and a kernel a previous runner left "busy" or "idle" is gone: say so.
     void synced.then(() => {
@@ -100,6 +105,12 @@ export class NotebookKernels {
     this.kernels.get(fileId)?.shutdown();
     this.kernels.delete(fileId);
     return kernelOff;
+  }
+
+  private stopDeleted(): void {
+    if (!this.kernels.size) return;
+    const live = new Set(flatten(listTree(this.doc)).map((node) => node.id));
+    for (const fileId of this.kernels.keys()) if (!live.has(fileId)) this.shutdown(fileId);
   }
 
   /** The room closed or its sandbox went: every kernel goes with it. */

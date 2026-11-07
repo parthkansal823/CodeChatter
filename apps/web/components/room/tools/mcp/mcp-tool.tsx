@@ -232,7 +232,7 @@ function ServerView({ server, configText, ask, editable, onRemove }: { server: M
       </div>
       <div className="grid min-h-0 flex-1 content-start gap-3 overflow-auto p-3">
         {offers.isPending && (
-          <div className="grid gap-2" aria-label="Asking the server" aria-busy>
+          <div role="status" className="grid gap-2" aria-label="Asking the server" aria-busy>
             <Skeleton className="h-4 w-48" />
             <Skeleton className="h-16 w-full" />
           </div>
@@ -375,7 +375,7 @@ export default function McpTool(_props: RoomToolProps) {
       </header>
       {config.problem && <p className="border-b px-3 py-1.5 text-xs text-brand-text">{config.problem}</p>}
       {!synced ? (
-        <div className="grid gap-2 p-4" aria-label="Opening" aria-busy>
+        <div role="status" className="grid gap-2 p-4" aria-label="Opening" aria-busy>
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-4 w-3/4" />
         </div>

@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { resolveRequest, withQuery } from "../../../../../../packages/contracts/src/http-studio/request";
 import { IMPORT_TEXT_LIMIT, ImportBuilder, importUrl, parseOpenApi } from "./import-openapi";
 
 const openApi = (extra: Record<string, unknown> = {}) => ({ openapi: "3.1.0", info: { title: "Pet service", version: "1" }, paths: { "/health": { get: { summary: "Health" } } }, ...extra });
@@ -145,6 +146,12 @@ test("URL credentials and known secret query/header values are discarded, not co
   assert.equal(parsed.url, "https://example.test/path");
   assert.deepEqual(parsed.params, [{ key: "token", value: "{{token}}", enabled: true }, { key: "q", value: "public", enabled: true }]);
   assert.ok(!JSON.stringify(builder.finish()).includes("literal-"));
+  const encoded = importUrl(builder, "https://example.test?%61%70%69%5f%6b%65%79=encoded-private&%74oken=encoded-token");
+  assert.deepEqual(encoded.params.map((row) => row.value), ["{{api_key}}", "{{token}}"]);
+  assert.ok(!JSON.stringify(builder.finish()).includes("encoded-private"));
+  const server = parse(openApi({ servers: [{ url: "https://example.test/{apiKey}", variables: { apiKey: { default: "private-server-key" } } }] }));
+  assert.equal(server.variables.find((variable) => variable.key === "baseUrl")!.value, "");
+  assert.ok(!JSON.stringify(server).includes("private-server-key"));
 });
 
 test("invalid versions, missing operations, unsupported methods and missing refs are explicit", () => {
@@ -153,4 +160,38 @@ test("invalid versions, missing operations, unsupported methods and missing refs
   const plan = parse(openApi({ paths: { "/health": { get: {} }, "/trace": { trace: {} }, "/missing": { $ref: "#/not-found" } } }));
   assert.equal(plan.requests.length, 1);
   assert.equal(plan.counts.unsupported, 2);
+});
+
+test("structured OpenAPI query literals retain delimiter, Unicode and percent semantics through the actual resolver", () => {
+  const plan = parse(openApi({ servers: [{ url: "https://example.test" }], components: { securitySchemes: { Credential: { type: "apiKey", in: "query", name: "api key&=#" } } }, security: [{ Credential: [] }], paths: { "/pets": { get: { parameters: [
+    { in: "query", name: "q", required: true, example: "a&b#c" },
+    { in: "query", name: "name&= #界", required: true, example: "a&{{phrase}}#界%2F" },
+  ] } } } }));
+  const request = plan.requests[0]!;
+  const resolved = resolveRequest({ ...request, url: withQuery(request.url, request.params) }, (key) => key === "phrase" ? "ready" : key === "Credential" ? "safe-api-value" : plan.variables.find((variable) => variable.key === key)?.value);
+  const url = new URL(resolved.input.url);
+  assert.equal(url.searchParams.get("q"), "a&b#c");
+  assert.equal(url.searchParams.get("name&= #界"), "a&ready#界%2F");
+  assert.equal(url.searchParams.get("api key&=#"), "safe-api-value");
+  assert.equal(url.hash, "");
+  assert.equal([...url.searchParams].length, 3);
+  assert.equal(resolved.missing.length, 0);
+  assert.match(request.params[1]!.value, /\{\{phrase\}\}/);
+});
+
+test("path baseUrl uses a unique alias without replacing the server variable", () => {
+  for (const occupied of [false, true]) {
+    const plan = parse(openApi({ servers: [{ url: "https://example.test" }], paths: {
+      "/pets/{baseUrl}": { get: { parameters: [{ in: "path", name: "baseUrl", required: true, example: "abc", schema: { type: "string" } }] } },
+      ...(occupied ? { "/other/{pathBaseUrl}/{pathBaseUrl2}": { get: {} } } : {}),
+    } }));
+    const request = plan.requests[0]!;
+    const alias = occupied ? "pathBaseUrl3" : "pathBaseUrl";
+    assert.equal(request.url, `{{baseUrl}}/pets/{{${alias}}}`);
+    assert.equal(plan.variables.find((variable) => variable.key === "baseUrl")!.value, "https://example.test");
+    assert.equal(plan.variables.find((variable) => variable.key === alias)!.value, "abc");
+    const result = resolveRequest({ ...request, url: withQuery(request.url, request.params) }, (key) => plan.variables.find((variable) => variable.key === key)?.value);
+    assert.equal(result.input.url, "https://example.test/pets/abc");
+    assert.ok(plan.warnings.some((warning) => warning.includes(`renamed to ${alias}`)));
+  }
 });

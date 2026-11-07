@@ -34,21 +34,22 @@ function curlPlan(text: string): Plan {
   if (auth.type === "basic") { auth.username = builder.clip(auth.username); auth.password = builder.credential(auth.password, "password"); }
   if (auth.type === "apiKey") auth.value = builder.credential(auth.value, "apiKey");
   const { url, params } = importUrl(builder, value.url);
-  const headers = value.headers.flatMap((row) => { const safe = builder.row(row.key, row.value, row.enabled); return safe ? [safe] : []; });
-  const body = { ...value.body, text: builder.clip(value.body.text, 512 * 1024), form: value.body.form.flatMap((row) => { const safe = builder.row(row.key, row.value, row.enabled); return safe ? [safe] : []; }) };
+  if (value.headers.length > 63 || value.body.form.length > 256) builder.unsupported("Extra header or form rows were skipped.");
+  const headers = value.headers.slice(0, 63).flatMap((row) => { const safe = builder.row(row.key, row.value, row.enabled); return safe ? [safe] : []; });
+  const body = { ...value.body, text: builder.clip(value.body.text, 512 * 1024), form: value.body.form.slice(0, 256).flatMap((row) => { const safe = builder.row(row.key, row.value, row.enabled); return safe ? [safe] : []; }) };
   if (body.mode === "json") {
     try { body.text = JSON.stringify(safeExample(builder, JSON.parse(body.text)), null, 2); }
     catch { builder.warn("The JSON body could not be checked. Review it before sending."); body.text = ""; }
   }
   builder.add({ folderId: null, name: builder.plan.name, method: value.method, url, headers, params, body, auth });
-  for (const warning of value.warnings) builder.warn(warning);
+  if (value.warnings.length) builder.unsupported("Some cURL options, file fields or extra arguments were skipped. Review the imported request.");
   return { ...builder.finish(), format: "curl" };
 }
 
 function parseInput(source: string): Parsed {
+  if (new TextEncoder().encode(source).byteLength > MAX_BYTES) return { error: "Use a file or text no larger than 5 MB." };
   const text = source.replace(/^\uFEFF/, "");
   if (!text.trim()) return null;
-  if (new TextEncoder().encode(text).byteLength > MAX_BYTES) return { error: "Use a file or text no larger than 5 MB." };
   try {
     if (/^\s*(?:\$\s+)?curl\b/i.test(text)) return { value: curlPlan(text) };
     let postman = false;
@@ -100,7 +101,7 @@ export function ImportDialog() {
   const open = dialog?.kind === "import";
   return (
     <Dialog open={open} onOpenChange={(value) => !value && openDialog(null)}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto text-[13px] sm:max-w-2xl">
+      <DialogContent data-own-run-key className="max-h-[90dvh] overflow-y-auto text-[13px] sm:max-w-2xl">
         <DialogHeader><DialogTitle>Import</DialogTitle><DialogDescription>Paste cURL, OpenAPI, Swagger or a Postman collection, or choose a file. Preview it before adding anything.</DialogDescription></DialogHeader>
         {open && <ImportPanel />}
       </DialogContent>
@@ -127,7 +128,7 @@ function ImportPanel() {
     event.currentTarget.value = "";
     const epoch = ++readEpoch.current;
     setFileError("");
-    if (!file) return;
+    if (!file) { setReading(false); return; }
     if (file.size > MAX_BYTES) { setText(""); setReading(false); setFileError("Choose a file no larger than 5 MB."); return; }
     setReading(true);
     try { const value = await file.text(); if (epoch === readEpoch.current) setText(value); }

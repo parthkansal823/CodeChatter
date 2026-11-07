@@ -1,5 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, McpInput, McpOutput, RoomAnalysis,
+import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
   RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
@@ -231,6 +231,14 @@ export class RunnerClient {
   }
 
   /** The Analysis tool's report on the whole room, from real tools in its sandbox (runner: analysis.ts). */
+  /** A room's Delta tables and MLflow runs (apps/runner/src/lakehouse.ts). */
+  async lakehouse(roomId: string, input: LakehouseInput, user: RunnerUser): Promise<unknown> {
+    const response = await this.call(`/rooms/${roomId}/lakehouse`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't read the lakehouse.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response.json();
+  }
+
   /** DuckDB's numbers for a table of results (apps/runner/src/data-summary.ts). */
   async dataSummary(roomId: string, input: DataSummaryInput, user: RunnerUser): Promise<DataSummary> {
     const response = await this.call(`/rooms/${roomId}/data-summary`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });

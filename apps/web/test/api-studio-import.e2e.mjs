@@ -111,6 +111,39 @@ let stage = "sign in";
 let runIssued = false;
 let sends = 0;
 let remoteFetches = 0;
+let runStarts = 0;
+let runStarted = 0;
+let ownedRunId = null;
+let ownedRunExit = null;
+const runFailures = new Set();
+const newContext = browser.newContext.bind(browser);
+browser.newContext = async (...options) => {
+  const context = await newContext(...options);
+  context.on("page", (page) => page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => { if (String(payload).includes('"run:start"')) runStarts++; });
+    socket.on("framereceived", ({ payload }) => {
+      const frame = String(payload);
+      const event = /^42\d*(\[.*\])$/.exec(frame);
+      if (event) {
+        try {
+          const [name, data] = JSON.parse(event[1]);
+          if (name === "run:started" && data.path === serverFile) { ownedRunId = data.id; runStarted++; }
+          if (name === "run:exit" && data.runId === ownedRunId) ownedRunExit = data.reason;
+        } catch { /* Not a JSON event. */ }
+      }
+      const ack = /^43\d+(\[.*\])$/.exec(frame);
+      if (!ack) return;
+      try {
+        const error = JSON.parse(ack[1])[0]?.error;
+        if (typeof error === "string") {
+          // Only categories are recorded; an error can otherwise quote room data.
+          for (const category of ["sandbox", "Docker", "timeout", "permission", "file", "language", "sync"]) if (error.toLowerCase().includes(category.toLowerCase())) runFailures.add(category);
+        }
+      } catch { /* Not a JSON acknowledgement. */ }
+    });
+  }));
+  return context;
+};
 
 async function openStudio(page) {
   if (!await page.getByRole("button", { name: "Close API Studio", exact: true }).count()) {
@@ -202,14 +235,31 @@ try {
 
   stage = "sandbox echo server";
   await a.getByRole("button", { name: "Close API Studio", exact: true }).click();
+  stage = "create sandbox server file";
   await a.getByRole("button", { name: "New file", exact: true }).click();
   await a.getByPlaceholder("name.ext", { exact: true }).fill(serverFile);
   await a.getByPlaceholder("name.ext", { exact: true }).press("Enter");
   await a.getByRole("tab", { name: new RegExp(escapeRegex(serverFile)) }).waitFor();
+  stage = "type sandbox server source";
   await a.locator(".monaco-editor .view-lines").first().click();
-  await a.keyboard.type(`require("http").createServer((q,s)=>{let b="";q.on("data",c=>b+=c);q.on("end",()=>{s.setHeader("content-type","application/json");s.end(JSON.stringify({ok:true,method:q.method,url:q.url,body:b}))})}).listen(${port},()=>console.log("import listening ${port}"))`);
+  await a.keyboard.type(`require("http").createServer((q,s)=>{let b="";q.on("data",c=>b+=c);q.on("end",()=>{s.setHeader("content-type","application/json");s.end(JSON.stringify({ok:true,method:q.method,url:q.url,body:b,message:JSON.parse(b||"{}").message}))})}).listen(${port},()=>console.log("import listening ${port}"))`);
+  stage = "import preview keyboard guard with runnable file";
+  await openStudio(a);
+  dialog = await preview(openApi);
+  const startsBeforePreview = runStarts;
+  await dialog.getByRole("textbox", { name: "cURL command or API document", exact: true }).press("Control+Enter");
+  await pause(400);
+  check("Ctrl+Enter in an import preview does not run the open server file", runStarts === startsBeforePreview);
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await a.getByRole("button", { name: "Close API Studio", exact: true }).click();
   runIssued = true;
-  await a.keyboard.press("Control+Enter");
+  stage = "start sandbox server run";
+  const startsBeforeRun = runStarts;
+  await a.getByRole("button", { name: "Run", exact: true }).click();
+  await until(() => runStarts > startsBeforeRun, 5_000);
+  check("Run submits the server file to the sandbox", true);
+  stage = "wait for sandbox server output";
+  await until(() => ownedRunId !== null, 30_000);
   await a.locator(".xterm-rows").getByText(`import listening ${port}`, { exact: false }).first().waitFor({ timeout: 60_000 });
   check("disposable server starts inside the room sandbox", true);
 
@@ -221,7 +271,7 @@ try {
   const response = b.getByRole("region", { name: "Response", exact: true });
   await response.getByText("200 OK", { exact: true }).waitFor({ timeout: 30_000 });
   const body = await response.textContent();
-  check("second user sends imported path, query and JSON body to sandbox", body.includes('"method": "POST"') && body.includes(`/import-probe/${stamp}?marker=${stamp}`) && body.includes(stamp) && !body.includes("optional=off"));
+  check("second user sends imported path, query and JSON body to sandbox", body.includes('"method": "POST"') && body.includes(`/import-probe/${stamp}?marker=${stamp}`) && body.includes(`"message": "${stamp}"`) && !body.includes("optional=off"));
   await b.getByRole("button", { name: "Code", exact: true }).click();
   await b.getByRole("radio", { name: "JavaScript axios", exact: true }).click();
   const code = await b.getByLabel("axios code", { exact: true }).textContent();
@@ -230,17 +280,21 @@ try {
 } catch (error) {
   // Playwright errors can contain an input's value; keep diagnostics credential-free.
   check(`completed import workflow (${stage})`, false, error?.name ?? "Error");
+  if (runIssued) check("server run diagnostic events", false, `start=${runStarts}, started=${runStarted}, error categories=${[...runFailures].join(",") || "none"}`);
 } finally {
   if (a) {
     // Every cleanup is independent, so a failed assertion cannot strand another fixture.
     try {
       await a.keyboard.press("Escape");
       if (await a.getByRole("button", { name: "Close API Studio", exact: true }).count()) await a.getByRole("button", { name: "Close API Studio", exact: true }).click();
-      if (runIssued) {
-        const stop = a.getByRole("button", { name: "Stop", exact: true });
-        if (await stop.count()) { await stop.click(); await stop.waitFor({ state: "hidden" }); }
+      if (ownedRunId && !ownedRunExit) {
+        const stop = a.getByRole("button", { name: "Stop", exact: true }).first();
+        await stop.waitFor();
+        await stop.click();
+        await until(() => ownedRunExit !== null);
+        await stop.waitFor({ state: "hidden" });
       }
-      check("fixture sandbox run is stopped", true);
+      check("fixture sandbox run is stopped", !ownedRunId || ownedRunExit !== null, ownedRunExit ?? "no run started");
     } catch { check("fixture sandbox run is stopped", false); }
     try {
       if (!await a.getByRole("tree", { name: "Files", exact: true }).count()) await a.getByRole("button", { name: "Files", exact: true }).click();
@@ -252,15 +306,22 @@ try {
       await openStudio(a);
       for (const name of [apiName, postmanName]) {
         for (let attempts = 0; attempts < 4; attempts++) {
-          const root = a.getByRole("tree", { name: "Requests", exact: true }).locator('[role="treeitem"][aria-level="1"]').filter({ hasText: new RegExp(`^${escapeRegex(name)}$`) }).first();
+          const id = observer?.fixture().roots.find((node) => node.name === name)?.id;
+          const tree = a.getByRole("tree", { name: "Requests", exact: true });
+          const root = id ? tree.locator(`[data-id="${id}"]`) : tree.locator('[role="treeitem"][aria-level="1"]').filter({ hasText: new RegExp(`^${escapeRegex(name)}$`) }).first();
           if (!await root.count()) break;
-          await root.press("Delete");
-          await a.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
+          await root.click({ button: "right" });
+          await a.getByRole("menuitem", { name: "Delete", exact: true }).click();
+          const confirmation = a.getByRole("alertdialog");
+          await confirmation.getByRole("button", { name: "Delete", exact: true }).click();
+          await confirmation.waitFor({ state: "hidden" });
+          await root.waitFor({ state: "hidden" });
+          if (id && observer) await until(() => !observer.fixture().roots.some((node) => node.id === id));
         }
       }
       if (observer) await until(() => observer.fixture().nodes.length === 0);
       check("all fixture collection nodes are removed", true);
-    } catch { check("all fixture collection nodes are removed", false); }
+    } catch (error) { check("all fixture collection nodes are removed", false, error?.name ?? "Error"); }
     try {
       await a.keyboard.press("Escape");
       await openStudio(a);

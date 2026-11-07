@@ -12,6 +12,7 @@ import {
   INSTALLS_MINUTES,
   JudgeRunnerInput,
   KubeRequest,
+  LakehouseInput,
   McpInput,
   QueryInput,
   RagRunnerInput,
@@ -46,6 +47,7 @@ import { log, messageOf } from "./log.js";
 import { configureRunnerCollectors, serveMetrics } from "./metrics.js";
 import { DataSummaryError, summarizeData } from "./data-summary.js";
 import { EvalError, runEvals } from "./evals.js";
+import { askLakehouse, LakehouseError } from "./lakehouse.js";
 import { callMcp } from "./mcp.js";
 import { RagError, searchCodebase } from "./rag.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
@@ -86,6 +88,7 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   DELETE /rooms/:id/databases/:kind       deletes its data
  *   POST /rooms/:id/databases/:kind/query   { query } QueryResult (the console)
  *   GET  /rooms/:id/databases/:kind/tables  DatabaseTable[] (the table browser)
+ *   POST /rooms/:id/lakehouse                LakehouseInput      a room's Delta tables and MLflow runs
  *   POST /rooms/:id/data-summary             DataSummaryInput    DataSummary (DuckDB's numbers for a table)
  *   POST /rooms/:id/mcp                      McpInput            McpOutput (the MCP Inspector in the sandbox)
  *   POST /rooms/:id/rag                      RagRunnerInput      CodebaseHits (a search of the room's files)
@@ -186,6 +189,8 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (analysis && req.method === "POST") return handleAnalysis(req, res, analysis[1]!);
     const mcp = /^\/rooms\/([A-Z0-9]{6})\/mcp$/.exec(url.pathname);
     if (mcp && req.method === "POST") return handleMcp(req, res, mcp[1]!);
+    const lakehouse = /^\/rooms\/([A-Z0-9]{6})\/lakehouse$/.exec(url.pathname);
+    if (lakehouse && req.method === "POST") return handleLakehouse(req, res, lakehouse[1]!);
     const dataSummary = /^\/rooms\/([A-Z0-9]{6})\/data-summary$/.exec(url.pathname);
     if (dataSummary && req.method === "POST") return handleDataSummary(req, res, dataSummary[1]!);
     const rag = /^\/rooms\/([A-Z0-9]{6})\/rag$/.exec(url.pathname);
@@ -488,6 +493,23 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       return json(res, 200, await callMcp(session.sandbox, input.data));
     } catch (error) {
       if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** A room's Delta tables and MLflow runs (lakehouse.ts). */
+  async function handleLakehouse(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const input = LakehouseInput.safeParse(await readJson(req));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a request." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      return json(res, 200, await askLakehouse(session.sandbox, input.data));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      if (error instanceof LakehouseError) return json(res, 422, { error: error.message });
       throw error;
     }
   }

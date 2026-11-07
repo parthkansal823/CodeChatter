@@ -37,6 +37,9 @@ export const USER_ENV = [
   // The room's model, for real SDKs and tools. The value isn't a secret: SDKs refuse to start without one, and the gateway ignores it.
   ...["OPENAI_BASE_URL", "OPENAI_API_BASE"].map((name) => `${name}=${AI_GATEWAY}`),
   "OPENAI_API_KEY=not-needed-in-this-room",
+  // MLflow's runs go with the room's lakehouse (sandbox/image/lakehouse.py), not into its files. It complains when there's no git to read a version from.
+  "MLFLOW_TRACKING_URI=file:///home/ccuser/lakehouse/mlruns",
+  "GIT_PYTHON_REFRESH=quiet",
   // Debian marks its Python as managed by apt; with a read-only root, pip installs for the user.
   "PIP_BREAK_SYSTEM_PACKAGES=1",
   "npm_config_prefix=/home/ccuser/.local",
