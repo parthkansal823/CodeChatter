@@ -5,6 +5,7 @@ import { LoggerModule } from "nestjs-pino";
 import { AiController } from "./ai/ai.controller.js";
 import { AiGatewayController } from "./ai/gateway.controller.js";
 import { AiService } from "./ai/ai.service.js";
+import { AiTraces } from "./ai/traces.service.js";
 import { SessionGuard } from "./auth/session.guard.js";
 import { ProblemFilter } from "./common/problem.filter.js";
 import { DemoController } from "./demo/demo.controller.js";
@@ -80,6 +81,7 @@ const dev = process.env.NODE_ENV !== "production";
   controllers: [HealthController, MeController, GithubController, MetaController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, AiGatewayController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController, InterviewRecordingsController, InterviewAiReviewController],
   providers: [
     AiService,
+    AiTraces,
     InterviewsService,
     InterviewTestsService,
     InterviewRecordingsService,

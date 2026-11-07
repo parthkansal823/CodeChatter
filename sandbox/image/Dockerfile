@@ -133,6 +133,8 @@ RUN set -eu; \
 COPY image/gitleaks.toml /out/lib/codechatter/gitleaks.toml
 # Ask the codebase (apps/runner/src/rag.ts) uses lizard and gitleaks from here.
 COPY image/codebase_search.py /out/lib/codechatter/codebase_search.py
+# Explain this data (apps/runner/src/data-summary.ts) uses DuckDB.
+COPY image/summarize_data.py /out/lib/codechatter/summarize_data.py
 
 # Evals (apps/runner/src/evals.ts): promptfoo, from a lockfile so that all its packages are checked against their
 # hashes, with no install scripts. Its optional extras (other providers, PDFs, browsers) stay out, which takes it from

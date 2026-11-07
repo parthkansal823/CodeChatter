@@ -87,6 +87,8 @@ YAML does not expand variables. `LIVEKIT_URL` defaults to `wss://${DOMAIN}/livek
 The production API does not issue call tokens with missing LiveKit settings.
 
 Caddy sends PROXYv2 with the decrypted stream, preserving the client's address.
+Its TURN TLS policy explicitly accepts `stun.turn` ALPN, while retaining legacy
+HTTP/1.1 negotiation and ACME's TLS challenge protocol.
 The dedicated network fixes Caddy at 172.30.250.2 and LiveKit at 172.30.250.3,
 so startup order cannot consume the proxy's reserved address.
 LiveKit trusts only Caddy's 172.30.250.2/32 on the dedicated `turn-proxy`

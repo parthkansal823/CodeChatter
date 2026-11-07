@@ -1,6 +1,6 @@
 "use client";
 
-import type { AiMode } from "@codechatter/contracts";
+import type { AiMode, ExplainDataContext } from "@codechatter/contracts";
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 
@@ -16,6 +16,8 @@ export type AiRequest = {
   send?: boolean;
   /** Override the mode's default context chips, e.g. `{ run: true }`. */
   attach?: Partial<AiAttach>;
+  /** Data mode: the numbers to explain. */
+  data?: ExplainDataContext;
 };
 
 type AiRequestsState = {

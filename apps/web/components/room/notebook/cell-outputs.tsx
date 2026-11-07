@@ -2,10 +2,11 @@
 
 import type { NotebookOutput } from "@codechatter/workspace-model";
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { ExplainDataButton, tableFromHtml } from "@/components/room/tools/ai/explain-data";
 import { cssVar } from "@/lib/css-color";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,7 @@ function Rich({ data }: { data: Record<string, unknown> }) {
     // eslint-disable-next-line @next/next/no-img-element -- a kernel's plot, inline as data
     return <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`} alt={alt} className="max-w-full self-start rounded-sm bg-white" />;
   }
-  if (typeof html === "string") return <HtmlOutput html={html} />;
+  if (typeof html === "string") return <HtmlTable html={html} />;
   if (typeof markdown === "string") {
     return (
       <div className="text-sm [&_a]:underline [&_code]:font-mono [&_li]:ml-5 [&_ol]:list-decimal [&_p]:my-1 [&_ul]:list-disc">
@@ -80,6 +81,21 @@ function Rich({ data }: { data: Record<string, unknown> }) {
   }
   if (typeof text === "string") return <Ansi text={text} />;
   return <pre className="font-mono text-muted-foreground">{`[${Object.keys(data).join(", ") || "empty"} output]`}</pre>;
+}
+
+/** A kernel's HTML, with "Explain this data" under a table like a pandas DataFrame. */
+function HtmlTable({ html }: { html: string }) {
+  const table = useMemo(() => (html.includes("<table") ? tableFromHtml(html) : null), [html]);
+  return (
+    <>
+      <HtmlOutput html={html} />
+      {table && (
+        <div>
+          <ExplainDataButton table={{ ...table, source: "notebook" }} />
+        </div>
+      )}
+    </>
+  );
 }
 
 /**

@@ -91,7 +91,7 @@ try {
 
   // A tool saying it failed is an answer.
   const failed = await mcp({ server: "real", method: "tools/call", tool: "fail" });
-  check("aToolsFailureIsAnAnswer", failed.status === 200 && failed.result?.isError === true || /went wrong/.test(failed.error ?? ""), JSON.stringify(failed));
+  check("aToolsFailureIsAnAnswer", failed.ok === true && failed.result?.isError === true && failed.result.content[0].text === "It went wrong.", JSON.stringify(failed));
 
   // Where it runs: the room's folder and user, with what a Run has and no more.
   const where = JSON.parse((await mcp({ server: "real", method: "tools/call", tool: "where" })).result?.content?.[0]?.text ?? "{}");
@@ -106,7 +106,7 @@ try {
 
   // Servers that don't work say so.
   const broken = await mcp({ server: "broken", method: "tools/list" });
-  check("aProgramThatIsntThereIsAnAnswer", broken.status === 200 && broken.ok === false && broken.error.length > 0, JSON.stringify(broken));
+  check("aProgramThatIsntThereIsAnAnswer", broken.status === 200 && broken.ok === false && broken.error.length > 0 && !/keychain/i.test(broken.error), JSON.stringify(broken));
   const crashes = await mcp({ server: "crashes", method: "tools/list" });
   check("aServerThatCrashesIsAnAnswer", crashes.status === 200 && crashes.ok === false, JSON.stringify(crashes));
   const unknown = await mcp({ server: "nobody", method: "tools/list" });

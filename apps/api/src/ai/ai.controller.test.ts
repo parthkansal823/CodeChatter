@@ -39,7 +39,7 @@ function setup({ role = "editor", complete = async () => ({ text: "```python\nre
   };
   const res = Object.assign(new EventEmitter(), { writableFinished: false, setHeader: vi.fn() });
   const interviews = { candidateMayUseAi: vi.fn(async () => aiAllowed), noteAiUse: vi.fn(async () => {}) };
-  const controller = new AiController(ai as never, rooms as never, {} as never, interviews as never);
+  const controller = new AiController(ai as never, rooms as never, {} as never, interviews as never, {} as never);
   return { ai, rooms, res, provider, interviews, call: (body = input) => controller.complete(session, "E2ETST", body, res as never) };
 }
 

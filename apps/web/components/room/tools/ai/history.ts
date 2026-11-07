@@ -1,4 +1,4 @@
-import { AI_LIMITS, type AiMode, type AiTokenCount, type AiTurn } from "@codechatter/contracts";
+import { AI_LIMITS, type AiMode, type AiTokenCount, type AiTurn, type DataSummary } from "@codechatter/contracts";
 
 /** Where an Edit answer applies: the selection that was sent (or the whole file) and a fingerprint of its text. */
 export type EditTarget = {
@@ -44,6 +44,8 @@ export type ChatEntry = {
   /** Codebase mode: what the search found, for the person to check, and what to know about the search. */
   passages?: Array<{ path: string; start: number; end: number; name: string; text: string; found: "both" | "meaning" | "words" }>;
   searchNote?: string;
+  /** Data mode: the numbers the answer was given. */
+  numbers?: DataSummary;
 };
 
 type Stored = { mode: AiMode; entries: ChatEntry[] };

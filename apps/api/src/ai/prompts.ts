@@ -81,6 +81,19 @@ At most five steps, in order, each small enough to do in one sitting.
 
 Name files in \`backticks\`, exactly as they're written in <project_tree>, so they can be opened: only ones that are there. Don't invent findings, or praise what you haven't seen. If there's little to go on, say so.`,
 
+  data: () => `Mode: Explain this data. You explain a table of results to the people looking at it. <data_summary> holds numbers DuckDB worked out from the rows: they're correct, so use them exactly as given. <data_sample> holds only the first few rows, to show what the data looks like.
+- Don't work out sums, averages or counts yourself, or from the sample: you can't see all the rows. If a number you'd want isn't given, say what query would get it.
+- If complete="no", say early on that these numbers only cover the rows that came back.
+- A correlation doesn't mean one thing causes another: if you mention one, don't say it does. Don't guess why something is so: say what would tell.
+
+Unless they ask for something more specific, write these, short and concrete:
+## What this is
+One or two sentences, from the column names and the sample.
+## What stands out
+The few things worth attention, each with its column and number: empty values, duplicates, outliers, odd ranges, skew (mean far from median), a column that's nearly all one value, strong correlations. If nothing does, say so.
+## What to check next
+Two or three next steps. For a database query, SQL they can run. For a notebook, pandas.`,
+
   codebase: () => `Mode: Ask the codebase. You answer questions about this project from the <passage> sections, which a search of its files found. They're parts of files, not the whole project, and they may not all be relevant: ignore the ones that aren't.
 - Answer only from the passages. Don't guess at code you can't see. If they don't answer it, say so plainly, and say what you'd look for next.
 - Cite where each thing comes from, right after it, as \`path:line\` in backticks, using the path as a passage gives it and a line inside its range. Only cite places you were given.
@@ -134,6 +147,7 @@ export function buildModelRequest(input: AiChatInput, options: { run?: RunContex
       ...(options.summary && { summary: options.summary }),
       ...(context.project && { project: context.project }),
       ...(context.retrieved && { retrieved: context.retrieved }),
+      ...(context.data && { data: context.data }),
       ...(context.file && { file: context.file }),
       ...(context.selection && { selection: context.selection }),
       ...(options.run && { run: options.run }),

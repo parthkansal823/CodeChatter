@@ -156,6 +156,12 @@ try {
     await step(page, `${theme} room, a prompt's evals and a result`, () => prompts.getByRole("region", { name: "This result" }).waitFor({ timeout: 15_000 }));
     await prompts.getByRole("button", { name: "Delete this prompt" }).click();
     await prompts.getByRole("button", { name: "Delete", exact: true }).click();
+    // The room's AI calls, with one open. The list is stood in for.
+    const call = (over) => ({ id: "a", at: "2026-11-07T10:00:00.000Z", source: "chat", mode: "tutor", by: "Test", mine: true, model: "m", status: "ok", error: null, inputTokens: 5, outputTokens: 5, estimated: true, firstMs: 100, totalMs: 900, input: [{ role: "user", content: "Hi" }], output: "Hello", hidden: false, ...over });
+    await page.route("**/api/rooms/*/ai/traces", (route) => route.fulfill({ json: [call({}), call({ id: "b", status: "error", error: "It broke." })] }));
+    await prompts.getByRole("button", { name: "AI calls" }).click();
+    await prompts.getByRole("group", { name: "The calls" }).getByRole("row").nth(1).getByRole("button").click();
+    await step(page, `${theme} room, the AI calls and one open`, () => prompts.getByRole("region", { name: "This call" }).waitFor({ timeout: 15_000 }));
     // Ask the codebase, with what it read showing. The search and the model are stood in for.
     await page.route("**/api/rooms/*/ai/retrieve", (route) => route.fulfill({ json: { passages: [{ path: "README.md", start: 1, end: 2, name: "", text: "# Hello", score: 0.03, found: "both" }], index: { files: 1, chunks: 1, changed: 0, embedded: 0, waiting: 0, ms: 1, model: null }, note: "Searched by words only: this server has no embedding model." } }));
     await page.route("**/api/rooms/*/ai/chat", (route) => {
@@ -171,6 +177,14 @@ try {
     await page.getByText(/What it read/).waitFor({ timeout: 15_000 });
     await step(page, `${theme} room, what the AI read`, () => page.getByText(/What it read/).click());
     await page.getByRole("button", { name: "New conversation" }).click();
+    // The numbers under an Explain this data answer, from a conversation already in this browser.
+    const numbers = { engine: "DuckDB 1.5.6", rows: 3, duplicates: 1, columns: [{ name: "age", type: "BIGINT", nullPercent: 0, unique: 3, min: "1", max: "9", mean: "4", std: "2", q25: "2", q50: "3", q75: "6", outliers: 0, top: [] }], correlations: [{ a: "age", b: "pay", r: 0.9 }] };
+    await page.evaluate(([room, summary]) => sessionStorage.setItem(`cc-ai:${room}`, JSON.stringify({ mode: "data", entries: [{ id: "q", role: "user", content: "Explain this data.", mode: "data" }, { id: "a", role: "assistant", content: "An answer.", mode: "data", status: "done", numbers: summary }] })), [ROOM, numbers]);
+    await page.reload();
+    await settle(page);
+    if (!(await sidePanel.isVisible().catch(() => false))) await page.getByRole("button", { name: "AI", exact: true }).click();
+    await sidePanel.getByRole("tab", { name: /^AI/ }).click();
+    await step(page, `${theme} room, the numbers an answer was given`, () => page.getByText(/The numbers it was given/).click());
     await context.close();
   }
 

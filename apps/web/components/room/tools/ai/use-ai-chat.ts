@@ -21,6 +21,8 @@ export type SendOptions = {
   /** Codebase mode: what the answer was given to read. */
   passages?: ChatEntry["passages"];
   searchNote?: string;
+  /** Data mode: the numbers the answer was given. */
+  numbers?: ChatEntry["numbers"];
 };
 
 class ChatError extends Error {}
@@ -102,6 +104,7 @@ export function useAiChat(roomId: string) {
         ...(options.target && { target: options.target }),
         ...(options.passages && { passages: options.passages }),
         ...(options.searchNote && { searchNote: options.searchNote }),
+        ...(options.numbers && { numbers: options.numbers }),
       };
       setState((s) => ({ ...s, entries: [...s.entries, question, answer] }));
 

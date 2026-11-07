@@ -1,4 +1,4 @@
-import { redactSecrets, runnableLanguage, type ProjectDigest, type RunSnapshot } from "@codechatter/contracts";
+import { describeColumn, redactSecrets, runnableLanguage, type ExplainDataContext, type ProjectDigest, type RunSnapshot } from "@codechatter/contracts";
 
 /** The room's last run, as the server found it (never taken from the browser). */
 export type RunContext =
@@ -15,6 +15,7 @@ export type ContextParts = {
   summary?: SummaryContext;
   project?: ProjectDigest;
   retrieved?: Array<{ path: string; start: number; end: number; name: string; text: string; found: string }>;
+  data?: ExplainDataContext;
   file?: { path: string; text: string };
   selection?: { path: string; text: string; startLine: number; endLine: number };
   run?: RunContext;
@@ -101,6 +102,22 @@ const attr = (value: string) => value.replace(/"/g, "'");
 
 /** A project's contents can't close the sections around them, and whatever the browser let through, no secret goes on from here. */
 const projectText = (text: string) => redactSecrets(text).replace(/<(\/?)\s*project_/gi, "<$1_project_");
+
+/** DuckDB's numbers, first as they're what to go by, then a few rows to show what the data looks like. Nothing in the data can close a section. */
+function dataSections(data: ExplainDataContext, budget: number): string[] {
+  const clean = (text: string) => redactSecrets(text).replace(/<(\/?)\s*data_/gi, "<$1_data_");
+  const { summary, sample, complete, source } = data;
+  const lines = [
+    `Worked out by ${summary.engine} from ${summary.rows} rows, ${complete ? "which is all of them" : "which is NOT all of them: more exist that these numbers don't cover"}.`,
+    `${summary.duplicates} rows are exact duplicates of another.`,
+    ...summary.columns.map(describeColumn),
+    ...(summary.correlations.length ? [`Strong correlations: ${summary.correlations.map((item) => `${item.a} and ${item.b}: ${item.r}`).join("; ")}`] : ["No strong correlations between number columns."]),
+  ];
+  const numbers = truncateMiddle(clean(lines.join("\n")), Math.floor(budget * 0.7));
+  const rows = [sample.columns.join(" | "), ...sample.rows.map((row) => row.map((value) => value ?? "NULL").join(" | "))].join("\n");
+  const shown = truncateMiddle(clean(rows), Math.floor(budget * 0.2));
+  return [`<data_summary source="${source === "query" ? "a database query" : "a notebook table"}" complete="${complete ? "yes" : "no"}">\n${numbers.text}\n</data_summary>`, `<data_sample first_rows="${sample.rows.length}">\n${shown.text}\n</data_sample>`];
+}
 
 /** What a search found: most of the model's room, best first. A passage can't close its section, and no secret goes on from here. */
 function passageSections(passages: NonNullable<ContextParts["retrieved"]>, budget: number): string[] {
@@ -192,6 +209,7 @@ ${changes || "(this browser tab saw no file changes)"}
   }
 
   if (parts.project) sections.push(...projectSections(parts.project, budget));
+  if (parts.data) sections.push(...dataSections(parts.data, budget));
   if (parts.retrieved) sections.push(parts.retrieved.length ? passageSections(parts.retrieved, budget).join("\n") : "<passages>The search found nothing.</passages>");
 
   if (parts.extra?.length) {

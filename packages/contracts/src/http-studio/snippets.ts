@@ -9,6 +9,7 @@ import type { HttpSendInput } from "./send.js";
 export const SNIPPET_LANGUAGES = [
   { id: "curl", label: "cURL" },
   { id: "fetch", label: "JavaScript fetch" },
+  { id: "axios", label: "JavaScript axios" },
   { id: "python", label: "Python requests" },
   { id: "go", label: "Go net/http" },
 ] as const;
@@ -46,6 +47,31 @@ function fetchCode(input: HttpSendInput): string {
     lines.push(json === undefined ? `body: ${JSON.stringify(input.body)},` : `body: JSON.stringify(${JSON.stringify(json, null, 2)}),`);
   }
   return [`const response = await fetch(${JSON.stringify(input.url)}, {`, ...lines.map((l) => `  ${indent(l, "  ")}`), "});", "console.log(response.status, await response.text());"].join("\n");
+}
+
+function axiosCode(input: HttpSendInput): string {
+  const lines = [`method: ${JSON.stringify(input.method)},`, `url: ${JSON.stringify(input.url)},`];
+  if (input.headers.length) {
+    // A computed key keeps an imported __proto__ header as data in JavaScript.
+    const key = (name: string) => name === "__proto__" ? `[${JSON.stringify(name)}]` : JSON.stringify(name);
+    lines.push("headers: {", ...input.headers.map((h) => `  ${key(h.name)}: ${JSON.stringify(h.value)},`), "},");
+  }
+  if (input.method !== "HEAD" && input.body !== null && input.body !== "") {
+    const form = input.headers.some((h) => h.name.toLowerCase() === "content-type" && /^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(h.value.trim()));
+    if (form) lines.push(`data: new URLSearchParams(${JSON.stringify(input.body)}),`);
+    else {
+      // Already-serialized JSON stays text: no object-literal prototype setter
+      // or JavaScript number conversion can change the user's original body.
+      lines.push(`data: ${JSON.stringify(input.body)},`);
+      // Axios otherwise turns invalid JSON text into a JSON string. Send uses
+      // the exact text, including valid scalar JSON such as null or "hello".
+      if (isJsonType(input)) lines.push("transformRequest: [(data) => data],");
+    }
+  }
+  // API Studio displays error responses too, instead of treating their status
+  // as a transport error. Keep that behavior in the copied axios request.
+  lines.push("validateStatus: () => true,");
+  return ['import axios from "axios";', "", "const response = await axios({", ...lines.map((line) => `  ${line}`), "});", "console.log(response.status, response.data);"].join("\n");
 }
 
 function pyLiteral(value: unknown, depth = 0): string {
@@ -110,6 +136,8 @@ export function generateSnippet(language: SnippetLanguage, input: HttpSendInput)
       return curl(input);
     case "fetch":
       return fetchCode(input);
+    case "axios":
+      return axiosCode(input);
     case "python":
       return python(input);
     case "go":

@@ -10,6 +10,8 @@ import {
   type AiPromptModels,
   type AiStatus,
   type AiStreamEvent,
+  type AiTrace,
+  type AiTraceSource,
   type CodebaseHits,
   type AiTokenCount,
   type AiUsage,
@@ -43,7 +45,9 @@ import { buildCompletionRequest, cleanCompletion, completionLimitMessage, comple
 import type { RunContext, SummaryContext } from "./context.js";
 import { buildModelRequest, type ModelRequest } from "./prompts.js";
 import { describeAiError, type AiProvider, type StreamPiece } from "./providers.js";
+import { MOST_TRACE_CHARS } from "./traces.js";
 import { rateLimitMessage } from "./rate-limit.js";
+import { AiTraces } from "./traces.service.js";
 import { formatActivity, formatChat } from "./summary.js";
 import { estimateUsage } from "./usage.js";
 
@@ -62,6 +66,7 @@ export class AiController {
     private readonly rooms: RoomsService,
     private readonly runner: RunnerClient,
     private readonly interviews: InterviewsService,
+    private readonly traces: AiTraces,
   ) {}
 
   /** Whether AI is set up, for the panel to show the chat or the setup help. Never includes keys. */
@@ -84,7 +89,7 @@ export class AiController {
     @Body(new ZodPipe(AiChatInput)) input: AiChatInput,
     @Res() res: Response,
   ): Promise<void> {
-    const provider = await this.mayAsk(session, roomId);
+    const { provider, traced } = await this.mayAsk(session, roomId);
     if (input.context.image && !provider.settings.vision) {
       throw new BadRequestException("This AI model can't read images. Remove the image and ask in words.");
     }
@@ -111,7 +116,7 @@ export class AiController {
       };
     }
     const request = buildModelRequest(input, { ...(run && { run }), ...(summary && { summary }), contextChars: this.ai.contextChars });
-    await this.streamAnswer(session, roomId, provider, request, res);
+    await this.streamAnswer(session, roomId, provider, request, res, traced ? { source: "chat", mode: input.mode } : null);
   }
 
   /** The models the Prompt Playground may offer here. */
@@ -132,7 +137,7 @@ export class AiController {
     @Body(new ZodPipe(AiPromptInput)) input: AiPromptInput,
     @Res() res: Response,
   ): Promise<void> {
-    const provider = await this.mayAsk(session, roomId);
+    const { provider, traced } = await this.mayAsk(session, roomId);
     const offered = await this.ai.promptModels();
     if (!offered.models.includes(input.model)) throw new BadRequestException(`This server doesn't offer the model "${input.model}".`);
     await this.countRequest(session, res);
@@ -146,7 +151,14 @@ export class AiController {
         ...(input.maxTokens !== undefined && { maxTokens: input.maxTokens }),
       },
     };
-    await this.streamAnswer(session, roomId, provider, request, res);
+    await this.streamAnswer(session, roomId, provider, request, res, traced ? { source: "prompt", mode: null } : null);
+  }
+
+  /** A room's calls to the AI. Whose text can be read is up to the traces (traces.service.ts). */
+  @Get("rooms/:roomId/ai/traces")
+  async listTraces(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string): Promise<AiTrace[]> {
+    const { role } = await this.rooms.require(roomId, session.user.id, "room.chat");
+    return this.traces.list(roomId, { userId: session.user.id, canRunCode: can(role, "code.run") });
   }
 
   /**
@@ -169,8 +181,8 @@ export class AiController {
   }
 
   /** The model to ask, if this person may ask it in this room. */
-  private async mayAsk(session: AuthSession, roomId: string): Promise<AiProvider> {
-    const { role } = await this.rooms.require(roomId, session.user.id, "room.chat");
+  private async mayAsk(session: AuthSession, roomId: string): Promise<{ provider: AiProvider; traced: boolean }> {
+    const { room, role } = await this.rooms.require(roomId, session.user.id, "room.chat");
     if (role === "candidate") {
       // The interviewer decides, and sees when they used it.
       if (!(await this.interviews.candidateMayUseAi(roomId))) throw new ForbiddenException(NO_AI_IN_INTERVIEWS);
@@ -178,7 +190,8 @@ export class AiController {
     }
     const provider = this.ai.provider;
     if (!provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");
-    return provider;
+    // An interview keeps its own record: this shouldn't be another about a candidate.
+    return { provider, traced: room.kind !== "interview" };
   }
 
   private async countRequest(session: AuthSession, res: Response): Promise<void> {
@@ -189,7 +202,7 @@ export class AiController {
     throw new HttpException(rateLimitMessage(requests, windowSeconds, limit.retryAfterSeconds), HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  private async streamAnswer(session: AuthSession, roomId: string, provider: AiProvider, request: ModelRequest, res: Response): Promise<void> {
+  private async streamAnswer(session: AuthSession, roomId: string, provider: AiProvider, request: ModelRequest, res: Response, trace: { source: AiTraceSource; mode: string | null } | null): Promise<void> {
     res.status(200);
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     // no-transform: compression by a proxy would hold chunks back.
@@ -206,9 +219,14 @@ export class AiController {
     const started = Date.now();
     let firstAt: number | null = null;
     let outputChars = 0;
+    let output = "";
     let recorded = false;
+    let counted: AiTokenCount | null = null;
+    let stop: "end" | "length" | "refusal" | null = null;
+    let failure: string | null = null;
     const record = async (tokens: AiTokenCount): Promise<AiTokenCount> => {
       recorded = true;
+      counted = tokens;
       await this.ai.record(session.user.id, tokens).catch((error) => this.logger.warn(`AI usage not recorded: ${String(error)}`));
       return tokens;
     };
@@ -219,6 +237,7 @@ export class AiController {
         if (piece.type === "text") {
           firstAt ??= Date.now();
           outputChars += piece.text.length;
+          if (output.length < MOST_TRACE_CHARS * 2) output += piece.text;
           send({ type: "delta", text: piece.text });
         } else {
           end = piece;
@@ -226,17 +245,39 @@ export class AiController {
       }
       const usage = await record(end?.usage ? { ...end.usage, estimated: false } : estimateUsage(request, outputChars));
       const now = Date.now();
+      stop = end?.stop ?? "end";
       send({ type: "done", stop: end?.stop ?? "end", usage, timing: { firstMs: (firstAt ?? now) - started, totalMs: now - started } });
     } catch (error) {
       if (!abort.signal.aborted) {
         const settings = request.tuning ? { ...provider.settings, model: request.tuning.model } : provider.settings;
         const message = describeAiError(error, settings, Boolean(request.image));
         this.logger.warn(`AI request failed in room ${roomId}: ${error instanceof Error ? error.message : String(error)}`);
+        failure = message ?? "The AI request failed.";
         if (message) send({ type: "error", message });
       }
     } finally {
       // Stopped or cut off after some output: the provider still did the work, so count what was produced.
       if (!recorded && outputChars > 0) await record(estimateUsage(request, outputChars));
+      if (trace) {
+        const tokens = counted as AiTokenCount | null;
+        this.traces.record({
+          roomId,
+          userId: session.user.id,
+          source: trace.source,
+          mode: trace.mode,
+          model: request.tuning?.model ?? provider.settings.model,
+          provider: provider.settings.provider,
+          status: failure ? "error" : stop === "length" ? "cut" : stop === "refusal" ? "refused" : stop ? "ok" : "stopped",
+          error: failure,
+          inputTokens: tokens?.inputTokens ?? 0,
+          outputTokens: tokens?.outputTokens ?? 0,
+          estimated: tokens?.estimated ?? false,
+          firstMs: firstAt === null ? null : firstAt - started,
+          totalMs: Date.now() - started,
+          input: [...(request.system ? [{ role: "system", content: request.system }] : []), ...request.messages],
+          output,
+        });
+      }
       clearInterval(heartbeat);
       res.end();
     }

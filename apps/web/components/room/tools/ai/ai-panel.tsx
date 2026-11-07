@@ -1,6 +1,6 @@
 "use client";
 
-import { AI_LIMITS, AI_MODES, buildProjectDigest, citationsNotShown, parseAgentReply, pathsNotInProject, type AiChatInput, type AiMode, type AiStatus, type CodebaseHits, type ProjectFile, type RoomAnalysis } from "@codechatter/contracts";
+import { AI_LIMITS, AI_MODES, buildProjectDigest, citationsNotShown, parseAgentReply, pathsNotInProject, type AiChatInput, type AiMode, type AiStatus, type CodebaseHits, type ExplainDataContext, type ProjectFile, type RoomAnalysis } from "@codechatter/contracts";
 import { flatten, listTree, textOf, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquarePlus, RotateCw } from "lucide-react";
@@ -27,6 +27,7 @@ import { appliedToast, applyAiText, captureRange, fingerprint, firstCodeBlock, m
 import { useAiRequests, type AiAttach, type AiRequest } from "./ai-requests";
 import { Composer } from "./composer";
 import { EditCard } from "./edit-card";
+import { NumbersItUsed } from "./explain-data";
 import type { ChatEntry, EditTarget, StepState } from "./history";
 import type { PastedImage } from "./image";
 import { MODES, SUMMARY_WINDOWS } from "./modes";
@@ -85,6 +86,8 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
   const { room, doc, provider, can, synced } = useRoom();
   const queryClient = useQueryClient();
   const [preparing, setPreparing] = useState(false);
+  // The table being talked about, for the questions that follow the first.
+  const dataInHand = useRef<ExplainDataContext | null>(null);
   const run = useRun();
   const tree = useFileTree();
   const chat = useAiChat(room.id);
@@ -172,7 +175,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
     sendMode: AiMode,
     use: AiAttach,
     history: ChatEntry[] = chat.entries,
-    options: { auto?: boolean; extraPaths?: string[]; labels?: string[]; analysed?: boolean; hits?: CodebaseHits } = {},
+    options: { auto?: boolean; extraPaths?: string[]; labels?: string[]; analysed?: boolean; hits?: CodebaseHits; data?: ExplainDataContext } = {},
   ) => {
     // What the search or the tools just found carries on past `preparing`, which may not have caught up yet.
     if (chat.busy || (preparing && !options.hits && !options.analysed) || !canChat) return;
@@ -208,11 +211,17 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
         .finally(() => setPreparing(false));
       return;
     }
+    if (options.data) dataInHand.current = options.data;
+    if (sendMode === "data" && !dataInHand.current) return void toast.error('Press "Explain this data" on a table first.');
     const attached = !options.auto && image && status.vision ? image : null;
     const text = raw.trim() || MODES[sendMode].fallbackPrompt || (attached ? "What's in this image?" : "");
     if (!text) return;
     if (sendMode === "edit" && !activeFile) return void toast.error("Open the file you want to change first.");
     const { context, labels, target } = collect(use, sendMode, options.extraPaths);
+    if (sendMode === "data" && dataInHand.current) {
+      context.data = dataInHand.current;
+      labels.push(`${dataInHand.current.summary.rows.toLocaleString()} rows, DuckDB's numbers`);
+    }
     const { hits } = options;
     if (hits) {
       context.retrieved = hits.passages.map(({ path, start, end, name, text: body, found }) => ({ path, start, end, name, text: body, found }));
@@ -234,6 +243,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
         ...(target && { target }),
         ...(hits && { passages: hits.passages.map((passage) => ({ path: passage.path, start: passage.start, end: passage.end, name: passage.name, text: passage.text.slice(0, SHOWN_PASSAGE_CHARS), found: passage.found })) }),
         ...(hits?.note && { searchNote: hits.note }),
+        ...(options.data && { numbers: options.data.summary }),
       },
       history,
     );
@@ -285,7 +295,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
       latest.current.changeMode(request.mode);
       setAttach(use);
       if (request.send === false || latest.current.busy) setDraft(request.prompt);
-      else latest.current.submit(request.prompt, request.mode, use);
+      else latest.current.submit(request.prompt, request.mode, use, undefined, request.data ? { data: request.data } : {});
     };
     const take = () => {
       const request = useAiRequests.getState().take();
@@ -342,7 +352,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" align="start">
-            {AI_MODES.filter((m) => m !== "codebase" || (can("code.run") && room.kind !== "interview")).map((m) => (
+            {AI_MODES.filter((m) => (m !== "codebase" || (can("code.run") && room.kind !== "interview")) && (m !== "data" || mode === "data")).map((m) => (
               <SelectItem key={m} value={m}>
                 {MODES[m].label}
               </SelectItem>
@@ -529,7 +539,7 @@ function Entry({ entry, first, currentMode, onApply, applyBlocked, paths, onRetr
           // Edit answers apply through their own review, so a code block there never replaces the whole file.
           <AiMarkdown
             text={entry.content}
-            {...(entry.mode !== "edit" && onApply && { onApply })}
+            {...(entry.mode !== "edit" && entry.mode !== "data" && onApply && { onApply })}
             applyBlocked={streaming ? "Wait for the answer to finish." : applyBlocked}
             paths={paths}
           />
@@ -545,6 +555,7 @@ function Entry({ entry, first, currentMode, onApply, applyBlocked, paths, onRetr
           </p>
         )}
         {entry.passages && <WhatItRead passages={entry.passages} note={entry.searchNote} />}
+        {entry.numbers && <NumbersItUsed summary={entry.numbers} />}
         {code !== null && <EditCard entry={entry} code={code} setReview={setReview} patch={(p) => patch(entry.id, p)} />}
         {ending && <p className="mt-1 text-xs text-muted-foreground">{ending}</p>}
         {entry.status === "error" && (

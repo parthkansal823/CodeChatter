@@ -13,6 +13,8 @@ import { InterviewsService } from "../interviews/interviews.service.js";
 import { AiService } from "./ai.service.js";
 import { adapterRequest, errorBody, planChat, planEmbeddings, StreamRelay, upstreamFailure, usageIn, type ChatPlan, type GatewayFailure, type GatewayUsage } from "./gateway.js";
 import { describeAiError, type AiProvider } from "./providers.js";
+import { messagesAsText, type TraceMessage } from "./traces.js";
+import { AiTraces } from "./traces.service.js";
 
 const OPENAI_URL = "https://api.openai.com/v1";
 const isFailure = (value: object): value is GatewayFailure => "status" in value;
@@ -21,7 +23,7 @@ const fail = (res: Response, failure: GatewayFailure, retryAfter?: number): void
   res.status(failure.status).json(errorBody(failure));
 };
 
-type Admitted = { roomId: string; ownerId: string | null; provider: AiProvider };
+type Admitted = { roomId: string; ownerId: string | null; provider: AiProvider; traced: boolean };
 
 @Public()
 @Controller("internal/ai-gateway/v1")
@@ -31,6 +33,7 @@ export class AiGatewayController {
   constructor(
     private readonly ai: AiService,
     private readonly interviews: InterviewsService,
+    private readonly traces: AiTraces,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -57,7 +60,8 @@ export class AiGatewayController {
       if (!(await this.interviews.candidateMayUseAi(claims.sub))) return refuse(403, "AI help is off during this interview.");
       void this.interviews.noteAiUse(claims.sub).catch(() => {});
     }
-    return { roomId: claims.sub, ownerId: room.ownerId, provider };
+    // An interview keeps its own record: this shouldn't be another about a candidate.
+    return { roomId: claims.sub, ownerId: room.ownerId, provider, traced: room.kind !== "interview" };
   }
 
   /** A loop in someone's code shouldn't get far. It's the room's limit, as anyone's code in it comes through here. */
@@ -75,6 +79,28 @@ export class AiGatewayController {
     void this.ai.record(admitted.ownerId, tokens).catch((error) => this.logger.warn(`AI usage not recorded: ${String(error)}`));
   }
 
+  /** A call from the room's code, for its traces. It isn't anyone's in particular. */
+  private trace(admitted: Admitted, detail: { source: "gateway" | "embedding"; model: string; status: "ok" | "cut" | "refused" | "stopped" | "error"; error?: string | null; usage: GatewayUsage | null; estimated: { input: number; output: number }; started: number; firstAt?: number | null; input: TraceMessage[]; output: string }): void {
+    if (!admitted.traced) return;
+    this.traces.record({
+      roomId: admitted.roomId,
+      userId: null,
+      source: detail.source,
+      mode: null,
+      model: detail.model,
+      provider: admitted.provider.settings.provider,
+      status: detail.status,
+      error: detail.error ?? null,
+      inputTokens: detail.usage?.inputTokens ?? Math.ceil(detail.estimated.input / 4),
+      outputTokens: detail.usage?.outputTokens ?? Math.ceil(detail.estimated.output / 4),
+      estimated: !detail.usage,
+      firstMs: detail.firstAt ? detail.firstAt - detail.started : null,
+      totalMs: Date.now() - detail.started,
+      input: detail.input,
+      output: detail.output,
+    });
+  }
+
   private send(path: string, provider: AiProvider, body: unknown, signal: AbortSignal) {
     return fetch(`${provider.settings.baseURL ?? OPENAI_URL}${path}`, {
       method: "POST",
@@ -84,7 +110,7 @@ export class AiGatewayController {
     });
   }
 
-  private async relayFailure(res: Response, answer: globalThis.Response, provider: AiProvider): Promise<void> {
+  private async relayFailure(res: Response, answer: globalThis.Response, provider: AiProvider): Promise<string> {
     const raw = await answer.text().catch(() => "");
     let parsed: unknown = raw;
     try {
@@ -92,7 +118,9 @@ export class AiGatewayController {
     } catch {
       // Not JSON (a proxy's error page): its text is what there is.
     }
-    fail(res, upstreamFailure(answer.status, parsed, provider.settings.apiKey), Number(answer.headers.get("retry-after")) || undefined);
+    const failure = upstreamFailure(answer.status, parsed, provider.settings.apiKey);
+    fail(res, failure, Number(answer.headers.get("retry-after")) || undefined);
+    return failure.message;
   }
 
   @Get("models")
@@ -116,24 +144,37 @@ export class AiGatewayController {
       if (!res.writableFinished) gone.abort();
     });
     const inputChars = JSON.stringify(plan.body.messages).length;
+    const started = Date.now();
+    const asked = messagesAsText(plan.body.messages);
     try {
-      if (admitted.provider.settings.provider === "anthropic") await this.throughAdapter(admitted, plan, res, gone.signal, inputChars);
-      else await this.passThrough(admitted, plan, res, gone.signal, inputChars);
+      if (admitted.provider.settings.provider === "anthropic") await this.throughAdapter(admitted, plan, res, gone.signal, inputChars, started, asked);
+      else await this.passThrough(admitted, plan, res, gone.signal, inputChars, started, asked);
     } catch (error) {
-      if (gone.signal.aborted) return;
+      if (gone.signal.aborted) {
+        this.trace(admitted, { source: "gateway", model: plan.model, status: "stopped", usage: null, estimated: { input: inputChars, output: 0 }, started, input: asked, output: "" });
+        return;
+      }
       this.logger.warn(`AI gateway failed for room ${admitted.roomId}: ${error instanceof Error ? error.message : String(error)}`);
       const message = describeAiError(error, { ...admitted.provider.settings, model: plan.model }, false) ?? "The AI request failed. Try again.";
+      this.trace(admitted, { source: "gateway", model: plan.model, status: "error", error: message, usage: null, estimated: { input: inputChars, output: 0 }, started, input: asked, output: "" });
       if (!res.headersSent) fail(res, { status: 502, message, type: "api_error" });
       else res.destroy();
     }
   }
 
-  private async passThrough(admitted: Admitted, plan: ChatPlan, res: Response, signal: AbortSignal, inputChars: number): Promise<void> {
+  private async passThrough(admitted: Admitted, plan: ChatPlan, res: Response, signal: AbortSignal, inputChars: number, started: number, asked: TraceMessage[]): Promise<void> {
     const answer = await this.send("/chat/completions", admitted.provider, plan.body, signal);
-    if (!answer.ok) return this.relayFailure(res, answer, admitted.provider);
+    if (!answer.ok) {
+      const error = await this.relayFailure(res, answer, admitted.provider);
+      this.trace(admitted, { source: "gateway", model: plan.model, status: "error", error, usage: null, estimated: { input: inputChars, output: 0 }, started, input: asked, output: "" });
+      return;
+    }
     if (!plan.stream || !answer.body) {
-      const parsed = (await answer.json()) as { choices?: Array<{ message?: { content?: string } }> };
-      this.record(admitted, usageIn(parsed), { input: inputChars, output: parsed.choices?.[0]?.message?.content?.length ?? 0 });
+      const parsed = (await answer.json()) as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> };
+      const written = parsed.choices?.[0]?.message?.content ?? "";
+      const estimated = { input: inputChars, output: written.length };
+      this.record(admitted, usageIn(parsed), estimated);
+      this.trace(admitted, { source: "gateway", model: plan.model, status: parsed.choices?.[0]?.finish_reason === "length" ? "cut" : "ok", usage: usageIn(parsed), estimated, started, input: asked, output: written });
       res.status(200).json(parsed);
       return;
     }
@@ -142,25 +183,31 @@ export class AiGatewayController {
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.flushHeaders();
     const relay = new StreamRelay(plan.askedForUsage);
+    let firstAt: number | null = null;
+    let finished = false;
     try {
       const reader = answer.body.pipeThrough(new TextDecoderStream()).getReader();
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
         const out = relay.feed(value);
+        if (relay.outputChars > 0) firstAt ??= Date.now();
         if (out) res.write(out);
       }
       const rest = relay.flush();
       if (rest) res.write(rest);
+      finished = true;
     } finally {
       // Stopped part way, the provider still did the work.
-      this.record(admitted, relay.usage, { input: inputChars, output: relay.outputChars });
+      const estimated = { input: inputChars, output: relay.outputChars };
+      this.record(admitted, relay.usage, estimated);
+      this.trace(admitted, { source: "gateway", model: plan.model, status: finished ? "ok" : "stopped", usage: relay.usage, estimated, started, firstAt, input: asked, output: relay.output });
     }
     res.end();
   }
 
   /** For a provider that doesn't speak OpenAI's format: its text, in that format. */
-  private async throughAdapter(admitted: Admitted, plan: ChatPlan, res: Response, signal: AbortSignal, inputChars: number): Promise<void> {
+  private async throughAdapter(admitted: Admitted, plan: ChatPlan, res: Response, signal: AbortSignal, inputChars: number, started: number, asked: TraceMessage[]): Promise<void> {
     const request = adapterRequest(plan);
     if (isFailure(request)) return fail(res, request);
     const id = `chatcmpl-${Date.now().toString(36)}`;
@@ -169,6 +216,8 @@ export class AiGatewayController {
     let text = "";
     let usage: GatewayUsage | null = null;
     let stop = "stop";
+    let firstAt: number | null = null;
+    let finished = false;
     if (plan.stream) {
       res.status(200);
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -179,6 +228,7 @@ export class AiGatewayController {
     try {
       for await (const piece of admitted.provider.stream(request, signal)) {
         if (piece.type === "text") {
+          firstAt ??= Date.now();
           text += piece.text;
           if (plan.stream) res.write(chunk({ content: piece.text }, null));
         } else {
@@ -186,8 +236,11 @@ export class AiGatewayController {
           stop = piece.stop === "length" ? "length" : piece.stop === "refusal" ? "content_filter" : "stop";
         }
       }
+      finished = true;
     } finally {
-      this.record(admitted, usage, { input: inputChars, output: text.length });
+      const estimated = { input: inputChars, output: text.length };
+      this.record(admitted, usage, estimated);
+      if (finished) this.trace(admitted, { source: "gateway", model: plan.model, status: stop === "length" ? "cut" : stop === "content_filter" ? "refused" : "ok", usage, estimated, started, firstAt, input: asked, output: text });
     }
     const counted = usage as GatewayUsage | null;
     const reported = counted && { prompt_tokens: counted.inputTokens, completion_tokens: counted.outputTokens, total_tokens: counted.inputTokens + counted.outputTokens };
@@ -213,11 +266,21 @@ export class AiGatewayController {
     res.on("close", () => {
       if (!res.writableFinished) gone.abort();
     });
+    const started = Date.now();
+    const inputs = Array.isArray(plan.body.input) ? plan.body.input.length : 1;
+    // What's embedded can be a whole project: how much is what's worth keeping.
+    const asked = [{ role: "user", content: `${inputs} ${inputs === 1 ? "text" : "texts"} to embed` }];
+    const size = JSON.stringify(plan.body.input).length;
     try {
       const answer = await this.send("/embeddings", admitted.provider, plan.body, gone.signal);
-      if (!answer.ok) return await this.relayFailure(res, answer, admitted.provider);
+      if (!answer.ok) {
+        const error = await this.relayFailure(res, answer, admitted.provider);
+        this.trace(admitted, { source: "embedding", model: plan.model, status: "error", error, usage: null, estimated: { input: size, output: 0 }, started, input: asked, output: "" });
+        return;
+      }
       const parsed: unknown = await answer.json();
-      this.record(admitted, usageIn(parsed), { input: JSON.stringify(plan.body.input).length, output: 0 });
+      this.record(admitted, usageIn(parsed), { input: size, output: 0 });
+      this.trace(admitted, { source: "embedding", model: plan.model, status: "ok", usage: usageIn(parsed), estimated: { input: size, output: 0 }, started, input: asked, output: "" });
       res.status(200).json(parsed);
     } catch (error) {
       if (gone.signal.aborted) return;

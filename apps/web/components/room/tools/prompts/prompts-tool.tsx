@@ -58,6 +58,7 @@ import {
   type PromptText,
 } from "./model";
 import { Field } from "./prompt-field";
+import { TracesView } from "./traces-view";
 import { usePromptRun } from "./use-prompt-run";
 
 type Node = Y.Map<unknown>;
@@ -580,6 +581,7 @@ export default function PromptsTool({ close }: RoomToolProps) {
   const models = useQuery({ queryKey: ["ai-prompt-models", room.id], queryFn: () => api<AiPromptModels>(`/api/rooms/${room.id}/ai/models`), staleTime: 30_000 });
   const status = useQuery({ queryKey: ["ai-status"], queryFn: () => api<AiStatus>("/api/ai/status"), staleTime: 60_000 });
   const off = status.data && !status.data.configured ? status.data.problem : null;
+  const [view, setView] = useState<"prompts" | "calls">("prompts");
   return (
     // Ctrl+Enter runs the prompt here, not the room's open file.
     <section aria-label="Prompts" data-own-run-key className="flex h-full min-h-0 flex-col bg-background">
@@ -587,9 +589,19 @@ export default function PromptsTool({ close }: RoomToolProps) {
         <FlaskConical className="size-4 text-muted-foreground" aria-hidden />
         <h2 className="font-medium">Prompts</h2>
         {models.data?.default && <span className="truncate font-mono text-xs text-muted-foreground">{models.data.models.length === 1 ? models.data.default : `${models.data.models.length} models`}</span>}
+        <div role="group" aria-label="What to look at" className="ml-auto flex items-center gap-1">
+          <Button size="xs" variant={view === "prompts" ? "secondary" : "ghost"} aria-pressed={view === "prompts"} onClick={() => setView("prompts")}>
+            Prompts
+          </Button>
+          <Button size="xs" variant={view === "calls" ? "secondary" : "ghost"} aria-pressed={view === "calls"} onClick={() => setView("calls")}>
+            AI calls
+          </Button>
+        </div>
       </header>
       {off && <p className="border-b px-3 py-1.5 text-xs text-brand-text">{off}</p>}
-      {connection?.synced ? (
+      {view === "calls" ? (
+        <TracesView />
+      ) : connection?.synced ? (
         <Workspace doc={connection.doc} models={models.data} problem={off} close={close} />
       ) : (
         <div className="grid gap-2 p-4" aria-label="Opening Prompts" aria-busy>

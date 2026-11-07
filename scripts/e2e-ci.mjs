@@ -32,6 +32,7 @@ const SUITES = [
     ["sandbox-git-runner", "git"],
     ["analysis-runner", "analysis"],
     ["mcp-runner", "mcp"],
+    ["data-summary-runner", "data-summary"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -51,6 +52,7 @@ const SUITES = [
     ["api-interview-ai-review", "interview-ai-review"],
     ["api-prompts", "prompts"],
     ["api-ai-gateway", "gateway"],
+    ["api-ai-traces", "traces"],
   ]),
   ...[
     "new-room",
@@ -69,6 +71,8 @@ const SUITES = [
     "prompts",
     "evals",
     "ask-codebase",
+    "explain-data",
+    "traces",
     "mcp",
     "a11y",
     "interview-recording",

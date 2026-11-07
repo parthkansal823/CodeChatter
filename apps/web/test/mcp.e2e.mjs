@@ -59,7 +59,7 @@ try {
   await shout.getByLabel(/^times/).fill("2");
   await shout.getByLabel(/^style/).selectOption("stars");
   await shout.getByRole("button", { name: "Call shout" }).click();
-  check("textNumbersAndChoicesGoThrough", await ok(shout.getByText("*** HIHI ***").waitFor({ timeout: 60_000 })));
+  check("textNumbersAndChoicesGoThrough", await ok(shout.getByText("*** HIHI ***").first().waitFor({ timeout: 60_000 })));
 
   // A tool saying it failed.
   await tools.getByRole("button", { name: "fail" }).click();
@@ -71,12 +71,12 @@ try {
   // Resources and prompts.
   await tool.getByRole("button", { name: "resources 1" }).click();
   await tool.getByRole("button", { name: "Read Welcome note" }).click();
-  check("aResourceIsRead", await ok(tool.getByText("Hello from a resource.").waitFor({ timeout: 60_000 })));
+  check("aResourceIsRead", await ok(tool.getByText("Hello from a resource.").first().waitFor({ timeout: 60_000 })));
   await tool.getByRole("button", { name: "prompts 1" }).click();
   check("aPromptWaitsForWhatItNeeds", await tool.getByRole("button", { name: "Get review" }).isDisabled());
   await tool.getByLabel(/^language/).fill("Python");
   await tool.getByRole("button", { name: "Get review" }).click();
-  check("aPromptIsGot", await ok(tool.getByText(/Review this Python code\./).waitFor({ timeout: 60_000 })));
+  check("aPromptIsGot", await ok(tool.getByText(/Review this Python code\./).first().waitFor({ timeout: 60_000 })));
 
   // One that won't start says so, and another can be added beside the first.
   await servers.getByRole("button", { name: "Add a server" }).click();

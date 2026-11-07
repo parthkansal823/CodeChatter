@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { ExplainDataContext } from "./data-summary.js";
 import { RAG_LIMITS } from "./rag.js";
 import { WorkspacePath } from "./run.js";
 
@@ -9,7 +10,7 @@ import { WorkspacePath } from "./run.js";
  * and the context it chose to attach.
  */
 
-export const AI_MODES = ["assistant", "explain-error", "tutor", "interviewer", "complexity", "screenshot", "edit", "agent", "summary", "project", "codebase"] as const;
+export const AI_MODES = ["assistant", "explain-error", "tutor", "interviewer", "complexity", "screenshot", "edit", "agent", "summary", "project", "codebase", "data"] as const;
 export type AiMode = (typeof AI_MODES)[number];
 
 /**
@@ -97,6 +98,8 @@ export const AiChatInput = z.object({
             .max(AI_LIMITS.projectOutlines),
         })
         .optional(),
+      /** Data mode: DuckDB's numbers for a table of results, and its first few rows (data-summary.ts). */
+      data: ExplainDataContext.optional(),
       /** Codebase mode: what the search found (rag.ts). The server takes out secrets again. */
       retrieved: z
         .array(

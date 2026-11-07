@@ -10,6 +10,16 @@ Error: Failed to connect to MCP server: spawn nothing ENOENT
     expect(mcpProblem("", stderr, 1)).toBe("Error: Failed to connect to MCP server: spawn nothing ENOENT");
   });
 
+  it("isn't misled by the keychain a sandbox doesn't have", () => {
+    const stderr = "[mcp-inspector] Keychain error: Couldn't access platform storage: PermissionDenied\nError: spawn nothing ENOENT";
+    expect(mcpProblem("", stderr, 1)).toBe("Error: spawn nothing ENOENT");
+    expect(mcpProblem("", "[mcp-inspector] Keychain error: no", 3)).toBe("It stopped with exit code 3.");
+  });
+
+  it("reads its own failures, which it prints as JSON", () => {
+    expect(mcpProblem("", '{"error":{"code":"error","message":"spawn nothing ENOENT"}}', 1)).toBe("spawn nothing ENOENT");
+  });
+
   it("makes do with what there is", () => {
     expect(mcpProblem("", "Something odd", 1)).toBe("Something odd");
     expect(mcpProblem("Server said no", "", 1)).toBe("Server said no");

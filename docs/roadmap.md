@@ -15,7 +15,7 @@ Both this page and pending.md are updated after every finished piece.
 - **Done:**
   - the foundations, the sandbox and most of a full IDE (steps 1–3);
   - pro editing, including real git in the sandbox (step 7);
-  - collaboration, apart from TURN over TLS (step 6).
+  - collaboration (step 6).
 - **In progress:**
   - **hardening for launch** (step 10): backups, security, accessibility;
   - **teams** (step 8): members, invitations, account security;
@@ -33,7 +33,7 @@ flowchart TD
   S2 --> S3["3 · A full IDE 🟡"]
   S3 --> S4["4 · AI copilot and agent 🟡"]
   S4 --> S5["5 · Workspace suite 🟡"]
-  S5 --> S6["6 · Collaboration tools 🟡"]
+  S5 --> S6["6 · Collaboration tools ✅"]
   S6 --> S7["7 · Pro editing ✅"]
   S7 --> S8["8 · Teams and admin 🟡"]
   S8 --> S9["9 · Automations and platform 🟡"]
@@ -113,12 +113,12 @@ flowchart TD
 - ⬜ **Messaging** (like Slack): channels, threads, huddles, bots, search
 - ⬜ **Across the suite:** one command bar, one permissions model, AI everywhere
 
-## Step 6 · Collaboration tools 🟡
+## Step 6 · Collaboration tools ✅
 
 *Goal: what makes it a room, not just an editor.* Details: §5.
 
 - ✅ Whiteboard; Mermaid flowcharts with a live preview; shared and private notes with a focus timer
-- 🟡 Video and voice (LiveKit): development and production ✅; TURN over TLS and a screen-share test ⬜
+- ✅ Video and voice (LiveKit), with screen sharing, and TURN over TLS on port 443 for networks that only allow HTTPS
 - ✅ GitHub import, commit, push and pull requests
 - ✅ Files: upload, folder upload, zip import and export, and **binary files** in S3 (images, PDFs, fonts, data)
 - ✅ Notifications: inbox, email digest, room activity
@@ -198,8 +198,10 @@ flowchart TD
 - ✅ AI gateway: code in a room's sandbox calls its model through OpenAI's format, with real SDKs, no key in the room and no network
 - ✅ Evals with promptfoo: a prompt's test cases, checked on every column, with a pass rate and what changed from the last run
 - ✅ Ask the codebase: answers from a search of the room's files, by meaning and by words, citing each place and showing what it read
-- ⬜ AI engineering tools: MCP Inspector, Traces
-- ⬜ Explain this data; a lakehouse as Databricks does it (Spark, Delta Lake, MLflow); a layout for researchers
+- ✅ The MCP tool: an MCP server's tools, resources and prompts, listed and tried through the official MCP Inspector
+- ✅ Traces: every AI call from a room with its tokens and time, what was said for those allowed to read it, and sent on to tools like Jaeger, Langfuse or Phoenix
+- ✅ Explain this data: on a query's results or a pandas table, DuckDB works out the numbers and the AI explains them
+- ⬜ A lakehouse as Databricks does it (Spark, Delta Lake, MLflow); a visual Flow as Dataiku does it; a layout for researchers
 - ⬜ Suggestion mode, room branches, live authorship, session replay, smarter calls
 - ⬜ Test explorer, profiler, package search, room secrets, deploy previews
 - ⬜ Ask the codebase, AI team, natural-language terminal, generated tests and docs, AI code review

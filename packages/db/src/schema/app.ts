@@ -567,3 +567,30 @@ export const interviewRuns = pgTable(
   },
   (t) => [index().on(t.interviewId, t.createdAt.desc())],
 );
+
+/** Each call to the AI from a room, for the Traces view. Text has had secrets taken out, and rows go after AI_TRACES_DAYS. */
+export const aiTraces = pgTable(
+  "ai_traces",
+  {
+    id: uuidv7Pk(),
+    roomId: text()
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    /** Null for code in the room's sandbox, which isn't anyone in particular, as well as for someone who has left. */
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    source: text().notNull(),
+    mode: text(),
+    model: text().notNull(),
+    status: text().notNull(),
+    error: text(),
+    inputTokens: integer().notNull().default(0),
+    outputTokens: integer().notNull().default(0),
+    estimated: boolean().notNull().default(false),
+    firstMs: integer(),
+    totalMs: integer().notNull(),
+    input: jsonb().$type<Array<{ role: string; content: string }>>().notNull(),
+    output: text().notNull().default(""),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index().on(t.roomId, t.id.desc()), index().on(t.createdAt)],
+);

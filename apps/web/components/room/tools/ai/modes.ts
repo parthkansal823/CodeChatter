@@ -93,6 +93,14 @@ export const MODES: Record<AiMode, ModeInfo> = {
     starters: ["Catch me up on what happened", "What did people decide?", "What still needs doing?"],
     attach: { file: false, selection: false, run: false, paths: false },
   },
+  data: {
+    label: "Explain this data",
+    description: "Explains a table of results from the numbers DuckDB worked out, with a few of its rows. Start it from \"Explain this data\" on a table.",
+    placeholder: "Ask about this data",
+    fallbackPrompt: null,
+    starters: ["What stands out?", "What should I check next?", "Is any of this suspicious?"],
+    attach: { file: false, selection: false, run: false, paths: false },
+  },
   codebase: {
     label: "Ask the codebase",
     description: "Searches the room's files for what answers your question, by meaning and by words, and answers from that, citing each place. You can see what it read. Secrets are left out.",

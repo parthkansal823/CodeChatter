@@ -284,7 +284,12 @@ Tests:
       - every chart guard fails as it should;
       - LiveKit starts with the production config (TURN up on 3478, `/` answers `OK`).
     - **Not checked here:** a real call through a server or the Kubernetes demo (the demo isn't installed now).
-  - 🟡 **TURN over TLS** on its own public TCP 443 address, for networks that only allow HTTPS (UDP TURN and TCP 7881 don't get through those). Also browser tests of a forced relay and of screen sharing. Handed to ChatGPT: the brief is `docs/handoff/chatgpt-12-turn-tls.md`.
+  - ✅ **TURN over TLS** on port 443, for networks that only allow HTTPS (UDP TURN and TCP 7881 don't get through those). Built by ChatGPT, checked here.
+    - **How:** Caddy, with the pinned layer-4 module (`infra/docker/caddy.Dockerfile`), routes by the name asked for on 443. `turn.<DOMAIN>` is decrypted and passed to LiveKit's TURN with PROXY protocol, and everything else goes to the site as before. LiveKit trusts PROXY headers only from Caddy's fixed address on a private network. On Kubernetes it's a separate LoadBalancer on 443, and Helm refuses settings that couldn't work.
+    - **Development:** TURN over UDP on `127.0.0.1:3478`, and `?callRelay=1` on a room's address forces relaying, which production builds ignore.
+    - **Checked in a throwaway copy of production's edge** (the real Caddy image, Caddyfile and LiveKit config, with a stand-in site): TURN and the website answer on one TLS port; TURN sees the client's address, not Caddy's; LiveKit offers `turns:<domain>:443?transport=tcp` beside its UDP TURN; those credentials get a relay allocated over TLS; another name doesn't reach TURN.
+    - **Tests:** `apps/web/test/call-relay.e2e.mjs` (8: media flows with only relay candidates selected, and without TURN it can't connect), `call-screen-share.e2e.mjs` (7), `call.e2e.mjs` (11). `docker compose config` and `helm lint` pass, and Helm's guards refuse bad settings.
+    - **Not tried:** a public certificate, from a network that only allows HTTPS. That needs a real server (in `docs/pending.md`).
 - ✅ **GitHub:** import a repository, commit, push and open pull requests (done in section 14 E, through the GitHub API).
 - ✅ **Files:** uploads (images and binaries in S3), zip import and export.
   - ✅ **Text files in and out** (`components/room/files-transfer.ts`, `lib/zip.ts`), from the Files view's menu (…).
@@ -661,6 +666,70 @@ What's left is in `docs/pending.md` under step 11.
 - ⬜ **Security review:** a final pass over everything above.
 
 ## 11. Advanced features ⬜
+
+### Explain this data ✅
+
+**What:** a button on a query's results and on a notebook's table. A model shown rows guesses at sums and averages and only sees a few of them, so DuckDB works out the numbers and the model explains them.
+
+- **The numbers (`sandbox/image/summarize_data.py`, in the sandbox, inside the jail):** DuckDB works out each column's type from the text, and `SUMMARIZE` gives its range, mean, spread, quartiles, distinct values and empties. Plain SQL adds exact duplicates, outliers beyond 1.5 times the interquartile range, common values and strong correlations. Column names are quoted, so one can't become SQL.
+- **Where from:** the rows a query returned, or a pandas table read from the notebook's HTML output, which drops the "..." row pandas leaves in the middle of a long one. Up to 5,000 rows.
+- **The answer (mode `data`):** the prompt says the numbers are correct and not to work out its own, to say when they don't cover every row, that a correlation isn't a cause, and to give next steps in SQL or pandas. A few rows go with them, to show what the data looks like: the button says so. Secrets are taken out on the server, and the data can't close its section.
+- **Checking it:** "The numbers it was given" sits under the answer, with DuckDB's version and each column's numbers. Questions after it keep the same numbers. The mode only appears once started from a table, and has no "Apply to file".
+- **Who may:** `POST /api/rooms/:id/data/summary` needs `code.run`, the button also needs `room.chat`, and neither is for interview rooms.
+
+**Rebuilding:** both sandbox images need it.
+
+**Not included:** summarizing a whole table beyond the rows returned, which would need its own query for each kind of database.
+
+**Tests:**
+- `packages/contracts/src/data-summary.test.ts`, `apps/runner/src/data-summary.test.ts`, `apps/api/src/ai/prompts.test.ts`
+- `apps/runner/test/data-summary.e2e.mjs` (21 checks with real DuckDB, the mean worked out in the test to compare: types from text, an outlier, duplicates, empties, a strong correlation, awkward names, a name trying to be SQL)
+- `apps/web/test/explain-data.e2e.mjs` (19 checks, a real SQL result and a real pandas table from a real kernel, the model stood in for)
+- Tried against the real `gemma4:e4b`: 62 rows, and the empties, outliers, duplicates and city counts it gave were DuckDB's
+- `a11y.e2e.mjs` includes the numbers
+
+### Traces ✅
+
+**What:** "AI calls" in the Prompts tool. Every call to the AI from a room, from the AI panel, the Playground or code in the sandbox: who made it, its model, tokens in and out, time to the first word and in all, whether it worked, and what was said.
+
+- **Kept:** in the `ai_traces` table (migration 0015, a new table only), for `AI_TRACES_DAYS` (14, and 0 keeps none). Text has secrets taken out and is cut to 16,000 characters. An image isn't kept, only that there was one, and what's embedded is only counted, as it can be a whole project. Inline completions aren't traced: they come many to the minute and there's nothing to read.
+- **Who can read what:**
+  - **Someone's conversation is theirs,** as it is in the panel. Anyone in the room sees that it happened and what it cost, but only they can read it, and for anyone else a failure's message is only "It failed", as it can quote what was sent.
+  - **Code in the sandbox** isn't anyone's, so whoever can run code there can read its calls.
+  - **This goes by where a call came from, not by having no person:** deleting an account empties the column, and that mustn't hand someone's conversation to the room. A test holds this, including against the room's owner.
+- **Not in interview rooms:** an interview keeps its own record, and this shouldn't be another about a candidate.
+- **Real tools:** with `AI_TRACES_OTLP_URL`, each call also goes out over OTLP/HTTP with OpenTelemetry's names for AI calls (`gen_ai.request.model`, `gen_ai.usage.input_tokens` and so on), which Jaeger, Langfuse and Phoenix read. Only models, tokens and times go, unless `AI_TRACES_OTLP_CONTENT=true`, as prompts then leave this server. It never holds up a call: failures are only logged.
+
+**Tests:**
+- `apps/api/src/ai/traces.test.ts`
+- `apps/api/test/traces.e2e.mjs` (25 checks, its own API with a stand-in model and tracing tool: each kind of call, times and tokens, secrets, who can read what, someone who has left, spans without what was said)
+- `apps/web/test/traces.e2e.mjs` (18 checks, the list stood in for)
+- Tried against real Jaeger: a call's span arrived with its model and tokens, and without its prompt
+- `a11y.e2e.mjs` includes the view with a call open
+
+### The MCP tool ✅
+
+**What:** a tool for people building or using MCP servers: add one, see the tools, resources and prompts it offers, and try them, without connecting it to an AI first.
+
+- **The real tool:** the official MCP Inspector's command line (`sandbox/image/mcp-inspector/`, from a lockfile with no install scripts, 111 MB, in both images). `apps/runner/src/mcp.ts` runs it inside the jail like a Run, from `/workspace`.
+- **Servers** are in `.mcp.json` at the room's root, the file other MCP tools read, so it's edited together, kept in git and usable elsewhere. A command is started for each call and keeps nothing between them. An address is a server that's already up, in a terminal say.
+- **The tool (`tools/mcp/mcp-tool.tsx`):** a form from each tool's input schema (text, number, switch, choice, and JSON for the rest), its answer in words with all of it as JSON beneath, and resources and prompts likewise. "Try an example" adds a small server with no dependencies, written here, to try it on and start from.
+- **Getting it right:**
+  - **Values** go as JSON, so the text `123` stays text.
+  - **Names** go as `--tool-name=x`, so one starting with a dash can't be taken for an option. A server's name can't start with one at all, and only six methods are allowed.
+  - **A tool's failure is an answer:** the Inspector exits with a failure but still prints it, so what it printed is read first.
+  - **Its complaint about a keychain**, which a sandbox doesn't have, is never given as the reason.
+- **Who may:** `POST /api/rooms/:id/mcp` needs `code.run`, as it starts programs in the sandbox, and isn't for interview rooms. It waits for the edits the browser has seen, so a server added a moment ago is there.
+
+**Rebuilding:** both sandbox images need it.
+
+**Not included:** connecting a room's servers to the AI panel, and HTTP servers needing sign-in.
+
+**Tests:**
+- `packages/contracts/src/mcp.test.ts`, `apps/runner/src/mcp.test.ts`, `apps/web/components/room/tools/mcp/config.test.ts`
+- `apps/runner/test/mcp.e2e.mjs` (21 checks, the real Inspector and a real server: types kept, awkward text whole, a tool's failure, a server that won't start or crashes, names that look like options, the room's folder and user with no server secrets)
+- `apps/web/test/mcp.e2e.mjs` (25 checks in a browser, all the way to the sandbox, with nothing stood in for)
+- `a11y.e2e.mjs` includes the tool
 
 ### Ask the codebase (RAG) ✅
 

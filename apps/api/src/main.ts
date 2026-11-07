@@ -63,6 +63,8 @@ express.use("/api/interviews/:id/ai-review", json({ limit: "20mb" }));
 express.use("/api/internal/ai-gateway", json({ limit: "6mb" }));
 // A prompt's test cases, with long values.
 express.use("/api/rooms/:roomId/evals", json({ limit: "8mb" }));
+// A table of results, to work out its numbers.
+express.use("/api/rooms/:roomId/data/summary", json({ limit: "12mb" }));
 app.useBodyParser("json", { limit: "1mb" });
 app.useWebSocketAdapter(new ValkeyIoAdapter(app, env.VALKEY_URL));
 app.setGlobalPrefix("api");

@@ -90,6 +90,12 @@ const Env = z.object({
   AI_CONTEXT_CHARS: z.coerce.number().int().min(4000).optional().catch(undefined),
   AI_RATE_LIMIT: z.coerce.number().int().positive().default(30).catch(30),
   AI_RATE_WINDOW_SECONDS: z.coerce.number().int().positive().default(600).catch(600),
+  // How long a room's AI calls are kept, for its Traces view. 0 keeps none.
+  AI_TRACES_DAYS: z.coerce.number().int().min(0).default(14).catch(14),
+  // Send each call on to a tracing tool that takes OTLP over HTTP (Langfuse, Phoenix, Jaeger), for example http://localhost:4318.
+  AI_TRACES_OTLP_URL: z.string().trim().optional().default(""),
+  // "true" sends prompts and answers too, which then leave this server. Without it, only models, tokens and times go.
+  AI_TRACES_OTLP_CONTENT: z.string().trim().toLowerCase().optional().default(""),
   // Requests code in one room may make per window, through the AI gateway. 0 turns the gateway off.
   AI_GATEWAY_RATE_LIMIT: z.coerce.number().int().min(0).default(120).catch(120),
   /** Inline completions (ghost text as you type) per person per minute; a separate limit from the one above. */

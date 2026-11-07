@@ -9,7 +9,12 @@
 			layer4 {
 				@turn tls sni {$TURN_DOMAIN}
 				route @turn {
-					tls
+					tls {
+						connection_policy {
+							# TURN ALPN plus legacy TLS clients and ACME validation.
+							alpn stun.turn http/1.1 acme-tls/1
+						}
+					}
 					proxy {
 						proxy_protocol v2
 						upstream livekit-turn:5349

@@ -25,6 +25,7 @@ import { toast } from "sonner";
 
 import { FilePicker } from "@/components/room/editor/file-picker";
 import { useRoom } from "@/components/room/room-context";
+import { ExplainDataButton } from "@/components/room/tools/ai/explain-data";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -453,9 +454,10 @@ function ResultSet({ set }: { set: QueryResultSet }) {
           </tbody>
         </table>
       </div>
-      <p className="border-t bg-chrome px-2 py-1 text-xs text-muted-foreground">
-        {set.truncated ? `The first ${count}; there are more.` : count}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-chrome px-2 py-1 text-xs text-muted-foreground">
+        <p>{set.truncated ? `The first ${count}; there are more.` : count}</p>
+        {set.rows.length > 0 && <ExplainDataButton table={{ columns: set.columns, rows: set.rows, source: "query", complete: !set.truncated }} />}
+      </div>
     </div>
   );
 }

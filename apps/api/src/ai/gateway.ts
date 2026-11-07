@@ -112,6 +112,8 @@ export class StreamRelay {
   private buffer = "";
   usage: GatewayUsage | null = null;
   outputChars = 0;
+  /** The start of what was written, for the room's traces. */
+  output = "";
 
   constructor(private readonly passUsage: boolean) {}
 
@@ -144,7 +146,10 @@ export class StreamRelay {
     const choices = Array.isArray(chunk.choices) ? (chunk.choices as unknown[]) : [];
     for (const choice of choices) {
       const delta = isObject(choice) && isObject(choice.delta) ? choice.delta.content : null;
-      if (typeof delta === "string") this.outputChars += delta.length;
+      if (typeof delta === "string") {
+        this.outputChars += delta.length;
+        if (this.output.length < 32_000) this.output += delta;
+      }
     }
     return usage && choices.length === 0 && !this.passUsage ? "" : line;
   }
