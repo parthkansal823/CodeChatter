@@ -194,8 +194,11 @@ flowchart TD
 
 - ✅ Multiplayer debugger; Problems panel, database playground and HTTP client (done in steps 3 and 5)
 - ✅ Code analysis with real tools (scc, lizard, gitleaks, bandit, the project's checkers), and the AI's project review written from their results
-- ⬜ AI engineering tools: Prompt Playground, Evals, AI gateway, RAG, MCP Inspector, Traces
-- ⬜ Explain this data; a layout for researchers
+- ✅ Prompt Playground: a prompt written together, tried on several models and settings side by side, with tokens and speed, and its runs kept
+- ✅ AI gateway: code in a room's sandbox calls its model through OpenAI's format, with real SDKs, no key in the room and no network
+- ✅ Evals with promptfoo: a prompt's test cases, checked on every column, with a pass rate and what changed from the last run
+- ⬜ AI engineering tools: RAG, MCP Inspector, Traces
+- ⬜ Explain this data; a lakehouse as Databricks does it (Spark, Delta Lake, MLflow); a layout for researchers
 - ⬜ Suggestion mode, room branches, live authorship, session replay, smarter calls
 - ⬜ Test explorer, profiler, package search, room secrets, deploy previews
 - ⬜ Ask the codebase, AI team, natural-language terminal, generated tests and docs, AI code review

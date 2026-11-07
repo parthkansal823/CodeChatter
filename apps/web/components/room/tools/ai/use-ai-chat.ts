@@ -18,6 +18,9 @@ export type SendOptions = {
   image: PastedImage | null;
   /** Edit mode: where the answer applies. */
   target?: EditTarget;
+  /** Codebase mode: what the answer was given to read. */
+  passages?: ChatEntry["passages"];
+  searchNote?: string;
 };
 
 class ChatError extends Error {}
@@ -97,6 +100,8 @@ export function useAiChat(roomId: string) {
         mode: options.mode,
         status: "streaming",
         ...(options.target && { target: options.target }),
+        ...(options.passages && { passages: options.passages }),
+        ...(options.searchNote && { searchNote: options.searchNote }),
       };
       setState((s) => ({ ...s, entries: [...s.entries, question, answer] }));
 

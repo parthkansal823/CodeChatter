@@ -14,6 +14,7 @@ export type ContextParts = {
   extra?: Array<{ path: string; text: string }>;
   summary?: SummaryContext;
   project?: ProjectDigest;
+  retrieved?: Array<{ path: string; start: number; end: number; name: string; text: string; found: string }>;
   file?: { path: string; text: string };
   selection?: { path: string; text: string; startLine: number; endLine: number };
   run?: RunContext;
@@ -101,6 +102,20 @@ const attr = (value: string) => value.replace(/"/g, "'");
 /** A project's contents can't close the sections around them, and whatever the browser let through, no secret goes on from here. */
 const projectText = (text: string) => redactSecrets(text).replace(/<(\/?)\s*project_/gi, "<$1_project_");
 
+/** What a search found: most of the model's room, best first. A passage can't close its section, and no secret goes on from here. */
+function passageSections(passages: NonNullable<ContextParts["retrieved"]>, budget: number): string[] {
+  const sections: string[] = [];
+  let left = Math.floor(budget * 0.8);
+  for (const passage of passages) {
+    const room = Math.min(left, Math.max(800, Math.floor((budget * 0.8) / passages.length) * 2));
+    if (room < 200) break;
+    const cut = truncateMiddle(redactSecrets(passage.text).replace(/<(\/?)\s*passage/gi, "<$1_passage"), room);
+    sections.push(`<passage path="${attr(passage.path)}" lines="${passage.start}-${passage.end}"${passage.name ? ` name="${attr(passage.name)}"` : ""}>\n${cut.text}\n</passage>`);
+    left -= cut.text.length;
+  }
+  return sections;
+}
+
 /** Most of the room goes on what was read in full; what's left, on outlines of the rest. */
 function projectSections(project: ProjectDigest, budget: number): string[] {
   const sections: string[] = [];
@@ -177,6 +192,7 @@ ${changes || "(this browser tab saw no file changes)"}
   }
 
   if (parts.project) sections.push(...projectSections(parts.project, budget));
+  if (parts.retrieved) sections.push(parts.retrieved.length ? passageSections(parts.retrieved, budget).join("\n") : "<passages>The search found nothing.</passages>");
 
   if (parts.extra?.length) {
     const share = Math.max(1000, Math.floor((budget * 0.35) / parts.extra.length));

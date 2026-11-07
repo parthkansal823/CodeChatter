@@ -193,15 +193,15 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 ## Step 13 · Advanced features
 
 - ⬜ **For researchers** (the owner's idea, 2026-11-06): a layout that opens on notebooks, data, documents and PDFs, which all exist already. LaTeX and citations after that, as they need new tools in the sandbox image.
+- ⬜ **The AI gateway on Kubernetes:** run `apps/runner/test/gateway.e2e.mjs` on the Kubernetes driver. It hasn't been yet, as Docker Desktop's cluster doesn't have the sandbox images loaded. The agent channel it uses is the same on both drivers.
 - ⬜ **Opengrep in the Analysis tool:** only once its rules' licence is checked. Semgrep's rules don't allow SaaS use, so it may need rules of our own.
-- ⬜ **AI engineering tools** (the owner's idea, 2026-11-07, **Claude**), in this order:
-  - Prompt Playground: one prompt against several models side by side, with tokens and speed, kept in the room;
-  - Evals: test cases with assertions, a pass rate, and what changed from the last run;
-  - AI gateway: code in the sandbox calls the room's model through an OpenAI-style address, with no key in the room and the person's limit applying;
+- 🟡 **AI engineering tools** (the owner's idea, 2026-11-07, **Claude**; the Prompt Playground, AI gateway and Evals are done), in this order:
   - RAG: "ask the codebase" with embeddings and citations, and a view of what it retrieved;
   - MCP Inspector: list and call the tools of an MCP server running in the sandbox;
   - Traces: each AI call's prompt, tokens and time.
 - ⬜ **Explain this data** (**Claude**): a button on query results and notebook output, with the numbers worked out by DuckDB's `SUMMARIZE` and pandas, not by the model.
+- ⬜ **A lakehouse, as Databricks does it** (the owner's idea, 2026-11-07, **Claude**), before the researcher layout: Databricks itself is a paid cloud service that can't run in a room, so the open-source tools it's built on go in the full sandbox image: Apache Spark (PySpark) and Delta Lake in notebooks, MLflow for experiments. Spark needs Java and a good deal of memory, so check first that it fits a room's limits. Later, once rooms have secrets, a connection to a real Databricks workspace for people who have one.
+- ⬜ **A visual Flow, as Dataiku does it** (the owner's idea, 2026-11-07, **Claude**), with the lakehouse: Dataiku is a paid product too, so a tool of our own over open-source ones: a graph of datasets and the recipes that make them (SQL on DuckDB, Python), run in the sandbox, with what depends on what, data quality checks and a profile of each dataset. Candidates, licences and size to be checked first: dbt with DuckDB for the SQL recipes and their tests, FLAML for AutoML. It shares its running with Pipelines, so they're designed together.
 - ⬜ **Together:** suggestion mode, room branches, live authorship, session recording and replay, smarter calls (captions, AI notes)
 - ⬜ **Developer tools:**
   - a test explorer with coverage;

@@ -80,6 +80,11 @@ The most serious first. For each, the file and line where you know it, why it ma
 At most five steps, in order, each small enough to do in one sitting.
 
 Name files in \`backticks\`, exactly as they're written in <project_tree>, so they can be opened: only ones that are there. Don't invent findings, or praise what you haven't seen. If there's little to go on, say so.`,
+
+  codebase: () => `Mode: Ask the codebase. You answer questions about this project from the <passage> sections, which a search of its files found. They're parts of files, not the whole project, and they may not all be relevant: ignore the ones that aren't.
+- Answer only from the passages. Don't guess at code you can't see. If they don't answer it, say so plainly, and say what you'd look for next.
+- Cite where each thing comes from, right after it, as \`path:line\` in backticks, using the path as a passage gives it and a line inside its range. Only cite places you were given.
+- Be short and direct: the answer first, then the detail that matters.`,
 };
 
 export function systemPrompt(mode: AiMode, language: string | null): string {
@@ -128,6 +133,7 @@ export function buildModelRequest(input: AiChatInput, options: { run?: RunContex
       ...(context.extraFiles && { extra: context.extraFiles }),
       ...(options.summary && { summary: options.summary }),
       ...(context.project && { project: context.project }),
+      ...(context.retrieved && { retrieved: context.retrieved }),
       ...(context.file && { file: context.file }),
       ...(context.selection && { selection: context.selection }),
       ...(options.run && { run: options.run }),

@@ -16,6 +16,10 @@
 	}
 
 	# NestJS: REST, Better Auth, Socket.IO, terminal/LSP sockets
+	# Between our own services only: the runner comes straight to the API, never through here.
+	handle /api/internal/* {
+		respond 404
+	}
 	handle /api/* {
 		reverse_proxy host.docker.internal:4000
 	}

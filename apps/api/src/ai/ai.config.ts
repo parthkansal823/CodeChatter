@@ -129,10 +129,19 @@ export function resolveAiSetup(env: AiEnv): AiSetup {
 }
 
 /** What the Playground may offer: the server's model, the ones named for it, and what Ollama has pulled, since those cost nothing. */
-export function playableModels(setup: Pick<AiSetup, "settings" | "model">, env: Pick<Env, "AI_PLAYGROUND_MODELS">, pulled: readonly string[]): string[] {
+export function playableModels(setup: Pick<AiSetup, "settings" | "model">, env: Pick<Env, "AI_PLAYGROUND_MODELS" | "AI_EMBEDDING_MODEL">, pulled: readonly string[]): string[] {
   if (!setup.settings) return [];
   const named = env.AI_PLAYGROUND_MODELS.split(",").map((model) => model.trim()).filter(Boolean);
-  return [...new Set([...(setup.model ? [setup.model] : []), ...named, ...(setup.settings.provider === "ollama" ? pulled : [])])];
+  // A model that only makes embeddings can't answer a prompt.
+  const local = setup.settings.provider === "ollama" ? pulled.filter((model) => model !== env.AI_EMBEDDING_MODEL && !/embed/i.test(model)) : [];
+  return [...new Set([...(setup.model ? [setup.model] : []), ...named, ...local])];
+}
+
+/** The model that makes embeddings here, if any: the one named for it, or with Ollama, one that's pulled and says so in its name. */
+export function embeddingModelOf(setup: Pick<AiSetup, "settings">, env: Pick<Env, "AI_EMBEDDING_MODEL">, pulled: readonly string[]): string | null {
+  if (!setup.settings || setup.settings.provider === "anthropic") return null;
+  if (env.AI_EMBEDDING_MODEL) return env.AI_EMBEDDING_MODEL;
+  return setup.settings.provider === "ollama" ? (pulled.find((model) => /embed/i.test(model)) ?? null) : null;
 }
 
 export function aiStatus(setup: AiSetup, env: Pick<AiEnv, "AI_RATE_LIMIT" | "AI_RATE_WINDOW_SECONDS">): AiStatus {

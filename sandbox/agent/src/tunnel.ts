@@ -3,6 +3,7 @@ import { connect, type Socket } from "node:net";
 
 import type { AgentEvent, TunnelOp } from "@codechatter/contracts";
 
+import { GATEWAY_PORT } from "./gateway.js";
 import { RELAY_PORT } from "./relay.js";
 
 /**
@@ -17,6 +18,11 @@ export class Tunnels {
 
   handle(op: TunnelOp): void {
     if (op.op === "tcp_open") {
+      // The agent's own doors are for code in the sandbox, not for visitors to a preview.
+      if (op.port === RELAY_PORT || op.port === GATEWAY_PORT) {
+        this.emit({ ev: "tcp_closed", conn: op.conn, error: "that port isn't a server to preview" });
+        return;
+      }
       const socket = connect({ host: "127.0.0.1", port: op.port });
       this.sockets.set(op.conn, socket);
       socket.on("connect", () => this.emit({ ev: "tcp_connected", conn: op.conn }));
@@ -48,8 +54,8 @@ export async function listeningPorts(): Promise<number[]> {
       const fields = line.trim().split(/\s+/);
       if (fields[3] !== "0A" || !fields[1]) continue;
       const port = Number.parseInt(fields[1].split(":").at(-1) ?? "", 16);
-      // The package-install relay is the agent's own, not a server to preview.
-      if (port > 0 && port !== RELAY_PORT) ports.add(port);
+      // The package-install relay and the AI gateway are the agent's own, not servers to preview.
+      if (port > 0 && port !== RELAY_PORT && port !== GATEWAY_PORT) ports.add(port);
     }
   }
   return [...ports].sort((a, b) => a - b);

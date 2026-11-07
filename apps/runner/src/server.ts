@@ -4,11 +4,14 @@ import {
   DuckdbPreviewInput,
   DuckdbQueryInput,
   DuckdbTarget,
+  EVAL_LIMITS,
+  EvalInput,
   GitRunnerRequest,
   INSTALLS_MINUTES,
   JudgeRunnerInput,
   KubeRequest,
   QueryInput,
+  RagRunnerInput,
   RoomCode,
   RunInput,
   RunStartInput,
@@ -16,6 +19,7 @@ import {
   SqliteQueryInput,
   SqliteTarget,
   TablePreviewInput,
+  type EvalEvent,
   type JudgeEvent,
   type RunnerEvent,
   type SandboxStatus,
@@ -37,6 +41,8 @@ import type { Env } from "./env.js";
 import { judge } from "./judge.js";
 import { log, messageOf } from "./log.js";
 import { configureRunnerCollectors, serveMetrics } from "./metrics.js";
+import { EvalError, runEvals } from "./evals.js";
+import { RagError, searchCodebase } from "./rag.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
 import type { RoomRegistry } from "./room-session.js";
 import { RunError } from "./runs.js";
@@ -75,6 +81,8 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   DELETE /rooms/:id/databases/:kind       deletes its data
  *   POST /rooms/:id/databases/:kind/query   { query } QueryResult (the console)
  *   GET  /rooms/:id/databases/:kind/tables  DatabaseTable[] (the table browser)
+ *   POST /rooms/:id/rag                      RagRunnerInput      CodebaseHits (a search of the room's files)
+ *   POST /rooms/:id/evals                    EvalInput           NDJSON EvalEvents (promptfoo in the sandbox)
  *   POST /rooms/:id/databases/:kind/preview { name, schema? } QueryResult
  *   GET  /rooms/:id/databases/:kind/dump    a backup, streamed
  *   POST /rooms/:id/databases/:kind/load    a file (the body, or ?path= one of the room's) run through its client
@@ -169,6 +177,10 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (check && req.method === "POST") return handleCheck(req, res, check[1]!);
     const analysis = /^\/rooms\/([A-Z0-9]{6})\/analysis$/.exec(url.pathname);
     if (analysis && req.method === "POST") return handleAnalysis(req, res, analysis[1]!);
+    const rag = /^\/rooms\/([A-Z0-9]{6})\/rag$/.exec(url.pathname);
+    if (rag && req.method === "POST") return handleRag(req, res, rag[1]!);
+    const evals = /^\/rooms\/([A-Z0-9]{6})\/evals$/.exec(url.pathname);
+    if (evals && req.method === "POST") return handleEvals(req, res, evals[1]!);
     const gitRoute = /^\/rooms\/([A-Z0-9]{6})\/git$/.exec(url.pathname);
     if (gitRoute && req.method === "POST") return handleGit(req, res, gitRoute[1]!);
     const duckdb = /^\/rooms\/([A-Z0-9]{6})\/duckdb(?:\/(tables|query|preview))?$/.exec(url.pathname);
@@ -449,6 +461,59 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     } catch (error) {
       if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
       throw error;
+    }
+  }
+
+  /** What a search of the room's files found (rag.ts). */
+  async function handleRag(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const input = RagRunnerInput.safeParse(await readJson(req));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a search." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+      return json(res, 200, await searchCodebase(session, input.data));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      if (error instanceof RagError) return json(res, 422, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** A prompt's test cases, run by promptfoo in the sandbox (evals.ts). NDJSON: how far it's got, then the report. */
+  async function handleEvals(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const input = EvalInput.safeParse(await readJson(req, EVAL_LIMITS.bodyBytes));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a set of evals." });
+    const session = rooms.get(roomId);
+    try {
+      session.touch();
+      await session.ready();
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      throw error;
+    }
+    res.writeHead(200, { "content-type": "application/x-ndjson", "cache-control": "no-cache" });
+    const send = (event: EvalEvent) => res.write(`${JSON.stringify(event)}\n`);
+    const gone = new AbortController();
+    res.on("close", () => {
+      if (!res.writableFinished) gone.abort();
+    });
+    const before = session.gatewayChats;
+    const beat = setInterval(() => {
+      // A long eval is the room in use, and these lines keep the connections to it open.
+      session.touch();
+      send({ type: "progress", calls: session.gatewayChats - before });
+    }, 2000);
+    try {
+      send({ type: "done", report: await runEvals(session, input.data, gone.signal) });
+    } catch (error) {
+      if (!(error instanceof EvalError)) log.warn(`evals failed in room ${roomId}: ${String(error)}`);
+      send({ type: "error", message: error instanceof EvalError ? error.message : "The evals couldn't run. Try again." });
+    } finally {
+      clearInterval(beat);
+      res.end();
     }
   }
 

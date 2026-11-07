@@ -15,10 +15,12 @@ export const LABEL_NAMESPACE = "codechatter.namespace";
 export const LABEL_ROLE = "codechatter.role";
 /** Bumped when a container's shape changes (mounts, limits), so older ones are recreated. */
 export const LABEL_CONFIG = "codechatter.config";
-const CONTAINER_CONFIG = "2";
+const CONTAINER_CONFIG = "3";
 
 /** The agent's relay to the room's egress proxy (sandbox/agent/src/relay.ts). */
 const PROXY = "http://127.0.0.1:3128";
+/** The agent's door to the AI gateway (sandbox/agent/src/gateway.ts). */
+const AI_GATEWAY = "http://127.0.0.1:3129/v1";
 /**
  * The only environment user code sees (spike S2: no server secrets, no image
  * ENV). Package managers go through the agent's relay (ADR 0007) and install
@@ -32,6 +34,9 @@ export const USER_ENV = [
   "TERM=xterm-256color",
   ...["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"].map((name) => `${name}=${PROXY}`),
   ...["NO_PROXY", "no_proxy"].map((name) => `${name}=localhost,127.0.0.1,::1`),
+  // The room's model, for real SDKs and tools. The value isn't a secret: SDKs refuse to start without one, and the gateway ignores it.
+  ...["OPENAI_BASE_URL", "OPENAI_API_BASE"].map((name) => `${name}=${AI_GATEWAY}`),
+  "OPENAI_API_KEY=not-needed-in-this-room",
   // Debian marks its Python as managed by apt; with a read-only root, pip installs for the user.
   "PIP_BREAK_SYSTEM_PACKAGES=1",
   "npm_config_prefix=/home/ccuser/.local",

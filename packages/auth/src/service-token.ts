@@ -2,7 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * Short-lived tokens between our own services: the API calling the runner,
- * and the runner opening a room document on the collab server.
+ * the runner opening a room document on the collab server, and the runner
+ * passing on a call to the AI from code in a room's sandbox.
  *
  *   svc.<base64url(JSON claims)>.<base64url(HMAC-SHA256)>
  *
@@ -11,7 +12,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * token minted for room A can't open room B or be replayed at another service.
  * Import from "@codechatter/auth/service-token" (no Better Auth, no database).
  */
-export type ServiceAudience = "runner" | "collab" | "preview";
+export type ServiceAudience = "runner" | "collab" | "preview" | "api";
 
 export interface ServiceClaims {
   aud: ServiceAudience;

@@ -115,6 +115,7 @@ spec:
             - name: SERVICE_SECRET
               valueFrom: { secretKeyRef: { name: {{ include "cc.secretName" . }}, key: SERVICE_SECRET } }
             - { name: COLLAB_INTERNAL_URL, value: "ws://{{ .Release.Name }}-collab:4100" }
+            - { name: API_INTERNAL_URL, value: "http://{{ .Release.Name }}-api:4000" }
             - { name: RUNNER_DRIVER, value: kubernetes }
             - { name: SANDBOX_NAMESPACE, value: {{ .Values.runner.namespace | quote }} }
             - { name: SANDBOX_IMAGE, value: {{ .Values.runner.sandbox.image | quote }} }

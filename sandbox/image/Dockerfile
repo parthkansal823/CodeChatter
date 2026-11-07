@@ -99,11 +99,12 @@ RUN apt-get update  && apt-get install -y --no-install-recommends curl ca-certif
 
 # DuckDB's Python package, for the Databases tool's DuckDB files and its SQL over the room's
 # CSV, Parquet and JSON files (apps/runner/src/duckdb.ts): the wheel for the images' Python
-# 3.13, checked against the SHA-256 PyPI publishes, with nothing else.
+# 3.13, checked against the SHA-256 PyPI publishes, with nothing else. Its full-text search is an extension sandboxes
+# couldn't download, so it comes now; DuckDB checks an extension's signature when it loads one.
 FROM debian:trixie-slim AS duckdb
 ARG DUCKDB_VERSION=1.5.6
 ARG DUCKDB_SHA256=644f54ce99b3b61844bc9a3fe80e0aecb1ea4084b1fffc4396d1569db6111679
-RUN apt-get update  && apt-get install -y --no-install-recommends python3-pip  && rm -rf /var/lib/apt/lists/*  && echo "duckdb==${DUCKDB_VERSION} --hash=sha256:${DUCKDB_SHA256}" > /tmp/duckdb.txt  && pip install --no-cache-dir --break-system-packages --no-deps --only-binary :all: --require-hashes --target /out -r /tmp/duckdb.txt  && PYTHONPATH=/out python3 -c "import duckdb; print(duckdb.__version__)"
+RUN apt-get update  && apt-get install -y --no-install-recommends python3-pip  && rm -rf /var/lib/apt/lists/*  && echo "duckdb==${DUCKDB_VERSION} --hash=sha256:${DUCKDB_SHA256}" > /tmp/duckdb.txt  && pip install --no-cache-dir --break-system-packages --no-deps --only-binary :all: --require-hashes --target /out -r /tmp/duckdb.txt  && PYTHONPATH=/out python3 -c "import duckdb; print(duckdb.__version__); c = duckdb.connect(config={'extension_directory': '/out/codechatter_duckdb_extensions'}); c.execute('INSTALL fts'); c.execute('LOAD fts')"
 
 # Code analysis (apps/runner/src/analysis.ts): scc and gitleaks, checked against the SHA-256 their releases
 # publish, and lizard and bandit with their dependencies pinned by hash, in a folder of their own so they
@@ -130,6 +131,29 @@ RUN set -eu; \
     tar xzf /tmp/gitleaks.tgz -C /out/bin gitleaks; \
     pip install --no-cache-dir --break-system-packages --require-hashes --target /out/lib/codechatter/analysis -r /tmp/analysis-requirements.txt
 COPY image/gitleaks.toml /out/lib/codechatter/gitleaks.toml
+# Ask the codebase (apps/runner/src/rag.ts) uses lizard and gitleaks from here.
+COPY image/codebase_search.py /out/lib/codechatter/codebase_search.py
+
+# Evals (apps/runner/src/evals.ts): promptfoo, from a lockfile so that all its packages are checked against their
+# hashes, with no install scripts. Its optional extras (other providers, PDFs, browsers) stay out, which takes it from
+# 734 MB to under 270; the database binding is the one it can't start without, and its hash is in the lockfile too.
+FROM node:24-slim AS evals
+ARG TARGETARCH
+COPY image/promptfoo/package.json image/promptfoo/package-lock.json /out/lib/codechatter/promptfoo/
+RUN set -eu; \
+    cd /out/lib/codechatter/promptfoo; \
+    npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund; \
+    version=$(node -p "require('./node_modules/libsql/package.json').version"); \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) binding=linux-x64-gnu;; \
+      arm64) binding=linux-arm64-gnu;; \
+      *) echo "No database binding for ${TARGETARCH}"; exit 1;; \
+    esac; \
+    npm install --no-save --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund "@libsql/${binding}@${version}"; \
+    rm -rf /root/.npm; \
+    mkdir -p /out/bin; \
+    ln -s /usr/local/lib/codechatter/promptfoo/node_modules/.bin/promptfoo /out/bin/promptfoo; \
+    ./node_modules/.bin/promptfoo --version
 
 # The base image: what every room gets by default.
 FROM core AS base
@@ -141,6 +165,7 @@ COPY --from=jsdebug /out/js-debug /usr/local/lib/js-debug
 COPY image/js-debug-bridge.mjs /usr/local/lib/codechatter/js-debug-bridge.mjs
 COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
 COPY --from=analysis /out/ /usr/local/
+COPY --from=evals /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -230,6 +255,7 @@ COPY --from=jsdebug /out/js-debug /usr/local/lib/js-debug
 COPY image/js-debug-bridge.mjs /usr/local/lib/codechatter/js-debug-bridge.mjs
 COPY --from=duckdb /out/ /usr/local/lib/python3.13/dist-packages/
 COPY --from=analysis /out/ /usr/local/
+COPY --from=evals /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).

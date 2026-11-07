@@ -48,6 +48,8 @@ const SUITES = [
     ["api-notifications", "notifications"],
     ["api-source-control", "source-control"],
     ["api-interview-ai-review", "interview-ai-review"],
+    ["api-prompts", "prompts"],
+    ["api-ai-gateway", "gateway"],
   ]),
   ...[
     "new-room",
@@ -63,6 +65,8 @@ const SUITES = [
     "account-security",
     "sign-out-device",
     "analysis",
+    "prompts",
+    "evals",
     "a11y",
     "interview-recording",
     "csp",

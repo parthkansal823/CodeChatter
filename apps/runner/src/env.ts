@@ -13,6 +13,8 @@ const Env = z.object({
   SERVICE_SECRET: z.string().min(32, "SERVICE_SECRET must be at least 32 characters"),
   /** Where the runner joins room documents as a peer (Hocuspocus, not through Caddy). */
   COLLAB_INTERNAL_URL: z.string().startsWith("ws").default("ws://127.0.0.1:4100"),
+  /** Where calls to the AI from code in a sandbox go (not through Caddy). */
+  API_INTERNAL_URL: z.string().startsWith("http").default("http://127.0.0.1:4000"),
   SANDBOX_IMAGE: z.string().default("codechatter-sandbox:dev"),
   /**
    * The base and full images a room's owner can pick between (Ports panel), when both are

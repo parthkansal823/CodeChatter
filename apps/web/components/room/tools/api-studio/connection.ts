@@ -17,8 +17,8 @@ function collabUrl() {
 
 export type ApiConnection = { doc: Y.Doc; provider: HocuspocusProvider; synced: boolean };
 
-/** The room's API Studio document, live, for as long as the tool is open. */
-export function useApiConnection(roomId: string, user: Pick<Me["user"], "id" | "name" | "image">): ApiConnection | null {
+/** One of the room's documents, live, for as long as the tool is open. */
+export function useRoomDoc(roomId: string, kind: "api" | "prompts", user: Pick<Me["user"], "id" | "name" | "image">): ApiConnection | null {
   const [state, setState] = useState<Omit<ApiConnection, "synced"> | null>(null);
   const [synced, setSynced] = useState(false);
   const { id, name, image } = user;
@@ -26,7 +26,7 @@ export function useApiConnection(roomId: string, user: Pick<Me["user"], "id" | "
   useEffect(() => {
     const doc = new Y.Doc();
     const socket = new HocuspocusProviderWebsocket({ url: collabUrl() });
-    const provider = new HocuspocusProvider({ websocketProvider: socket, name: roomDocName(roomId, "api"), document: doc, token: "session" });
+    const provider = new HocuspocusProvider({ websocketProvider: socket, name: roomDocName(roomId, kind), document: doc, token: "session" });
     // An external socket isn't attached automatically in Hocuspocus 4.
     provider.attach();
     provider.on("synced", () => setSynced(true));
@@ -40,16 +40,18 @@ export function useApiConnection(roomId: string, user: Pick<Me["user"], "id" | "
       socket.destroy();
       doc.destroy();
     };
-  }, [roomId, id, name, image]);
+  }, [roomId, kind, id, name, image]);
 
   return state && { ...state, synced };
 }
+
+export const useApiConnection = (roomId: string, user: Pick<Me["user"], "id" | "name" | "image">) => useRoomDoc(roomId, "api", user);
 
 /** Anything Yjs lets you observe deeply (Y.Map, Y.Array, Y.Text). */
 type DeepObservable = { observeDeep: (handler: () => void) => void; unobserveDeep: (handler: () => void) => void };
 
 /** Re-render when a Y type (or anything inside it) changes; returns a version number. */
-function useYVersion(type: DeepObservable | null | undefined): number {
+export function useYVersion(type: DeepObservable | null | undefined): number {
   const version = useRef(0);
   const subscribe = useCallback(
     (onChange: () => void) => {

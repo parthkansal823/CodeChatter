@@ -1,7 +1,7 @@
 import type { AuthSession } from "@codechatter/auth";
-import { INSTALLS_MINUTES, RoomCode, SandboxImageInput, type DevServerStatus, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Req, ServiceUnavailableException } from "@nestjs/common";
-import type { Request } from "express";
+import { can, EvalInput, INSTALLS_MINUTES, RoomCode, SandboxImageInput, type DevServerStatus, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, HttpCode, Inject, Param, Post, Put, Req, Res, ServiceUnavailableException } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { z } from "zod";
 
 import { AuditService } from "../audit/audit.service.js";
@@ -151,6 +151,44 @@ export class SandboxController {
       if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
       throw error;
     }
+  }
+
+  /**
+   * A prompt's evals (apps/runner/src/evals.ts): promptfoo in the sandbox, so it needs Run rights, calling the AI, so it needs those too.
+   * Trying prompts isn't part of an interview. Streams NDJSON EvalEvents.
+   */
+  @Post("evals")
+  async evals(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Body(new ZodPipe(EvalInput)) input: EvalInput, @Res() res: Response): Promise<void> {
+    const code = this.room(roomId);
+    const { room, role } = await this.rooms.require(code, session.user.id, "code.run");
+    if (!can(role, "room.chat") || room.kind === "interview") throw new ForbiddenException("You can't run evals in this room.");
+    const gone = new AbortController();
+    res.on("close", () => {
+      if (!res.writableFinished) gone.abort();
+    });
+    let answer: globalThis.Response;
+    try {
+      answer = await this.runner.evals(code, input, session.user, gone.signal);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
+    res.status(200);
+    res.setHeader("Content-Type", "application/x-ndjson");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    try {
+      const reader = answer.body!.getReader();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+    } catch {
+      // The person stopped it or left, or the runner went away: either way, the stream ends here.
+    }
+    res.end();
   }
 
   /** The Analysis tool (apps/runner/src/analysis.ts): it runs tools in the sandbox, like checking every file, so it needs Run rights. */

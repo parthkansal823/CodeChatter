@@ -40,6 +40,10 @@ export type AiPromptModels = {
   oneAtATime: boolean;
   /** Past about this length a local model may silently lose the start of a prompt. */
   contextChars: number;
+  /** Code in the room's sandbox can call these models: OPENAI_BASE_URL is set for it, and it needs no key. */
+  gateway: { on: boolean; requests: number; windowSeconds: number };
+  /** The model that makes embeddings here, if any. Without one, Ask the codebase searches by words only. */
+  embedding: string | null;
 };
 
 const VARIABLE = /\{\{\s*([A-Za-z_][\w.-]*)\s*\}\}/g;

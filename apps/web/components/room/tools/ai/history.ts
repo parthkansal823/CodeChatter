@@ -41,6 +41,9 @@ export type ChatEntry = {
   steps?: Record<number, StepState>;
   /** The agent's step results were already sent back. */
   followedUp?: boolean;
+  /** Codebase mode: what the search found, for the person to check, and what to know about the search. */
+  passages?: Array<{ path: string; start: number; end: number; name: string; text: string; found: "both" | "meaning" | "words" }>;
+  searchNote?: string;
 };
 
 type Stored = { mode: AiMode; entries: ChatEntry[] };

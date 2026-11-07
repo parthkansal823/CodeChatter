@@ -5,6 +5,7 @@ import type { JudgeCase, JudgeEvent, SandboxStatus } from "@codechatter/contract
 
 import { databaseEnv, databasePassword, Databases } from "./databases.js";
 import { DockerDatabases } from "./docker-databases.js";
+import { GatewayHub } from "./gateway.js";
 import { KubeDatabases } from "./kube-databases.js";
 import { DocSync } from "./doc-sync.js";
 import { Egress, LABEL_UNTIL, type PackageProxy } from "./egress.js";
@@ -32,6 +33,10 @@ export class RoomSession {
   readonly runs: RunManager;
   readonly notebooks: NotebookKernels;
   readonly tunnels: TunnelHub;
+  private readonly gateway: GatewayHub;
+  get gatewayChats(): number {
+    return this.gateway.chats;
+  }
   /** Ports something in the sandbox listens on (reported by the agent). */
   ports: number[] = [];
   terminals = 0;
@@ -60,14 +65,17 @@ export class RoomSession {
     this.runs = new RunManager(this.sandbox, env.RUN_TIMEOUT_MINUTES * 60_000);
     this.notebooks = new NotebookKernels(this.sandbox, this.sync.doc, this.sync.synced(60_000).catch(() => {}));
     this.tunnels = new TunnelHub(() => this.sandbox.agent);
+    this.gateway = new GatewayHub(roomId, { apiUrl: env.API_INTERNAL_URL, secret: env.SERVICE_SECRET }, () => this.sandbox.agent);
     this.debugger = new DebugHub(this);
     this.sandbox.onAgentEvent = (event) => {
       if (event.ev === "ports") this.ports = event.ports;
       else if (event.ev === "tcp_connected" || event.ev === "tcp_data" || event.ev === "tcp_closed") this.tunnels.handle(event);
+      else if (event.ev === "gw_open" || event.ev === "gw_data" || event.ev === "gw_closed") this.gateway.handle(event);
       else this.sync.applyFromSandbox(event);
     };
     this.sandbox.onAgentClosed = () => {
       this.tunnels.closeAll();
+      this.gateway.closeAll();
       this.ports = [];
     };
   }

@@ -129,9 +129,33 @@ try {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Analysis", "Databases", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Analysis", "Prompts", "Databases", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
     }
+    // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
+    await page.route("**/api/rooms/*/ai/prompt", (route) => {
+      const events = [{ type: "delta", text: "An answer." }, { type: "done", stop: "end", usage: { inputTokens: 5, outputTokens: 5, estimated: true }, timing: { firstMs: 200, totalMs: 900 } }];
+      return route.fulfill({ status: 200, contentType: "text/event-stream", body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") });
+    });
+    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Prompts", exact: true }).click();
+    const prompts = page.getByRole("region", { name: "Prompts" });
+    await prompts.getByRole("button", { name: "New prompt" }).first().click();
+    await prompts.getByRole("button", { name: "Run", exact: true }).click();
+    await step(page, `${theme} room, a prompt and its answers`, () => prompts.getByRole("region", { name: "Runs" }).waitFor({ timeout: 15_000 }));
+    // Its evals, with a result open. promptfoo is stood in for too.
+    await page.route("**/api/rooms/*/evals", (route) => {
+      const body = route.request().postDataJSON();
+      const cell = { caseId: body.cases[0].id, columnId: body.columns[0].id, pass: false, error: null, output: "An answer.", failed: [{ type: "contains", value: "Paris", reason: "Expected output to contain Paris" }], latencyMs: 900, inputTokens: 5, outputTokens: 5 };
+      return route.fulfill({ status: 200, contentType: "application/x-ndjson", body: `${JSON.stringify({ type: "done", report: { cells: [cell], passed: 0, failed: 1, errors: 0, inputTokens: 5, outputTokens: 5, ms: 900 } })}\n` });
+    });
+    await prompts.getByRole("button", { name: "Test it" }).click();
+    await prompts.getByRole("button", { name: "Add a test case" }).click();
+    await prompts.getByLabel("What check 1 in Case 1 looks for").fill("Paris");
+    await prompts.getByRole("button", { name: "Run evals" }).click();
+    await prompts.getByRole("region", { name: "Results" }).getByRole("button", { name: "Fail", exact: true }).click();
+    await step(page, `${theme} room, a prompt's evals and a result`, () => prompts.getByRole("region", { name: "This result" }).waitFor({ timeout: 15_000 }));
+    await prompts.getByRole("button", { name: "Delete this prompt" }).click();
+    await prompts.getByRole("button", { name: "Delete", exact: true }).click();
     await context.close();
   }
 

@@ -1,6 +1,6 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { DatabaseKind, DatabaseStatus, DevServerStatus, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, RoomAnalysis,
-  RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
+import type { DatabaseKind, DatabaseStatus, CodebaseHits, DevServerStatus, EvalInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, RoomAnalysis,
+  RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import type { Env } from "../config/env.js";
@@ -231,6 +231,22 @@ export class RunnerClient {
   }
 
   /** The Analysis tool's report on the whole room, from real tools in its sandbox (runner: analysis.ts). */
+  /** What a search of the room's files found (apps/runner/src/rag.ts). */
+  async retrieve(roomId: string, input: RagRunnerInput, user: RunnerUser): Promise<CodebaseHits> {
+    const response = await this.call(`/rooms/${roomId}/rag`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The search couldn't run.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return (await response.json()) as CodebaseHits;
+  }
+
+  /** A prompt's evals; the response body streams NDJSON EvalEvents. */
+  async evals(roomId: string, input: EvalInput, user: RunnerUser, signal: AbortSignal): Promise<Response> {
+    const response = await this.call(`/rooms/${roomId}/evals`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input), signal });
+    if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The sandbox isn't available.");
+    if (!response.ok || !response.body) throw new RunnerUnavailableError();
+    return response;
+  }
+
   async analysis(roomId: string, user: RunnerUser): Promise<RoomAnalysis> {
     const response = await this.call(`/rooms/${roomId}/analysis`, { method: "POST", headers: this.headers(roomId, user), body: "{}" });
     if (response.status === 409) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The sandbox isn't available.");

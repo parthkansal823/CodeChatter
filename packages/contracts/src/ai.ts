@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { RAG_LIMITS } from "./rag.js";
 import { WorkspacePath } from "./run.js";
 
 /**
@@ -8,7 +9,7 @@ import { WorkspacePath } from "./run.js";
  * and the context it chose to attach.
  */
 
-export const AI_MODES = ["assistant", "explain-error", "tutor", "interviewer", "complexity", "screenshot", "edit", "agent", "summary", "project"] as const;
+export const AI_MODES = ["assistant", "explain-error", "tutor", "interviewer", "complexity", "screenshot", "edit", "agent", "summary", "project", "codebase"] as const;
 export type AiMode = (typeof AI_MODES)[number];
 
 /**
@@ -95,6 +96,20 @@ export const AiChatInput = z.object({
             .array(z.object({ path: WorkspacePath, lines: z.array(z.string().max(AI_LIMITS.projectOutlineLineChars)).max(AI_LIMITS.projectOutlineLines) }))
             .max(AI_LIMITS.projectOutlines),
         })
+        .optional(),
+      /** Codebase mode: what the search found (rag.ts). The server takes out secrets again. */
+      retrieved: z
+        .array(
+          z.object({
+            path: WorkspacePath,
+            start: z.number().int().min(1),
+            end: z.number().int().min(1),
+            name: z.string().max(RAG_LIMITS.nameChars),
+            text: z.string().max(RAG_LIMITS.textChars),
+            found: z.enum(["both", "meaning", "words"]),
+          }),
+        )
+        .max(RAG_LIMITS.passages)
         .optional(),
       image: z
         .object({

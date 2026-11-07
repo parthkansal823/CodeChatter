@@ -24,7 +24,10 @@ export type AgentOp =
 export type TunnelOp =
   | { op: "tcp_open"; conn: number; port: number }
   | { op: "tcp_data"; conn: number; b64: string }
-  | { op: "tcp_close"; conn: number };
+  | { op: "tcp_close"; conn: number }
+  // The AI gateway: connections code in the sandbox opened to the agent, the other way round from those above.
+  | { op: "gw_data"; conn: number; b64: string }
+  | { op: "gw_close"; conn: number };
 
 /** Agent → runner. "file" and "removed" report changes made inside the sandbox. */
 export type AgentEvent =
@@ -40,7 +43,10 @@ export type AgentEvent =
   | { ev: "ports"; ports: number[] }
   | { ev: "tcp_connected"; conn: number }
   | { ev: "tcp_data"; conn: number; b64: string }
-  | { ev: "tcp_closed"; conn: number; error?: string };
+  | { ev: "tcp_closed"; conn: number; error?: string }
+  | { ev: "gw_open"; conn: number }
+  | { ev: "gw_data"; conn: number; b64: string }
+  | { ev: "gw_closed"; conn: number };
 
 /** Live facts about a room's sandbox, for the Ports and resources panel. */
 export type SandboxStatus = {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { aiStatus, DEFAULT_ANTHROPIC_MODEL, resolveAiSetup, type AiEnv } from "./ai.config.js";
 import { AnthropicProvider, createProvider, OpenAiCompatibleProvider } from "./providers.js";
-import { playableModels } from "./ai.config.js";
+import { embeddingModelOf, playableModels } from "./ai.config.js";
 
 const env = (overrides: Partial<AiEnv> = {}): AiEnv => ({
   AI_PROVIDER: "none",
@@ -104,15 +104,27 @@ describe("the models the Prompt Playground may offer", () => {
   const paid = { settings: { provider: "openai" as const, model: "gpt-cheap", apiKey: "k", vision: false }, model: "gpt-cheap" };
 
   it("is nothing while AI is off", () => {
-    expect(playableModels({ settings: null, model: null }, { AI_PLAYGROUND_MODELS: "x" }, ["y"])).toEqual([]);
+    expect(playableModels({ settings: null, model: null }, { AI_PLAYGROUND_MODELS: "x", AI_EMBEDDING_MODEL: "" }, ["y"])).toEqual([]);
   });
 
   it("with Ollama, is whatever's pulled, the server's own first", () => {
-    expect(playableModels(ollama, { AI_PLAYGROUND_MODELS: "" }, ["b", "a", "c"])).toEqual(["a", "b", "c"]);
+    expect(playableModels(ollama, { AI_PLAYGROUND_MODELS: "", AI_EMBEDDING_MODEL: "" }, ["b", "a", "c"])).toEqual(["a", "b", "c"]);
+  });
+
+  it("leaves out what only makes embeddings", () => {
+    expect(playableModels(ollama, { AI_PLAYGROUND_MODELS: "", AI_EMBEDDING_MODEL: "minilm" }, ["a", "nomic-embed-text:latest", "minilm"])).toEqual(["a"]);
   });
 
   it("with a paid provider, is only what the owner named", () => {
-    expect(playableModels(paid, { AI_PLAYGROUND_MODELS: "" }, ["costly"])).toEqual(["gpt-cheap"]);
-    expect(playableModels(paid, { AI_PLAYGROUND_MODELS: " gpt-other , gpt-cheap ," }, ["costly"])).toEqual(["gpt-cheap", "gpt-other"]);
+    expect(playableModels(paid, { AI_PLAYGROUND_MODELS: "", AI_EMBEDDING_MODEL: "" }, ["costly"])).toEqual(["gpt-cheap"]);
+    expect(playableModels(paid, { AI_PLAYGROUND_MODELS: " gpt-other , gpt-cheap ,", AI_EMBEDDING_MODEL: "" }, ["costly"])).toEqual(["gpt-cheap", "gpt-other"]);
   });
+
+  it("finds the embedding model: the one named, or with Ollama, one that says so", () => {
+    expect(embeddingModelOf(ollama, { AI_EMBEDDING_MODEL: "named" }, ["nomic-embed-text"])).toBe("named");
+    expect(embeddingModelOf(ollama, { AI_EMBEDDING_MODEL: "" }, ["a", "nomic-embed-text"])).toBe("nomic-embed-text");
+    expect(embeddingModelOf(ollama, { AI_EMBEDDING_MODEL: "" }, ["a"])).toBeNull();
+    expect(embeddingModelOf(paid, { AI_EMBEDDING_MODEL: "" }, ["x-embed"])).toBeNull();
+    expect(embeddingModelOf(paid, { AI_EMBEDDING_MODEL: "text-embedding-3-small" }, [])).toBe("text-embedding-3-small");
+    expect(embeddingModelOf({ settings: null }, { AI_EMBEDDING_MODEL: "x" }, [])).toBeNull();
 });

@@ -5,9 +5,10 @@ import { and, count, eq, gte, like, max, min, notLike } from "drizzle-orm";
 import type { Redis } from "ioredis";
 
 import type { Env } from "../config/env.js";
+import { GUEST_DOMAIN } from "../demo/guest-domain.js";
 import { DB, ENV, VALKEY } from "../infra/tokens.js";
 import { MessagesService } from "../messages/messages.service.js";
-import { aiStatus, ollamaUrl, playableModels, resolveAiSetup, type AiSetup } from "./ai.config.js";
+import { aiStatus, embeddingModelOf, ollamaUrl, playableModels, resolveAiSetup, type AiSetup } from "./ai.config.js";
 import { COMPLETION } from "./complete.js";
 import { createProvider, type AiProvider } from "./providers.js";
 import { RateLimiter, type RateDecision } from "./rate-limit.js";
@@ -23,6 +24,7 @@ export class AiService {
   readonly contextChars: number;
   private readonly limiter: RateLimiter;
   private readonly completionLimiter: RateLimiter;
+  private readonly gatewayLimiter: RateLimiter;
   private readonly usageTracker: UsageTracker;
 
   constructor(
@@ -38,6 +40,7 @@ export class AiService {
     this.limiter = new RateLimiter(redis, { limit: env.AI_RATE_LIMIT, windowSeconds: env.AI_RATE_WINDOW_SECONDS });
     // Inline completions come many to a minute while someone types, so they count in a bucket of their own.
     this.completionLimiter = new RateLimiter(redis, { limit: env.AI_COMPLETE_RATE_LIMIT, windowSeconds: COMPLETION.windowSeconds, prefix: "ai:complete" });
+    this.gatewayLimiter = new RateLimiter(redis, { limit: Math.max(1, env.AI_GATEWAY_RATE_LIMIT), windowSeconds: env.AI_RATE_WINDOW_SECONDS, prefix: "ai:gateway" });
     this.usageTracker = new UsageTracker(redis);
     if (this.provider) this.logger.log(`AI copilot: ${this.setup.provider} (${this.setup.model})`);
     else this.logger.log(`AI copilot off: ${this.setup.problem}`);
@@ -79,6 +82,8 @@ export class AiService {
       json: !anthropic,
       oneAtATime: this.setup.provider === "ollama",
       contextChars: this.contextChars,
+      gateway: { on: Boolean(this.setup.settings) && this.env.AI_GATEWAY_RATE_LIMIT > 0, requests: this.env.AI_GATEWAY_RATE_LIMIT, windowSeconds: this.env.AI_RATE_WINDOW_SECONDS },
+      embedding: embeddingModelOf(this.setup, this.env, local?.models ?? []),
     };
   }
 
@@ -97,6 +102,23 @@ export class AiService {
   /** Inline completions allowed per person per minute. */
   get completionLimit(): number {
     return this.env.AI_COMPLETE_RATE_LIMIT;
+  }
+
+  hitGateway(roomId: string): Promise<RateDecision> {
+    return this.gatewayLimiter.hit(roomId);
+  }
+
+  /** What the AI gateway needs to know about a room. Null when it's gone or archived. */
+  async gatewayRoom(roomId: string): Promise<{ kind: "workspace" | "interview"; ownerId: string | null; guest: boolean } | null> {
+    const { rooms, user } = schema;
+    const [row] = await this.handle.db
+      .select({ kind: rooms.kind, ownerId: rooms.createdBy, email: user.email, archivedAt: rooms.archivedAt })
+      .from(rooms)
+      .leftJoin(user, eq(rooms.createdBy, user.id))
+      .where(eq(rooms.id, roomId))
+      .limit(1);
+    if (!row || row.archivedAt) return null;
+    return { kind: row.kind, ownerId: row.ownerId, guest: row.email?.endsWith(`@${GUEST_DOMAIN}`) ?? false };
   }
 
   record(userId: string, tokens: AiTokenCount): Promise<void> {

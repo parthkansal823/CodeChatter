@@ -128,6 +128,7 @@ services:
       NODE_ENV: production
       SERVICE_SECRET: ${SERVICE_SECRET:?set SERVICE_SECRET}
       COLLAB_INTERNAL_URL: ws://collab:4100
+      API_INTERNAL_URL: http://api:4000
       SANDBOX_IMAGE: codechatter-sandbox:latest
       SANDBOX_MEMORY_MB: ${SANDBOX_MEMORY_MB:-768}
       SANDBOX_CPUS: ${SANDBOX_CPUS:-1}

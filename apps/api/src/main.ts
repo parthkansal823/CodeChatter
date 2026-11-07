@@ -59,6 +59,10 @@ express.use("/api/rooms/:roomId/repo/commit", json({ limit: "30mb" }));
 express.use("/api/rooms/:roomId/repo/publish", json({ limit: "30mb" }));
 // A sitting's code, and stills from its recording.
 express.use("/api/interviews/:id/ai-review", json({ limit: "20mb" }));
+// Code in a sandbox calling the AI: messages can hold images, and embeddings long lists of text.
+express.use("/api/internal/ai-gateway", json({ limit: "6mb" }));
+// A prompt's test cases, with long values.
+express.use("/api/rooms/:roomId/evals", json({ limit: "8mb" }));
 app.useBodyParser("json", { limit: "1mb" });
 app.useWebSocketAdapter(new ValkeyIoAdapter(app, env.VALKEY_URL));
 app.setGlobalPrefix("api");

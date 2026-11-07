@@ -1,6 +1,6 @@
 "use client";
 
-import { AI_LIMITS, AI_MODES, buildProjectDigest, parseAgentReply, pathsNotInProject, type AiChatInput, type AiMode, type AiStatus, type ProjectFile, type RoomAnalysis } from "@codechatter/contracts";
+import { AI_LIMITS, AI_MODES, buildProjectDigest, citationsNotShown, parseAgentReply, pathsNotInProject, type AiChatInput, type AiMode, type AiStatus, type CodebaseHits, type ProjectFile, type RoomAnalysis } from "@codechatter/contracts";
 import { flatten, listTree, textOf, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquarePlus, RotateCw } from "lucide-react";
@@ -12,6 +12,7 @@ import { useRoom } from "@/components/room/room-context";
 import { useRun } from "@/components/room/run-context";
 import type { RoomToolProps } from "@/components/room/tools/registry";
 import { Button } from "@/components/ui/button";
+import { openRoomFile } from "@/components/room/editor/editor-opener";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -70,6 +71,8 @@ function clipMiddle(text: string, max: number): string {
   return text.slice(0, head) + marker + text.slice(text.length - (max - marker.length - head));
 }
 
+/** What's kept of each passage to show under an answer: this conversation is kept in the browser. */
+const SHOWN_PASSAGE_CHARS = 1500;
 /** Bigger than this, a file isn't read for a review: it's almost certainly not written by hand. */
 const PROJECT_FILE_CHARS = 1_000_000;
 /** A review shouldn't run the tools again for every question that follows it. */
@@ -169,7 +172,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
     sendMode: AiMode,
     use: AiAttach,
     history: ChatEntry[] = chat.entries,
-    options: { auto?: boolean; extraPaths?: string[]; labels?: string[]; analysed?: boolean } = {},
+    options: { auto?: boolean; extraPaths?: string[]; labels?: string[]; analysed?: boolean; hits?: CodebaseHits } = {},
   ) => {
     if (chat.busy || preparing || !canChat) return;
     // A review stands on what the tools found, so they run first. If they can't (no Run rights, no sandbox), it goes on without them, and the model is told nothing ran.
@@ -191,18 +194,48 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
         });
       return;
     }
+    // Each question gets its own search, as what's relevant changes with it. It goes first, so the answer can stand on what it found.
+    if (sendMode === "codebase" && !options.hits) {
+      const question = raw.trim();
+      if (!question) return;
+      setPreparing(true);
+      void api<CodebaseHits>(`/api/rooms/${room.id}/ai/retrieve`, { method: "POST", json: { question } })
+        .then((hits) => {
+          setTimeout(() => latest.current.submit(raw, sendMode, use, history, { ...options, hits }));
+        })
+        .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "The search couldn't run."))
+        .finally(() => setPreparing(false));
+      return;
+    }
     const attached = !options.auto && image && status.vision ? image : null;
     const text = raw.trim() || MODES[sendMode].fallbackPrompt || (attached ? "What's in this image?" : "");
     if (!text) return;
     if (sendMode === "edit" && !activeFile) return void toast.error("Open the file you want to change first.");
     const { context, labels, target } = collect(use, sendMode, options.extraPaths);
+    const { hits } = options;
+    if (hits) {
+      context.retrieved = hits.passages.map(({ path, start, end, name, text: body, found }) => ({ path, start, end, name, text: body, found }));
+      labels.push(`${hits.passages.length} ${hits.passages.length === 1 ? "passage" : "passages"} found`);
+    }
     stickToBottom.current = true;
     // An automatic follow-up must not eat what the person is typing.
     if (!options.auto) {
       setDraft("");
       setImage(null);
     }
-    void chat.send({ text, mode: sendMode, context, labels: options.labels ?? labels, image: attached, ...(target && { target }) }, history);
+    void chat.send(
+      {
+        text,
+        mode: sendMode,
+        context,
+        labels: options.labels ?? labels,
+        image: attached,
+        ...(target && { target }),
+        ...(hits && { passages: hits.passages.map((passage) => ({ path: passage.path, start: passage.start, end: passage.end, name: passage.name, text: passage.text.slice(0, SHOWN_PASSAGE_CHARS), found: passage.found })) }),
+        ...(hits?.note && { searchNote: hits.note }),
+      },
+      history,
+    );
   };
 
   const retry = (failed: ChatEntry) => {
@@ -308,7 +341,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" align="start">
-            {AI_MODES.map((m) => (
+            {AI_MODES.filter((m) => m !== "codebase" || (can("code.run") && room.kind !== "interview")).map((m) => (
               <SelectItem key={m} value={m}>
                 {MODES[m].label}
               </SelectItem>
@@ -372,7 +405,7 @@ function AiChat({ status, activeFile }: { status: AiStatus; activeFile: TreeNode
         )}
         {preparing && (
           <p role="status" className="mt-3 animate-pulse pl-3 font-ai text-sm text-muted-foreground">
-            Running the analysis tools over the project first…
+            {mode === "codebase" ? "Searching the code…" : "Running the analysis tools over the project first…"}
           </p>
         )}
       </div>
@@ -418,6 +451,46 @@ type EntryProps = {
   patch: (id: string, patch: Partial<ChatEntry>) => void;
 };
 
+const FOUND_BY = { both: "by meaning and words", meaning: "by meaning", words: "by words" } as const;
+
+/** What the search gave the model, so an answer can be checked. */
+function WhatItRead({ passages, note }: { passages: NonNullable<ChatEntry["passages"]>; note: string | undefined }) {
+  return (
+    <div className="mt-2 grid gap-1 text-xs">
+      {note && <p className="text-brand-text">{note}</p>}
+      {passages.length === 0 ? (
+        <p className="text-muted-foreground">The search found nothing to read.</p>
+      ) : (
+        <details>
+          <summary className="cursor-pointer text-muted-foreground">
+            What it read: {passages.length} {passages.length === 1 ? "passage" : "passages"}
+          </summary>
+          <ol className="mt-1 grid gap-1.5">
+            {passages.map((passage) => (
+              <li key={`${passage.path}:${passage.start}`} className="grid gap-0.5 rounded-sm border p-1.5">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <button
+                    type="button"
+                    className="min-h-6 max-w-full truncate rounded-sm text-left font-mono hover:underline"
+                    title={`Open ${passage.path}, line ${passage.start}`}
+                    onClick={() => openRoomFile(passage.path, { startLine: passage.start, startColumn: 1, endLine: passage.start, endColumn: 1 })}
+                  >
+                    {passage.path}:{passage.start}-{passage.end}
+                  </button>
+                  <span className="text-muted-foreground">found {FOUND_BY[passage.found]}</span>
+                </div>
+                <pre tabIndex={0} role="group" aria-label={`The passage from ${passage.path}`} className="max-h-40 overflow-auto rounded-sm bg-chrome p-1 font-mono break-words whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {passage.text}
+                </pre>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function Entry({ entry, first, currentMode, onApply, applyBlocked, paths, onRetry, onStep, setReview, patch }: EntryProps) {
   if (entry.role === "user") {
     const attached = [...(entry.context ?? []), ...(entry.image ? ["Image"] : [])];
@@ -438,7 +511,8 @@ function Entry({ entry, first, currentMode, onApply, applyBlocked, paths, onRetr
   const code = entry.mode === "edit" && entry.status === "done" ? firstCodeBlock(entry.content) : null;
   const thinking = <p className="animate-pulse font-ai text-sm text-muted-foreground">Thinking…</p>;
   // A model that hasn't read a file may still name one that sounds right.
-  const madeUp = entry.mode === "project" && !streaming ? pathsNotInProject(entry.content, paths) : [];
+  const madeUp = (entry.mode === "project" || entry.mode === "codebase") && !streaming ? pathsNotInProject(entry.content, paths) : [];
+  const notShown = entry.passages && !streaming ? citationsNotShown(entry.content, entry.passages).filter((place) => !madeUp.includes(place.slice(0, place.lastIndexOf(":")))) : [];
   return (
     <div className="mt-3">
       <div className="mb-0.5 flex items-baseline gap-2 pl-3">
@@ -464,6 +538,12 @@ function Entry({ entry, first, currentMode, onApply, applyBlocked, paths, onRetr
             Not in this project, so don&apos;t rely on what it says about them: <span className="font-mono">{madeUp.join(", ")}</span>
           </p>
         )}
+        {notShown.length > 0 && (
+          <p className="mt-2 text-xs text-brand-text">
+            It cites places it wasn&apos;t shown, so check them yourself: <span className="font-mono">{notShown.join(", ")}</span>
+          </p>
+        )}
+        {entry.passages && <WhatItRead passages={entry.passages} note={entry.searchNote} />}
         {code !== null && <EditCard entry={entry} code={code} setReview={setReview} patch={(p) => patch(entry.id, p)} />}
         {ending && <p className="mt-1 text-xs text-muted-foreground">{ending}</p>}
         {entry.status === "error" && (

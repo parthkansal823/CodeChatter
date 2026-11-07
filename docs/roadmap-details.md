@@ -662,6 +662,77 @@ What's left is in `docs/pending.md` under step 11.
 
 ## 11. Advanced features ⬜
 
+### Evals ✅
+
+**What:** "Test it" in the Prompts tool. Say what a good answer looks like, and check it every time the prompt changes. The checking is done by **promptfoo**, the standard open-source tool for this, in the room's sandbox, through the AI gateway.
+
+- **Test cases** (up to 30, in the `prompts` document, edited together): each fills in the prompt's variables, using the prompt's own value when a case hasn't one, and has up to 10 checks: contains, contains in any case, doesn't contain, is exactly, matches a pattern, is JSON, contains JSON, JavaScript, the AI agrees that (`llm-rubric`), answers within a time.
+- **Results:** a score for each column (passed, average time, tokens), a pass or fail in words for each case on each column, and when one's opened, which check failed, why, and the answer that failed it.
+- **What changed:** each run says how many are newly failing or fixed since the one before, marks those cells, and says whether the prompt was different. The last 6 runs are kept with the prompt they used.
+- **The real tool:** "Copy the promptfoo config" gives the same config to save and run with `promptfoo eval` in a terminal, as `promptfoo` is on the PATH in every sandbox.
+- **Runner (`apps/runner/src/evals.ts`, `POST /rooms/:id/evals`):** the config and results live in a folder of `/tmp` for the length of the run, so nothing lands in the room's files, and telemetry and update checks are off. One run at a time in a room, up to 30 minutes. It streams how many calls have gone through, counted at the gateway. Stop ends promptfoo and removes the folder. The parser keeps named fields only, as promptfoo repeats the whole prompt in every result.
+- **API (`POST /api/rooms/:id/evals`):** needs both `code.run` and `room.chat`, and isn't for interview rooms.
+- **The image:** promptfoo comes from a lockfile (`sandbox/image/promptfoo/`), so all its packages are checked against their hashes, with no install scripts. Leaving out its optional extras takes it from 734 MB and 617 packages to under 270 MB, and it peaks at about 200 MB of memory, within a room's limit. It went in both images.
+- **Limits to know:** models here use temperature 0 and at most 1,024 tokens unless a column says otherwise (promptfoo's defaults). A large set of evals can use up the room's gateway limit (120 requests per 10 minutes), which the tool shows by counting calls first.
+
+**Tests:**
+- `packages/contracts/src/evals.test.ts`, `apps/runner/src/evals.test.ts` (parsing a report shaped from real output), `apps/web/components/room/tools/prompts/evals-model.test.ts`
+- `apps/runner/test/evals.e2e.mjs` (19 checks, the real promptfoo and the real model: checks passing and failing, a value with quotes and newlines arriving whole, JavaScript, the AI judging, a second run refused, Stop leaving no folder and no process)
+- `apps/web/test/evals.e2e.mjs` (35 checks, two people, promptfoo stood in for)
+- Tried from a browser through to `gemma4:e4b`: 4 cases on 2 columns, 10 calls, 21 seconds
+- `a11y.e2e.mjs` includes the view with its results
+
+### AI gateway ✅
+
+**What:** code in a room's sandbox calls the room's model as if it were OpenAI, so real SDKs and tools work (`pip install openai`, `OpenAI()`, nothing else). It's the way in for Evals and RAG too. The sandbox still has no network and holds no key.
+
+- **The way out:** the sandbox's agent listens on `127.0.0.1:3129` (`sandbox/agent/src/gateway.ts`) and carries each connection over its stdio to the runner (`gw_open`, `gw_data`, `gw_closed`). The runner serves them with an HTTP server that never listens (`apps/runner/src/gateway.ts`), and passes `GET /v1/models`, `POST /v1/chat/completions` and `POST /v1/embeddings` to the API with a service token for that room. **The room comes from which sandbox's channel a call arrived on**, so nothing the code sends can change it.
+- **In the sandbox:** `OPENAI_BASE_URL`, `OPENAI_API_BASE` and a placeholder `OPENAI_API_KEY` (SDKs won't start without one) are in every terminal and Run. The door isn't shown in the Ports panel and can't be reached through a preview, for the package relay too.
+- **API (`apps/api/src/ai/gateway.controller.ts`, `gateway.ts`):**
+  - Only a service token for the API gets in, and Caddy answers 404 for `/api/internal/*`.
+  - **Models:** only those on offer (the Playground's list); `default` means the server's own.
+  - **What goes on:** a fixed list of fields, so `store`, `service_tier` and the like don't. One answer per request, and limits on `max_tokens`.
+  - **What comes back:** a provider's answer as it came. Its failures are cleaned so they can't carry the key, and a refused key is reported as the server's problem.
+  - **Streams** pass through as they come. Usage is read from them for the room's count, and a usage-only chunk goes only to code that asked for it: plenty of code reads `chunk.choices[0]` without checking.
+  - **Claude** doesn't speak this format, so it goes through a plain text adapter that refuses `tools` and images, rather than quietly dropping them. It hasn't been tried against the real service.
+- **Who may:**
+  - **The limit is the room's** (`AI_GATEWAY_RATE_LIMIT`, 120 requests per window; 0 turns the gateway off), as anyone's code in a room comes through here, and a loop should stop quickly. Tokens count towards the room's creator.
+  - **Interview rooms:** refused unless the interviewer has allowed the AI, when each call is noted in the sitting's record. Without this, code could get round "AI off".
+  - **Demo rooms and archived rooms:** refused.
+  - A throwaway judge container has no agent, so hidden tests can't reach it.
+- **In the Prompts tool:** "Use it from code" shows the current prompt as Python, JavaScript or curl, with its variables filled in and no key.
+
+**Rebuilding:** both sandbox images need it (`pnpm sandbox:build`, `pnpm sandbox:build:full`). The container config went up, so rooms get the new agent on next use, and their files and home survive.
+
+**Tests:**
+- `sandbox/agent`, `apps/runner` and `packages/auth` unit tests, `apps/api/src/ai/gateway.test.ts` (20)
+- `apps/api/test/gateway.e2e.mjs` (31 checks, its own API and a stand-in provider: who gets in, exactly what the provider is sent, the key never coming back, the rooms refused, a loop stopped)
+- `apps/runner/test/gateway.e2e.mjs` (14 checks from inside a real sandbox with the real model). With `REAL_SDK=1`, 5 more: OpenAI's own Python library installed with pip, then listing models, answering, streaming and showing a refusal, with no settings of its own
+- `runner.e2e`, `network.e2e` and `dev.e2e` pass with the new agent
+
+**Not done:** it hasn't been run on the Kubernetes driver, as the cluster here doesn't have the images loaded (in `docs/pending.md`).
+
+### Prompt Playground ✅
+
+**What:** the Prompts tool. People write a prompt together, try it on several models and settings side by side, and see each answer's tokens and speed. It's what LangSmith's or OpenAI's playground does, kept in the room.
+
+- **The prompt:** a system prompt, a conversation of user and assistant messages, and `{{variables}}` that get a field as soon as they're typed (the same way promptfoo writes them, ready for Evals). Everything's in the room's `prompts` document, so two people can type in the same field.
+- **Columns (up to 4):** each with its own model, temperature, token limit and JSON switch. Each shows its answer with the time to the first word, the time in all, tokens in and out, and tokens a second, which leaves out the wait for the first word. JSON answers are checked.
+- **Runs:** the last 12 of each prompt are kept with the prompt they used. One can be opened, and its prompt brought back with "Use this prompt". The table says which runs differ from the prompt as it is now. Someone who can't edit can still try it, but their run isn't kept.
+- **Server (`POST /api/rooms/:id/ai/prompt`, `GET .../ai/models`):**
+  - The prompt goes exactly as written, with nothing of ours. It needs `room.chat`, follows the interview rule for candidates, and each column counts against the person's AI limit.
+  - **Only models on offer run**, as a paid provider's others would be on the owner's bill: `AI_MODEL`, those in `AI_PLAYGROUND_MODELS`, and with Ollama whatever's been pulled.
+  - The model and settings reach the provider through `ModelRequest.tuning`. Every AI answer now reports its timing, and Ollama's report real token counts instead of an estimate.
+- **Comparing fairly:** with Ollama, columns run one after another, as sharing one machine would make each look slow. A warning shows when a prompt is longer than the server's context setting, since a local model loses its start silently.
+- **Not in interview rooms.** Closing the tool stops a run.
+
+**Tests:**
+- `packages/contracts/src/prompts.test.ts`, `apps/web/components/room/tools/prompts/model.test.ts`, `apps/api/src/ai/ai.config.test.ts`
+- `apps/api/test/prompts.e2e.mjs` (29 checks, its own API and a stand-in model: exactly what the model is sent, models not on offer, the limit)
+- `apps/web/test/prompts.e2e.mjs` (34 checks, two people)
+- Tried against the real `gemma4:e4b`: two columns in 43 s, Ollama's own token counts, about 10 tokens a second
+- `a11y.e2e.mjs` includes the tool with a prompt and its answers
+
 ### Code analysis and the AI's project review ✅
 
 **What:** an Analysis tool that runs real tools over the room's files, and a review by the AI that starts from what they found. A model can't take in a whole project and guesses at numbers, so tools measure and the model explains.

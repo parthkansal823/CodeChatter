@@ -1,0 +1,9 @@
+{
+  "name": "codechatter-promptfoo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Evals tool's promptfoo, for the sandbox image. Its lockfile checks all its packages against their hashes.",
+  "dependencies": {
+    "promptfoo": "0.125.1"
+  }
+}

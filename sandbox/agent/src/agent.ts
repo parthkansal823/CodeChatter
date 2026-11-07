@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 
 import type { AgentEvent, AgentOp, TunnelOp } from "@codechatter/contracts";
 
+import { Gateway } from "./gateway.js";
 import { startRelay } from "./relay.js";
 import { Tunnels, watchPorts } from "./tunnel.js";
 import { TreeWatcher } from "./watcher.js";
@@ -59,11 +60,13 @@ async function handle(op: AgentOp): Promise<void> {
 }
 
 const tunnels = new Tunnels(emit);
+const gateway = new Gateway(emit);
 
 await watcher.watchTree();
 emit({ ev: "ready", pid: process.pid, uid: process.getuid?.() ?? -1 });
 watchPorts(emit);
 startRelay();
+gateway.start();
 
 // Ops run strictly in order: a delete sent after a write must land after it.
 let queue: Promise<void> = Promise.resolve();
@@ -83,6 +86,10 @@ createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line)
   // Tunnel traffic is independent of file operations: never queued behind them.
   if (op.op === "tcp_open" || op.op === "tcp_data" || op.op === "tcp_close") {
     tunnels.handle(op);
+    return;
+  }
+  if (op.op === "gw_data" || op.op === "gw_close") {
+    gateway.handle(op);
     return;
   }
   const fileOp = op;

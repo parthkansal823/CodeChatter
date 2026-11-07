@@ -75,6 +75,8 @@ const Env = z.object({
   AI_MODEL: z.string().trim().optional().default(""),
   // More models the Prompt Playground may offer, comma-separated. A paid provider's would be on the owner's bill, so it's only these and AI_MODEL; with Ollama, whatever's pulled too.
   AI_PLAYGROUND_MODELS: z.string().trim().optional().default(""),
+  // The model that makes embeddings, for Ask the codebase. With Ollama, one with "embed" in its name is found by itself.
+  AI_EMBEDDING_MODEL: z.string().trim().optional().default(""),
   ANTHROPIC_API_KEY: z.string().trim().optional().default(""),
   OPENAI_API_KEY: z.string().trim().optional().default(""),
   /** Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Groq, Gemini, a local Ollama… */
@@ -88,6 +90,8 @@ const Env = z.object({
   AI_CONTEXT_CHARS: z.coerce.number().int().min(4000).optional().catch(undefined),
   AI_RATE_LIMIT: z.coerce.number().int().positive().default(30).catch(30),
   AI_RATE_WINDOW_SECONDS: z.coerce.number().int().positive().default(600).catch(600),
+  // Requests code in one room may make per window, through the AI gateway. 0 turns the gateway off.
+  AI_GATEWAY_RATE_LIMIT: z.coerce.number().int().min(0).default(120).catch(120),
   /** Inline completions (ghost text as you type) per person per minute; a separate limit from the one above. */
   AI_COMPLETE_RATE_LIMIT: z.coerce.number().int().positive().default(30).catch(30),
 }).superRefine((env, ctx) => {

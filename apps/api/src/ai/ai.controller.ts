@@ -3,12 +3,14 @@ import {
   AiChatInput,
   AiCompleteInput,
   AiPromptInput,
+  AiRetrieveInput,
   can,
   RoomCode,
   type AiCompletion,
   type AiPromptModels,
   type AiStatus,
   type AiStreamEvent,
+  type CodebaseHits,
   type AiTokenCount,
   type AiUsage,
 } from "@codechatter/contracts";
@@ -35,7 +37,7 @@ import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
 import { InterviewsService } from "../interviews/interviews.service.js";
 import { RoomsService } from "../rooms/rooms.service.js";
-import { RunnerClient } from "../runner/runner.client.js";
+import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js";
 import { AiService } from "./ai.service.js";
 import { buildCompletionRequest, cleanCompletion, completionLimitMessage, completionTimeoutMs, completionUsage } from "./complete.js";
 import type { RunContext, SummaryContext } from "./context.js";
@@ -145,6 +147,25 @@ export class AiController {
       },
     };
     await this.streamAnswer(session, roomId, provider, request, res);
+  }
+
+  /**
+   * Ask the codebase: what a search of the room's files found, for the panel to send with the question. It runs in the sandbox, so it
+   * needs Run rights as well as the AI, and an interview isn't the place for it.
+   */
+  @Post("rooms/:roomId/ai/retrieve")
+  @HttpCode(200)
+  async retrieve(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string, @Body(new ZodPipe(AiRetrieveInput)) input: AiRetrieveInput): Promise<CodebaseHits> {
+    const { room, role } = await this.rooms.require(roomId, session.user.id, "code.run");
+    if (!can(role, "room.chat") || room.kind === "interview") throw new ForbiddenException("You can't search the code with the AI in this room.");
+    if (!this.ai.provider) throw new ServiceUnavailableException(this.ai.setup.problem ?? "AI isn't set up on this server.");
+    const { embedding } = await this.ai.promptModels();
+    try {
+      return await this.runner.retrieve(roomId, { ...input, model: embedding }, session.user);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
   }
 
   /** The model to ask, if this person may ask it in this room. */

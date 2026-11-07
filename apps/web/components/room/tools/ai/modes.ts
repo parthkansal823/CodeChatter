@@ -93,6 +93,13 @@ export const MODES: Record<AiMode, ModeInfo> = {
     starters: ["Catch me up on what happened", "What did people decide?", "What still needs doing?"],
     attach: { file: false, selection: false, run: false, paths: false },
   },
+  codebase: {
+    label: "Ask the codebase",
+    description: "Searches the room's files for what answers your question, by meaning and by words, and answers from that, citing each place. You can see what it read. Secrets are left out.",
+    placeholder: "Where do we handle failed logins?",
+    starters: ["How does this project start?", "Where are errors handled?", "What calls the database?"],
+    attach: { file: false, selection: false, run: false, paths: false },
+  },
   project: {
     label: "Project review",
     description: "Runs the Analysis tools over the whole project, then reviews it: how it's put together, the risks, and what to fix first. Secrets are left out.",
