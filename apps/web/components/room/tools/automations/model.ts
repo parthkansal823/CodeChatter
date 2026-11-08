@@ -12,7 +12,7 @@ export type FlowStep = {
   firstLoopAction?: FlowStep | null;
   children?: Array<FlowStep | null>;
 };
-export type Flow = { displayName: string; schemaVersion: string; trigger: FlowStep };
+export type Flow = { /** Stays with the flow when its file moves, so its runs do too. */ id?: string; displayName: string; schemaVersion: string; trigger: FlowStep };
 
 export const SCHEMA_VERSION = "27";
 
@@ -25,7 +25,8 @@ export function parseFlow(text: string): { flow: Flow } | { error: string } {
   }
   const flow = value as Partial<Flow> | null;
   if (!flow || typeof flow !== "object" || !flow.trigger || typeof flow.trigger !== "object" || typeof flow.trigger.name !== "string") return { error: "This file isn't a flow: it has no trigger." };
-  return { flow: { displayName: typeof flow.displayName === "string" ? flow.displayName : "Automation", schemaVersion: typeof flow.schemaVersion === "string" ? flow.schemaVersion : SCHEMA_VERSION, trigger: flow.trigger } };
+  // Whatever else the file has is kept, its id above all: an edit that dropped it would leave the flow's runs behind.
+  return { flow: { ...flow, displayName: typeof flow.displayName === "string" ? flow.displayName : "Automation", schemaVersion: typeof flow.schemaVersion === "string" ? flow.schemaVersion : SCHEMA_VERSION, trigger: flow.trigger } };
 }
 
 /** Every step, in the order it would run, with what's inside each. */

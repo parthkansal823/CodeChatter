@@ -29,6 +29,16 @@ test("a flow is read, or says what's wrong", () => {
   assert.ok("flow" in defaults && defaults.flow.displayName === "Automation" && defaults.flow.schemaVersion === "27");
 });
 
+test("a flow keeps its id and anything else it has through an edit", () => {
+  const read = parseFlow(JSON.stringify({ ...flowOf(code("first")), id: "flow_1", notes: [{ text: "keep me" }] }));
+  assert.ok("flow" in read);
+  const edited = updateStep(read.flow, "first", (step) => void (step.displayName = "Renamed"));
+  assert.equal(edited.id, "flow_1");
+  assert.deepEqual((edited as Flow & { notes?: unknown }).notes, [{ text: "keep me" }]);
+  assert.equal(addStep(edited, { after: "first" }, code("second")).id, "flow_1");
+  assert.equal(removeStep(edited, "first").id, "flow_1");
+});
+
 const branching = (): Flow => {
   const router: FlowStep = { ...newRouterStep("route"), children: [code("yes", code("yes_more")), code("no")], nextAction: code("join") };
   const loop: FlowStep = { ...newLoopStep("each"), firstLoopAction: code("inside"), nextAction: router };

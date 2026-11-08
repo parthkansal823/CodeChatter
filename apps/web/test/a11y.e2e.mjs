@@ -71,7 +71,7 @@ async function step(page, name, act) {
 const { browser, signIn } = await launch();
 const themed = (context, theme) => context.addInitScript((value) => localStorage.setItem("theme", value), theme);
 const PUBLIC = ["/", "/sign-in", "/sign-up", "/forgot-password", "/reset-password?token=none", "/verify-email", "/two-factor", "/invite/none", "/interview/none"];
-const SIGNED_IN = ["/dashboard", "/explore", "/new", "/interviews", "/interviews?tab=assessments", "/interviews/new", "/interviews/questions/new", "/orgs/new", "/settings", "/settings/account", "/settings/members", "/settings/audit", "/settings/webhooks"];
+const SIGNED_IN = ["/dashboard", "/explore", "/new", "/interviews", "/interviews?tab=assessments", "/interviews/new", "/interviews/questions/new", "/orgs/new", "/settings", "/settings/account", "/settings/preferences", "/settings/members", "/settings/audit", "/settings/webhooks"];
 
 try {
   for (const theme of ["light", "dark"]) {
@@ -111,6 +111,10 @@ try {
       await page.keyboard.press("Delete");
       await sleep(300);
       check("deleteClosesAnOpenFile", (await openFiles.count()) === before - 1, `${before} then ${await openFiles.count()}`);
+      await page.getByRole("tablist", { name: "Open files" }).getByRole("tab", { selected: true }).focus();
+      await page.keyboard.press("Enter");
+      await sleep(300);
+      check("enterGoesIntoTheFile", await page.evaluate(() => Boolean(document.activeElement?.closest(".monaco-editor"))));
     }
     await step(page, `${theme} room, Share`, () => page.getByRole("button", { name: "Share" }).click());
     await page.keyboard.press("Escape");
@@ -129,7 +133,7 @@ try {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Tasks", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Tasks", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Automations", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
     }
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.

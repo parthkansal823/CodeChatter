@@ -30,7 +30,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **15** (task board) → **16** (appearance, notifications and connected accounts).
+1. **ChatGPT**, one prompt at a time, each checked before the next: **16** (appearance, notifications and connected accounts).
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -144,7 +144,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ Dependencies:
   - a per-person rate limit;
   - a fade that shows the side tabs scroll.
-- ⬜ **Automations on Activepieces' real engine** (the owner's decision, 2026-11-07, with Pipelines; **Claude**):
+- 🟡 **Automations on Activepieces' real engine** (the owner's decision, 2026-11-07, with Pipelines; **Claude**). Part one is done (roadmap-details, "Automations, part one"): the engine and 44 pieces in the sandbox, flows as files, the tool and its chart, 179 examples. What's left is below, from step 4, and the n8n list after it.
   - **What was tried, and why it's built this way:**
     - **n8n:** its licence only lets it be given to others free of charge for non-commercial purposes. Its features are the checklist; nothing of it is copied.
     - **Activepieces' builder embedded:** enterprise only, "From $36k a year". The owner doesn't want anything paid.
@@ -152,15 +152,25 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
     - **Its engine and pieces, in each room's sandbox:** tried for real on 2026-11-07 and it works. `dist/packages/engine/main.js` from image `activepieces/activepieces:0.92.3-hotfix.2` (MIT, 633 KB), driven by a small host of ours, ran a webhook payload, code steps, a router, a loop and the real HTTP piece, with a failing step continuing, in 1.3 seconds and 176 MB, inside the jail with no network, with no Activepieces server.
   - **How the host works** (the spike is the reference): a socket.io server on `/worker/ws`, checking `auth.connectionToken`; it forks the engine with `AP_SANDBOX_WS_PORT`, `AP_SANDBOX_WS_TOKEN`, `SANDBOX_ID`, `AP_EXECUTION_MODE=UNSANDBOXED` (the room's jail is the sandbox), `AP_BASE_CODE_DIRECTORY`, `AP_CUSTOM_PIECES_PATHS`; it emits `rpc` with `{method: "executeOperation", payload: {operationType: "EXECUTE_FLOW", operation}}`, and serves on loopback `PUT /v1/files/:id` (zstd; replies with `x-ap-file-read-url`), `POST /v1/engine/run-logs`, `POST /v1/engine/run-progress`, `/v1/store-entries`, `/v1/worker/app-connections/:name`. The run's step data comes back through the file. Pieces go in `pieces/<name>-<version>/node_modules/<name>`. Code steps are `codes/<flowVersionId>/<step>/index.js`, a module exporting `code`. Expressions read `{{step_1.output.x}}` and `{{trigger.output.body.x}}` in schema version 27.
   - **To build, in order:**
-    1. The engine, a host, and pieces for coding (GitHub, GitLab, Slack, Discord, HTTP and so on), pinned from a lockfile, in the sandbox images.
-    2. Flows as files in the room, in Activepieces' own format, so they're edited together, versioned, and can leave.
-    3. The Automations tool: n8n-like flowchart (`components/flowchart`), steps edited from each piece's own description of its fields, a test run, and each run's history with the data at every step lit up on the chart.
+    1. ✅ The engine, a host, and pieces for coding (GitHub, GitLab, Slack, Discord, HTTP and so on), pinned from a lockfile, in the sandbox images.
+    2. ✅ Flows as files in the room, in Activepieces' own format, so they're edited together, versioned, and can leave.
+    3. ✅ The Automations tool: n8n-like flowchart (`components/flowchart`), steps edited from each piece's own description of its fields, a test run, and each run's history with the data at every step lit up on the chart.
     4. Triggers: by hand, a webhook URL, a schedule, room events (a push, a failed test), and pieces' polling triggers. Retries and error handling come from the engine.
     5. Secrets for a room, encrypted in the database, given to a run in memory only. A room's connections never leave its own sandbox.
     6. The internet: rooms have none (ADR 0007), so an owner's switch and an allowlist per service, through the room's egress proxy, with limits and a security review first. Automations that stay inside the room work without it.
     7. CodeChatter's own piece: run a command or tests in the sandbox, ask the room's AI through the gateway, post to the room's chat.
-    8. **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the tool. **Each is checked to load in the engine; each is run for real only where the service is available to try it on, and the gallery says which.**
-  - **n8n as the checklist** (the owner's request, 2026-11-07): the canvas, each run's history with the data at every step, retries, error handling, sub-flows, webhooks and schedules, expressions, versions, templates.
+    8. ✅ **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the tool. **Each is checked to load in the engine; each is run for real only where the service is available to try it on, and the gallery says which.**
+  - **Every n8n feature, or better** (the owner's request, 2026-11-07: "n8n ke saare features", our own UI). This list comes from n8n's own source, read for what it does. Its code isn't copied: its licence allows only internal, personal or non-commercial use, its `.ee` files need a paid licence, and either limit would land on CodeChatter. Only its permissively licensed packages may be used directly: `@n8n/tournament` (expressions, Apache-2.0), `@n8n/codemirror-lang`, `-html`, `-sql` (MIT), `@n8n/json-schema-to-zod` (ISC), `@n8n/rules-engine` (MIT). In order:
+    1. **The editor.** A + on every arrow; right-click menu and shortcuts (select all, arrows to move between steps, copy, cut, paste, duplicate, delete, rename with F2, N to add, Ctrl+Enter to run, undo and redo); turn a step off; replace a step; sticky notes and groups; search for steps; command bar. Input and output as Table, JSON and Schema; click a field to use it, and expressions that autocomplete and preview real values. And/or conditions and many branches on a router.
+    2. **Trying things.** Run one step (the engine's `stepNameToTest`), run from a step, pin a step's output, retry a failed run from where it failed, copy an old run's data in to debug it.
+    3. **Built-in steps,** as our own piece (`AP_CUSTOM_PIECES_PATHS`): Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates, Split Out, Rename Keys, Merge (append, by key, by position, cross join), Compare Datasets, Stop and Error, Execute Command, Read and Write Files, Convert to File, Extract from File, Compression, iCal, Edit Image, Execution Data, Data Tables. Crypto, Date, HTML, Markdown, XML, HTTP and RSS come from Activepieces' pieces.
+    4. **Starting by itself.** Turning a flow on and off; webhooks (test and live URLs, methods, authentication, the response modes, Respond to Webhook); schedules; pieces' polling triggers; room events, including a file changing; an error flow that runs when another fails; sub-flows, called and calling, with who may call them; Wait (a time, a date, a webhook, a form); approvals; forms and a chat trigger with public pages.
+    5. **Connections.** Room secrets, encrypted, with each piece's kinds of sign-in, tested on save; OAuth2; allowed domains per secret; variables; the internet switch and allowlist.
+    6. **Runs and settings.** Every flow's runs in one list, filters, notes and tags on a run, custom data, redaction, how long runs are kept; each flow's timezone, timeout, what to save, error flow and time saved; tags and favourites; a visual diff between versions, restoring one; the Insights page (runs, failures, failure rate, time saved, average time).
+    7. **AI.** An agent step with a model, memory, tools and an output parser; chains (Basic LLM, Q&A, Summarize, Information Extractor, Sentiment, Text Classifier, AI Transform); tools (calculator, code, HTTP, a flow as a tool, a vector store, MCP client, think); memory (window, Postgres, Redis); vector stores, embeddings, document loaders, splitters and retrievers; a flow as an MCP server; guardrails; evaluations with test cases. All able to use the room's AI through the gateway, with no key.
+    8. **More.** Import n8n's workflow JSON (its format, converting what we have a step for, and saying what we don't); the rest of Activepieces' MIT pieces for services (n8n has 363 service nodes, we have 44, so measure the image first); a room's own pieces; the public API and a CLI for flows.
+    - **Better than n8n:** several people editing one flow live (n8n allows one editor); flows as files, so they get git, review and History; each room's runs sealed in its own sandbox; AI steps that need no key; an AI that writes a flow from a sentence, checked against the real pieces; a flow's own tests.
+    - **Already here in other forms, so not rebuilt:** projects and sharing (rooms and roles), SSO, two-factor, users, source control (the room's git), traces. **Not needed:** n8n's queue mode and workers, as each room has its own.
 - ⬜ **Pipelines, Jenkins-style** (the owner's idea, 2026-11-06): stages and steps in a file in the room, run in its sandbox, with live logs and a run history, started by hand, on a schedule or by a push. Our own rather than embedding Jenkins, which is heavy and hard to make safe for many rooms. Together with the terminals, ports, databases and Kubernetes panel, this is what "DevOps online" means here. The Flow tool's way of running things is there to build on: a build that carries on after the request, with its progress and history in files that any viewer's tool reads (`sandbox/image/flow.py`), and its chart.
 - ⬜ Workflow builder (n8n-style): triggers, actions, conditions, run history
 - ⬜ Public API with personal access tokens, and a `cc` CLI that syncs a folder with a room
@@ -237,7 +247,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ Public profile and portfolio
 - ⬜ Code and algorithm visualizer, with AI narration
 - ⬜ Code tours
-- 🟡 A task board, with TODO and FIXME comments as cards (**ChatGPT 15**)
+- ⬜ Task board, next: rescan only the files that changed (now every keystroke anywhere, and every move, rescans every file, in 5 ms slices); two identical TODOs in one file show as one card; a hand-written card's delete has no undo
 - ⬜ Math (KaTeX) and Mermaid inside the Markdown preview
 - ⬜ VS Code extension: join a room from VS Code
 - ⬜ More interface languages: Hindi first

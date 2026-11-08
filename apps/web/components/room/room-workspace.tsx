@@ -616,7 +616,8 @@ function Workspace() {
         {!zen && (
           <nav
             aria-label="Panels"
-            className="flex w-activitybar shrink-0 flex-col items-center gap-1 border-r bg-chrome py-2"
+            // With every app, it's taller than a phone: it scrolls rather than squashing its buttons below a finger's size.
+            className="flex min-h-0 w-activitybar shrink-0 flex-col items-center gap-1 overflow-x-hidden overflow-y-auto border-r bg-chrome py-2 [scrollbar-width:none]"
           >
             <ActivityButton
               label="Files"
@@ -673,7 +674,7 @@ function Workspace() {
                 )}
               </ActivityButton>
             )}
-            <span aria-hidden className="my-1 h-px w-6 bg-border" />
+            <span aria-hidden className="my-1 h-px w-6 shrink-0 bg-border" />
             <div role="group" aria-label="Apps" className="flex flex-col items-center gap-1">
               {shownApps.map((tool) => {
                 const active = mainToolId === tool.id;
@@ -1207,7 +1208,7 @@ function ActivityButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "relative flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
+        "relative flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
         active && "text-foreground",
       )}
     >

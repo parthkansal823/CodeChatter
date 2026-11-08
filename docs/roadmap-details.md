@@ -778,6 +778,58 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/web/test/research.e2e.mjs` (51 checks in a browser: the template, the layout, a real build, a mistake and going to it, as I type, citing, `\cite` completion, adding by DOI with the lookup stood in for, the notebook's figure in the paper, two people, and the code layout)
 - `a11y.e2e.mjs` includes the layout with a paper's problems, what LaTeX said and the References tool
 
+### Automations, part one: Activepieces' engine in the sandbox, and the chart ✅ (2026-11-08)
+
+**What:** the owner's "n8n jaisa" automations, with nothing paid. A flow is a file in the room (`automations/<name>.flow.json`, in Activepieces' own format), drawn as a chart of boxes and arrows. Running it runs Activepieces' real engine and pieces (MIT) inside the room's sandbox, and the chart lights up step by step: what ran, which branch was taken, what failed, and what each step took in and gave out.
+
+**Why it's built this way** (the long version is in `docs/pending.md`): n8n's licence allows only internal, personal or non-commercial use; Activepieces' builder embed is enterprise-only, and its free server refuses a second project, so rooms couldn't be kept apart. Its engine runs alone, though, with a small host of ours standing in for its server. Each room's runs stay in that room's sandbox, inside the jail, with no network.
+
+**What it does:**
+- **The chart** is the shared flowchart (`components/flowchart`): triggers, code, pieces, routers with their branches and loops with what's inside, each box with its kind and, after a run, how it went and how many times. Selecting a box shows its fields, made from what its piece says it needs, with dropdowns for its choices, and what it took in and gave out on the run being looked at.
+- **Editing:** renaming, changing code or fields, the router's tests, "if it fails" (try again, carry on), adding a step after any step, inside a loop or in a router's branch (code, a router, a loop, or any action of any piece), and removing one. It's the room's file, so everyone edits it together, live, and the History, git and search all see it.
+- **Running:** "Run it" with JSON for the trigger to hand over. Each step lights up while the run goes on (the engine reports steps only in its test mode, which is otherwise the same run). A run can be stopped. Runs queue, up to 20, and a run stops after 5 minutes by default (15 at most).
+- **Runs:** each flow's last runs, with when, how long and who, and any one can be looked at again. Runs belong to the flow's own `id`, so they follow it when the file moves, and a new flow with an old name starts with none.
+- **Examples:** 179 for coding, written here (collections found online don't show terms that allow copying them), in 12 kinds: releases, pull requests, code quality, tests and CI, security, issues, deploys, docs and data, notifications, tickets, AI and digests. **80 run here**, with no account: code steps, and real pieces for CSV, JSON (JSONata), XML, crypto, dates, maths, text and the room's own store. The other 99 need a service's connection and the internet, which rooms don't have yet, and the gallery says so on each.
+
+**Where:**
+- **Sandbox:** `sandbox/image/automation/` (`package.json` and its lockfile pin 44 pieces; `prepare.mjs` writes the manifest of their actions and fields; `host.mjs` is the worker that runs the engine), `sandbox/image/automation.py` (queue, status, stop, runs), and the `apengine` and `automation` stages of the Dockerfile, which take the engine from Activepieces' image by digest.
+- **Runner and API:** `apps/runner/src/automations.ts`, `POST /api/rooms/:id/automations` (needs `code.run`, not in interviews; looking at status or runs doesn't wake a sleeping room); `packages/contracts/src/automations.ts`.
+- **Web:** `components/room/tools/automations/` (`automations-tool.tsx`, `step-panel.tsx`, `examples-view.tsx`, `examples.ts`, `model.ts`).
+
+**Found by using it, and fixed:**
+- **A run could miss what was just typed:** it waits for the sandbox to have it, as LaTeX builds do.
+- **Runs belonged to a file's path,** so a flow deleted and made again with the same name showed the old one's runs, and a webhook would have broken on a rename. Each flow now has its own `id`, kept through every edit.
+- **An example said it made a safe branch name, and didn't:** the Slugify piece keeps colons and capitals. Running every example and checking its answer caught it; that example is code now.
+- **The help under a field was read out as part of its name;** it's now tied to the field with `aria-describedby`.
+- **Two older bugs the audit found:** going through the open files with the arrow keys lost focus to the editor, and on a phone the side bar's buttons were squashed below a finger's size once it held every app. Focus now stays on the tabs, and the bar scrolls.
+
+**Tests:**
+- `apps/web/components/room/tools/automations/model.test.ts` (24)
+- `apps/runner/test/automations.e2e.mjs` (57 checks on the real engine and pieces: code and TypeScript, pieces, routers, loops, a failure that stops a run and one that carries on, retries, the store, a queue, stopping, too long, a flow's runs following its id, a file that isn't a flow or isn't there, paths that try to leave, and another room's token)
+- `apps/runner/test/automation-examples.e2e.ts` (every step of all 179 examples checked against what its piece has, and all 80 that run here run on the engine with their answer checked)
+- `apps/web/test/automations.e2e.mjs` (48 checks in a browser: the gallery, using an example, two people, a real run lit up on the chart, the other branch, earlier runs, what went in and came out, renaming and changing code, adding code and a real piece and running them, removing, a failure, steps lighting up while running, stopping, bad JSON, a new flow, a broken file, and a phone)
+- `a11y.e2e.mjs` includes the tool
+
+### The task board ✅ (ChatGPT 15, checked 2026-11-08)
+
+**What:** one board per room, with **To do**, **Doing** and **Done**. Some cards are written by hand; the rest are the `TODO`, `FIXME`, `HACK` and `XXX` comments in the room's code, which turn up by themselves and open their line when clicked.
+
+- **The document:** `room:ID:tasks`, a single kind. Each card's column and order are one value, and its title, description and assignee each have their own key, so two people moving different cards, or one moving and one editing, both keep what they did. Collab's existing rule covers it: writing needs `files.edit`, so viewers read.
+- **Cards from the code** aren't written to the document: each browser works them out and merges them into what it shows, so several people with the board open don't each add the same card. Only a code card that someone moves or assigns is kept, under a key made of the file's id, the marker and the text, so it survives lines moving. When its comment goes, a card in Done disappears quietly, and one in Doing stays, marked "No longer in the code", until someone removes it.
+- **The scanner** (`scanCodeTasks`) is a small lexer that knows each language's comments (`//`, `#`, `--`, `/* */`, `<!-- -->`, `%`, `;`) and skips strings, Rust lifetimes and C++ digit separators. It yields every 4096 characters, and the board scans in 5 ms slices, so typing never waits. Files too big for search are skipped and counted, and at most 500 code cards show.
+- **Moving:** dragging, the Move menu, or Left and Right on a focused card, with the change read out.
+
+**Where:** `packages/workspace-model/src/tasks.ts`, `apps/web/components/room/tools/tasks/` (`tasks-tool.tsx`, `use-code-tasks.ts`, `connection.ts`, `task-editor.tsx`).
+
+**Checked:** the code and the tests were read against the brief; typecheck and lint are clean.
+
+**Left for later** (in `docs/pending.md`): a change rescans every file, rather than just the one that changed; two identical TODOs in one file show as one card; deleting a card has no undo.
+
+**Tests:**
+- `packages/workspace-model/src/tasks.test.ts` (17: comment styles, words in strings and names, keys when lines move, two people moving cards at once)
+- `apps/web/test/task-board.e2e.mjs` (21 checks, two people: adding, dragging, the keyboard and the Move menu, an edit and an assignment at once, filters, a typed TODO becoming a card and opening its line, Doing and Done when the comment goes, a viewer, and collab refusing a viewer's write)
+- `a11y.e2e.mjs` includes the board
+
 ### Explain this data ✅
 
 **What:** a button on a query's results and on a notebook's table. A model shown rows guesses at sums and averages and only sees a few of them, so DuckDB works out the numbers and the model explains them.

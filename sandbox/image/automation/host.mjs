@@ -82,7 +82,7 @@ function readStep(execution) {
 /** One job, to its end. Never throws: whatever goes wrong is the run's result. */
 async function runJob(job) {
   const startedAt = NOW();
-  const live = { state: "running", id: job.id, path: job.path, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
+  const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
   writeJson(LIVE, live);
   const connections = job.connections ?? {};
   let steps = {};
@@ -123,7 +123,21 @@ async function runJob(job) {
       }
       return send(200);
     }
-    if (path === "/v1/engine/run-progress" || path === "/v1/engine/step-progress" || path === "/v1/engine/flow-response") return send(200);
+    // Each step as it starts and ends. Inside a loop it's kept by its name too, so the chart can light it up; the final details have each time round.
+    if (path === "/v1/engine/run-progress") {
+      try {
+        const { step } = JSON.parse(raw.toString());
+        if (step?.name) {
+          steps = { ...steps, [step.name]: step.output };
+          live.steps = steps;
+          writeJson(LIVE, live);
+        }
+      } catch {
+        // Details that can't be read don't stop the run.
+      }
+      return send(200);
+    }
+    if (path === "/v1/engine/step-progress" || path === "/v1/engine/flow-response") return send(200);
     if (path.startsWith("/v1/store-entries")) {
       const key = url.searchParams.get("key");
       if (req.method === "POST") {
@@ -219,7 +233,7 @@ async function runJob(job) {
     io.on("connection", async (socket) => {
       socket.on("rpc-notify", () => {});
       socket.on("rpc", (_message, ack) => ack?.(undefined));
-      const flowVersion = { id: job.id, flowId: job.path, displayName: job.flow.displayName ?? job.path, valid: true, state: "LOCKED", schemaVersion: job.flow.schemaVersion ?? "27", trigger: job.flow.trigger, agentIds: [], connectionIds: [], notes: [], updatedBy: null, backupFiles: null, created: new Date(startedAt).toISOString(), updated: new Date(startedAt).toISOString() };
+      const flowVersion = { id: job.id, flowId: job.flowId ?? job.path, displayName: job.flow.displayName ?? job.path, valid: true, state: "LOCKED", schemaVersion: job.flow.schemaVersion ?? "27", trigger: job.flow.trigger, agentIds: [], connectionIds: [], notes: [], updatedBy: null, backupFiles: null, created: new Date(startedAt).toISOString(), updated: new Date(startedAt).toISOString() };
       const operation = {
         projectId: "room",
         platformId: "room",
@@ -230,7 +244,8 @@ async function runJob(job) {
         flowVersion,
         flowRunId: job.id,
         executionType: "BEGIN",
-        runEnvironment: "PRODUCTION",
+        // The engine only reports each step as it goes on a test run. It's the same run otherwise.
+        runEnvironment: "TESTING",
         workerHandlerId: null,
         httpRequestId: null,
         streamStepProgress: "NONE",

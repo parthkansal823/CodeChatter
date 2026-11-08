@@ -199,7 +199,10 @@ try {
   check("missing Doing stays marked while missing Done disappears", true);
 
   stage = "viewer UI and collab write refusal";
-  await role("viewer"); roleChanged = true;
+  // Treat a failed/aborted HTTP response as an unknown role outcome, so the
+  // finally block still restores the original role after a committed request.
+  roleChanged = true;
+  await role("viewer");
   viewer = await signIn("test2@codechatter.local");
   await openBoard(viewer.page);
   await card(viewer.page, title).waitFor();

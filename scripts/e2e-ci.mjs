@@ -34,6 +34,7 @@ const SUITES = [
     ["mcp-runner", "mcp"],
     ["data-summary-runner", "data-summary"],
     ["flow-runner", "flow"],
+    ["automations-runner", "automations"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -77,6 +78,8 @@ const SUITES = [
     "mcp",
     "flow",
     "api-studio-import",
+    "task-board",
+    "automations",
     "a11y",
     "interview-recording",
     "csp",

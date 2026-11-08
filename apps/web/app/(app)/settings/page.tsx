@@ -7,15 +7,20 @@ import { PageHeader, useMe } from "@/components/app/app-shell";
 import { GithubToken } from "@/components/app/github-token";
 import { Button } from "@/components/ui/button";
 
-/** Your account's connections. Editor settings live in the room (Settings in the editor) and follow you from there. */
+/** Links to personal preferences, account security and workspace connections. */
 export default function SettingsPage() {
   const me = useMe();
   const org = me.organizations.find((item) => item.id === me.session.activeOrganizationId);
   const canReadAudit = org?.role === "owner" || org?.role === "admin";
   return (
     <>
-      <PageHeader title="Settings" description="Connections for your account." />
+      <PageHeader title="Settings" description="Preferences and connections for your account." />
       <div className="grid max-w-2xl gap-8 px-6 py-6 sm:px-8">
+        <section className="grid gap-2">
+          <h2 className="font-medium">Preferences</h2>
+          <p className="text-muted-foreground">Choose your appearance, email digest and ways to sign in.</p>
+          <div><Button variant="outline" size="sm" asChild><Link href="/settings/preferences">Open preferences <ArrowRight /></Link></Button></div>
+        </section>
         <section className="grid gap-2">
           <h2 className="font-medium">Account security</h2>
           <p className="text-muted-foreground">Update your name and password, set up two-factor sign-in and manage your devices.</p>

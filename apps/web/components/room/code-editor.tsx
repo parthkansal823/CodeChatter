@@ -187,10 +187,14 @@ function TextEditor({ file, role }: Props) {
   );
 }
 
-/** Opening a file puts the cursor in it, unless you are typing in chat or another field. */
+/**
+ * Opening a file puts the cursor in it, unless you are typing in chat or another field, or going through the open files with the arrow keys: then focus stays on
+ * the tabs, so the next arrow or Delete still works. A tab clicked with the mouse isn't focus-visible, so a click still lands in the file.
+ */
 function focusUnlessTyping(editor: monaco.editor.IStandaloneCodeEditor) {
   const el = document.activeElement;
-  const typingElsewhere =
-    el instanceof HTMLElement && !editor.getContainerDomNode().contains(el) && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
-  if (!typingElsewhere) editor.focus();
+  const elsewhere = el instanceof HTMLElement && !editor.getContainerDomNode().contains(el);
+  const typingElsewhere = elsewhere && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  const movingThroughTabs = elsewhere && el.getAttribute("role") === "tab" && el.matches(":focus-visible");
+  if (!typingElsewhere && !movingThroughTabs) editor.focus();
 }

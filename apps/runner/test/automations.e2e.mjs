@@ -293,6 +293,23 @@ try {
   const forged = await fetch(`${RUNNER}/rooms/${ROOM}/automations`, { method: "POST", headers: { authorization: token("TEAM22"), "content-type": "application/json" }, body: JSON.stringify({ op: "status" }) });
   check("anotherRoomsTokenIsRefused", forged.status === 401);
 
+  // A flow's runs follow it, by its own id.
+  const OWN = inFolder("own-id");
+  const MOVED = inFolder("moved-id");
+  write(OWN, { id: `flow_${stamp}`, ...flow("Own", webhook(code("only", "export const code = async () => ({ ok: true });"), webhookVersion)) });
+  await runToEnd(OWN, {});
+  const beforeMove = await ask({ op: "runs", path: OWN });
+  check("aFlowsRunsAreListedWithItsId", beforeMove.body.runs?.length === 1 && beforeMove.body.runs[0].flowId === `flow_${stamp}`, JSON.stringify(beforeMove.body).slice(0, 300));
+  write(MOVED, { id: `flow_${stamp}`, ...flow("Own", webhook(code("only", "export const code = async () => ({ ok: true });"), webhookVersion)) });
+  await sleep(2000);
+  const afterMove = await ask({ op: "runs", path: MOVED });
+  check("theyFollowItToAnotherFile", afterMove.body.runs?.length === 1, JSON.stringify(afterMove.body).slice(0, 300));
+  const FRESH = inFolder("fresh-id");
+  write(FRESH, { id: `flow_${stamp}_new`, ...flow("Fresh", webhook(code("only", "export const code = async () => ({ ok: true });"), webhookVersion)) });
+  await sleep(2000);
+  const fresh = await ask({ op: "runs", path: FRESH });
+  check("aDifferentFlowHasNone", fresh.body.runs?.length === 0, JSON.stringify(fresh.body).slice(0, 300));
+
   const memory = await shell(`awk '/^anon /{print int($2/1048576)}' /sys/fs/cgroup/memory.stat; echo PEAK $(($(cat /sys/fs/cgroup/memory.peak) / 1048576))\n`);
   console.log(`      memory now, then the sandbox's peak, in MB: ${memory.replace(/\s+/g, " ").trim()}`);
 } catch (error) {

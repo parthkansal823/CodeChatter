@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Threads, type PresenceSlot } from "@/components/presence/presence";
+import { getActiveEditor } from "@/components/room/editor/active-editor";
 import { cn } from "@/lib/utils";
 
 export function TabBar({
@@ -42,7 +43,10 @@ export function TabBar({
               if (e.key === "Delete") return onClose(tab.id);
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                return onSelect(tab.id);
+                onSelect(tab.id);
+                // The arrows only look; Enter goes into the file, as it does in other editors.
+                requestAnimationFrame(() => getActiveEditor()?.focus());
+                return;
               }
               const to = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: tabs.length - 1 }[e.key];
               if (to === undefined) return;

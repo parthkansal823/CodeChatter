@@ -2,7 +2,7 @@ import { schema, type Db } from "@codechatter/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import type { Redis } from "ioredis";
 
 import { uuidv7 } from "./ids.js";
@@ -33,8 +33,8 @@ function validateOrganisationIdentity(organisation: { slug?: string; metadata?: 
   }
 }
 
-/** Serialise membership changes and invitation creation without a schema change or a long-lived database transaction. */
-function organisationSafeAdapter(db: Db): ReturnType<typeof drizzleAdapter> {
+/** Serialise membership and sign-in changes on their owning row without a schema change. */
+function organisationSafeAdapter(db: Db, socialProviders: readonly string[]): ReturnType<typeof drizzleAdapter> {
   return (options) => {
     const adapter = drizzleAdapter(db, { provider: "pg", schema })(options);
     const protect = async <T>(data: Parameters<typeof adapter.delete>[0], nextRole: unknown, mutate: (scoped: typeof adapter) => Promise<T>): Promise<T> => db.transaction(async (tx) => {
@@ -51,6 +51,27 @@ function organisationSafeAdapter(db: Db): ReturnType<typeof drizzleAdapter> {
         }
       }
       return mutate(scoped);
+    });
+    // Better Auth checks the last account before deleting it. Lock the user here
+    // too: two unlink requests must not both pass that earlier, separate check.
+    const unlink = async (data: Parameters<typeof adapter.delete>[0]) => db.transaction(async (tx) => {
+      const scoped = drizzleAdapter(tx, { provider: "pg", schema })(options);
+      const initial = await scoped.findOne<typeof schema.account.$inferSelect>(data);
+      if (!initial) return scoped.delete(data);
+      const [person] = await tx.select({ id: schema.user.id }).from(schema.user).where(eq(schema.user.id, initial.userId)).for("update");
+      if (!person) return scoped.delete(data);
+      const accounts = await tx.select({
+        id: schema.account.id,
+        providerId: schema.account.providerId,
+        hasPassword: sql<boolean>`${schema.account.password} is not null and ${schema.account.password} <> ''`,
+      }).from(schema.account).where(eq(schema.account.userId, initial.userId));
+      const remaining = accounts.some((account) => account.id !== initial.id && (
+        account.providerId === "credential" ? account.hasPassword : socialProviders.includes(account.providerId)
+      ));
+      if (accounts.some((account) => account.id === initial.id) && !remaining) {
+        throw new APIError("BAD_REQUEST", { code: "FAILED_TO_UNLINK_LAST_ACCOUNT", message: "Keep at least one way to sign in. Set a password or connect another account first." });
+      }
+      return scoped.delete(data);
     });
     const guarded: typeof adapter = {
       ...adapter,
@@ -81,7 +102,7 @@ function organisationSafeAdapter(db: Db): ReturnType<typeof drizzleAdapter> {
       },
       update: <T>(data: Parameters<typeof adapter.update>[0]) => data.model === "member" && Object.hasOwn(data.update, "role")
         ? protect(data, data.update.role, (scoped) => scoped.update<T>(data)) : adapter.update<T>(data),
-      delete: (data) => data.model === "member" ? protect(data, undefined, (scoped) => scoped.delete(data)) : adapter.delete(data),
+      delete: (data) => data.model === "member" ? protect(data, undefined, (scoped) => scoped.delete(data)) : data.model === "account" ? unlink(data) : adapter.delete(data),
       // Preserve the configured autocommit fallback, but keep nested plugin operations on the guarded adapter.
       transaction: (callback) => callback(guarded),
     };
@@ -200,7 +221,7 @@ export function createAuth(options: CreateAuthOptions) {
     baseURL: appUrl,
     secret,
     trustedOrigins: origins ? (request) => origins.trustedFor(request?.headers.get("origin")) : [appUrl],
-    database: organisationSafeAdapter(db),
+    database: organisationSafeAdapter(db, [...(oauth?.google ? ["google"] : []), ...(oauth?.github ? ["github"] : [])]),
     secondaryStorage: valkeyStorage(redis),
 
     emailAndPassword: {

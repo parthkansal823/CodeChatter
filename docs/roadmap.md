@@ -150,7 +150,8 @@ flowchart TD
 
 - ✅ Outgoing webhooks: signed, retried, with a delivery log, leases and retention
 - ✅ Dependency alerts from OSV, in a side tool
-- ⬜ Pipelines, Jenkins-style; workflow builder; public API and `cc` CLI; MCP server; `devcontainer.json`
+- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here). Next: triggers, connections, the internet, and the rest of n8n's features
+- ⬜ Pipelines, Jenkins-style; public API and `cc` CLI; MCP server; `devcontainer.json`
 
 ## Step 10 · Hardening and launch 🟡 ← now
 
@@ -218,5 +219,6 @@ They're scheduled beside the step they need.
 - **Built:**
   - resource monitor, ports panel, competitive-programming helper, every language, service add-ons;
   - tutor, mock interviewer, complexity and screenshot-to-code AI modes;
-  - Markdown preview, Vim keys and Zen mode.
-- **Still open** (in pending.md): in-browser runner, public profile, visualizer, code tours, a task board from TODOs, math in Markdown, a VS Code extension, interface languages.
+  - Markdown preview, Vim keys and Zen mode;
+  - a task board, with TODO and FIXME comments as cards.
+- **Still open** (in pending.md): in-browser runner, public profile, visualizer, code tours, math in Markdown, a VS Code extension, interface languages.

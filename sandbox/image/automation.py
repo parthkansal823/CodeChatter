@@ -65,6 +65,12 @@ def flow_at(path):
     return flow
 
 
+def flow_id(flow):
+    """A flow's own id stays with it when its file moves, and a new flow with an old name doesn't get the old one's runs. A file written by hand may have none."""
+    value = flow.get("id")
+    return value if isinstance(value, str) and value else None
+
+
 def is_gone(live):
     return live.get("state") == "running" and time.time() * 1000 - float(live.get("beat") or 0) > GONE_AFTER_SECONDS * 1000
 
@@ -123,7 +129,7 @@ def run(request):
     identity = f"{time.strftime('%Y%m%d-%H%M%S', time.gmtime(now))}-{uuid.uuid4().hex[:8]}"
     seconds = request.get("seconds")
     seconds = max(LEAST_SECONDS, min(MOST_SECONDS, seconds)) if isinstance(seconds, int) else DEFAULT_SECONDS
-    job = {"id": identity, "path": path, "flow": flow, "payload": payload, "trigger": str(request.get("trigger") or "manual")[:20], "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}}
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "trigger": str(request.get("trigger") or "manual")[:20], "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}.json"), job)
     start_worker()
     return {"id": identity, "queued": queued()}
@@ -138,16 +144,30 @@ def stop():
     return {"id": live.get("id")}
 
 
-SHOWN = ("id", "path", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs")
+SHOWN = ("id", "path", "flowId", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs")
 
 
 def runs(path):
     if not os.path.isdir(RUNS):
         return {"runs": []}
+    wanted = None
+    if path:
+        try:
+            wanted = flow_id(flow_at(path))
+        except Refused:
+            pass
+
+    def belongs(run_file):
+        if not path:
+            return True
+        if wanted:
+            return run_file.get("flowId") == wanted
+        return run_file.get("path") == path and not run_file.get("flowId")
+
     found = []
     for name in sorted(os.listdir(RUNS), reverse=True):
         run_file = read_json(os.path.join(RUNS, name))
-        if run_file and (not path or run_file.get("path") == path):
+        if run_file and belongs(run_file):
             found.append({key: run_file.get(key) for key in SHOWN})
     return {"runs": found}
 
