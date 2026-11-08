@@ -8,7 +8,7 @@ import WebSocket from "ws";
 import * as Y from "yjs";
 
 import { EXAMPLE_CATEGORIES, EXAMPLES, flowOfExample, matchesExample, servicesOf } from "../../web/components/room/tools/automations/examples.ts";
-import { allSteps, chartOfFlow, type FlowStep } from "../../web/components/room/tools/automations/model.ts";
+import { allSteps, chartOfFlow, CONDITIONS, type FlowStep } from "../../web/components/room/tools/automations/model.ts";
 
 const ROOM = process.env.E2E_ROOM ?? "E2ETST";
 const RUNNER = process.env.RUNNER_URL ?? "http://127.0.0.1:4200";
@@ -76,6 +76,10 @@ for (const example of EXAMPLES) {
       if (what.needsAuth && piece.auth && !settings.input?.auth) problems.push(`${example.id}: ${settings.pieceName} needs a connection`);
       if (example.runsHere && settings.input?.auth) problems.push(`${example.id}: says it runs here, and needs a connection`);
     }
+    if (step.type === "ROUTER") {
+      const operators = ((step.settings.branches ?? []) as Array<{ conditions?: Array<Array<{ operator: string }>> }>).flatMap((branch) => (branch.conditions ?? []).flat().map((condition) => condition.operator));
+      for (const operator of operators) if (!CONDITIONS.some((known) => known.value === operator)) problems.push(`${example.id}: the engine has no test called ${operator}`);
+    }
     // What a step refers to has to run before it.
     for (const match of JSON.stringify(step.settings).matchAll(/\{\{\s*([A-Za-z0-9_]+)\./g)) if (!names.includes(match[1]!)) problems.push(`${example.id}: ${step.name} refers to ${match[1]}, which isn't a step`);
   }
@@ -101,27 +105,33 @@ const vector = () => Buffer.from(Y.encodeStateVector(doc)).toString("base64");
 try {
   const runnable = EXAMPLES.filter((item) => item.runsHere);
   const wrong: string[] = [];
+  const runOnce = async (path: string, payload: unknown) => {
+    const run = await ask({ op: "run", path, payload, stateVector: vector() });
+    if (run.status !== 200) return { error: `didn't start: ${JSON.stringify(run.body).slice(0, 200)}` };
+    for (let i = 0; i < 120; i++) {
+      const found = await ask({ op: "run-details", id: run.body.id });
+      if (found.status === 200) return { details: found.body };
+      await sleep(250);
+    }
+    return { error: "never finished" };
+  };
   const started = Date.now();
   for (const example of runnable) {
     const path = `${FOLDER}/${example.id}.flow.json`;
     createFileAtPath(doc, path, JSON.stringify(flowOfExample(example, pieces), null, 2));
-    const run = await ask({ op: "run", path, payload: example.sample ?? {}, stateVector: vector() });
-    if (run.status !== 200) {
-      wrong.push(`${example.id}: didn't start: ${JSON.stringify(run.body).slice(0, 200)}`);
-      continue;
-    }
-    let details: any = null;
-    for (let i = 0; i < 120 && !details; i++) {
-      const found = await ask({ op: "run-details", id: run.body.id });
-      if (found.status === 200) details = found.body;
-      else await sleep(250);
-    }
-    if (!details) wrong.push(`${example.id}: never finished`);
+    const { details, error } = await runOnce(path, example.sample ?? {});
+    if (error) wrong.push(`${example.id}: ${error}`);
     else if (details.status !== "SUCCEEDED") wrong.push(`${example.id}: ${details.status}: ${String(details.message ?? "").slice(0, 200)}`);
     else if (example.expect) {
       const step = details.steps[example.expect.step];
       if (!step) wrong.push(`${example.id}: ${example.expect.step} didn't run: ${Object.keys(details.steps).join()}`);
       else if (!has(step.output, example.expect.output)) wrong.push(`${example.id}: answered ${JSON.stringify(step.output).slice(0, 200)}, wanted ${JSON.stringify(example.expect.output).slice(0, 120)}`);
+    }
+    // A router's other way: the right branch runs, and the other one doesn't.
+    if (example.alsoTry) {
+      const other = await runOnce(path, example.alsoTry.sample);
+      if (other.error) wrong.push(`${example.id}, the other way: ${other.error}`);
+      else if (!other.details.steps[example.alsoTry.step] || other.details.steps[example.alsoTry.notStep]) wrong.push(`${example.id}, the other way: ran ${Object.keys(other.details.steps).join()}`);
     }
   }
   console.log(`      ran ${runnable.length} on the real engine in ${Math.round((Date.now() - started) / 1000)} s`);

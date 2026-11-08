@@ -169,7 +169,11 @@ try {
     try { check("the shared seeded room roles remain unchanged", roster(await members(one, "E2ETST")) === seededBefore); }
     catch { check("the shared seeded room roles remain unchanged", false); }
   }
-  for (const person of [one, two]) await person?.context.close().catch(() => {});
+  for (const person of [one, two]) {
+    if (!person) continue;
+    await request(person, "auth/sign-out", "POST", {}).catch(() => {});
+    await person.context.close().catch(() => {});
+  }
   await browser?.close().catch(() => {});
 }
 check("no browser page errors", Boolean(errors) && errors.length === 0);

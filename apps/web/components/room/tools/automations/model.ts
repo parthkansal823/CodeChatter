@@ -173,7 +173,12 @@ export function chartOfFlow(flow: Flow, steps: Record<string, AutomationStepResu
         for (let index = 0; index < Math.max(branches.length, children.length); index++) {
           const into: End = { id: step.name, label: branches[index]?.branchName || `Branch ${index + 1}`, place: { inBranch: step.name, branch: index } };
           const child = children[index];
-          if (child) out.push(...chain(child, [into]).ends);
+          if (child) {
+            out.push(...chain(child, [into]).ends);
+            // The branch's name is drawn on its arrow; a screen reader hears it with the branch's first step.
+            const first = items.find((item) => item.id === child.name);
+            if (first) first.description += `, first in the ${into.label} branch of ${title(step)}`;
+          }
           else if (adds) out.push({ id: addPoint(`+branch:${step.name}:${index}`, into.place, `Add a step to the ${into.label} branch of ${title(step)}`, [into]), place: into.place });
           else out.push(into);
         }

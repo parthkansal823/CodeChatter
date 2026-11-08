@@ -150,7 +150,7 @@ flowchart TD
 
 - ✅ Outgoing webhooks: signed, retried, with a delivery log, leases and retention
 - ✅ Dependency alerts from OSV, in a side tool
-- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here). Next: triggers, connections, the internet, and the rest of n8n's features
+- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here), and most of n8n's editor: adding anywhere, the menu and keys, undo, data mapping, and routers with and and or. Next: triggers, connections, the internet, and the rest of n8n's features
 - ⬜ Pipelines, Jenkins-style; public API and `cc` CLI; MCP server; `devcontainer.json`
 
 ## Step 10 · Hardening and launch 🟡 ← now

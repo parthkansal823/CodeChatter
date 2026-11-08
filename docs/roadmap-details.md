@@ -818,6 +818,36 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/web/test/automations.e2e.mjs` (48 checks in a browser: the gallery, using an example, two people, a real run lit up on the chart, the other branch, earlier runs, what went in and came out, renaming and changing code, adding code and a real piece and running them, removing, a failure, steps lighting up while running, stopping, bad JSON, a new flow, a broken file, and a phone)
 - `a11y.e2e.mjs` includes the tool
 
+### Automations, part two: n8n's editor, our own way ✅ (2026-11-08)
+
+**What:** the owner's "n8n ke saare features", for the editor. n8n's source was read for what its canvas does (its node settings, its right-click menu and its keys); none of its code is used.
+
+**What it does:**
+- **Adding anywhere:** a + on every arrow (faint until pointed at or focused), and a + wherever nothing comes next yet: after the last step, at the end of a loop's steps, in an empty branch or loop. Each says where it puts a step ("Add a step at the start of the Big branch of Big?").
+- **The step picker:** the basics (code, a router, a loop) and every action of the 44 pieces (1,305), searchable by name or what it does, or browsed by service. The same picker replaces a step (keeping its name, so what refers to it still works) and changes the trigger.
+- **The right-click menu and keys** on a box: Open, Rename (F2), Replace, Turn off (D), Add a step after (N), Duplicate, Copy, Cut, Paste after (Ctrl+D, C, X, V), Remove (Delete); the arrows move between boxes, up and down between branches; Ctrl+Enter runs. The keyboard's menu key opens the menu too. A box focused or selected off the edge of the chart is brought into view.
+- **Undo and redo** take back one's own changes, not another person's (Yjs' undo manager on the flow's text, tracking only this browser's edits).
+- **Copy and paste** give the copy and everything inside it names of their own, and their expressions follow: a copied loop still reads its own item. A step copied goes to the system clipboard as JSON too, for another room.
+- **A step turned off** is passed over when the flow runs (the engine's own `skip`), with a dashed border and "Off" on the chart.
+- **A note on any step,** shown under its box, and what the flow is for, beside its runs.
+- **Data, as n8n maps it:** what went in and came out as a table, as JSON or as its fields; the data of every step before, from the run being looked at, each field with Use, which puts its expression where the cursor was in the field being filled in; and under a field with an expression, what it comes to on that run. Only plain paths are shown; the engine works out the rest.
+- **Routers:** every test the engine has (22, by its own names), and and or, more branches and removing them, capitals mattering or not, and running the first branch that matches or each that does. A branch's name is drawn on its arrow, and said with its first step for a screen reader.
+
+**Where:** `components/room/tools/automations/` (`flow-view.tsx`, `step-picker.tsx`, `router-fields.tsx`, `data-view.tsx`, `expressions.ts`, `clipboard.ts`, `step-panel.tsx`, `model.ts`), and `components/flowchart/flowchart.tsx` (labels and + on arrows, + points, the menu, keys, dashed boxes, notes, following focus), whose new parts are all opt-in, so the Flow tool is as it was.
+
+**Found by using it, and fixed:**
+- **"Starts with" didn't exist:** the engine calls it `TEXT_START_WITH`, without an S, and an example had the other spelling. It passed because its sample did start that way. Every router example is now run both ways, and every test's name is checked against the engine's.
+- **The chart shrank until it couldn't be read** once arrows had room for labels; it now stops at a readable size, and "Show everything" goes smaller.
+- **Branch names overlapped** where branches fan out from one router; they now sit at each arrow's end.
+- **A step added off the edge of the chart couldn't be seen,** and nothing could be added at the end of a branch when the router was last. Both fixed.
+
+**Left** (in `docs/pending.md`): choosing several boxes at once, sticky notes and groups placed freely, expressions completing as they're typed, and the command bar.
+
+**Tests:**
+- `model.test.ts` and `expressions.test.ts` (34: the + points and where each puts a step, branch names, turning off and notes, copying and pasting with names and expressions following, replacing, branches added and removed, the engine's tests, fields and paths, previews, putting an expression where the cursor is)
+- `apps/runner/test/automation-examples.e2e.ts`: also every router example both ways, and every test's name
+- `apps/web/test/automations.e2e.mjs` (69 checks in a browser, adding to part one's: the picker and searching it, the + at the end of a branch, data put in a field and what it comes to, the engine reading it, the menu's Duplicate, undo and redo, the other person seeing it, Delete, copy and paste from the keyboard with a name of its own, the arrows, N, D and the engine passing over a step turned off, a note, a branch added and removed, the 22 tests, and changing the trigger)
+
 ### The task board ✅ (ChatGPT 15, checked 2026-11-08)
 
 **What:** one board per room, with **To do**, **Doing** and **Done**. Some cards are written by hand; the rest are the `TODO`, `FIXME`, `HACK` and `XXX` comments in the room's code, which turn up by themselves and open their line when clicked.

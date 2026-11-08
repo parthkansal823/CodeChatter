@@ -36,7 +36,7 @@ const given = (role: string): GivenRole => (GIVEN_ROLES.includes(role as GivenRo
 function RoleSelect<Role extends RoomRole>({ label, value, roles, disabled, onChange }: { label: string; value: Role; roles: readonly Role[]; disabled?: boolean; onChange: (role: Role) => void }) {
   return (
     <Select value={value} disabled={disabled} onValueChange={(role) => onChange(role as Role)}>
-      <SelectTrigger aria-label={label} size="sm" className="h-6 w-24 shrink-0 px-2 text-xs">
+      <SelectTrigger aria-label={label} size="sm" className="h-6 w-24 min-w-0 max-w-full px-2 text-xs [&_[data-slot=select-value]]:min-w-0">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -52,10 +52,10 @@ function RoleSelect<Role extends RoomRole>({ label, value, roles, disabled, onCh
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className="mt-3 border-t px-2 pt-3">
+    <section aria-label={title} className="mt-3 min-w-0 border-t px-2 pt-3">
       <h3 className="px-2 text-xs font-medium text-muted-foreground">{title}</h3>
       {hint && <p className="mt-1 px-2 text-xs text-muted-foreground">{hint}</p>}
-      <ul className="mt-1.5 grid gap-0.5">{children}</ul>
+      <ul className="mt-1.5 grid min-w-0 gap-0.5">{children}</ul>
     </section>
   );
 }
@@ -135,11 +135,11 @@ export function RoomMembers() {
       {manages && Boolean(people?.waiting.length) && (
         <Section title="Waiting to join" hint="Check it's someone you expect before you let them in.">
           {people!.waiting.map((waiting) => (
-            <li key={waiting.id} className="grid gap-1.5 rounded-md px-2 py-1.5">
-              <div className="flex items-center gap-2.5">
+            <li key={waiting.id} className="grid min-w-0 gap-1.5 rounded-md px-2 py-1.5">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <Who person={waiting} detail={waiting.email} />
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <RoleSelect
                   label={`Role for ${waiting.name}`}
                   value={asked[waiting.id] ?? given(waiting.role)}
@@ -167,8 +167,9 @@ export function RoomMembers() {
       {manages && people ? (
         <Section title="Members" hint="Editors change files and use terminals. Can run: runs code, no editing. Viewers look and chat.">
           {people.members.map((member) => (
-            <li key={member.id} className="flex items-center gap-2.5 rounded-md px-2 py-1">
-              <Who person={member} />
+            <li key={member.id} className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-md px-2 py-1.5">
+              <div className="flex min-w-0 flex-[1_1_7rem] items-center gap-2.5"><Who person={member} /></div>
+              <div className="ml-auto flex min-w-0 flex-[0_1_auto] flex-wrap items-center justify-end gap-1.5">
               <RoleSelect
                 label={`Role of ${member.name}`}
                 value={member.role}
@@ -196,6 +197,7 @@ export function RoomMembers() {
                     <UserMinus />
                   </Button>
               )}
+              </div>
             </li>
           ))}
         </Section>
@@ -215,8 +217,8 @@ export function RoomMembers() {
       {manages && Boolean(people?.removed.length) && (
         <Section title="Removed" hint="They can't join again, even with the link, until you let them back.">
           {people!.removed.map((removed) => (
-            <li key={removed.id} className="flex items-center gap-2.5 rounded-md px-2 py-1">
-              <Who person={removed} />
+            <li key={removed.id} className="flex min-w-0 flex-wrap items-center gap-2.5 rounded-md px-2 py-1">
+              <div className="flex min-w-0 flex-[1_1_7rem] items-center gap-2.5"><Who person={removed} /></div>
               <Button size="xs" variant="outline" aria-label={`Let ${removed.name} back`} disabled={!canManage} onClick={() => act.mutate({ path: `${person(removed.id)}/allow`, method: "POST" })}>
                 Let back
               </Button>
@@ -226,17 +228,18 @@ export function RoomMembers() {
       )}
 
       {owner && (
-        <div className="mt-3 grid gap-2 border-t px-4 pt-3">
-          {lastOwner && <p className="text-xs text-muted-foreground">Make someone else an owner before you step down or leave. You can still delete the room.</p>}
-          <div><Button size="xs" variant="outline" disabled={!canManage || handoverCandidates.length === 0} onClick={() => { setNextOwner(""); setConfirm({ title: "Hand this room to someone else?", body: "They become an owner and you become an editor together. Other owners keep their role. An owner can delete the room, change everyone's role and remove anyone, including you.", yes: "Hand over room", handover: true, management: true }); }}>Hand this room to…</Button></div>
+        <div className="mt-3 grid w-full min-w-0 gap-2 border-t px-4 pt-3">
+          {lastOwner && <p className="min-w-0 break-words text-xs text-muted-foreground">Make someone else an owner before you step down or leave. You can still delete the room.</p>}
+          <div className="min-w-0"><Button size="xs" variant="outline" className="h-auto min-h-6 max-w-full whitespace-normal break-words py-1" disabled={!canManage || handoverCandidates.length === 0} onClick={() => { setNextOwner(""); setConfirm({ title: "Hand this room to someone else?", body: "They become an owner and you become an editor together. Other owners keep their role. An owner can delete the room, change everyone's role and remove anyone, including you.", yes: "Hand over room", handover: true, management: true }); }}>Hand this room to…</Button></div>
         </div>
       )}
 
       {canLeave && (
-        <div className="mt-3 border-t px-4 pt-3">
+        <div className="mt-3 min-w-0 border-t px-4 pt-3">
           <Button
             variant="outline"
             size="xs"
+            className="h-auto min-h-6 max-w-full whitespace-normal break-words py-1"
             disabled={busy || (room.role === "owner" && !canManage)}
             onClick={() =>
               setConfirm({

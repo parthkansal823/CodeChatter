@@ -78,6 +78,7 @@ test("for someone who can edit, there's a + wherever a step can go next, and eac
   assert.equal(into("yes").label, "Branch 1");
   assert.deepEqual(into("no").place, { inBranch: "route", branch: 1 });
   assert.equal(into("no").label, "Otherwise");
+  assert.match(items.find((item) => item.id === "no")!.description, /, first in the Otherwise branch of Router$/);
   assert.deepEqual(into("inside").place, { insideLoop: "each" });
   assert.equal(into("inside").label, "Each");
   // What leaves a branch and joins the step after the router goes at the end of that branch.

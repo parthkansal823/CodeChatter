@@ -83,7 +83,7 @@ export function RouterFields({
                         />
                         <div className="flex items-center gap-1">
                           <select aria-label={`Test, ${label}`} className={`${field} flex-1`} disabled={!canEdit} value={condition.operator} onChange={(event) => setCondition(index, groupIndex, at, { operator: event.target.value })}>
-                            {!known && <option value={condition.operator}>{condition.operator} (the engine doesn't know this test)</option>}
+                            {!known && <option value={condition.operator}>{condition.operator} (the engine doesn&apos;t know this test)</option>}
                             {CONDITIONS.map((option) => (
                               <option key={option.value} value={option.value}>
                                 {option.words}

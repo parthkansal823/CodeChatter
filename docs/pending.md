@@ -30,7 +30,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **17** (more than one owner in a room, and handing a room over).
+1. **ChatGPT**, each checked before it counts: **17** (more than one owner in a room, and handing a room over), then **18** (a scorecard for each interviewer), **19** (a two-factor code works once) and **20** (instance admin: users, rooms, health). 18 to 20 touch different files, so they can go to ChatGPT side by side.
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -133,17 +133,17 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 - ⬜ Teams, later: a guest role, auto-join by email domain, organisation templates and policies
 - ⬜ What signing out doesn't end yet: a video call the device is in (LiveKit knows a person, not a sign-in, so removing them would drop their other devices too), and a dev server's preview, whose own cookie lasts 12 hours and is checked against the room, not the sign-in. Both end when the person loses access to the room. Worth closing in the final security review.
-- ⬜ A two-factor code can be used again until it expires (about 30 seconds): Better Auth doesn't remember used ones. Someone would need the password and that code at that moment. Worth closing in the final security review.
+- 🟡 A two-factor code can be used again until it expires (about 30 seconds): Better Auth doesn't remember used ones (**ChatGPT 19**). Someone would need the password and that code at that moment. Worth closing in the final security review.
 - 🟡 Rooms, later: more than one owner, and handing a room to someone else (**ChatGPT 17**)
 - ⬜ Usage dashboard: runs, AI tokens and sandbox minutes, with quotas
-- ⬜ Instance admin: users, rooms, health
+- 🟡 Instance admin: users, rooms, health (**ChatGPT 20**)
 
 ## Step 9 · Automations and platform
 
 - ⬜ Dependencies:
   - a per-person rate limit;
   - a fade that shows the side tabs scroll.
-- 🟡 **Automations on Activepieces' real engine** (the owner's decision, 2026-11-07, with Pipelines; **Claude**). Part one is done (roadmap-details, "Automations, part one"): the engine and 44 pieces in the sandbox, flows as files, the tool and its chart, 179 examples. What's left is below, from step 4, and the n8n list after it.
+- 🟡 **Automations on Activepieces' real engine** (the owner's decision, 2026-11-07, with Pipelines; **Claude**). Part one is done (roadmap-details, "Automations, part one"): the engine and 44 pieces in the sandbox, flows as files, the tool and its chart, 179 examples. Part two, most of n8n's editor, too ("Automations, part two"). What's left is below, from step 4, and the n8n list after it.
   - **What was tried, and why it's built this way:**
     - **n8n:** its licence only lets it be given to others free of charge for non-commercial purposes. Its features are the checklist; nothing of it is copied.
     - **Activepieces' builder embedded:** enterprise only, "From $36k a year". The owner doesn't want anything paid.
@@ -160,7 +160,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
     7. CodeChatter's own piece: run a command or tests in the sandbox, ask the room's AI through the gateway, post to the room's chat.
     8. ✅ **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the tool. **Each is checked to load in the engine; each is run for real only where the service is available to try it on, and the gallery says which.**
   - **Every n8n feature, or better** (the owner's request, 2026-11-07: "n8n ke saare features", our own UI). This list comes from n8n's own source, read for what it does. Its code isn't copied: its licence allows only internal, personal or non-commercial use, its `.ee` files need a paid licence, and either limit would land on CodeChatter. Only its permissively licensed packages may be used directly: `@n8n/tournament` (expressions, Apache-2.0), `@n8n/codemirror-lang`, `-html`, `-sql` (MIT), `@n8n/json-schema-to-zod` (ISC), `@n8n/rules-engine` (MIT). In order:
-    1. **The editor.** A + on every arrow; right-click menu and shortcuts (select all, arrows to move between steps, copy, cut, paste, duplicate, delete, rename with F2, N to add, Ctrl+Enter to run, undo and redo); turn a step off; replace a step; sticky notes and groups; search for steps; command bar. Input and output as Table, JSON and Schema; click a field to use it, and expressions that autocomplete and preview real values. And/or conditions and many branches on a router.
+    1. 🟡 **The editor.** Done (roadmap-details, "Automations, part two"): a + on arrows and wherever nothing comes next, branch names on the chart, the right-click menu and keys (copy, cut, paste, duplicate, turn off, rename, add, remove, the arrows between boxes, Ctrl+Enter), undo and redo, a note on any step, replacing a step and changing the trigger, searching every action, Table, JSON and Schema views with Use to put data in a field and what an expression comes to, and routers with and, or, every test the engine has, more branches, and running each that matches. **Left:** choosing several boxes at once, sticky notes and groups placed freely on the chart, expressions that complete as they're typed, and the command bar.
     2. **Trying things.** Run one step (the engine's `stepNameToTest`), run from a step, pin a step's output, retry a failed run from where it failed, copy an old run's data in to debug it.
     3. **Built-in steps,** as our own piece (`AP_CUSTOM_PIECES_PATHS`): Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates, Split Out, Rename Keys, Merge (append, by key, by position, cross join), Compare Datasets, Stop and Error, Execute Command, Read and Write Files, Convert to File, Extract from File, Compression, iCal, Edit Image, Execution Data, Data Tables. Crypto, Date, HTML, Markdown, XML, HTTP and RSS come from Activepieces' pieces.
     4. **Starting by itself.** Turning a flow on and off; webhooks (test and live URLs, methods, authentication, the response modes, Respond to Webhook); schedules; pieces' polling triggers; room events, including a file changing; an error flow that runs when another fails; sub-flows, called and calling, with who may call them; Wait (a time, a date, a webhook, a form); approvals; forms and a chat trigger with public pages.
@@ -208,7 +208,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ Showing Diagrams and Boards in the replay (files only now)
 - ⬜ An email reminder before an assessment closes
 - ⬜ Hidden tests on the Kubernetes driver (a one-off pod, as the Docker driver's throwaway container); **Run tests** refuses there until then
-- ⬜ A scorecard for each interviewer (one is shared now, and the last save wins)
+- 🟡 A scorecard for each interviewer (one is shared now, and the last save wins) (**ChatGPT 18**)
 - ⬜ The report as a PDF (Markdown now)
 
 ## Step 12 · Recruiter kit

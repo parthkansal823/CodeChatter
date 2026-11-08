@@ -8,9 +8,9 @@
 import "@xyflow/react/dist/base.css";
 
 import dagre from "@dagrejs/dagre";
-import { Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, getBezierPath, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
+import { Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, getBezierPath, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, Check, Loader2, Maximize, Minus, Plus, SkipForward, X, type LucideIcon } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -40,8 +40,9 @@ const BOX = { width: 176, height: 48 };
 const CIRCLE = { width: 44, height: 44 };
 const ADD = { width: 28, height: 28 };
 const sizeOf = (shape: FlowchartNode["shape"]) => (shape === "circle" ? CIRCLE : shape === "add" ? ADD : BOX);
-// Showing everything stops short of making it too small to read: a big chart can be moved around, or zoomed out by hand.
-const FIT = { padding: 0.1, maxZoom: 1, minZoom: 0.6 };
+// At first, and as it changes, it fits as much as stays readable: a big chart can be moved around. "Show everything" goes as small as it takes.
+const FIT = { padding: 0.1, maxZoom: 1, minZoom: 0.75 };
+const EVERYTHING = { padding: 0.1, maxZoom: 1, minZoom: 0.2 };
 const STATUS: Record<Exclude<FlowchartStatus, "idle">, { icon: LucideIcon; className: string; border: string }> = {
   running: { icon: Loader2, className: "animate-spin text-brand-text", border: "border-brand" },
   ok: { icon: Check, className: "text-success", border: "border-success" },
@@ -50,7 +51,7 @@ const STATUS: Record<Exclude<FlowchartStatus, "idle">, { icon: LucideIcon; class
   skipped: { icon: SkipForward, className: "text-muted-foreground", border: "border-border" },
 };
 
-type ChartData = FlowchartNode & { selected: boolean; onSelect: (id: string) => void; menu?: FlowchartMenuItem[]; onKey?: (id: string, event: KeyboardEvent<HTMLButtonElement>) => void };
+type ChartData = FlowchartNode & { selected: boolean; onSelect: (id: string) => void; onFocused: (id: string) => void; menu?: FlowchartMenuItem[]; onKey?: (id: string, event: KeyboardEvent<HTMLButtonElement>) => void };
 type ArrowData = { label?: string; onAdd?: () => void; addLabel?: string };
 
 const CONNECTOR = "pointer-events-none !size-px !min-h-0 !min-w-0 !border-0 !bg-transparent";
@@ -82,7 +83,7 @@ const ChartNode = memo(function ChartNode({ data }: NodeProps<Node<ChartData>>) 
   const StatusIcon = status?.icon;
   // React Flow turns clicks off for a node that can't be selected or dragged, and this button is how it's selected.
   const look = cn("pointer-events-auto relative bg-background outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring", status?.border, data.selected && "ring-2 ring-ring", data.muted && "border-dashed");
-  const common = { type: "button" as const, "data-chart-id": data.id, "aria-label": data.description, title: data.description, onClick: () => data.onSelect(data.id), onKeyDown: data.onKey ? (event: KeyboardEvent<HTMLButtonElement>) => data.onKey!(data.id, event) : undefined };
+  const common = { type: "button" as const, "data-chart-id": data.id, "aria-label": data.description, title: data.description, onClick: () => data.onSelect(data.id), onFocus: () => data.onFocused(data.id), onKeyDown: data.onKey ? (event: KeyboardEvent<HTMLButtonElement>) => data.onKey!(data.id, event) : undefined };
   return (
     <>
       <Handle type="target" position={Position.Left} isConnectable={false} className={CONNECTOR} />
@@ -123,7 +124,10 @@ const ChartNode = memo(function ChartNode({ data }: NodeProps<Node<ChartData>>) 
   );
 });
 
-/** An arrow, with a router's branch name on it, and a + to put a step there. */
+/**
+ * An arrow. A router's branch name sits at its end, just before the branch's first box, where branches fanning out from one router don't overlap. A + in its
+ * middle puts a step there: faint until pointed at or focused, as one on every arrow would crowd the chart.
+ */
 function ChartArrow({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, data }: EdgeProps<Edge<ArrowData>>) {
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   return (
@@ -131,14 +135,23 @@ function ChartArrow({ id, sourceX, sourceY, targetX, targetY, sourcePosition, ta
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
       {(data?.label || data?.onAdd) && (
         <EdgeLabelRenderer>
-          <div className="nodrag nopan pointer-events-auto absolute flex flex-col items-center gap-0.5" style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}>
-            {data.label && <span className="max-w-24 truncate rounded-sm border bg-background px-1 text-[11px] text-muted-foreground">{data.label}</span>}
-            {data.onAdd && (
-              <button type="button" aria-label={data.addLabel ?? "Add a step here"} title={data.addLabel ?? "Add a step here"} className="grid size-6 place-items-center rounded-full border bg-background text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" onClick={data.onAdd}>
-                <Plus className="size-3" aria-hidden />
-              </button>
-            )}
-          </div>
+          {data.label && (
+            <span aria-hidden title={data.label} className="absolute max-w-12 truncate text-[11px] leading-none text-muted-foreground" style={{ transform: `translate(-100%, -100%) translate(${targetX - 8}px, ${targetY - 3}px)` }}>
+              {data.label}
+            </span>
+          )}
+          {data.onAdd && (
+            <button
+              type="button"
+              aria-label={data.addLabel ?? "Add a step here"}
+              title={data.addLabel ?? "Add a step here"}
+              className="nodrag nopan pointer-events-auto absolute grid size-6 place-items-center rounded-full border bg-background text-muted-foreground opacity-50 outline-none hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+              onClick={data.onAdd}
+            >
+              <Plus className="size-3" aria-hidden />
+            </button>
+          )}
         </EdgeLabelRenderer>
       )}
     </>
@@ -166,6 +179,30 @@ function layoutOf(nodes: readonly FlowchartNode[], edges: readonly FlowchartEdge
   return places;
 }
 
+/** Brings a box into view when it's selected or focused off the edge of the chart, as after adding a step, or moving between boxes with the keys. */
+function Follow({ id }: { id: string | null }) {
+  const flow = useReactFlow();
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
+  useEffect(() => {
+    if (!id) return;
+    // After the chart has fitted itself to what changed.
+    const timer = setTimeout(() => {
+      const node = flow.getNode(id);
+      if (!node) return;
+      const { x, y, zoom } = flow.getViewport();
+      const size = { width: node.width ?? BOX.width, height: node.height ?? BOX.height };
+      const left = node.position.x * zoom + x;
+      const top = node.position.y * zoom + y;
+      const margin = 24;
+      if (left >= margin && top >= margin && left + size.width * zoom <= width - margin && top + size.height * zoom <= height - margin) return;
+      void flow.setCenter(node.position.x + size.width / 2, node.position.y + size.height / 2, { zoom, duration: 150 });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [id, flow, width, height]);
+  return null;
+}
+
 function Zoom({ shape }: { shape: string }) {
   const flow = useReactFlow();
   const first = useRef(true);
@@ -186,7 +223,7 @@ function Zoom({ shape }: { shape: string }) {
       <Button size="icon-xs" variant="outline" aria-label="Zoom out" title="Zoom out" onClick={() => void flow.zoomOut()}>
         <Minus />
       </Button>
-      <Button size="icon-xs" variant="outline" aria-label="Show everything" title="Show everything" onClick={() => void flow.fitView(FIT)}>
+      <Button size="icon-xs" variant="outline" aria-label="Show everything" title="Show everything" onClick={() => void flow.fitView(EVERYTHING)}>
         <Maximize />
       </Button>
     </Panel>
@@ -215,7 +252,8 @@ export function Flowchart({
   /** More buttons beside the zoom ones. */
   toolbar?: ReactNode;
 }) {
-  const gap = edges.some((edge) => edge.label) ? 88 : edges.some((edge) => edge.onAdd) ? 56 : 28;
+  const gap = edges.some((edge) => edge.label || edge.onAdd) ? 56 : 28;
+  const [focused, setFocused] = useState<string | null>(null);
   const shape = JSON.stringify([gap, nodes.map((node) => [node.id, node.shape]), edges.map((edge) => [edge.from, edge.to])]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `shape` says when these change in a way that moves anything.
   const places = useMemo(() => layoutOf(nodes, edges, gap), [shape]);
@@ -224,7 +262,7 @@ export function Flowchart({
     () =>
       nodes.map((node) => {
         const size = sizeOf(node.shape);
-        return { id: node.id, type: "chart", position: places.get(node.id) ?? { x: 0, y: 0 }, width: size.width, height: size.height, data: { ...node, selected: node.id === selected, onSelect, ...(menuFor && node.shape !== "add" ? { menu: menuFor(node.id) } : {}), ...(onNodeKey && node.shape !== "add" ? { onKey: onNodeKey } : {}) } };
+        return { id: node.id, type: "chart", position: places.get(node.id) ?? { x: 0, y: 0 }, width: size.width, height: size.height, data: { ...node, selected: node.id === selected, onSelect, onFocused: setFocused, ...(menuFor && node.shape !== "add" ? { menu: menuFor(node.id) } : {}), ...(onNodeKey && node.shape !== "add" ? { onKey: onNodeKey } : {}) } };
       }),
     [nodes, places, selected, onSelect, menuFor, onNodeKey],
   );
@@ -248,6 +286,8 @@ export function Flowchart({
         <ReactFlow nodes={chartNodes} edges={chartEdges} nodeTypes={NODE_TYPES} edgeTypes={EDGE_TYPES} fitView fitViewOptions={FIT} minZoom={0.2} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} nodesFocusable={false} edgesFocusable={false} disableKeyboardA11y deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null}>
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--border)" />
           <Zoom shape={shape} />
+          <Follow id={selected} />
+          <Follow id={focused} />
           {toolbar && (
             <Panel position="top-right" className="flex gap-1">
               {toolbar}

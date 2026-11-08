@@ -85,8 +85,11 @@ function editor(roomId, cookie) {
 
 function terminal(roomId, cookie) {
   const ws = new WebSocket(`${WS_ORIGIN}/ws/terminal?room=${roomId}&n=1&cols=80&rows=24`, { headers: { cookie, origin: ORIGIN } });
-  const shell = { ready: false, closed: null, refused: null, close() { ws.terminate(); } };
-  ws.on("message", (data, binary) => { if (!binary && data.toString().includes('"ready"')) shell.ready = true; });
+  const shell = { ready: false, closed: null, refused: null, output: "", type(text) { ws.send(JSON.stringify({ t: "in", d: text })); }, close() { ws.terminate(); } };
+  ws.on("message", (data, binary) => {
+    if (binary) shell.output += data.toString();
+    else if (data.toString().includes('"ready"')) shell.ready = true;
+  });
   ws.on("close", (code) => { shell.closed = code; });
   ws.on("unexpected-response", (_request, response) => { shell.refused = response.statusCode; });
   ws.on("error", () => {});
@@ -97,6 +100,11 @@ function terminal(roomId, cookie) {
 async function notifications(roomId, userId) {
   return database.db.select({ type: schema.notifications.type, payload: schema.notifications.payload })
     .from(schema.notifications).where(and(eq(schema.notifications.roomId, roomId), eq(schema.notifications.userId, userId)));
+}
+
+async function roleAudits(roomId) {
+  return database.db.select({ id: schema.auditEvents.id, actorId: schema.auditEvents.actorId, data: schema.auditEvents.data })
+    .from(schema.auditEvents).where(and(eq(schema.auditEvents.targetId, roomId), eq(schema.auditEvents.action, "room.member.role")));
 }
 
 try {
@@ -146,6 +154,8 @@ try {
   check("a second owner can open a real editor connection", await until(() => doc.synced > 0, 30_000));
   const shell = terminal(id, second);
   check("a second owner can open a real terminal", await until(() => shell.ready, 60_000));
+  shell.type('export CC_OWNERS_MARK=here; echo "owner-mark=[$CC_OWNERS_MARK]"\r');
+  check("the owner terminal has state before losing rights", await until(() => shell.output.includes("owner-mark=[here]")));
   const synced = doc.synced;
   check("another owner can demote an owner to viewer", (await setRole(first, secondPath, "viewer")).status === 204);
   check("an owner losing terminal rights has their socket closed", await until(() => shell.closed === 4205));
@@ -155,6 +165,10 @@ try {
   check("a demoted owner cannot reconnect a terminal", await until(() => deniedShell.refused === 403));
   check("the demoted owner receives the new role notification", await until(async () => (await notifications(id, secondId)).some((item) => item.type === "room.role" && item.payload?.role === "viewer")));
   check("the active viewer can become an owner again", (await setRole(first, secondPath, "owner")).status === 204);
+  const restoredShell = terminal(id, second);
+  const restoredReady = await until(() => restoredShell.ready, 30_000);
+  if (restoredReady) restoredShell.type('echo "owner-mark=[$CC_OWNERS_MARK]"\r');
+  check("the old owner shell ended rather than merely hiding its socket", restoredReady && await until(() => restoredShell.output.includes("owner-mark=[]")) && !restoredShell.output.includes("owner-mark=[here]"));
 
   stage = "owner removal and owner leave";
   check("an owner can remove another owner", (await api(first, secondPath, "DELETE")).status === 204);
@@ -187,13 +201,19 @@ try {
   check("the handover recipient is prepared as editor", (await setRole(first, secondPath, "editor")).status === 204);
 
   stage = "transactional handover and return";
+  const previousAuditIds = new Set((await roleAudits(id)).map((event) => event.id));
   check("the room can be handed to an active member", (await api(first, `${secondPath}/handover`, "POST")).status === 204);
   const handed = await memberRows(id);
   check("handover promotes the recipient and steps the actor down together", roleOf(handed, firstId) === "editor" && roleOf(handed, secondId) === "owner" && activeOwners(handed).length === 1);
+  const handoverAudits = (await roleAudits(id)).filter((event) => !previousAuditIds.has(event.id));
+  check("this handover creates both fresh role audit entries", handoverAudits.length === 2 && handoverAudits.every((event) => event.actorId === firstId) && handoverAudits.some((event) => event.data?.personId === secondId && event.data?.role === "owner") && handoverAudits.some((event) => event.data?.personId === firstId && event.data?.role === "editor"));
   check("the previous owner cannot manage after handover", (await api(first, people)).status === 403);
+  const beforeReturnAuditIds = new Set((await roleAudits(id)).map((event) => event.id));
   check("the new owner can hand the room back", (await api(second, `${firstPath}/handover`, "POST")).status === 204);
   const returned = await memberRows(id);
   check("handover back restores the creator and leaves the other editor", roleOf(returned, firstId) === "owner" && roleOf(returned, secondId) === "editor" && activeOwners(returned).length === 1);
+  const returnAudits = (await roleAudits(id)).filter((event) => !beforeReturnAuditIds.has(event.id));
+  check("the return handover creates both fresh role audit entries", returnAudits.length === 2 && returnAudits.every((event) => event.actorId === secondId) && returnAudits.some((event) => event.data?.personId === firstId && event.data?.role === "owner") && returnAudits.some((event) => event.data?.personId === secondId && event.data?.role === "editor"));
   check("an editor cannot hand the room over", (await api(second, `${firstPath}/handover`, "POST")).status === 403);
 
   stage = "approval must never grant ownership";

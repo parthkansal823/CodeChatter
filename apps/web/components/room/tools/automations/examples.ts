@@ -16,6 +16,8 @@ export type Example = {
   /** What to send when trying it, and what its `check` step should answer. */
   sample?: unknown;
   expect?: { step: string; output: unknown };
+  /** For a router: another sample, the step it should take, and the one it shouldn't. */
+  alsoTry?: { sample: unknown; step: string; notStep: string };
   flow: () => { trigger: FlowStep };
 };
 
@@ -292,6 +294,7 @@ const RUNS_HERE: Example[] = [
     runsHere: true,
     sample: { additions: 900, deletions: 200 },
     expect: { step: "second_review", output: { review: "second reviewer" } },
+    alsoTry: { sample: { additions: 1, deletions: 2 }, step: "one_review", notStep: "second_review" },
     flow: () => chain(webhook(), [code("measure", "Measure it", "  return { lines: (data.additions ?? 0) + (data.deletions ?? 0) };"), branch("route", "Big?", "{{measure.output.lines}}", "NUMBER_IS_GREATER_THAN", "500", code("second_review", "Ask for a second review", '  return { review: "second reviewer" };', {}), code("one_review", "One review is enough", '  return { review: "one reviewer" };', {}), "Big", "Small")]),
   },
   {
@@ -312,6 +315,7 @@ const RUNS_HERE: Example[] = [
     runsHere: true,
     sample: { before: 82, now: 79 },
     expect: { step: "fail_it", output: { pass: false } },
+    alsoTry: { sample: { before: 82, now: 82 }, step: "pass_it", notStep: "fail_it" },
     flow: () => chain(webhook(), [code("compare", "Compare", "  return { drop: Math.round((data.before - data.now) * 100) / 100 };"), branch("route", "Dropped?", "{{compare.output.drop}}", "NUMBER_IS_GREATER_THAN", "1", code("fail_it", "Fail it", "  return { pass: false };", {}), code("pass_it", "Pass it", "  return { pass: true };", {}), "Dropped", "Fine")]),
   },
   {
@@ -322,7 +326,8 @@ const RUNS_HERE: Example[] = [
     runsHere: true,
     sample: { branch: "hotfix/payments" },
     expect: { step: "fast", output: { checks: "quick" } },
-    flow: () => chain(webhook(), [branch("route", "A hotfix?", "{{trigger.output.body.branch}}", "TEXT_STARTS_WITH", "hotfix/", code("fast", "Quick checks", '  return { checks: "quick" };', {}), code("full", "All the checks", '  return { checks: "all" };', {}), "Hotfix", "Anything else")]),
+    alsoTry: { sample: { branch: "main" }, step: "full", notStep: "fast" },
+    flow: () => chain(webhook(), [branch("route", "A hotfix?", "{{trigger.output.body.branch}}", "TEXT_START_WITH", "hotfix/", code("fast", "Quick checks", '  return { checks: "quick" };', {}), code("full", "All the checks", '  return { checks: "all" };', {}), "Hotfix", "Anything else")]),
   },
 ];
 

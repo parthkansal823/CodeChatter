@@ -18,6 +18,12 @@ const tool = a.getByRole("region", { name: "Automations", exact: true });
 const details = tool.getByRole("complementary", { name: "Details" });
 const chart = tool.getByRole("group", { name: "The steps of this automation" });
 const box = (name) => chart.getByRole("button", { name: new RegExp(`^Step ${escape(name)},`) });
+/** Selects a box, bringing it into view first as focusing it does, since the chart may have moved on. */
+async function select(name) {
+  await box(name).focus();
+  await sleep(300);
+  await box(name).click();
+}
 const openTool = async (page = a) => {
   await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Automations", exact: true }).click();
   await page.getByRole("region", { name: "Automations", exact: true }).waitFor({ timeout: 20_000 });
@@ -149,24 +155,23 @@ try {
   await edited.getByRole("region", { name: "What came out" }).getByText('"two people"').waitFor({ timeout: 10_000 });
   check("theChangeIsWhatRuns", true);
 
-  // ---- Adding steps ----
-  const add = edited.getByRole("button", { name: "Add a step after this" });
-  await add.click();
-  await edited.getByRole("region", { name: "Add a step after this" }).getByRole("button", { name: "Code", exact: true }).click();
+  // ---- Adding steps, from the picker ----
+  const picker = details.getByRole("region", { name: "Add a step" });
+  const option = (name) => picker.getByRole("option", { name: new RegExp(`^${escape(name)}`) });
+  await edited.getByRole("button", { name: "Add a step after this" }).click();
+  await option("Code").click();
   await box("Code").waitFor({ timeout: 5000 });
-  check("aCodeStepCanBeAdded", (await chart.getByRole("button", { name: /^Step / }).count()) === 6);
-  await box("Code").click();
+  check("aCodeStepComesFromThePicker", (await chart.getByRole("button", { name: /^Step / }).count()) === 6);
   const added = details.getByRole("region", { name: "Step Code" });
-  await added.getByRole("button", { name: "Add a step after this" }).click();
-  const adding = added.getByRole("region", { name: "Add a step after this" });
-  await adding.getByLabel("Or a service").selectOption({ label: "Text Helper" });
-  await adding.getByLabel("What it does").selectOption({ label: "Slugify" });
-  await adding.getByRole("button", { name: "Add it" }).click();
+  // The + after the last step, and a service found by searching every action.
+  await chart.getByRole("button", { name: "Add a step after Code", exact: true }).click();
+  await picker.getByPlaceholder(/^Search \d+ actions$/).fill("slugify");
+  await option("Text Helper: Slugify").click();
   await box("Slugify").waitFor({ timeout: 5000 });
-  check("aServiceStepCanBeAdded", true);
-  await box("Slugify").click();
+  check("aServiceIsFoundBySearchingItsActions", true);
   const slug = details.getByRole("region", { name: "Step Slugify" });
-  await slug.getByRole("region", { name: "Its fields" }).getByLabel(/^Text/).fill("Hello Big World");
+  const slugText = slug.getByRole("region", { name: "Its fields" }).getByLabel(/^Text/);
+  await slugText.fill("Hello Big World");
   await sleep(500);
   check("itsFieldsComeFromThePiece", (await slug.getByRole("region", { name: "Its fields" }).getByRole("textbox").count()) >= 1);
   await details.getByRole("button", { name: "Back to the runs" }).click();
@@ -175,6 +180,92 @@ try {
   await slug.getByRole("region", { name: "What came out" }).getByText("Hello-Big-World").waitFor({ timeout: 10_000 });
   check("aRealPieceAddedHereRunsOnTheEngine", true);
 
+  // ---- Data from a step before, put in a field, as n8n maps it ----
+  await slugText.fill("");
+  await slugText.focus();
+  const before = slug.getByRole("region", { name: "Data from the steps before" });
+  await before.getByText("measure", { exact: true }).click();
+  await before.getByRole("button", { name: "Use {{measure.output.lines}}" }).click();
+  await sleep(500);
+  check("usingDataPutsItsExpressionWhereTheCursorWas", (await slugText.inputValue()) === "{{measure.output.lines}}", await slugText.inputValue());
+  check("theFieldSaysWhatItComesToOnThisRun", await slug.getByText("On this run: 901").isVisible());
+  await slug.getByRole("region", { name: "What came out" }).getByRole("tab", { name: "Table" }).click();
+  check("whatCameOutCanBeShownAnotherWay", await slug.getByRole("region", { name: "What came out" }).getByRole("tabpanel").getByText("Hello-Big-World").isVisible());
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  await runUntil({ additions: 900, deletions: 1 }, /^Finished in/);
+  await box("Slugify").click();
+  await slug.getByRole("region", { name: "What came out" }).getByRole("tab", { name: "JSON" }).click();
+  await slug.getByRole("region", { name: "What came out" }).getByText('"901"').waitFor({ timeout: 10_000 });
+  check("theEngineReadsTheMappedData", true);
+
+  // ---- The right-click menu, and undo and redo ----
+  const slugBoxes = chart.getByRole("button", { name: /^Step Slugify,/ });
+  await box("Slugify").click({ button: "right" });
+  await a.getByRole("menuitem", { name: /^Duplicate/ }).click();
+  await slugBoxes.nth(1).waitFor({ timeout: 5000 });
+  check("theMenuDuplicatesAStep", (await slugBoxes.count()) === 2);
+  await box("Measure it").focus();
+  await a.keyboard.press("Control+z");
+  await sleep(600);
+  check("undoTakesItBack", (await slugBoxes.count()) === 1, await slugBoxes.count());
+  await a.keyboard.press("Control+y");
+  await sleep(600);
+  check("redoPutsItBack", (await slugBoxes.count()) === 2, await slugBoxes.count());
+  // Someone else's undo doesn't take back this person's change.
+  check("theOtherPersonSeesTheDuplicate", await ok(toolB.getByRole("button", { name: /^Step Slugify,/ }).nth(1).waitFor({ timeout: 10_000 })));
+  await slugBoxes.nth(1).focus();
+  await a.keyboard.press("Delete");
+  await sleep(600);
+  check("deleteOnABoxRemovesIt", (await slugBoxes.count()) === 1);
+
+  // ---- Keys on a focused box ----
+  await box("Slugify").focus();
+  await a.keyboard.press("Control+c");
+  await a.keyboard.press("Control+v");
+  await sleep(600);
+  check("copyAndPasteFromTheKeyboard", (await slugBoxes.count()) === 2);
+  // What's pasted is selected, so its panel is showing.
+  check("thePasteHasANameOfItsOwn", /· slugify_\d+$/.test((await details.getByText(/^Text Helper: Slugify ·/).textContent()) ?? "") && !/· slugify_1$/.test((await details.getByText(/^Text Helper: Slugify ·/).textContent()) ?? ""), await details.getByText(/^Text Helper: Slugify ·/).textContent());
+  await slugBoxes.nth(1).focus();
+  await a.keyboard.press("Delete");
+  await sleep(500);
+  await box("Measure it").focus();
+  await a.keyboard.press("ArrowRight");
+  await sleep(300);
+  check("theArrowsMoveBetweenBoxes", await a.evaluate(() => /^Step Big\?,/.test(document.activeElement?.getAttribute("aria-label") ?? "")));
+  await a.keyboard.press("n");
+  check("nOpensThePicker", await ok(picker.waitFor({ timeout: 5000 })));
+  await picker.getByRole("button", { name: "Cancel" }).click();
+  await box("Code").focus();
+  await a.keyboard.press("d");
+  await sleep(500);
+  check("dTurnsAStepOff", /turned off/.test(await stepName("Code")), await stepName("Code"));
+  await details.getByRole("button", { name: "Back to the runs" }).click().catch(() => {});
+  await runUntil({ additions: 900, deletions: 1 }, /^Finished in/);
+  check("aStepTurnedOffIsPassedOver", /didn't run/.test(await stepName("Code")) && /ran fine/.test(await stepName("Slugify")), `${await stepName("Code")} | ${await stepName("Slugify")}`);
+  await box("Code").focus();
+  await a.keyboard.press("d");
+  await sleep(500);
+  check("andOnAgain", !/turned off/.test(await stepName("Code")));
+
+  // ---- A note, and a router's branches ----
+  await select("Measure it");
+  await details.getByRole("region", { name: "Step Measure it" }).getByLabel("Note").fill("Counts the lines");
+  await sleep(500);
+  check("aNoteShowsWithItsBox", /note: Counts the lines/.test(await stepName("Measure it")));
+  await select("Big?");
+  const router = details.getByRole("region", { name: "Step Big?" });
+  await router.getByRole("button", { name: "Add a branch" }).click();
+  check("aBranchCanBeAdded", await ok(chart.getByRole("button", { name: "Add a step to the Branch 2 branch of Big?", exact: true }).waitFor({ timeout: 5000 })));
+  await router.getByRole("button", { name: "Remove the Branch 2 branch and its steps" }).click();
+  check("andRemoved", await ok(chart.getByRole("button", { name: "Add a step to the Branch 2 branch of Big?", exact: true }).waitFor({ state: "detached", timeout: 5000 })));
+  check("everyTestTheEngineHasIsOffered", (await router.getByRole("combobox", { name: /^Test, branch 1/ }).first().getByRole("option").count()) === 22);
+  await select("When called");
+  await details.getByRole("button", { name: "Change the trigger" }).click();
+  check("theTriggerCanBeChanged", await ok(details.getByPlaceholder(/^Search \d+ triggers$/).waitFor({ timeout: 5000 })));
+  await details.getByRole("button", { name: "Cancel" }).click();
+
+  await select("Slugify");
   await slug.getByRole("button", { name: "Remove Slugify" }).click();
   await box("Slugify").waitFor({ state: "detached", timeout: 5000 });
   check("aStepCanBeRemoved", true);
@@ -217,9 +308,9 @@ try {
   await box("Catch Webhook").or(chart.getByRole("button", { name: /^Step / })).first().waitFor({ timeout: 10_000 });
   await sleep(500);
   check("aNewOneStartsWithOneStep", (await chart.getByRole("button", { name: /^Step / }).count()) === 1);
-  const picker = tool.getByLabel("Automation to show");
-  check("itsPickedInTheList", (await picker.inputValue()).endsWith("from-scratch.flow.json"), await picker.inputValue());
-  check("bothAreInTheList", (await picker.getByRole("option").count()) === 2);
+  const flowList = tool.getByLabel("Automation to show");
+  check("itsPickedInTheList", (await flowList.inputValue()).endsWith("from-scratch.flow.json"), await flowList.inputValue());
+  check("bothAreInTheList", (await flowList.getByRole("option").count()) === 2);
   // Its own file, opened in the editor from here, and broken.
   await tool.getByRole("button", { name: "Its file" }).click();
   await a.getByRole("tab", { name: /from-scratch\.flow\.json/ }).waitFor({ timeout: 15_000 });
