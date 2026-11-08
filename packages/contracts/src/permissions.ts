@@ -57,3 +57,8 @@ export function assignableRoles(inviterRole: RoomRole): RoomRole[] {
   if (inviterRole === "editor") return ["editor", "runner", "viewer"];
   return [];
 }
+
+/** Roles an owner may give an active workspace member; links and approvals use assignableRoles instead. */
+export function assignableMemberRoles(managerRole: RoomRole): RoomRole[] {
+  return managerRole === "owner" ? ["owner", "editor", "runner", "viewer"] : [];
+}

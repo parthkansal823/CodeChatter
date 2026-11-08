@@ -139,7 +139,7 @@ flowchart TD
 
 - ✅ Organisations: teams, members, invitations
 - ✅ Managing a room's people: approve, decline, remove, change roles, leave, and an invite link from Share. Rights changing closes what the person has open
-- ✅ Settings: profile, password, two-factor, active sessions
+- ✅ Settings: profile, password, two-factor, active sessions; and preferences: the theme, the editor's settings, the email digest, and the ways to sign in
 - ✅ Audit log with filters and CSV export
 - ✅ Room roles for interviews (interviewer, candidate)
 - ⬜ Usage dashboard with quotas; instance admin

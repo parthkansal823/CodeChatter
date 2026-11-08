@@ -2,12 +2,17 @@ import type { AuthSession } from "@codechatter/auth";
 import { MemberRoleInput, PersonId, RoomCode } from "@codechatter/contracts";
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
+import { z } from "zod";
 
 import { AuditService } from "../audit/audit.service.js";
 import { CurrentSession } from "../auth/current-session.decorator.js";
 import { ZodPipe } from "../common/zod.pipe.js";
 import { RoomPeopleService, type PeopleChange } from "./room-people.service.js";
 import { RoomsService } from "./rooms.service.js";
+
+/** Active members can become owners; approval and invite inputs deliberately remain narrower. */
+const ActiveMemberRoleInput = MemberRoleInput.extend({ role: z.enum(["owner", "editor", "runner", "viewer"]) });
+type ActiveMemberRoleInput = z.infer<typeof ActiveMemberRoleInput>;
 
 /** Who's in a room and how they get in: its people, and its invite link. */
 @Controller("rooms/:id")
@@ -48,10 +53,24 @@ export class RoomPeopleController {
     @CurrentSession() session: AuthSession,
     @Param("id", new ZodPipe(RoomCode)) id: string,
     @Param("userId", new ZodPipe(PersonId)) userId: string,
-    @Body(new ZodPipe(MemberRoleInput)) input: MemberRoleInput,
+    @Body(new ZodPipe(ActiveMemberRoleInput)) input: ActiveMemberRoleInput,
     @Req() request: Request,
   ) {
     await this.note(session, request, id, "room.member.role", userId, await this.people.setRole(id, session.user, userId, input.role));
+  }
+
+  /** Promote another active member and step down together, with one audit entry for each role. */
+  @Post("people/:userId/handover")
+  @HttpCode(204)
+  async handover(
+    @CurrentSession() session: AuthSession,
+    @Param("id", new ZodPipe(RoomCode)) id: string,
+    @Param("userId", new ZodPipe(PersonId)) userId: string,
+    @Req() request: Request,
+  ) {
+    const change = await this.people.handover(id, session.user, userId);
+    await this.note(session, request, id, "room.member.role", userId, change.promoted);
+    await this.note(session, request, id, "room.member.role", session.user.id, change.steppedDown);
   }
 
   /** Remove a member, or decline someone waiting. */

@@ -33,5 +33,5 @@ export function useRoomPeople() {
     return () => void socket.off("room:people-changed", changed);
   }, [client, room.id]);
 
-  return { manages, people: query.data };
+  return { manages, people: query.data, loading: query.isPending, refreshing: query.isFetching, error: query.isError };
 }

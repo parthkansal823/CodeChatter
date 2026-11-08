@@ -30,7 +30,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, one prompt at a time, each checked before the next: **16** (appearance, notifications and connected accounts).
+1. **ChatGPT**, one prompt at a time, each checked before the next: **17** (more than one owner in a room, and handing a room over).
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -134,8 +134,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ Teams, later: a guest role, auto-join by email domain, organisation templates and policies
 - ⬜ What signing out doesn't end yet: a video call the device is in (LiveKit knows a person, not a sign-in, so removing them would drop their other devices too), and a dev server's preview, whose own cookie lasts 12 hours and is checked against the room, not the sign-in. Both end when the person loses access to the room. Worth closing in the final security review.
 - ⬜ A two-factor code can be used again until it expires (about 30 seconds): Better Auth doesn't remember used ones. Someone would need the password and that code at that moment. Worth closing in the final security review.
-- 🟡 Account, later: pages for appearance, notifications and connected accounts (**ChatGPT 16**)
-- ⬜ Rooms, later: more than one owner, and handing a room to someone else
+- 🟡 Rooms, later: more than one owner, and handing a room to someone else (**ChatGPT 17**)
 - ⬜ Usage dashboard: runs, AI tokens and sandbox minutes, with quotas
 - ⬜ Instance admin: users, rooms, health
 

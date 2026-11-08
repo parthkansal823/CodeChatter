@@ -79,6 +79,7 @@ const SUITES = [
     "flow",
     "api-studio-import",
     "task-board",
+    "preferences",
     "automations",
     "a11y",
     "interview-recording",

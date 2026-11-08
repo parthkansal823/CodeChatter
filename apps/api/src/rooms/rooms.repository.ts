@@ -1,7 +1,7 @@
 import type { RoomRole } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
-import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { DB } from "../infra/tokens.js";
 
@@ -11,7 +11,15 @@ type NewRoomRepo = typeof schema.roomRepos.$inferInsert;
 export type MemberRow = typeof schema.roomMembers.$inferSelect;
 type MemberStatus = MemberRow["status"];
 
-/** Queries only. Business rules live in RoomsService. */
+/** A room-row lock covers every membership check and write made through this scoped writer. */
+export type LockedRoomPeople = {
+  room: RoomRow;
+  members: MemberRow[];
+  setMember(userId: string, from: MemberStatus[], set: { role?: RoomRole; status?: MemberStatus }): Promise<MemberRow | undefined>;
+  deleteMember(userId: string, from: MemberStatus[]): Promise<boolean>;
+};
+
+/** Room queries and guarded membership transactions; services authorize scoped writes. */
 @Injectable()
 export class RoomsRepository {
   constructor(@Inject(DB) private readonly handle: DbHandle) {}
@@ -80,23 +88,49 @@ export class RoomsRepository {
     return row?.name ?? "Someone";
   }
 
-  /** Change someone's row if it's in one of these states. Never an owner's. Undefined when nothing changed. */
-  async setMember(roomId: string, userId: string, from: MemberStatus[], set: { role?: RoomRole; status?: MemberStatus }): Promise<MemberRow | undefined> {
-    const [row] = await this.db
-      .update(schema.roomMembers)
-      .set({ ...set, updatedAt: new Date() })
-      .where(and(eq(schema.roomMembers.roomId, roomId), eq(schema.roomMembers.userId, userId), inArray(schema.roomMembers.status, from), ne(schema.roomMembers.role, "owner")))
-      .returning();
-    return row;
-  }
-
-  /** Delete someone's row if it's in one of these states. Never an owner's. */
-  async deleteMember(roomId: string, userId: string, from: MemberStatus[]): Promise<boolean> {
-    const rows = await this.db
-      .delete(schema.roomMembers)
-      .where(and(eq(schema.roomMembers.roomId, roomId), eq(schema.roomMembers.userId, userId), inArray(schema.roomMembers.status, from), ne(schema.roomMembers.role, "owner")))
-      .returning({ userId: schema.roomMembers.userId });
-    return rows.length > 0;
+  /**
+   * Serialise membership changes, including checks of the caller's current role.
+   * Locking the room, rather than an individual owner, covers changes to different
+   * owner rows on different API instances. The scoped writers always keep an
+   * active owner, even if a caller forgets the UI's last-owner check.
+   */
+  async withPeopleLock<T>(roomId: string, work: (people: LockedRoomPeople) => Promise<T>): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      const [room] = await tx.select().from(schema.rooms).where(eq(schema.rooms.id, roomId)).for("update");
+      if (!room) throw new NotFoundException("Room not found.");
+      const members = await tx.select().from(schema.roomMembers).where(eq(schema.roomMembers.roomId, roomId));
+      const keepOwner = (before: MemberRow, role?: RoomRole, status?: MemberStatus) => {
+        if (before.role !== "owner" || before.status !== "active" || (role === "owner" && status === "active")) return;
+        if (members.filter((member) => member.role === "owner" && member.status === "active").length <= 1) {
+          throw new ConflictException("This room needs an owner. Make another active member an owner or hand the room over first.");
+        }
+      };
+      return work({
+        room,
+        members,
+        setMember: async (userId, from, set) => {
+          const index = members.findIndex((member) => member.userId === userId && from.includes(member.status));
+          const before = members[index];
+          if (!before) return undefined;
+          keepOwner(before, set.role ?? before.role, set.status ?? before.status);
+          const [row] = await tx.update(schema.roomMembers).set({ ...set, updatedAt: new Date() })
+            .where(and(eq(schema.roomMembers.roomId, roomId), eq(schema.roomMembers.userId, userId), inArray(schema.roomMembers.status, from))).returning();
+          if (row) members.splice(index, 1, row);
+          return row;
+        },
+        deleteMember: async (userId, from) => {
+          const index = members.findIndex((member) => member.userId === userId && from.includes(member.status));
+          const before = members[index];
+          if (!before) return false;
+          keepOwner(before);
+          const rows = await tx.delete(schema.roomMembers)
+            .where(and(eq(schema.roomMembers.roomId, roomId), eq(schema.roomMembers.userId, userId), inArray(schema.roomMembers.status, from)))
+            .returning({ userId: schema.roomMembers.userId });
+          if (rows.length) members.splice(index, 1);
+          return rows.length > 0;
+        },
+      });
+    });
   }
 
   async deleteRoom(id: string): Promise<void> {

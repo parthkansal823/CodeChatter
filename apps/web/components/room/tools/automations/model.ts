@@ -12,7 +12,17 @@ export type FlowStep = {
   firstLoopAction?: FlowStep | null;
   children?: Array<FlowStep | null>;
 };
-export type Flow = { /** Stays with the flow when its file moves, so its runs do too. */ id?: string; displayName: string; schemaVersion: string; trigger: FlowStep };
+export type Flow = {
+  /** Stays with the flow when its file moves, so its runs do too. */
+  id?: string;
+  displayName: string;
+  schemaVersion: string;
+  trigger: FlowStep;
+  /** What it's for, in a sentence or two. Ours, not the engine's: the host never hands it on. */
+  description?: string;
+  /** A note on a step, by its name, shown under its box. */
+  stepNotes?: Record<string, string>;
+};
 
 export const SCHEMA_VERSION = "27";
 
@@ -104,49 +114,116 @@ export function kindOf(step: FlowStep, pieces?: Record<string, PieceInfo>): stri
 }
 
 export type Glyph = "trigger" | "code" | "piece" | "router" | "loop";
-export type ChartItem = { id: string; label: string; detail: string; shape: "box"; glyph: Glyph; status: ChartStatus; description: string };
+/** A box on the chart: a step, or a + where one can be added. */
+export type ChartItem = { id: string; label: string; detail: string; shape: "box" | "add"; glyph: Glyph; status: ChartStatus; description: string; muted?: boolean; note?: string; place?: Place };
+/** An arrow. `place` says where a step put on it goes; `label` is a router's branch. */
+export type ChartEdge = { from: string; to: string; label?: string; place?: Place };
 const GLYPHS: Record<FlowStep["type"], Glyph> = { PIECE_TRIGGER: "trigger", EMPTY: "trigger", CODE: "code", PIECE: "piece", ROUTER: "router", LOOP_ON_ITEMS: "loop" };
 const STATUS_WORDS: Record<ChartStatus, string> = { idle: "didn't run", running: "running now", ok: "ran fine", warning: "has a warning", failed: "failed", skipped: "stopped" };
+const title = (step: FlowStep) => step.displayName || step.name;
 
-/** The chart: boxes and arrows, with branches going their own ways and coming back together at the step after the router. */
-export function chartOfFlow(flow: Flow, steps: Record<string, AutomationStepResult> | undefined, pieces?: Record<string, PieceInfo>): { items: ChartItem[]; edges: Array<{ from: string; to: string }> } {
+/**
+ * The chart: boxes and arrows, with branches going their own ways and coming back together at the step after the router. With `adds`, there's a + wherever
+ * nothing comes next yet (after the last step, in an empty branch or loop), and each arrow says where a step put on it would go.
+ */
+export function chartOfFlow(flow: Flow, steps: Record<string, AutomationStepResult> | undefined, pieces?: Record<string, PieceInfo>, options: { adds?: boolean } = {}): { items: ChartItem[]; edges: ChartEdge[] } {
   const results = resultsOf(steps);
   const ran = Object.keys(steps ?? {}).length > 0;
+  const adds = options.adds === true;
   const items: ChartItem[] = [];
-  const edges: Array<{ from: string; to: string }> = [];
+  const edges: ChartEdge[] = [];
   const seen = new Set<string>();
+  type End = { id: string; label?: string; place: Place };
+  const arrow = (end: End, to: string) => edges.push({ from: end.id, to, ...(end.label ? { label: end.label } : {}), place: end.place });
+  const addPoint = (id: string, place: Place, description: string, from: End[]) => {
+    items.push({ id, label: "+", detail: "", shape: "add", glyph: "piece", status: "idle", description, place });
+    for (const end of from) arrow(end, id);
+    return id;
+  };
 
-  /** Draws a chain, and returns the steps a next one follows from. */
-  const chain = (start: FlowStep | null | undefined, from: string[]): string[] => {
+  /** Draws a chain, and returns the arrows that leave its end, and its last step. */
+  const chain = (start: FlowStep | null | undefined, from: End[]): { ends: End[]; last: FlowStep | null } => {
     let ends = from;
+    let last: FlowStep | null = null;
     for (let step = start; step; step = step.nextAction) {
       if (seen.has(step.name)) break;
       seen.add(step.name);
-      for (const end of ends) edges.push({ from: end, to: step.name });
+      last = step;
+      for (const end of ends) arrow(end, step.name);
       const result = results.get(step.name);
       const status = result?.status ?? "idle";
       const kind = kindOf(step, pieces);
       const times = result && result.times > 1 ? ` · ${result.times} times` : "";
-      items.push({ id: step.name, label: step.displayName || step.name, detail: `${kind}${times}`, shape: "box", glyph: GLYPHS[step.type] ?? "piece", status, description: [`Step ${step.displayName || step.name}`, kind, ...(ran ? [STATUS_WORDS[status]] : []), ...(result && result.times > 1 ? [`${result.times} times`] : [])].join(", ") });
+      const note = flow.stepNotes?.[step.name]?.trim() || undefined;
+      items.push({
+        id: step.name,
+        label: title(step),
+        detail: `${step.skip ? "Off · " : ""}${kind}${times}`,
+        shape: "box",
+        glyph: GLYPHS[step.type] ?? "piece",
+        status,
+        ...(step.skip ? { muted: true } : {}),
+        ...(note ? { note } : {}),
+        description: [`Step ${title(step)}`, kind, ...(step.skip ? ["turned off"] : []), ...(ran ? [STATUS_WORDS[status]] : []), ...(result && result.times > 1 ? [`${result.times} times`] : []), ...(note ? [`note: ${note}`] : [])].join(", "),
+      });
       if (step.type === "ROUTER") {
-        const branchEnds: string[] = [];
+        const branches = (step.settings.branches ?? []) as Array<{ branchName?: string }>;
         const children = step.children ?? [];
-        let emptyBranch = children.length === 0;
-        for (const child of children) {
-          if (child) branchEnds.push(...chain(child, [step.name]));
-          else emptyBranch = true;
+        const out: End[] = [];
+        for (let index = 0; index < Math.max(branches.length, children.length); index++) {
+          const into: End = { id: step.name, label: branches[index]?.branchName || `Branch ${index + 1}`, place: { inBranch: step.name, branch: index } };
+          const child = children[index];
+          if (child) out.push(...chain(child, [into]).ends);
+          else if (adds) out.push({ id: addPoint(`+branch:${step.name}:${index}`, into.place, `Add a step to the ${into.label} branch of ${title(step)}`, [into]), place: into.place });
+          else out.push(into);
         }
-        ends = emptyBranch ? [step.name, ...branchEnds] : branchEnds;
+        ends = out;
       } else {
-        if (step.type === "LOOP_ON_ITEMS" && step.firstLoopAction) chain(step.firstLoopAction, [step.name]);
-        ends = [step.name];
+        if (step.type === "LOOP_ON_ITEMS") {
+          const into: End = { id: step.name, label: "Each", place: { insideLoop: step.name } };
+          if (step.firstLoopAction) {
+            const inner = chain(step.firstLoopAction, [into]);
+            if (adds && inner.last) addPoint(`+after:${inner.last.name}`, { after: inner.last.name }, `Add a step after ${title(inner.last)}`, inner.ends);
+          } else if (adds) addPoint(`+inside:${step.name}`, into.place, `Add a step inside ${title(step)}`, [into]);
+        }
+        ends = [{ id: step.name, place: { after: step.name } }];
       }
     }
-    return ends;
+    return { ends, last };
   };
-  chain(flow.trigger, []);
+  const main = chain(flow.trigger, []);
+  if (adds && main.last) addPoint(`+after:${main.last.name}`, { after: main.last.name }, `Add a step after ${title(main.last)}`, main.ends);
   return { items, edges };
 }
+
+/** Every test a router's condition can do, as the engine names it. "Starts with" is TEXT_START_WITH there, without an S. */
+export const CONDITIONS: ReadonlyArray<{ value: string; words: string; needsValue: boolean; text?: boolean }> = [
+  { value: "TEXT_CONTAINS", words: "contains", needsValue: true, text: true },
+  { value: "TEXT_DOES_NOT_CONTAIN", words: "doesn't contain", needsValue: true, text: true },
+  { value: "TEXT_EXACTLY_MATCHES", words: "is exactly", needsValue: true, text: true },
+  { value: "TEXT_DOES_NOT_EXACTLY_MATCH", words: "isn't exactly", needsValue: true, text: true },
+  { value: "TEXT_START_WITH", words: "starts with", needsValue: true, text: true },
+  { value: "TEXT_DOES_NOT_START_WITH", words: "doesn't start with", needsValue: true, text: true },
+  { value: "TEXT_ENDS_WITH", words: "ends with", needsValue: true, text: true },
+  { value: "TEXT_DOES_NOT_END_WITH", words: "doesn't end with", needsValue: true, text: true },
+  { value: "NUMBER_IS_GREATER_THAN", words: "is more than", needsValue: true },
+  { value: "NUMBER_IS_LESS_THAN", words: "is less than", needsValue: true },
+  { value: "NUMBER_IS_EQUAL_TO", words: "is the number", needsValue: true },
+  { value: "BOOLEAN_IS_TRUE", words: "is true", needsValue: false },
+  { value: "BOOLEAN_IS_FALSE", words: "is false", needsValue: false },
+  { value: "DATE_IS_BEFORE", words: "is before the date", needsValue: true },
+  { value: "DATE_IS_EQUAL", words: "is the date", needsValue: true },
+  { value: "DATE_IS_AFTER", words: "is after the date", needsValue: true },
+  { value: "LIST_CONTAINS", words: "is a list that has", needsValue: true, text: true },
+  { value: "LIST_DOES_NOT_CONTAIN", words: "is a list without", needsValue: true, text: true },
+  { value: "LIST_IS_EMPTY", words: "is an empty list", needsValue: false },
+  { value: "LIST_IS_NOT_EMPTY", words: "is a list with something in it", needsValue: false },
+  { value: "EXISTS", words: "has a value", needsValue: false },
+  { value: "DOES_NOT_EXIST", words: "has no value", needsValue: false },
+];
+export type Condition = { operator: string; firstValue: string; secondValue?: string; caseSensitive?: boolean };
+export type Branch = { branchName: string; branchType: "CONDITION" | "FALLBACK"; conditions?: Condition[][] };
+export const newCondition = (): Condition => ({ operator: "TEXT_CONTAINS", firstValue: "", secondValue: "", caseSensitive: false });
 
 // ---- Changing a flow. Each returns a new flow, and leaves the one it was given as it was. ----
 
@@ -169,7 +246,7 @@ export function newCodeStep(name: string): FlowStep {
 }
 
 export function newRouterStep(name: string): FlowStep {
-  return { name, type: "ROUTER", displayName: "Router", valid: true, skip: false, settings: { executionType: "EXECUTE_FIRST_MATCH", branches: [{ branchName: "Branch 1", branchType: "CONDITION", conditions: [[{ operator: "TEXT_CONTAINS", firstValue: "", secondValue: "", caseSensitive: false }]] }, { branchName: "Otherwise", branchType: "FALLBACK" }] }, children: [null, null], nextAction: null };
+  return { name, type: "ROUTER", displayName: "Router", valid: true, skip: false, settings: { executionType: "EXECUTE_FIRST_MATCH", branches: [{ branchName: "Branch 1", branchType: "CONDITION", conditions: [[newCondition()]] }, { branchName: "Otherwise", branchType: "FALLBACK" }] }, children: [null, null], nextAction: null };
 }
 
 export function newLoopStep(name: string): FlowStep {
@@ -238,7 +315,129 @@ export function removeStep(flow: Flow, name: string): Flow {
     return step;
   };
   next.trigger = unlink(next.trigger)!;
-  return next;
+  return withoutLostNotes(next);
+}
+
+/** Notes only for steps that are still there. */
+function withoutLostNotes(flow: Flow): Flow {
+  if (!flow.stepNotes) return flow;
+  const names = new Set(allSteps(flow.trigger).map((step) => step.name));
+  const kept = Object.fromEntries(Object.entries(flow.stepNotes).filter(([name]) => names.has(name)));
+  return { ...flow, stepNotes: kept };
+}
+
+/** A step turned off is passed over when the flow runs, as if it weren't there, and what comes after it still runs. The trigger can't be. */
+export function toggleStep(flow: Flow, name: string): Flow {
+  if (flow.trigger.name === name) return flow;
+  return updateStep(flow, name, (step) => void (step.skip = !step.skip));
+}
+
+export function setStepNote(flow: Flow, name: string, note: string): Flow {
+  const notes = { ...(flow.stepNotes ?? {}) };
+  if (note.trim()) notes[name] = note;
+  else delete notes[name];
+  return { ...flow, stepNotes: notes };
+}
+
+/** A step and everything inside it, without what comes after it: what copying takes. The trigger isn't copied. */
+export function copyOfStep(flow: Flow, name: string): FlowStep | null {
+  const step = findStep(flow, name);
+  if (!step || step.type === "PIECE_TRIGGER" || step.type === "EMPTY") return null;
+  const copy = JSON.parse(JSON.stringify(step)) as FlowStep;
+  copy.nextAction = null;
+  return copy;
+}
+
+/** Whether something on the clipboard is a step this can paste. */
+export function asCopiedStep(value: unknown): FlowStep | null {
+  const step = value as FlowStep | null;
+  if (!step || typeof step !== "object" || typeof step.name !== "string" || !["CODE", "PIECE", "ROUTER", "LOOP_ON_ITEMS"].includes(step.type) || typeof step.settings !== "object" || !step.settings) return null;
+  return { ...step, nextAction: null };
+}
+
+/**
+ * Puts a copied step in: after a step, or first in a branch or a loop. It and everything inside it get names no step has, and its expressions follow them,
+ * so a copied loop still reads its own item. What it reads from outside itself stays as it was.
+ */
+export function pasteStep(flow: Flow, place: Place, copied: FlowStep): { flow: Flow; name: string } {
+  const taken = new Set(allSteps(flow.trigger).map((step) => step.name));
+  const fresh = JSON.parse(JSON.stringify(copied)) as FlowStep;
+  fresh.nextAction = null;
+  const renames = new Map<string, string>();
+  for (const step of allSteps(fresh)) {
+    const base = step.name.replace(/_\d+$/, "") || "step";
+    let name = step.name;
+    for (let index = 1; taken.has(name); index++) name = `${base}_${index}`;
+    taken.add(name);
+    renames.set(step.name, name);
+  }
+  const rewrite = (value: unknown): unknown => JSON.parse(JSON.stringify(value).replace(/\{\{\s*([A-Za-z0-9_]+)(?=[.\s}[])/g, (match, ref: string) => (renames.has(ref) ? match.replace(ref, renames.get(ref)!) : match)));
+  for (const step of allSteps(fresh)) {
+    step.name = renames.get(step.name) ?? step.name;
+    step.settings = rewrite(step.settings) as Record<string, unknown>;
+  }
+  const next = addStep(flow, place, fresh);
+  const notes = Object.fromEntries(Object.entries(flow.stepNotes ?? {}).flatMap(([old, note]) => (renames.has(old) ? [[renames.get(old)!, note]] : [])));
+  return { flow: Object.keys(notes).length ? { ...next, stepNotes: { ...(next.stepNotes ?? {}), ...notes } } : next, name: fresh.name };
+}
+
+export function duplicateStep(flow: Flow, name: string): { flow: Flow; name: string } | null {
+  const copy = copyOfStep(flow, name);
+  return copy ? pasteStep(flow, { after: name }, copy) : null;
+}
+
+/**
+ * Puts another step in this one's place, keeping its name, so what refers to it still does, and what comes after it. Only for a step with nothing inside
+ * (code or a piece's action), or the trigger, which can only become another trigger.
+ */
+export function replaceStep(flow: Flow, name: string, replacement: FlowStep): Flow {
+  const current = findStep(flow, name);
+  if (!current) return flow;
+  const isTrigger = current.type === "PIECE_TRIGGER" || current.type === "EMPTY";
+  if (isTrigger !== (replacement.type === "PIECE_TRIGGER")) return flow;
+  if (!isTrigger && current.type !== "CODE" && current.type !== "PIECE") return flow;
+  if (replacement.type === "ROUTER" || replacement.type === "LOOP_ON_ITEMS") return flow;
+  return updateStep(flow, name, (step) => {
+    const nextAction = step.nextAction ?? null;
+    for (const key of Object.keys(step)) delete (step as Record<string, unknown>)[key];
+    Object.assign(step, JSON.parse(JSON.stringify(replacement)), { name, nextAction });
+  });
+}
+
+const branchesOf = (step: FlowStep) => (step.settings.branches ?? []) as Branch[];
+
+/** A new branch, before the one taken when nothing matches. */
+export function addBranch(flow: Flow, router: string): Flow {
+  return updateStep(flow, router, (step) => {
+    if (step.type !== "ROUTER") return;
+    const branches = branchesOf(step);
+    const fallback = branches.findIndex((branch) => branch.branchType === "FALLBACK");
+    const at = fallback === -1 ? branches.length : fallback;
+    const names = new Set(branches.map((branch) => branch.branchName));
+    let number = branches.length;
+    while (names.has(`Branch ${number}`)) number++;
+    branches.splice(at, 0, { branchName: `Branch ${number}`, branchType: "CONDITION", conditions: [[newCondition()]] });
+    const children = [...(step.children ?? [])];
+    while (children.length < branches.length - 1) children.push(null);
+    children.splice(at, 0, null);
+    step.settings.branches = branches;
+    step.children = children;
+  });
+}
+
+/** Takes a branch out, with its steps. The last branch with a test, and the one taken when nothing matches, stay. */
+export function removeBranch(flow: Flow, router: string, index: number): Flow {
+  const step = findStep(flow, router);
+  if (!step || step.type !== "ROUTER") return flow;
+  const branches = branchesOf(step);
+  if (branches[index]?.branchType !== "CONDITION" || branches.filter((branch) => branch.branchType === "CONDITION").length < 2) return flow;
+  const next = updateStep(flow, router, (target) => {
+    (target.settings.branches as Branch[]).splice(index, 1);
+    const children = [...(target.children ?? [])];
+    children.splice(index, 1);
+    target.children = children;
+  });
+  return withoutLostNotes(next);
 }
 
 /** The expressions a step can use: what ran before it. Inside a loop, its item too. */

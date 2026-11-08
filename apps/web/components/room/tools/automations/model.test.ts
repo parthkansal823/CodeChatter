@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
 
-import { addStep, allSteps, chartOfFlow, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, removeStep, resultsOf, statusOfResult, updateStep, type Flow, type FlowStep } from "./model";
+import { addBranch, addStep, allSteps, asCopiedStep, chartOfFlow, CONDITIONS, copyOfStep, duplicateStep, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeBranch, removeStep, replaceStep, resultsOf, setStepNote, statusOfResult, toggleStep, updateStep, type Branch, type Flow, type FlowStep } from "./model";
 
 const code = (name: string, next: FlowStep | null = null): FlowStep => ({ ...newCodeStep(name), nextAction: next });
 const trigger = (next: FlowStep | null): FlowStep => ({ name: "trigger", type: "PIECE_TRIGGER", displayName: "When called", settings: { pieceName: "@activepieces/piece-webhook", triggerName: "catch_webhook" }, nextAction: next });
@@ -60,7 +60,110 @@ test("a step that points back at itself can't hang it", () => {
 test("the chart joins each step to the next", () => {
   const { items, edges } = chartOfFlow(flowOf(code("a", code("b"))), undefined);
   assert.deepEqual(items.map((item) => item.id), ["trigger", "a", "b"]);
-  assert.deepEqual(edges, [{ from: "trigger", to: "a" }, { from: "a", to: "b" }]);
+  assert.deepEqual(edges, [
+    { from: "trigger", to: "a", place: { after: "trigger" } },
+    { from: "a", to: "b", place: { after: "a" } },
+  ]);
+});
+
+test("for someone who can edit, there's a + wherever a step can go next, and each arrow says where a step put on it goes", () => {
+  const { items, edges } = chartOfFlow(branching(), undefined, undefined, { adds: true });
+  const adds = items.filter((item) => item.shape === "add");
+  // After the last step, and after the last step inside the loop. Both branches have steps, so neither needs one of its own.
+  assert.deepEqual(adds.map((item) => item.id).sort(), ["+after:inside", "+after:join"]);
+  assert.deepEqual(adds.find((item) => item.id === "+after:join")!.place, { after: "join" });
+  assert.match(adds.find((item) => item.id === "+after:inside")!.description, /^Add a step after Code$/);
+  const into = (to: string) => edges.find((edge) => edge.to === to)!;
+  assert.deepEqual(into("yes").place, { inBranch: "route", branch: 0 });
+  assert.equal(into("yes").label, "Branch 1");
+  assert.deepEqual(into("no").place, { inBranch: "route", branch: 1 });
+  assert.equal(into("no").label, "Otherwise");
+  assert.deepEqual(into("inside").place, { insideLoop: "each" });
+  assert.equal(into("inside").label, "Each");
+  // What leaves a branch and joins the step after the router goes at the end of that branch.
+  assert.deepEqual(edges.find((edge) => edge.from === "yes_more" && edge.to === "join")!.place, { after: "yes_more" });
+
+  const empty = chartOfFlow(flowOf({ ...newRouterStep("route"), nextAction: code("after") }), undefined, undefined, { adds: true });
+  const branchAdds = empty.items.filter((item) => item.id.startsWith("+branch:"));
+  assert.deepEqual(branchAdds.map((item) => item.place), [{ inBranch: "route", branch: 0 }, { inBranch: "route", branch: 1 }]);
+  // An empty branch still goes on to what's after the router, through its +.
+  assert.ok(empty.edges.some((edge) => edge.from === "+branch:route:0" && edge.to === "after"));
+  const loop = chartOfFlow(flowOf(newLoopStep("each")), undefined, undefined, { adds: true });
+  assert.deepEqual(loop.items.find((item) => item.id === "+inside:each")!.place, { insideLoop: "each" });
+  assert.equal(chartOfFlow(branching(), undefined).items.filter((item) => item.shape === "add").length, 0, "nothing to add for someone who can't edit");
+});
+
+test("a step turned off says so, and its note is shown", () => {
+  const flow = setStepNote(toggleStep(flowOf(code("a", code("b"))), "a"), "a", "Waiting for the API key");
+  const item = chartOfFlow(flow, undefined).items.find((each) => each.id === "a")!;
+  assert.equal(item.muted, true);
+  assert.match(item.detail, /^Off · Code/);
+  assert.equal(item.note, "Waiting for the API key");
+  assert.match(item.description, /turned off.*note: Waiting for the API key/);
+  assert.equal(findStep(toggleStep(flow, "a"), "a")!.skip, false, "turning it on again");
+  assert.equal(toggleStep(flow, "trigger"), flow, "the trigger can't be turned off");
+  assert.deepEqual(setStepNote(flow, "a", "  ").stepNotes, {}, "an empty note goes");
+  assert.deepEqual(removeStep(flow, "a").stepNotes, {}, "a removed step's note goes with it");
+});
+
+test("copying and pasting gives the copy and what's inside it new names, and its expressions follow them", () => {
+  const inside: FlowStep = { ...newCodeStep("inner_1"), settings: { ...newCodeStep("inner_1").settings, input: { item: "{{loop_1.output.item}}", before: "{{a.output.value}}" } } };
+  const flow: Flow = { ...flowOf(code("a", { ...newLoopStep("loop_1"), firstLoopAction: inside })), stepNotes: { loop_1: "the loop" } };
+  const copy = copyOfStep(flow, "loop_1")!;
+  assert.equal(copy.nextAction, null, "what comes after isn't copied");
+  const pasted = pasteStep(flow, { after: "a" }, copy);
+  assert.equal(pasted.name, "loop_2");
+  const loop = findStep(pasted.flow, "loop_2")!;
+  assert.equal(loop.firstLoopAction!.name, "inner_2");
+  assert.deepEqual(loop.firstLoopAction!.settings.input, { item: "{{loop_2.output.item}}", before: "{{a.output.value}}" });
+  assert.equal(loop.nextAction!.name, "loop_1", "it goes in, and what was there comes after it");
+  assert.equal(pasted.flow.stepNotes!.loop_2, "the loop");
+  assert.equal(new Set(allSteps(pasted.flow.trigger).map((step) => step.name)).size, allSteps(pasted.flow.trigger).length, "every name is still its own");
+  assert.equal(copyOfStep(flow, "trigger"), null, "the trigger isn't copied");
+
+  const twice = duplicateStep(pasted.flow, "a")!;
+  assert.equal(twice.name, "a_1");
+  assert.equal(findStep(twice.flow, "a")!.nextAction!.name, "a_1");
+  assert.equal(asCopiedStep({ name: "x", type: "PIECE_TRIGGER", settings: {} }), null, "a trigger from the clipboard isn't pasted");
+  assert.equal(asCopiedStep("not a step"), null);
+  assert.equal(asCopiedStep({ ...newCodeStep("x"), nextAction: code("y") })!.nextAction, null);
+});
+
+test("replacing a step keeps its name and what comes after it", () => {
+  const flow = flowOf(code("a", code("b")));
+  const replaced = replaceStep(flow, "a", newPieceStep("ignored", "@activepieces/piece-github", PIECE, "create_issue"));
+  const step = findStep(replaced, "a")!;
+  assert.equal(step.type, "PIECE");
+  assert.equal(step.nextAction!.name, "b");
+  const retriggered = replaceStep(flow, "trigger", newTrigger("@activepieces/piece-github", PIECE, "new_issue"));
+  assert.equal((retriggered.trigger.settings as { triggerName: string }).triggerName, "new_issue");
+  assert.equal(retriggered.trigger.nextAction!.name, "a");
+  assert.equal(replaceStep(flow, "trigger", newCodeStep("x")), flow, "a trigger only becomes another trigger");
+  assert.equal(replaceStep(flow, "a", newRouterStep("r")), flow, "nothing with steps inside it replaces a step");
+  const withRouter = flowOf(newRouterStep("r"));
+  assert.equal(replaceStep(withRouter, "r", newCodeStep("x")), withRouter, "a router keeps its branches");
+});
+
+test("a router can have more branches, and lose them, but keeps one with a test and the one for when nothing matches", () => {
+  const flow = flowOf({ ...newRouterStep("route"), children: [code("first"), code("otherwise")] });
+  const more = addBranch(flow, "route");
+  const router = findStep(more, "route")!;
+  const branches = router.settings.branches as Branch[];
+  assert.deepEqual(branches.map((branch) => branch.branchType), ["CONDITION", "CONDITION", "FALLBACK"]);
+  assert.equal(branches[1]!.branchName, "Branch 2");
+  assert.deepEqual(router.children!.map((child) => child?.name ?? null), ["first", null, "otherwise"], "the new branch is empty, and the others keep their steps");
+  const fewer = removeBranch(more, "route", 0);
+  assert.deepEqual((findStep(fewer, "route")!.children ?? []).map((child) => child?.name ?? null), [null, "otherwise"]);
+  assert.equal(findStep(fewer, "first"), null, "a branch's steps go with it");
+  assert.equal(removeBranch(fewer, "route", 0), fewer, "the last branch with a test stays");
+  assert.equal(removeBranch(more, "route", 2), more, "the one for when nothing matches stays");
+});
+
+test("a router's tests are the engine's own names", () => {
+  assert.equal(CONDITIONS.length, 22);
+  assert.ok(CONDITIONS.some((condition) => condition.value === "TEXT_START_WITH"), "starts with has no S in the engine");
+  assert.ok(!CONDITIONS.some((condition) => condition.value === "TEXT_STARTS_WITH"));
+  assert.equal(new Set(CONDITIONS.map((condition) => condition.value)).size, CONDITIONS.length);
 });
 
 test("a router's branches go their own ways and come back together", () => {

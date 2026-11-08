@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ROOM_ACTIONS, ROOM_ROLES, assignableRoles, can } from "./permissions.js";
+import { ROOM_ACTIONS, ROOM_ROLES, assignableMemberRoles, assignableRoles, can } from "./permissions.js";
 
 describe("room permissions", () => {
   it("never lets a viewer change anything", () => {
@@ -41,5 +41,18 @@ describe("room permissions", () => {
         }
       }
     }
+  });
+
+  it("only lets owners assign an active member the owner role", () => {
+    for (const role of ROOM_ROLES) {
+      expect(assignableMemberRoles(role)).toEqual(role === "owner" ? ["owner", "editor", "runner", "viewer"] : []);
+    }
+  });
+
+  it("keeps owner promotion separate from invitation and approval roles", () => {
+    expect(assignableRoles("owner")).toEqual(["editor", "runner", "viewer"]);
+    expect(assignableRoles("editor")).toEqual(["editor", "runner", "viewer"]);
+    expect(assignableRoles("interviewer")).toEqual(["interviewer", "candidate", "viewer"]);
+    for (const role of ROOM_ROLES) expect(assignableRoles(role)).not.toContain("owner");
   });
 });
