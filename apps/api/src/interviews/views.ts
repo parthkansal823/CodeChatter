@@ -1,5 +1,6 @@
 /** What each person may see of an interview: the one place hidden tests, right answers, the rubric, the scorecard and the integrity record are kept from candidates. */
 import type { CandidateAnswer, CandidateInterview, CandidatePaperQuestion, CandidateRun, GradedAnswer, InterviewerInterview, InterviewerRun, IntegrityEvent, IntegrityKind, InterviewListItem, PaperQuestion, Scorecard, VisibleCaseResult } from "@codechatter/contracts";
+import { summarizeScorecards, type InterviewScorecard, type InterviewScorecards, type ScorecardInterviewer } from "@codechatter/contracts";
 import type { schema } from "@codechatter/db";
 
 import { askedOf, integrityReport, scorePaper } from "./paper.js";
@@ -8,6 +9,8 @@ export type InterviewRow = typeof schema.interviews.$inferSelect;
 export type RunRow = typeof schema.interviewRuns.$inferSelect & { byName?: string | null };
 export type AnswerRow = typeof schema.interviewAnswers.$inferSelect;
 export type EventRow = typeof schema.interviewEvents.$inferSelect;
+export type ScorecardRow = typeof schema.interviewScorecards.$inferSelect & { interviewerName?: string | null; interviewerImage?: string | null };
+export type ScorecardViewer = { userId: string; interviewer: boolean; admin: boolean };
 type Test = InterviewRow["question"]["tests"][number];
 /** Every run's score, not only the ones shown: a coding question counts its best. */
 type RunScore = { questionId: string | null; passed: number; total: number };
@@ -134,16 +137,41 @@ export function candidateInterview(row: InterviewRow, runs: readonly RunRow[], i
 }
 
 /** A scorecard with a row for every criterion in the rubric, whatever was saved before. */
-export function fullScorecard(row: InterviewRow): Scorecard {
-  const saved = new Map(row.scorecard.scores.map((score) => [score.id, score]));
-  return { ...row.scorecard, scores: row.question.rubric.map(({ id }) => saved.get(id) ?? { id, score: null, note: "" }) };
+export function fullScorecard(row: InterviewRow, card?: Scorecard | null): Scorecard {
+  const saved = new Map((card?.scores ?? []).map((score) => [score.id, score]));
+  return { scores: row.question.rubric.map(({ id }) => saved.get(id) ?? { id, score: null, note: "" }), overall: card?.overall ?? null, recommendation: card?.recommendation ?? null, notes: card?.notes ?? "" };
 }
 
-export type InterviewerExtras = { answers?: readonly AnswerRow[]; events?: readonly EventRow[]; bigEdits?: number; runScores?: readonly RunScore[] };
+/** This is the only policy that discloses personal cards, other submissions or their aggregate. */
+export function scorecardView(row: InterviewRow, cards: readonly ScorecardRow[], interviewers: readonly ScorecardInterviewer[], viewer?: ScorecardViewer): InterviewScorecards {
+  const hidden: InterviewScorecards = { canWrite: false, own: null, submitted: [], otherSubmittedCount: 0, locked: true, summary: null };
+  if (!viewer || viewer.userId === row.candidateUserId || (!viewer.interviewer && !viewer.admin)) return hidden;
+  const ownRow = cards.find((card) => card.interviewerId === viewer.userId);
+  const canWrite = viewer.interviewer;
+  const locked = canWrite ? !ownRow?.submittedAt : false;
+  const person = (card: ScorecardRow): ScorecardInterviewer => ({ id: card.interviewerId, name: card.interviewerName ?? "Former interviewer", image: card.interviewerImage ?? null });
+  const presented = (card: ScorecardRow): InterviewScorecard => ({ ...fullScorecard(row, card), interviewer: person(card), submittedAt: card.submittedAt?.toISOString() ?? null, updatedAt: card.updatedAt.toISOString() });
+  const author = interviewers.find((person) => person.id === viewer.userId) ?? { id: viewer.userId, name: "You", image: null };
+  const own = canWrite ? ownRow ? presented(ownRow) : { ...fullScorecard(row), interviewer: author, submittedAt: null, updatedAt: null } : null;
+  const published = cards.filter((card) => card.submittedAt !== null);
+  const submitted = locked ? [] : published.map(presented);
+  const pending = locked ? [] : interviewers.filter((person) => !published.some((card) => card.interviewerId === person.id));
+  return {
+    canWrite,
+    own,
+    submitted,
+    otherSubmittedCount: published.filter((card) => card.interviewerId !== viewer.userId).length,
+    locked,
+    summary: locked ? null : summarizeScorecards(row.question.rubric, submitted, pending),
+  };
+}
+
+export type InterviewerExtras = { answers?: readonly AnswerRow[]; events?: readonly EventRow[]; bigEdits?: number; runScores?: readonly RunScore[]; scorecards?: readonly ScorecardRow[]; interviewers?: readonly ScorecardInterviewer[]; viewer?: ScorecardViewer };
 
 export function interviewerInterview(row: InterviewRow, runs: readonly RunRow[], interviewerName: string | null, now: Date, extras: InterviewerExtras = {}): InterviewerInterview {
   const tests = row.question.tests;
   const answers = (extras.answers ?? []).map(gradedOf);
+  const scorecards = scorecardView(row, extras.scorecards ?? [], extras.interviewers ?? [], extras.viewer);
   return {
     ...candidateInterview(row, [], interviewerName, now),
     // Interviewers see the question before it starts, too.
@@ -160,7 +188,8 @@ export function interviewerInterview(row: InterviewRow, runs: readonly RunRow[],
     candidateJoined: row.candidateUserId !== null,
     hiddenTests: tests.filter((test) => test.hidden).map(({ id, input, expected }) => ({ id, input, expected })),
     rubric: row.question.rubric,
-    scorecard: fullScorecard(row),
+    scorecard: fullScorecard(row, scorecards.own),
+    scorecards,
     runs: runs.map((run) => interviewerRun(run, testsOf(row, run.questionId))),
     paper: row.paper,
     answers,

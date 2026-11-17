@@ -8,7 +8,7 @@
 import type { AutomationInput, AutomationLive, AutomationManifest, AutomationRun, AutomationRunSummary } from "@codechatter/contracts";
 import { setFileText, textOf, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Code2, GitBranch, Loader2, Play, Puzzle, Redo2, Repeat, Square, Undo2, X, Zap } from "lucide-react";
+import { Code2, GitBranch, Loader2, Play, Puzzle, Redo2, Repeat, RotateCcw, Rows3, Square, Undo2, X, Zap } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 import * as Y from "yjs";
@@ -22,11 +22,11 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { copyStep, stepToPaste } from "./clipboard";
-import { addStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
+import { addStep, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
 import { StepPanel } from "./step-panel";
 import { StepPicker, type Picked } from "./step-picker";
 
-const GLYPHS: Record<Glyph, FlowchartNode["icon"]> = { trigger: Zap, code: Code2, piece: Puzzle, router: GitBranch, loop: Repeat };
+const GLYPHS: Record<Glyph, FlowchartNode["icon"]> = { trigger: Zap, code: Code2, piece: Puzzle, router: GitBranch, loop: Repeat, data: Rows3 };
 const failure = (error: unknown) => (error instanceof ApiError ? error.message : "Couldn't reach the server. Try again.");
 const when = (at: number | null | undefined) => (at ? new Date(at).toLocaleString([], { dateStyle: "short", timeStyle: "medium" }) : "–");
 const STATUS_WORDS: Record<string, string> = { SUCCEEDED: "Finished", FAILED: "Failed", STOPPED: "Stopped", TIMEOUT: "Took too long", RUNNING: "Running", PAUSED: "Paused" };
@@ -42,14 +42,20 @@ function stateVectorOf(doc: Y.Doc): string {
   return btoa(binary);
 }
 
-function RunsList({ runs, shownId, onShow }: { runs: AutomationRunSummary[]; shownId: string | null; onShow: (id: string) => void }) {
+const UNFINISHED = new Set(["FAILED", "TIMEOUT", "STOPPED"]);
+type RunExtra = Partial<Pick<Extract<AutomationInput, { op: "run" }>, "mode" | "step" | "sampleData" | "retryOf">>;
+
+function RunsList({ runs, shownId, onShow, titleOf }: { runs: AutomationRunSummary[]; shownId: string | null; onShow: (id: string) => void; titleOf: (name: string) => string }) {
   if (!runs.length) return <p className="text-muted-foreground">No runs yet.</p>;
   return (
     <ul aria-label="Runs of this flow" className="grid gap-0.5">
       {runs.map((run) => (
         <li key={run.id}>
           <button type="button" aria-current={shownId === run.id ? "true" : undefined} className={cn("flex min-h-6 w-full flex-wrap items-center gap-x-2 rounded-sm px-1 text-left hover:bg-accent", shownId === run.id && "bg-accent", run.status !== "SUCCEEDED" && "font-medium text-destructive")} onClick={() => onShow(run.id)}>
-            <span>{STATUS_WORDS[run.status] ?? run.status}</span>
+            <span>
+              {STATUS_WORDS[run.status] ?? run.status}
+              {run.mode === "step" && run.step ? ` · one step: ${titleOf(run.step)}` : run.mode === "retry" ? " · carried on" : ""}
+            </span>
             <span className={cn(run.status === "SUCCEEDED" && "text-muted-foreground")}>
               {when(run.startedAt)}
               {run.durationMs !== undefined ? ` · ${(run.durationMs / 1000).toFixed(1)} s` : ""}
@@ -112,7 +118,10 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
   const runDetails = useQuery({ queryKey: ["automations", room.id, "run", showId], queryFn: () => ask<AutomationRun>({ op: "run-details", id: showId! }), enabled: Boolean(showId), staleTime: Number.POSITIVE_INFINITY, retry: false });
   const runningHere = live?.state === "running" && live.path === node.path;
   const steps = runningHere ? live.steps : runDetails.data?.steps;
-  const results = resultsOf(steps);
+  // A run of one step lights up only that step: the rest is the data it was tried with.
+  const oneStep = runningHere ? (live.mode === "step" ? (live.step ?? null) : null) : runDetails.data?.mode === "step" ? (runDetails.data.step ?? null) : null;
+  const chartSteps = oneStep && steps ? (steps[oneStep] ? { [oneStep]: steps[oneStep]! } : {}) : steps;
+  const results = resultsOf(chartSteps);
 
   if ("error" in parsed) {
     return (
@@ -123,7 +132,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
   }
   const flow = parsed.flow;
   const save = (next: Flow) => setFileText(doc, node.id, `${JSON.stringify(next, null, 2)}\n`);
-  const chart = chartOfFlow(flow, steps, pieces, { adds: canEdit });
+  const chart = chartOfFlow(flow, chartSteps, pieces, { adds: canEdit });
   const isAdd = new Set(chart.items.filter((item) => item.shape === "add").map((item) => item.id));
   // An arrow into a + needs no + of its own when both put a step in the same place; from the end of a branch they don't, so it keeps one.
   const addPlaces = new Map(chart.items.filter((item) => item.shape === "add").map((item) => [item.id, JSON.stringify(item.place)]));
@@ -143,7 +152,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
   const isTrigger = (name: string) => name === flow.trigger.name;
 
   const focusBox = (name: string) => requestAnimationFrame(() => chartArea.current?.querySelector<HTMLElement>(`[data-chart-id="${CSS.escape(name)}"]`)?.focus());
-  const run = async () => {
+  const run = async (extra: RunExtra = {}) => {
     if (!canRun || runningHere) return;
     setProblem(null);
     let body: unknown = {};
@@ -157,7 +166,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
     }
     setStarting(true);
     try {
-      const started = await ask<{ id: string }>({ op: "run", path: node.path, payload: body, stateVector: stateVectorOf(doc) });
+      const started = await ask<{ id: string }>({ op: "run", path: node.path, payload: body, stateVector: stateVectorOf(doc), ...extra });
       setShownRun(started.id);
       queryClient.setQueryData(["automations", room.id, "status"], { state: "running", id: started.id, path: node.path, steps: {}, queued: 0 } satisfies AutomationLive);
       void queryClient.invalidateQueries({ queryKey: ["automations", room.id, "status"] });
@@ -166,6 +175,19 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
     } finally {
       setStarting(false);
     }
+  };
+  /** One step on its own: every other step stands in with what it gave on the run shown, and the trigger with what's to be sent when it hasn't run. */
+  const runStep = (name: string) => {
+    let body: unknown = {};
+    try {
+      body = payload.trim() ? JSON.parse(payload) : {};
+    } catch {
+      setProblem("What to send isn't valid JSON.");
+      return;
+    }
+    const sample: Record<string, unknown> = Object.fromEntries(Object.entries(steps ?? {}).map(([key, result]) => [key, result.output]));
+    if (!Object.hasOwn(sample, flow.trigger.name)) sample[flow.trigger.name] = { body, headers: {}, queryParams: {} };
+    void run({ mode: "step", step: name, sampleData: sample });
   };
   const stop = async () => {
     try {
@@ -298,6 +320,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
     if (picked.kind === "code") made = newCodeStep(newStepName(flow, "code"));
     else if (picked.kind === "router") made = newRouterStep(newStepName(flow, "router"));
     else if (picked.kind === "loop") made = newLoopStep(newStepName(flow, "loop"));
+    else if (picked.kind === "builtin") made = newBuiltinStep(newStepName(flow, picked.name), picked.name);
     else if (picked.kind === "action" && pieces[picked.pieceName]) made = newPieceStep(newStepName(flow, picked.actionName), picked.pieceName, pieces[picked.pieceName]!, picked.actionName);
     else if (picked.kind === "trigger" && pieces[picked.pieceName]) made = newTrigger(picked.pieceName, pieces[picked.pieceName]!, picked.triggerName);
     if (!made) return;
@@ -378,6 +401,14 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
               pieces={pieces}
               result={results.get(step.name)}
               runSteps={steps && Object.keys(steps).length ? steps : undefined}
+              onRunStep={canRun ? () => runStep(step.name) : null}
+              path={node.path}
+              canRun={canRun}
+              onUseEvent={(body) => {
+                setPayload(JSON.stringify(body ?? {}, null, 2));
+                toast("It's in What to send, beside the runs.");
+              }}
+              runningStep={starting || (runningHere && live.mode === "step" && live.step === step.name)}
               canEdit={canEdit}
               onChange={save}
               onClose={() => setSelected(null)}
@@ -449,12 +480,28 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
                     })()}
                   </p>
                 )}
+                {shown.mode === "retry" && <p className="text-muted-foreground">Carried on from an earlier run: what had succeeded wasn&apos;t run again.</p>}
+                {shown.pinned && shown.pinned.length > 0 && <p className="text-muted-foreground">Pinned, so not run: {shown.pinned.map(titleOf).join(", ")}.</p>}
+                {canRun && shown.mode !== "step" && (
+                  <div className="flex flex-wrap gap-1">
+                    {UNFINISHED.has(shown.status) && (
+                      <Button size="xs" variant="outline" title="Runs the flow as it is now, keeping what succeeded and starting again at the step that didn't" onClick={() => void run({ mode: "retry", retryOf: shown.id })}>
+                        <RotateCcw /> Carry on from where it stopped
+                      </Button>
+                    )}
+                    {shown.payload !== undefined && (
+                      <Button size="xs" variant="ghost" onClick={() => setPayload(JSON.stringify(shown.payload ?? {}, null, 2))}>
+                        Use what it was sent
+                      </Button>
+                    )}
+                  </div>
+                )}
                 <p className="text-muted-foreground">Select a step to see what went in and what came out.</p>
               </section>
             )}
             <section aria-label="Earlier runs" className="grid gap-1">
               <h4 className="font-medium">Runs</h4>
-              {runs.isError ? <p className="text-destructive">{failure(runs.error)}</p> : <RunsList runs={runs.data?.runs ?? []} shownId={showId} onShow={setShownRun} />}
+              {runs.isError ? <p className="text-destructive">{failure(runs.error)}</p> : <RunsList runs={runs.data?.runs ?? []} shownId={showId} onShow={setShownRun} titleOf={titleOf} />}
             </section>
             <p className="text-muted-foreground">
               {canEdit ? "Select a box to change it, or use a + to add a step. Right-click a box, or focus it and press its keys: N adds, D turns off, F2 renames, Delete removes, and the arrows move between boxes." : "Select a box to see it, and what it did on a run."}

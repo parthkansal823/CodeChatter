@@ -89,7 +89,7 @@ function TwoFactorControls({ hasPassword, enabled, changed }: { hasPassword: boo
     setError("");
     try {
       const result = await authClient.twoFactor.verifyTotp({ code, trustDevice: false });
-      if (result.error) { setError(result.error.status === 429 ? "Too many attempts. Wait a minute, then try again." : "That code didn't work. Use the current code from your authenticator."); return; }
+      if (result.error) { setError(result.error.code === "TOTP_CODE_ALREADY_USED" ? "That code has just been used. Wait for the next one." : result.error.code === "TOTP_REPLAY_STORE_UNAVAILABLE" ? "Couldn't check this code right now. Try again shortly." : result.error.status === 429 ? "Too many attempts. Wait a minute, then try again." : "That code didn't work. Use the current code from your authenticator."); return; }
       setBackupCodes(setup.backupCodes);
       setSetup(null);
       toast.success("Two-factor sign-in turned on.");

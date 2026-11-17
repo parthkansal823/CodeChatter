@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { candidateInterview, fullScorecard, interviewerInterview, type InterviewRow, type RunRow } from "./views.js";
+import { candidateInterview, fullScorecard, interviewerInterview, scorecardView, type InterviewRow, type RunRow, type ScorecardRow } from "./views.js";
 
 const NOW = new Date("2026-11-06T10:00:00Z");
 const row = (status: InterviewRow["status"] = "live"): InterviewRow => ({
@@ -48,7 +48,6 @@ const row = (status: InterviewRow["status"] = "live"): InterviewRow => ({
   candidateTokenHash: "TOKEN-HASH",
   candidateUserId: "u2",
   candidateJoinedAt: NOW,
-  scorecard: { scores: [{ id: "c1", score: 4, note: "SCORE-NOTE" }], overall: 4, recommendation: "yes", notes: "PRIVATE-NOTES" },
   createdAt: NOW,
   updatedAt: NOW,
 });
@@ -142,10 +141,11 @@ describe("a paper, as an interviewer sees it", () => {
 });
 
 describe("what a candidate sees", () => {
-  const seen = JSON.stringify(candidateInterview(row(), [run], "Bo", NOW));
+  const contaminated = { ...row(), scorecard: { notes: "PRIVATE-NOTES", scores: [{ note: "SCORE-NOTE" }] }, scorecards: { submitted: [{ notes: "SECOND-PRIVATE" }], summary: { overall: 5 } } };
+  const seen = JSON.stringify(candidateInterview(contaminated, [run], "Bo", NOW));
 
   it("never includes hidden tests, their output, the rubric, the scorecard or the link", () => {
-    for (const secret of ["HIDDEN-INPUT", "HIDDEN-EXPECTED", "HIDDEN-STDOUT", "HIDDEN-STDERR", "RUBRIC-LABEL", "SCORE-NOTE", "PRIVATE-NOTES", "TOKEN-HASH", "CANDIDATE-EMAIL"]) {
+    for (const secret of ["HIDDEN-INPUT", "HIDDEN-EXPECTED", "HIDDEN-STDOUT", "HIDDEN-STDERR", "RUBRIC-LABEL", "SCORE-NOTE", "PRIVATE-NOTES", "SECOND-PRIVATE", "TOKEN-HASH", "CANDIDATE-EMAIL", '"scorecard"', '"scorecards"']) {
       expect(seen, secret).not.toContain(secret);
     }
   });
@@ -168,7 +168,7 @@ describe("what a candidate sees", () => {
 
 describe("what an interviewer sees", () => {
   it("includes everything, before it starts too", () => {
-    const view = interviewerInterview(row("scheduled"), [run], "Bo", NOW);
+    const view = interviewerInterview(row("scheduled"), [run], "Bo", NOW, { scorecards: [card()], interviewers, viewer: { userId: "u1", interviewer: true, admin: false } });
     expect(view.prompt).toContain("add the numbers");
     expect(view.hiddenTests[0]!.input).toBe("HIDDEN-INPUT");
     expect(view.rubric[0]!.label).toBe("RUBRIC-LABEL");
@@ -186,6 +186,93 @@ describe("fullScorecard", () => {
   it("has a row for every criterion, in the rubric's order, keeping what was saved", () => {
     const interview = row();
     interview.question.rubric = [{ id: "c2", label: "Two" }, { id: "c1", label: "One" }];
-    expect(fullScorecard(interview).scores).toEqual([{ id: "c2", score: null, note: "" }, { id: "c1", score: 4, note: "SCORE-NOTE" }]);
+    expect(fullScorecard(interview, card()).scores).toEqual([{ id: "c2", score: null, note: "" }, { id: "c1", score: 4, note: "SCORE-NOTE" }]);
+  });
+});
+
+const interviewers = [{ id: "u1", name: "First interviewer", image: null }, { id: "u3", name: "Second interviewer", image: null }];
+function card(over: Partial<ScorecardRow> = {}): ScorecardRow {
+  return { id: "card1", interviewId: "i1", interviewerId: "u1", scores: [{ id: "c1", score: 4, note: "SCORE-NOTE" }], overall: 4, recommendation: "yes", notes: "PRIVATE-NOTES", submittedAt: null, updatedAt: NOW, interviewerName: "First interviewer", interviewerImage: null, ...over };
+}
+const second = (over: Partial<ScorecardRow> = {}) => card({ id: "card2", interviewerId: "u3", interviewerName: "Second interviewer", notes: "SECOND-PRIVATE", ...over });
+const firstViewer = { userId: "u1", interviewer: true, admin: false };
+
+describe("independent scorecard disclosure", () => {
+  it("always supplies an active interviewer's own empty draft", () => {
+    const view = scorecardView(row(), [], interviewers, firstViewer);
+    expect(view).toMatchObject({ canWrite: true, locked: true, otherSubmittedCount: 0, submitted: [], summary: null });
+    expect(view.own).toMatchObject({ interviewer: interviewers[0], submittedAt: null, updatedAt: null, scores: [{ id: "c1", score: null, note: "" }] });
+  });
+
+  it("keeps concurrent personal drafts separate and never returns the other's draft", () => {
+    const cards = [card(), second()];
+    const first = scorecardView(row(), cards, interviewers, firstViewer);
+    const other = scorecardView(row(), cards, interviewers, { ...firstViewer, userId: "u3" });
+    expect(first.own?.notes).toBe("PRIVATE-NOTES");
+    expect(other.own?.notes).toBe("SECOND-PRIVATE");
+    expect(JSON.stringify(first)).not.toContain("SECOND-PRIVATE");
+    expect(JSON.stringify(other)).not.toContain("PRIVATE-NOTES");
+  });
+
+  it("reveals only the count, with no author or summary, before submitting", () => {
+    const view = scorecardView(row(), [card(), second({ submittedAt: NOW })], interviewers, firstViewer);
+    expect(view).toMatchObject({ locked: true, otherSubmittedCount: 1, submitted: [], summary: null });
+    expect(JSON.stringify(view)).not.toContain("SECOND-PRIVATE");
+    expect(JSON.stringify(view)).not.toContain("Second interviewer");
+  });
+
+  it("does not let organisation-admin status bypass an active interviewer's blind review", () => {
+    expect(scorecardView(row(), [second({ submittedAt: NOW })], interviewers, { ...firstViewer, admin: true })).toMatchObject({ locked: true, submitted: [], summary: null, otherSubmittedCount: 1 });
+  });
+
+  it("shows both submitted judgements and their averages once the viewer submits", () => {
+    const view = scorecardView(row(), [card({ submittedAt: NOW }), second({ submittedAt: NOW, scores: [{ id: "c1", score: 2, note: "" }], recommendation: "maybe" })], interviewers, firstViewer);
+    expect(view.locked).toBe(false);
+    expect(view.submitted).toHaveLength(2);
+    expect(view.submitted[1]).toMatchObject({ interviewer: interviewers[1], submittedAt: NOW.toISOString() });
+    expect(view.summary).toMatchObject({ criteria: [{ id: "c1", average: 3, count: 2 }], recommendations: { yes: 1, maybe: 1, no: 0 }, submitted: 2, pending: [] });
+  });
+
+  it("never includes somebody else's unsubmitted draft even after the viewer submits", () => {
+    const view = scorecardView(row(), [card({ submittedAt: NOW }), second()], interviewers, firstViewer);
+    expect(view.submitted).toHaveLength(1);
+    expect(JSON.stringify(view)).not.toContain("SECOND-PRIVATE");
+    expect(view.summary?.pending).toEqual([interviewers[1]]);
+  });
+
+  it("lets non-participant admins read submitted cards but not write or see any draft", () => {
+    const view = scorecardView(row(), [card({ submittedAt: NOW }), second(), card({ id: "admin-draft", interviewerId: "admin", notes: "ADMIN-DRAFT" })], interviewers, { userId: "admin", interviewer: false, admin: true });
+    expect(view).toMatchObject({ canWrite: false, own: null, locked: false });
+    expect(view.submitted).toHaveLength(1);
+    expect(JSON.stringify(view)).not.toContain("SECOND-PRIVATE");
+    expect(JSON.stringify(view)).not.toContain("ADMIN-DRAFT");
+  });
+
+  it("denies candidate identities even with forged interviewer and admin flags", () => {
+    const view = scorecardView(row(), [card({ submittedAt: NOW }), second()], interviewers, { userId: "u2", interviewer: true, admin: true });
+    expect(view).toEqual({ canWrite: false, own: null, submitted: [], otherSubmittedCount: 0, locked: true, summary: null });
+    for (const status of ["scheduled", "live", "finished"] as const) {
+      const contaminated = { ...row(status), scorecards: view, scorecard: card() };
+      const candidate = candidateInterview(contaminated, [run], "Bo", NOW);
+      expect(candidate).not.toHaveProperty("scorecard");
+      expect(candidate).not.toHaveProperty("scorecards");
+    }
+  });
+
+  it("retains a removed interviewer's submission without listing them as awaiting submission", () => {
+    const view = scorecardView(row(), [card({ submittedAt: NOW }), second({ submittedAt: NOW })], [interviewers[0]!], firstViewer);
+    expect(view.submitted).toHaveLength(2);
+    expect(view.summary?.pending).toEqual([]);
+    expect(scorecardView(row(), [second({ submittedAt: NOW })], [interviewers[0]!], { userId: "u3", interviewer: false, admin: false }).submitted).toEqual([]);
+  });
+
+  it("relocks disclosure when a submission is withdrawn into a draft", () => {
+    expect(scorecardView(row(), [card(), second({ submittedAt: NOW })], interviewers, firstViewer)).toMatchObject({ locked: true, submitted: [], otherSubmittedCount: 1, summary: null });
+  });
+
+  it("fails closed without caller context and preserves unattributed historical submissions", () => {
+    expect(scorecardView(row(), [card({ submittedAt: NOW })], interviewers).submitted).toEqual([]);
+    const view = scorecardView(row(), [card({ interviewerId: null, interviewerName: null, submittedAt: NOW })], interviewers, { userId: "admin", interviewer: false, admin: true });
+    expect(view.submitted[0]?.interviewer).toEqual({ id: null, name: "Former interviewer", image: null });
   });
 });

@@ -62,6 +62,13 @@ export class RoomsRepository {
     await this.db.update(schema.rooms).set({ settings: patch }).where(eq(schema.rooms.id, roomId));
   }
 
+  /** One entry of a setting that holds entries by id, changed on its own in one statement, so two people changing different entries don't undo each other. Null takes it away. */
+  async setSettingEntry(roomId: string, key: string, entry: string, value: unknown): Promise<void> {
+    const current = sql`coalesce(${schema.rooms.settings} -> ${key}::text, '{}'::jsonb)`;
+    const next = value === null ? sql`${current} - ${entry}::text` : sql`${current} || ${JSON.stringify({ [entry]: value })}::jsonb`;
+    await this.db.update(schema.rooms).set({ settings: sql`${schema.rooms.settings} || jsonb_build_object(${key}::text, ${next})` }).where(eq(schema.rooms.id, roomId));
+  }
+
   async addMember(roomId: string, userId: string, role: RoomRole, status: "active" | "pending"): Promise<void> {
     await this.db.insert(schema.roomMembers).values({ roomId, userId, role, status }).onConflictDoNothing();
   }

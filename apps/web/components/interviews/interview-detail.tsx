@@ -1,7 +1,7 @@
 /** One sitting, for its interviewers: controls, the paper with its marks, the private scorecard, the integrity record, every test run, the replay and the report. */
 "use client";
 
-import type { InterviewerInterview, Scorecard } from "@codechatter/contracts";
+import type { InterviewerInterview, SaveScorecardInput } from "@codechatter/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ClipboardCopy, Download, ExternalLink, Link2, Play, Plus, Square, Trash2, X } from "lucide-react";
 import Link from "next/link";
@@ -27,7 +27,7 @@ import { RecordingsView } from "./recordings-view";
 import { interviewReport } from "./report";
 import { ReplayView } from "./replay-view";
 import { RunList } from "./run-list";
-import { ScorecardForm } from "./scorecard-form";
+import { ScorecardsPanel } from "./scorecards-panel";
 
 type Confirm = { title: string; body: string; yes: string; run: () => Promise<void> };
 
@@ -50,7 +50,8 @@ export function InterviewDetail({ id }: { id: string }) {
   const query = useQuery({
     queryKey: key,
     queryFn: ({ signal }) => api<InterviewerInterview>(`/api/interviews/${id}`, { signal }),
-    refetchInterval: (state) => (state.state.data?.status === "live" || state.state.data?.status === "scheduled" ? 5000 : false),
+    // Interviewers can submit their reviews after the interview has finished.
+    refetchInterval: 5000,
   });
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -85,12 +86,13 @@ export function InterviewDetail({ id }: { id: string }) {
     }
   }
 
-  async function saveScorecard(next: Scorecard) {
+  async function saveScorecard(next: SaveScorecardInput) {
     try {
       queryClient.setQueryData(key, await api<InterviewerInterview>(`/api/interviews/${id}/scorecard`, { method: "PUT", json: next }));
-      toast.success("Scorecard saved.");
+      toast.success(next.submit ? "Scorecard submitted." : "Draft saved.");
     } catch (error) {
       toast.error(error instanceof ApiError ? error.detail : "The scorecard couldn't be saved. Try again.");
+      throw error;
     }
   }
 
@@ -200,7 +202,7 @@ export function InterviewDetail({ id }: { id: string }) {
           <IntegrityRecord integrity={interview.integrity} />
         </TabsContent>
         <TabsContent value="scorecard" className="pt-2">
-          <ScorecardForm key={interview.id} rubric={interview.rubric} scorecard={interview.scorecard} onSave={saveScorecard} />
+          <ScorecardsPanel interview={interview} onSave={saveScorecard} />
         </TabsContent>
         <TabsContent value="runs" className="max-w-3xl pt-2">
           {interview.runs.length === 0 ? <p className="text-muted-foreground">Nobody has run the tests yet.</p> : <RunList runs={interview.runs} />}

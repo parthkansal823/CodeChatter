@@ -9,6 +9,9 @@ import * as Y from "yjs";
 
 import { EXAMPLE_CATEGORIES, EXAMPLES, flowOfExample, matchesExample, servicesOf } from "../../web/components/room/tools/automations/examples.ts";
 import { allSteps, chartOfFlow, CONDITIONS, type FlowStep } from "../../web/components/room/tools/automations/model.ts";
+import { BUILTINS } from "../../web/components/room/tools/automations/builtins.ts";
+// @ts-expect-error: plain JavaScript, in the image.
+import { BUILTINS as RUNS } from "../../../sandbox/image/automation/builtins.mjs";
 
 const ROOM = process.env.E2E_ROOM ?? "E2ETST";
 const RUNNER = process.env.RUNNER_URL ?? "http://127.0.0.1:4200";
@@ -41,6 +44,7 @@ check("thePiecesAreAvailable", manifest.status === 200 && Object.keys(pieces).le
 
 // ---- The gallery as a whole ----
 check("thereAreAtLeastOneHundred", EXAMPLES.length >= 100, EXAMPLES.length);
+check("everyBuiltInStepHasItsCodeInTheImage", Object.keys(BUILTINS).every((name) => (RUNS as Record<string, unknown>)[name]) && Object.keys(RUNS).every((name) => BUILTINS[name]), [Object.keys(BUILTINS), Object.keys(RUNS)]);
 console.log(`      ${EXAMPLES.length} examples, ${EXAMPLES.filter((item) => item.runsHere).length} that run here, in ${EXAMPLE_CATEGORIES.length} kinds`);
 check("eachHasItsOwnId", new Set(EXAMPLES.map((item) => item.id)).size === EXAMPLES.length, EXAMPLES.map((item) => item.id).filter((id, index, all) => all.indexOf(id) !== index));
 check("eachHasItsOwnTitle", new Set(EXAMPLES.map((item) => item.title)).size === EXAMPLES.length, EXAMPLES.map((item) => item.title).filter((title, index, all) => all.indexOf(title) !== index));
@@ -75,6 +79,16 @@ for (const example of EXAMPLES) {
       for (const [key, field] of Object.entries<any>(what.fields)) if (field.required && !(key in (settings.input ?? {}))) problems.push(`${example.id}: ${settings.actionName ?? settings.triggerName} needs ${key}`);
       if (what.needsAuth && piece.auth && !settings.input?.auth) problems.push(`${example.id}: ${settings.pieceName} needs a connection`);
       if (example.runsHere && settings.input?.auth) problems.push(`${example.id}: says it runs here, and needs a connection`);
+    }
+    if (step.builtin !== undefined) {
+      const form = BUILTINS[step.builtin];
+      const input = (step.settings as { input?: Record<string, unknown> }).input ?? {};
+      if (!form) problems.push(`${example.id}: no built-in step called ${step.builtin}`);
+      else {
+        if (!(RUNS as Record<string, unknown>)[step.builtin]) problems.push(`${example.id}: the image has no ${step.builtin}`);
+        for (const key of Object.keys(input)) if (!form.fields[key]) problems.push(`${example.id}: ${step.builtin} has no field ${key}`);
+        for (const [key, field] of Object.entries(form.fields)) if (field.required && (input[key] === undefined || input[key] === "")) problems.push(`${example.id}: ${step.builtin} needs ${key}`);
+      }
     }
     if (step.type === "ROUTER") {
       const operators = ((step.settings.branches ?? []) as Array<{ conditions?: Array<Array<{ operator: string }>> }>).flatMap((branch) => (branch.conditions ?? []).flat().map((condition) => condition.operator));

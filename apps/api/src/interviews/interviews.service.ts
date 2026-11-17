@@ -19,7 +19,9 @@ import {
   type RoomInterview,
   type ScheduleInterviewData,
   type ScheduledInterview,
-  type Scorecard,
+  type SaveScorecardInput,
+  type InterviewScorecards,
+  type ScorecardInterviewer,
 } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
 import { BadRequestException, ConflictException, ForbiddenException, GoneException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
@@ -34,7 +36,7 @@ import { RoomsRepository } from "../rooms/rooms.repository.js";
 import { newRoomCode, RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient, RunnerUnavailableError, type RunnerUser } from "../runner/runner.client.js";
 import { adhocPaperQuestion, askedOf, drawQuestions, nextQuestionId, PaperError, paperQuestion, secureRandom, sittingFrom, type BankQuestion } from "./paper.js";
-import { candidateInterview, candidateRun, interviewerInterview, interviewerRun, interviewListItem, testsOf, type InterviewRow, type RunRow } from "./views.js";
+import { candidateInterview, candidateRun, interviewerInterview, interviewerRun, interviewListItem, scorecardView, testsOf, type InterviewRow, type RunRow, type ScorecardRow, type ScorecardViewer } from "./views.js";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const SYSTEM: RunnerUser = { id: "interview-timer", name: "Interview timer" };
@@ -355,8 +357,9 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   /** The interview, for someone who may see its rubric: its interviewers, and the organisation's owners and admins. */
   async asInterviewer(id: string, userId: string): Promise<InterviewRow> {
     const row = await this.row(id);
+    if (row.candidateUserId === userId) throw new ForbiddenException("Candidates can't access interviewer information.");
     const member = await this.repo.findMember(row.roomId, userId);
-    if (member?.status === "active" && can(member.role, "interview.rubric")) return row;
+    if (member?.status === "active" && (member.role === "owner" || can(member.role, "interview.rubric"))) return row;
     if (await this.isOrgAdmin(row.orgId, userId)) return row;
     throw new ForbiddenException("You don't have access to this interview.");
   }
@@ -384,24 +387,63 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     return new Map(rows.map((row) => [row.docName.split(":")[1]!, row.n]));
   }
 
-  private async interviewerView(row: InterviewRow): Promise<InterviewerInterview> {
-    const [runs, name, answers, events, bigEdits, runScores] = await Promise.all([
+  /** Load scorecard facts in bulk; views.ts alone decides which of them may be disclosed. */
+  private async scorecardContexts(rows: readonly InterviewRow[], userId: string) {
+    type Context = { scorecards: ScorecardRow[]; interviewers: ScorecardInterviewer[]; viewer: ScorecardViewer };
+    const result = new Map<string, Context>();
+    if (!rows.length) return result;
+    const ids = rows.map((row) => row.id);
+    const roomIds = rows.map((row) => row.roomId);
+    const orgIds = [...new Set(rows.map((row) => row.orgId))];
+    const [saved, people, memberships] = await Promise.all([
+      this.db.select({ card: schema.interviewScorecards, name: schema.user.name, image: schema.user.image })
+        .from(schema.interviewScorecards).leftJoin(schema.user, eq(schema.interviewScorecards.interviewerId, schema.user.id))
+        .where(inArray(schema.interviewScorecards.interviewId, ids)).orderBy(asc(schema.interviewScorecards.updatedAt), asc(schema.interviewScorecards.id)),
+      this.db.select({ roomId: schema.roomMembers.roomId, id: schema.user.id, name: schema.user.name, image: schema.user.image })
+        .from(schema.roomMembers).innerJoin(schema.user, eq(schema.roomMembers.userId, schema.user.id))
+        .where(and(inArray(schema.roomMembers.roomId, roomIds), eq(schema.roomMembers.status, "active"), inArray(schema.roomMembers.role, ["interviewer", "owner"]))),
+      this.db.select({ orgId: schema.member.organizationId, role: schema.member.role }).from(schema.member)
+        .where(and(eq(schema.member.userId, userId), inArray(schema.member.organizationId, orgIds))),
+    ]);
+    for (const row of rows) {
+      const interviewers = people.filter((person) => person.roomId === row.roomId).map(({ id, name, image }) => ({ id, name, image }));
+      result.set(row.id, {
+        scorecards: saved.filter(({ card }) => card.interviewId === row.id).map(({ card, name, image }) => ({ ...card, interviewerName: name, interviewerImage: image })),
+        interviewers,
+        viewer: { userId, interviewer: interviewers.some((person) => person.id === userId), admin: memberships.some((member) => member.orgId === row.orgId && (member.role === "owner" || member.role === "admin")) },
+      });
+    }
+    return result;
+  }
+
+  /** Batch results must use the same blind-review policy as every individual response. */
+  async scorecardsFor(rows: readonly InterviewRow[], userId: string): Promise<Map<string, InterviewScorecards>> {
+    const contexts = await this.scorecardContexts(rows, userId);
+    return new Map(rows.map((row) => {
+      const context = contexts.get(row.id)!;
+      return [row.id, scorecardView(row, context.scorecards, context.interviewers, context.viewer)];
+    }));
+  }
+
+  private async interviewerView(row: InterviewRow, userId: string): Promise<InterviewerInterview> {
+    const [runs, name, answers, events, bigEdits, runScores, contexts] = await Promise.all([
       this.runRows(row.id),
       this.interviewerName(row),
       this.db.select().from(schema.interviewAnswers).where(eq(schema.interviewAnswers.interviewId, row.id)),
       this.db.select().from(schema.interviewEvents).where(eq(schema.interviewEvents.interviewId, row.id)).orderBy(asc(schema.interviewEvents.at)),
       this.bigEditsByRoom([row.roomId]),
       this.db.select({ questionId: schema.interviewRuns.questionId, passed: schema.interviewRuns.passed, total: schema.interviewRuns.total }).from(schema.interviewRuns).where(eq(schema.interviewRuns.interviewId, row.id)),
+      this.scorecardContexts([row], userId),
     ]);
-    return interviewerInterview(row, runs, name, new Date(), { answers, events, bigEdits: bigEdits.get(row.roomId) ?? 0, runScores });
+    return interviewerInterview(row, runs, name, new Date(), { answers, events, bigEdits: bigEdits.get(row.roomId) ?? 0, runScores, ...contexts.get(row.id)! });
   }
 
-  async viewFor(id: string): Promise<InterviewerInterview> {
-    return this.interviewerView(await this.row(id));
+  async viewFor(id: string, userId: string): Promise<InterviewerInterview> {
+    return this.interviewerView(await this.asInterviewer(id, userId), userId);
   }
 
   async get(id: string, userId: string): Promise<InterviewerInterview> {
-    return this.interviewerView(await this.asInterviewer(id, userId));
+    return this.interviewerView(await this.asInterviewer(id, userId), userId);
   }
 
   /** The room's interview, as this person may see it. */
@@ -409,7 +451,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     const { role } = await this.rooms.require(roomId, userId, "room.view");
     const [row] = await this.db.select().from(schema.interviews).where(eq(schema.interviews.roomId, roomId)).limit(1);
     if (!row) throw new NotFoundException("This room isn't an interview.");
-    if (can(role, "interview.rubric")) return this.interviewerView(row);
+    if (row.candidateUserId !== userId && (role === "owner" || can(role, "interview.rubric"))) return this.interviewerView(row, userId);
     const answers = await this.db.select().from(schema.interviewAnswers).where(eq(schema.interviewAnswers.interviewId, row.id));
     return { ...candidateInterview(row, await this.runRows(row.id), await this.interviewerName(row), new Date(), answers), role: "candidate" };
   }
@@ -447,7 +489,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     const row = await this.asInterviewer(id, userId);
     // Starting someone's assessment for them would start their clock, and a recording they haven't agreed to.
     if (row.mode === "assessment") throw new ConflictException("The candidate starts an assessment themselves.");
-    return this.interviewerView(await this.begin(row));
+    return this.interviewerView(await this.begin(row), userId);
   }
 
   /** The candidate starts their assessment: once the link is theirs, and only inside its window. */
@@ -524,7 +566,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .where(eq(schema.interviews.id, id))
       .returning();
     await this.announce(saved!, false);
-    return { interview: await this.interviewerView(saved!), question };
+    return { interview: await this.interviewerView(saved!, userId), question };
   }
 
   /** Ask a question that's been waiting on the paper. */
@@ -541,7 +583,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .where(eq(schema.interviews.id, id))
       .returning();
     await this.announce(saved!, false);
-    return { interview: await this.interviewerView(saved!), question: asked };
+    return { interview: await this.interviewerView(saved!, userId), question: asked };
   }
 
   /** The interviewer's call, and they can change it as it runs. It goes on the record. */
@@ -550,7 +592,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     const [saved] = await this.db.update(schema.interviews).set({ aiAllowed: allowed, updatedAt: new Date() }).where(eq(schema.interviews.id, id)).returning();
     if (row.aiAllowed !== allowed && row.status === "live") await this.db.insert(schema.interviewEvents).values({ interviewId: id, kind: allowed ? "ai-on" : "ai-off", source: "server" });
     await this.announce(saved!, false);
-    return this.interviewerView(saved!);
+    return this.interviewerView(saved!, userId);
   }
 
   /** Whether the room's candidate may use the AI right now. */
@@ -574,7 +616,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .returning();
     if (!row) throw new ConflictException("Only a running interview can be extended.");
     await this.announce(row, false);
-    return this.interviewerView(row);
+    return this.interviewerView(row, userId);
   }
 
   /** End one: the only code that does. Whoever wins the conditional update does the rest. */
@@ -597,7 +639,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     const row = await this.asInterviewer(id, session.user.id);
     const closed = await this.closeSitting(id, session.user);
     if (!closed && row.status !== "finished") throw new ConflictException(`This interview is ${row.status}, so it can't be finished.`);
-    return this.interviewerView(closed ?? row);
+    return this.interviewerView(closed ?? row, session.user.id);
   }
 
   /** Close the interviews whose time is up, and the assessments nobody started in time. */
@@ -626,7 +668,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .returning();
     if (!cancelled) throw new ConflictException(`This interview is ${row.status}, so it can't be cancelled.`);
     await this.announce(cancelled, false);
-    return this.interviewerView(cancelled);
+    return this.interviewerView(cancelled, userId);
   }
 
   /** A new link, when the first went astray. The old one stops working. Not once someone has used it. */
@@ -658,12 +700,29 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  async saveScorecard(id: string, userId: string, scorecard: Scorecard): Promise<InterviewerInterview> {
-    const row = await this.asInterviewer(id, userId);
-    const known = new Set(row.question.rubric.map((criterion) => criterion.id));
-    if (scorecard.scores.some((score) => !known.has(score.id))) throw new BadRequestException("That score isn't for one of this interview's criteria.");
-    const [saved] = await this.db.update(schema.interviews).set({ scorecard, updatedAt: new Date() }).where(eq(schema.interviews.id, id)).returning();
-    return this.interviewerView(saved!);
+  async saveScorecard(id: string, userId: string, input: SaveScorecardInput): Promise<InterviewerInterview> {
+    await this.db.transaction(async (tx) => {
+      const [row] = await tx.select().from(schema.interviews).where(eq(schema.interviews.id, id)).for("update");
+      if (!row) throw new NotFoundException("That interview doesn't exist.");
+      const [member] = await tx.select().from(schema.roomMembers)
+        .where(and(eq(schema.roomMembers.roomId, row.roomId), eq(schema.roomMembers.userId, userId))).for("share");
+      if (row.candidateUserId === userId || member?.status !== "active" || (member.role !== "interviewer" && member.role !== "owner")) {
+        throw new ForbiddenException("Only an active interviewer on this interview can write a scorecard. Organisation admins can read submitted scorecards.");
+      }
+      const known = new Set(row.question.rubric.map((criterion) => criterion.id));
+      if (input.scores.some((score) => !known.has(score.id))) throw new BadRequestException("That score isn't for one of this interview's criteria.");
+      if (new Set(input.scores.map((score) => score.id)).size !== input.scores.length) throw new BadRequestException("Each criterion can be scored once.");
+      const now = new Date();
+      const values = { scores: input.scores, overall: input.overall, recommendation: input.recommendation, notes: input.notes, updatedAt: now };
+      await tx.insert(schema.interviewScorecards).values({ interviewId: id, interviewerId: userId, ...values, submittedAt: input.submit ? now : null })
+        .onConflictDoUpdate({ target: [schema.interviewScorecards.interviewId, schema.interviewScorecards.interviewerId], set: {
+          ...values,
+          submittedAt: input.submit ? sql`greatest(${now.toISOString()}::timestamptz, ${schema.interviewScorecards.submittedAt} + interval '1 millisecond')` : null,
+        } });
+      await tx.update(schema.interviews).set({ updatedAt: now }).where(eq(schema.interviews.id, id));
+    });
+    await this.announce((await this.row(id)), false);
+    return this.viewFor(id, userId);
   }
 
   // The candidate's link.

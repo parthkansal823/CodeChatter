@@ -5,7 +5,7 @@
  */
 "use client";
 
-import type { CandidateRun, InterviewerInterview, InterviewerRun, PaperQuestion, RoomInterview, Scorecard, AskedQuestion } from "@codechatter/contracts";
+import type { CandidateRun, InterviewerInterview, InterviewerRun, PaperQuestion, RoomInterview, SaveScorecardInput, AskedQuestion } from "@codechatter/contracts";
 import { createFileAtPath, findByPath } from "@codechatter/workspace-model";
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, EyeOff, FlaskConical, Loader2, Play, Plus, Send, Sparkles, Square, Video } from "lucide-react";
@@ -19,7 +19,7 @@ import { MODE_LABEL, STATUS_LABEL } from "@/components/interviews/format";
 import { IntegrityRecord } from "@/components/interviews/integrity-record";
 import { PaperReview } from "@/components/interviews/paper-review";
 import { RunList } from "@/components/interviews/run-list";
-import { ScorecardForm } from "@/components/interviews/scorecard-form";
+import { ScorecardsPanel } from "@/components/interviews/scorecards-panel";
 import { useCall } from "@/components/room/call/call-store";
 import { MarkdownBody } from "@/components/room/editor/markdown-preview";
 import { usePeers } from "@/components/room/hooks";
@@ -205,13 +205,14 @@ export default function InterviewTool(_props: RoomToolProps) {
     }
   }
 
-  async function saveScorecard(next: Scorecard) {
+  async function saveScorecard(next: SaveScorecardInput) {
     if (!interview) return;
     try {
       setInterview(await api<InterviewerInterview>(`/api/interviews/${interview.id}/scorecard`, { method: "PUT", json: next }));
-      toast.success("Scorecard saved.");
+      toast.success(next.submit ? "Scorecard submitted." : "Draft saved.");
     } catch (error) {
       failed(error, "The scorecard couldn't be saved. Try again.");
+      throw error;
     }
   }
 
@@ -300,7 +301,7 @@ export default function InterviewTool(_props: RoomToolProps) {
         <>
           <section className="grid gap-2 border-t p-3" aria-label="Your evaluation">
             <h3 className="font-medium">Your evaluation</h3>
-            <ScorecardForm key={interview.id} rubric={interview.rubric} scorecard={interview.scorecard} onSave={saveScorecard} />
+            <ScorecardsPanel interview={interview} onSave={saveScorecard} />
           </section>
           {interview.status !== "scheduled" && (
             <>

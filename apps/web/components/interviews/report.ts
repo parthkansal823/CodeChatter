@@ -1,5 +1,5 @@
 /** An interview's report as Markdown, to copy or download. It has hidden tests' results and the scorecard, so it's for interviewers. */
-import { INTEGRITY_LABEL, type IntegrityKind, type InterviewerInterview, type InterviewerRun } from "@codechatter/contracts";
+import { INTEGRITY_LABEL, type IntegrityKind, type InterviewerInterview, type InterviewerRun, type InterviewScorecard, type ScorecardSummary } from "@codechatter/contracts";
 
 import { KIND_LABEL, MODE_LABEL, RECOMMENDATION_LABEL, STATUS_LABEL } from "./format";
 
@@ -7,6 +7,42 @@ import { KIND_LABEL, MODE_LABEL, RECOMMENDATION_LABEL, STATUS_LABEL } from "./fo
 const cell = (text: string) => text.replaceAll("\\", "\\\\").replaceAll("|", "\\|").replace(/\s*\r?\n\s*/g, " ").trim();
 const when = (iso: string | null) => (iso ? new Date(iso).toUTCString() : "Not recorded");
 const score = (value: number | null) => (value === null ? "Not scored" : `${value} / 5`);
+
+export const scoreAverage = (value: number | null) => value === null ? "Not scored" : `${Number(value.toFixed(2))} / 5`;
+export const recommendationSpread = (summary: ScorecardSummary | null): string => summary
+  ? (["yes", "maybe", "no"] as const).filter((key) => summary.recommendations[key] > 0).map((key) => `${summary.recommendations[key]} ${key}`).join(", ") || "None yet"
+  : "Submit your scorecard to see recommendations";
+
+function scorecardLines(card: InterviewScorecard, labels: Map<string, string>, heading: string): string[] {
+  return [
+    "", `## ${heading}`, "",
+    `- **Interviewer:** ${cell(card.interviewer.name)}`,
+    `- **Status:** ${card.submittedAt ? `Submitted ${when(card.submittedAt)}` : "Your private draft — not included in the summary"}`,
+    `- **Recommendation:** ${card.recommendation ? RECOMMENDATION_LABEL[card.recommendation] : "None yet"}`,
+    `- **Overall:** ${score(card.overall)}`,
+    ...(card.scores.length ? ["", "| Criterion | Score | Note |", "| --- | --- | --- |", ...card.scores.map((entry) => `| ${cell(labels.get(entry.id) ?? entry.id)} | ${score(entry.score)} | ${cell(entry.note)} |`)] : []),
+    ...(card.notes.trim() ? ["", "### Notes", "", card.notes.trim()] : []),
+  ];
+}
+
+function scorecardReport(interview: InterviewerInterview): string[] {
+  const view = interview.scorecards;
+  const labels = new Map(interview.rubric.map((criterion) => [criterion.id, criterion.label]));
+  const lines = ["", "## Result", ""];
+  if (view.own && !view.own.submittedAt) lines.push(...scorecardLines(view.own, labels, "Your draft"));
+  if (view.locked) {
+    lines.push("", `${view.otherSubmittedCount} other scorecards submitted. Submit your scorecard to see submitted reviews and their summary.`);
+    return lines;
+  }
+  const summary = view.summary;
+  if (summary) {
+    lines.push(`- **Recommendation spread:** ${recommendationSpread(summary)}`, `- **Overall average:** ${scoreAverage(summary.overall.average)}`, `- **Submitted scorecards:** ${summary.submitted}`, `- **Not submitted:** ${summary.pending.length ? summary.pending.map((person) => cell(person.name)).join(", ") : "Nobody"}`);
+    if (summary.criteria.length) lines.push("", "### Criterion averages", "", "| Criterion | Average | Scored reviews |", "| --- | --- | --- |", ...summary.criteria.map((criterion) => `| ${cell(criterion.label)} | ${scoreAverage(criterion.average)} | ${criterion.count} |`));
+  }
+  for (const card of view.submitted) lines.push(...scorecardLines(card, labels, `Scorecard: ${cell(card.interviewer.name)}`));
+  if (!view.submitted.length) lines.push("", "No scorecards have been submitted yet.");
+  return lines;
+}
 
 function runLine(run: InterviewerRun): string {
   const result = run.compileError !== null ? "didn't compile" : `${run.passed} of ${run.total} passed`;
@@ -86,8 +122,6 @@ function aiLines(interview: InterviewerInterview): string[] {
 }
 
 export function interviewReport(interview: InterviewerInterview): string {
-  const { scorecard } = interview;
-  const labels = new Map(interview.rubric.map((criterion) => [criterion.id, criterion.label]));
   const latest = interview.runs[0];
   const lines = [
     `# ${MODE_LABEL[interview.mode ?? "interview"]} report: ${interview.candidateName}`,
@@ -97,23 +131,8 @@ export function interviewReport(interview: InterviewerInterview): string {
     `- **Status:** ${STATUS_LABEL[interview.status]}`,
     `- **Started:** ${when(interview.startedAt)}`,
     `- **Finished:** ${when(interview.finishedAt)}`,
-    "",
-    "## Result",
-    "",
-    `- **Recommendation:** ${scorecard.recommendation ? RECOMMENDATION_LABEL[scorecard.recommendation] : "None yet"}`,
-    `- **Overall:** ${score(scorecard.overall)}`,
   ];
-  if (scorecard.scores.length) {
-    lines.push(
-      "",
-      "## Scores",
-      "",
-      "| Criterion | Score | Note |",
-      "| --- | --- | --- |",
-      ...scorecard.scores.map((row) => `| ${cell(labels.get(row.id) ?? row.id)} | ${score(row.score)} | ${cell(row.note)} |`),
-    );
-  }
-  if (scorecard.notes.trim()) lines.push("", "## Notes", "", scorecard.notes.trim());
+  lines.push(...scorecardReport(interview));
   if (interview.paper?.length) lines.push(...paperLines(interview));
   if (interview.integrity) lines.push(...recordLines(interview));
   if (interview.recordingConsentAt) lines.push("", `Recorded with their agreement, given ${when(interview.recordingConsentAt)}.`);

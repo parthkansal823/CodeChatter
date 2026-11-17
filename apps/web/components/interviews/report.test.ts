@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { InterviewerInterview } from "@codechatter/contracts";
+import { summarizeScorecards, type InterviewerInterview, type InterviewScorecard } from "@codechatter/contracts";
 
 import { candidateLink, csvRow, formatCountdown, isoFromLocalInput } from "./format";
 import { interviewReport } from "./report";
 
+const rubric = [{ id: "c1", label: "Problem | solving" }];
+const review = (over: Partial<InterviewScorecard> = {}): InterviewScorecard => ({
+  scores: [{ id: "c1", score: 4, note: "good\nstart" }], overall: 4, recommendation: "yes", notes: "Hire them.",
+  interviewer: { id: "u1", name: "Bo", image: null }, submittedAt: "2026-11-06T12:00:00.000Z", updatedAt: "2026-11-06T12:00:00.000Z", ...over,
+});
+const reviews = (cards: InterviewScorecard[]): InterviewerInterview["scorecards"] => ({
+  canWrite: false, own: null, submitted: cards, otherSubmittedCount: cards.length, locked: false,
+  summary: summarizeScorecards(rubric, cards, [{ id: "u3", name: "Waiting interviewer", image: null }]),
+});
 const interview = (over: Partial<InterviewerInterview> = {}): InterviewerInterview => ({
   mode: "interview",
   batchId: null,
@@ -43,6 +52,7 @@ const interview = (over: Partial<InterviewerInterview> = {}): InterviewerIntervi
   hiddenTests: [],
   rubric: [{ id: "c1", label: "Problem | solving" }],
   scorecard: { scores: [{ id: "c1", score: 4, note: "good\nstart" }], overall: 4, recommendation: "yes", notes: "Hire them." },
+  scorecards: reviews([review()]),
   runs: [
     {
       id: "r2",
@@ -84,13 +94,41 @@ test("keeps a table's rows whole", () => {
 });
 
 test("reads sensibly with nothing filled in", () => {
-  const report = interviewReport(interview({ runs: [], rubric: [], scorecard: { scores: [], overall: null, recommendation: null, notes: " " }, startedAt: null, finishedAt: null, interviewerName: null }));
+  const report = interviewReport(interview({ runs: [], rubric: [], scorecard: { scores: [], overall: null, recommendation: null, notes: " " }, scorecards: reviews([]), startedAt: null, finishedAt: null, interviewerName: null }));
   assert.match(report, /None yet/);
   assert.match(report, /Not scored/);
   assert.match(report, /No tests were run\./);
   assert.doesNotMatch(report, /## Scores/);
   assert.doesNotMatch(report, /## Notes/);
   assert.doesNotMatch(report, /undefined|null/);
+});
+
+test("summarises several submitted scorecards without counting unscored criteria", () => {
+  const cards = [review(), review({ interviewer: { id: "u2", name: "Jo", image: null }, overall: 2, recommendation: "maybe", scores: [{ id: "c1", score: 2, note: "Watch this" }] }), review({ interviewer: { id: null, name: "Former interviewer", image: null }, scores: [], overall: null, recommendation: "yes" })];
+  const report = interviewReport(interview({ scorecards: reviews(cards) }));
+  assert.match(report, /2 yes, 1 maybe/);
+  assert.match(report, /\| Problem \\\| solving \| 3 \/ 5 \| 2 \|/);
+  assert.match(report, /\*\*Overall average:\*\* 3 \/ 5/);
+  assert.match(report, /\*\*Not submitted:\*\* Waiting interviewer/);
+  for (const name of ["Bo", "Jo", "Former interviewer"]) assert.ok(report.includes(`## Scorecard: ${name}`));
+});
+
+test("summarises one submission and says plainly when none were submitted", () => {
+  assert.match(interviewReport(interview()), /\*\*Recommendation spread:\*\* 1 yes/);
+  const none = interviewReport(interview({ scorecards: reviews([]) }));
+  assert.match(none, /No scorecards have been submitted yet/);
+  assert.match(none, /\*\*Submitted scorecards:\*\* 0/);
+  assert.match(none, /\*\*Recommendation spread:\*\* None yet/);
+  assert.doesNotMatch(none, /Hire them/);
+});
+
+test("a locked report contains only the permitted count and own private draft", () => {
+  const own = review({ submittedAt: null, notes: "My private draft" });
+  const report = interviewReport(interview({ scorecards: { canWrite: true, own, locked: true, submitted: [], otherSubmittedCount: 2, summary: null } }));
+  assert.match(report, /My private draft/);
+  assert.match(report, /private draft/i);
+  assert.match(report, /2 other scorecards submitted/);
+  assert.doesNotMatch(report, /Recommendation spread|Overall average|Not submitted|Waiting interviewer/);
 });
 
 const question = (over: Partial<InterviewerInterview["paper"][number]>): InterviewerInterview["paper"][number] => ({

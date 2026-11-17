@@ -2,7 +2,7 @@ import "reflect-metadata";
 
 import type { Auth, OriginPolicy } from "@codechatter/auth";
 import { NestFactory } from "@nestjs/core";
-import { json } from "express";
+import { json, text, urlencoded } from "express";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { toNodeHandler } from "better-auth/node";
 import { Logger } from "nestjs-pino";
@@ -53,6 +53,13 @@ express.all("/api/auth/{*splat}", toNodeHandler(app.get<Auth>(AUTH)));
 express.use(
   "/api/github/webhooks",
   json({ limit: "5mb", verify: (req, _res, raw) => void ((req as unknown as { rawBody: Buffer }).rawBody = raw) }),
+);
+// A call to an automation's webhook: JSON, a form or plain text, as the services that call webhooks send them (automations/automation-hooks.controller.ts).
+express.use(
+  "/api/hooks/automations",
+  json({ limit: "1mb", verify: (req, _res, raw) => void ((req as unknown as { rawBody: Buffer }).rawBody = raw) }),
+  urlencoded({ extended: false, limit: "1mb" }),
+  text({ type: ["text/*", "application/xml"], limit: "1mb" }),
 );
 // A commit carries the room's changed files, up to what an import takes; everything else stays at 1 MB.
 express.use("/api/rooms/:roomId/repo/commit", json({ limit: "30mb" }));

@@ -3,7 +3,8 @@ import { test } from "node:test";
 
 import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
 
-import { addBranch, addStep, allSteps, asCopiedStep, chartOfFlow, CONDITIONS, copyOfStep, duplicateStep, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeBranch, removeStep, replaceStep, resultsOf, setStepNote, statusOfResult, toggleStep, updateStep, type Branch, type Flow, type FlowStep } from "./model";
+import { BUILTINS } from "./builtins";
+import { addBranch, addStep, allSteps, asCopiedStep, canPin, newBuiltinStep, chartOfFlow, CONDITIONS, copyOfStep, isPinned, pinStep, unpinStep, duplicateStep, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeBranch, removeStep, replaceStep, resultsOf, setStepNote, statusOfResult, toggleStep, updateStep, type Branch, type Flow, type FlowStep } from "./model";
 
 const code = (name: string, next: FlowStep | null = null): FlowStep => ({ ...newCodeStep(name), nextAction: next });
 const trigger = (next: FlowStep | null): FlowStep => ({ name: "trigger", type: "PIECE_TRIGGER", displayName: "When called", settings: { pieceName: "@activepieces/piece-webhook", triggerName: "catch_webhook" }, nextAction: next });
@@ -158,6 +159,37 @@ test("a router can have more branches, and lose them, but keeps one with a test 
   assert.equal(findStep(fewer, "first"), null, "a branch's steps go with it");
   assert.equal(removeBranch(fewer, "route", 0), fewer, "the last branch with a test stays");
   assert.equal(removeBranch(more, "route", 2), more, "the one for when nothing matches stays");
+});
+
+test("a step's output can be pinned, and the pin goes with it when it's copied or removed", () => {
+  const flow = flowOf(code("a", code("b")));
+  const pinned = pinStep(flow, "a", { lines: 3 });
+  assert.deepEqual(pinned.pinned, { a: { lines: 3 } });
+  assert.ok(isPinned(pinned, findStep(pinned, "a")!));
+  const item = chartOfFlow(pinned, undefined).items.find((each) => each.id === "a")!;
+  assert.match(item.detail, /^Pinned · Code/);
+  assert.match(item.description, /pinned/);
+  assert.equal(pinStep(flow, "trigger", {}), flow, "a trigger isn't pinned");
+  assert.equal(canPin(newRouterStep("r")), false);
+  assert.deepEqual(unpinStep(pinned, "a").pinned, {});
+  assert.equal(unpinStep(flow, "a"), flow, "nothing to unpin");
+  assert.deepEqual(removeStep(pinned, "a").pinned, {}, "a removed step's pin goes with it");
+  const pasted = pasteStep(pinned, { after: "b" }, copyOfStep(pinned, "a")!);
+  assert.deepEqual(pasted.flow.pinned![pasted.name], { lines: 3 }, "a copy keeps the pin, under its own name");
+  assert.deepEqual(pinStep(flow, "a", undefined).pinned, { a: null }, "nothing came out is pinned as null");
+});
+
+test("a built-in step is a code step marked with what it is, shown by its name", () => {
+  const step = newBuiltinStep("filter_1", "filter");
+  assert.equal(step.type, "CODE");
+  assert.equal(step.builtin, "filter");
+  assert.equal(step.displayName, "Filter");
+  assert.deepEqual(step.settings.input, BUILTINS.filter!.defaults);
+  assert.equal(kindOf(step), "Filter");
+  const item = chartOfFlow(flowOf(step), undefined).items.find((each) => each.id === "filter_1")!;
+  assert.equal(item.glyph, "data");
+  assert.match(item.detail, /^Filter/);
+  for (const [name, builtin] of Object.entries(BUILTINS)) for (const key of Object.keys(builtin.defaults)) assert.ok(builtin.fields[key], `${name} has a field for ${key}`);
 });
 
 test("a router's tests are the engine's own names", () => {

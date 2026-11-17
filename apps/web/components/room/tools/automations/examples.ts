@@ -5,7 +5,8 @@
  */
 import type { PieceInfo } from "@codechatter/contracts";
 
-import { SCHEMA_VERSION, type Flow, type FlowStep } from "./model";
+import { BUILTINS } from "./builtins";
+import { newBuiltinStep, SCHEMA_VERSION, type Flow, type FlowStep } from "./model";
 
 export type Example = {
   id: string;
@@ -358,6 +359,110 @@ const WITH_PIECES: Example[] = [
   withPieces(SECURITY, "hide-emails", "Hide email addresses in a log", "A real piece replaces what a pattern finds.", () => [action("clean", "text-helper", "replace", "Hide them", { text: body("log"), searchValue: "[\\w.]+@[\\w.]+", replaceValue: "[hidden]", replaceOnlyFirst: false }, false)], { log: "login by a.b@c.test ok" }, "clean", "login by [hidden] ok"),
 ];
 
+// Built-in steps, as n8n has for working on data. They need nothing outside the room either.
+const data = (name: string, kind: string, displayName: string, input: Record<string, unknown>): FlowStep => {
+  const step = newBuiltinStep(name, kind);
+  return { ...step, displayName, settings: { ...step.settings, input: { ...(BUILTINS[kind]?.defaults ?? {}), ...input } } };
+};
+const RESULTS = [
+  { name: "login", status: "failed", ms: 120, author: "Asha" },
+  { name: "search", status: "passed", ms: 900, author: "Ben" },
+  { name: "save", status: "failed", ms: 40, author: "Asha" },
+  { name: "export", status: "passed", ms: 300, author: "Ben" },
+];
+const WITH_BUILTINS: Example[] = [
+  {
+    id: "filter-failed-tests",
+    title: "Keep only the failed tests, with Filter",
+    about: "A built-in Filter step, as n8n's: the results whose status is failed.",
+    category: TESTS,
+    runsHere: true,
+    sample: { results: RESULTS },
+    expect: { step: "failed", output: [{ name: "login" }, { name: "save" }] },
+    flow: () => chain(webhook(), [data("failed", "filter", "Only the failures", { items: "{{trigger.output.body.results}}", field: "status", test: "equals", value: "failed" })]),
+  },
+  {
+    id: "slowest-tests-sort-limit",
+    title: "The two slowest tests, with Sort and Limit",
+    about: "Sort by time, largest first, then keep two.",
+    category: TESTS,
+    runsHere: true,
+    sample: { results: RESULTS },
+    expect: { step: "top", output: [{ name: "search" }, { name: "export" }] },
+    flow: () => chain(webhook(), [data("sorted", "sort", "Slowest first", { items: "{{trigger.output.body.results}}", field: "ms", direction: "descending", compare_as: "number" }), data("top", "limit", "Keep two", { items: "{{sorted.output}}", max: "2" })]),
+  },
+  {
+    id: "count-by-status",
+    title: "Count the results by status, with Summarize",
+    about: "How many passed and how many failed.",
+    category: TESTS,
+    runsHere: true,
+    sample: { results: RESULTS },
+    expect: { step: "counted", output: [{ status: "failed", count: 2 }, { status: "passed", count: 2 }] },
+    flow: () => chain(webhook(), [data("counted", "summarize", "Count each status", { items: "{{trigger.output.body.results}}", operation: "count", group_by: "status" })]),
+  },
+  {
+    id: "contributors-unique",
+    title: "Who wrote the failing tests, each once",
+    about: "Filter, then Remove Duplicates, then Aggregate the names into one list.",
+    category: DIGESTS,
+    runsHere: true,
+    sample: { results: RESULTS },
+    expect: { step: "names", output: { count: 1, author: ["Asha"] } },
+    flow: () => chain(webhook(), [data("failed", "filter", "Only the failures", { items: "{{trigger.output.body.results}}", field: "status", test: "equals", value: "failed" }), data("once", "remove_duplicates", "Each author once", { items: "{{failed.output}}", fields: "author" }), data("names", "aggregate", "Their names", { items: "{{once.output}}", fields: "author" })]),
+  },
+  {
+    id: "prs-with-reviews",
+    title: "Match pull requests to their reviews, with Merge",
+    about: "Two lists put together by a field they share, as a join.",
+    category: REVIEW,
+    runsHere: true,
+    sample: { pulls: [{ id: 1, title: "Add search" }, { id: 2, title: "Fix login" }], reviews: [{ pull: 1, state: "approved" }] },
+    expect: { step: "matched", output: [{ id: 1, title: "Add search", pull: 1, state: "approved" }] },
+    flow: () => chain(webhook(), [data("matched", "merge", "Pull requests and reviews", { first: "{{trigger.output.body.pulls}}", second: "{{trigger.output.body.reviews}}", mode: "match", first_key: "id", second_key: "pull" })]),
+  },
+  {
+    id: "dependency-changes",
+    title: "What changed in the dependencies, with Compare Datasets",
+    about: "Added, removed, and changed versions between two lists.",
+    category: SECURITY,
+    runsHere: true,
+    sample: { before: [{ name: "react", version: "18" }, { name: "lodash", version: "4" }], after: [{ name: "react", version: "19" }, { name: "zod", version: "4" }] },
+    expect: { step: "changes", output: { only_in_first: [{ name: "lodash" }], only_in_second: [{ name: "zod" }], same: [], different: [{ key: "react", fields: ["version"] }] } },
+    flow: () => chain(webhook(), [data("changes", "compare_datasets", "Compare them", { first: "{{trigger.output.body.before}}", second: "{{trigger.output.body.after}}", first_key: "name" })]),
+  },
+  {
+    id: "tidy-webhook-data",
+    title: "Keep only what you need, with Edit Fields",
+    about: "Each item down to the fields that matter.",
+    category: DOCS,
+    runsHere: true,
+    sample: { pulls: [{ title: "Add search", user: { login: "asha", id: 7 }, body: "Long text" }] },
+    expect: { step: "tidy", output: [{ title: "Add search", user: { login: "asha" } }] },
+    flow: () => chain(webhook(), [data("tidy", "edit_fields", "Keep the title and author", { items: "{{trigger.output.body.pulls}}", mode: "keep", fields: "title, user.login" })]),
+  },
+  {
+    id: "one-item-per-file",
+    title: "One item for each changed file, with Split Out",
+    about: "A pull request's files become items of their own, each knowing its pull request.",
+    category: REVIEW,
+    runsHere: true,
+    sample: { pull: { number: 7, files: [{ path: "a.ts" }, { path: "b.ts" }] } },
+    expect: { step: "files", output: [{ number: 7, path: "a.ts" }, { number: 7, path: "b.ts" }] },
+    flow: () => chain(webhook(), [data("files", "split_out", "Each file", { items: "{{trigger.output.body.pull}}", field: "files", keep_other_fields: true })]),
+  },
+  {
+    id: "rename-for-tracker",
+    title: "Rename fields for another tool, with Rename Keys",
+    about: "The names one service uses, turned into another's.",
+    category: ISSUES,
+    runsHere: true,
+    sample: { issues: [{ title: "Crash", body: "On save" }] },
+    expect: { step: "renamed", output: [{ name: "Crash", description: "On save" }] },
+    flow: () => chain(webhook(), [data("renamed", "rename_keys", "As the tracker names them", { items: "{{trigger.output.body.issues}}", renames: { title: "name", body: "description" } })]),
+  },
+];
+
 // ---- The same few things for each service. Each needs its service's connection, and its dropdowns chosen. ----
 
 type Destination = { key: string; label: string; step: (message: string) => FlowStep };
@@ -479,7 +584,7 @@ const ONE_OFFS: Example[] = [
   { id: "mail-release-notes", title: "Mail release notes as HTML", about: "Markdown to HTML with one piece, and mailed with another.", category: RELEASES, runsHere: false, flow: () => chain(webhook("A new release"), [action("html", "text-helper", "markdown_to_html", "To HTML", { markdown: "{{trigger.output.body.notes}}", flavor: "github", headerLevelStart: 1, tables: true, noHeaderId: true, simpleLineBreaks: false, openLinksInNewWindow: false }, false), action("mail", "smtp", "send-email", "Mail it", { from: "", to: [], subject: "Release notes", body_type: "html", body: "{{html.output}}" })]) },
 ];
 
-export const EXAMPLES: Example[] = [...RUNS_HERE, ...WITH_PIECES, ...NOTIFICATIONS, ...TICKET_EXAMPLES, ...SYNCS, ...AI_EXAMPLES, ...DIGEST_EXAMPLES, ...ONE_OFFS];
+export const EXAMPLES: Example[] = [...RUNS_HERE, ...WITH_PIECES, ...WITH_BUILTINS, ...NOTIFICATIONS, ...TICKET_EXAMPLES, ...SYNCS, ...AI_EXAMPLES, ...DIGEST_EXAMPLES, ...ONE_OFFS];
 export const EXAMPLE_CATEGORIES = [...new Set(EXAMPLES.map((example) => example.category))].sort();
 
 /** A flow ready for a room: each piece at the version this room's image has. */

@@ -5,7 +5,7 @@
 "use client";
 
 import type { AutomationStepResult, PieceField, PieceInfo } from "@codechatter/contracts";
-import { Plus, Replace, Trash2, Zap } from "lucide-react";
+import { Loader2, Pin, PinOff, Play, Plus, Replace, Trash2, Zap } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -13,10 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
+import { builtinOf } from "./builtins";
 import { DataView, SchemaOf } from "./data-view";
 import { insertAt, previewOf } from "./expressions";
-import { addBranch, expressionsFor, kindOf, removeBranch, removeStep, setStepNote, toggleStep, updateStep, type Flow, type FlowStep, type Place } from "./model";
+import { addBranch, canPin, expressionsFor, isPinned, kindOf, pinStep, removeBranch, removeStep, setStepNote, toggleStep, unpinStep, updateStep, type Flow, type FlowStep, type Place } from "./model";
 import { RouterFields } from "./router-fields";
+import { TriggerSettings } from "./trigger-settings";
 
 const shown = (value: unknown) => (value === undefined || value === null ? "" : typeof value === "string" ? value : JSON.stringify(value, null, 2));
 type FieldTarget = { element: HTMLInputElement | HTMLTextAreaElement; write: (text: string) => void };
@@ -118,6 +120,11 @@ export function StepPanel({
   onClose,
   onAdd,
   onReplace,
+  onRunStep,
+  runningStep,
+  path,
+  canRun,
+  onUseEvent,
 }: {
   flow: Flow;
   step: FlowStep;
@@ -131,11 +138,21 @@ export function StepPanel({
   onAdd: (place: Place) => void;
   /** Open the picker to put something else in this step's place (for the trigger, another trigger). */
   onReplace: () => void;
+  /** Run this step on its own, with the other steps' data from the run shown; null for someone who can't run. */
+  onRunStep: (() => void) | null;
+  runningStep: boolean;
+  /** The flow's file, for turning it on. */
+  path: string;
+  canRun: boolean;
+  /** Puts what a webhook's test address was sent in "What to send". */
+  onUseEvent: (body: unknown) => void;
 }) {
   const codeHelp = useId();
   const noteId = useId();
   const target = useRef<FieldTarget | null>(null);
   const [inputsText, setInputsText] = useState<string | null>(null);
+  const [pinText, setPinText] = useState<string | null>(null);
+  const pinned = isPinned(flow, step);
   const edit = (change: (step: FlowStep) => void) => onChange(updateStep(flow, step.name, change));
   const settings = step.settings as { pieceName?: string; actionName?: string; triggerName?: string; input?: Record<string, unknown>; sourceCode?: { code?: string }; items?: unknown; errorHandlingOptions?: { continueOnFailure?: { value?: boolean }; retryOnFailure?: { value?: boolean } } };
   const piece = settings.pieceName ? pieces[settings.pieceName] : undefined;
@@ -147,6 +164,7 @@ export function StepPanel({
       into.input = { ...(into.input ?? {}), [name]: value };
     });
   const isTrigger = step.type === "PIECE_TRIGGER" || step.type === "EMPTY";
+  const builtin = builtinOf(step);
   const last = result?.results.at(-1);
   const handling = settings.errorHandlingOptions;
   const data = runSteps ? Object.fromEntries(Object.entries(runSteps).map(([name, each]) => [name, { output: each.output }])) : null;
@@ -223,12 +241,60 @@ export function StepPanel({
           )}
         </div>
       )}
+      {onRunStep && canPin(step) && (
+        <div className="grid gap-1">
+          <div>
+            <Button size="xs" variant="outline" disabled={runningStep} title="Runs only this step, with the other steps' data from the run shown" onClick={onRunStep}>
+              {runningStep ? <Loader2 className="animate-spin" /> : <Play />} Run this step
+            </Button>
+          </div>
+          <span className="text-muted-foreground">Only this step runs, with what the steps before it gave on the run shown{pinned ? ", and for real, though it's pinned" : ""}.</span>
+        </div>
+      )}
       {step.skip && <p className="rounded-md border border-dashed p-2 text-muted-foreground">Turned off: the flow passes over it, and what comes after still runs.</p>}
-      {isTrigger && settings.pieceName !== "@activepieces/piece-webhook" && <p className="rounded-md border p-2 text-muted-foreground">A flow starts by itself once triggers are on, which comes next. Until then it runs when you press Run it, with what you send standing in for what this trigger would give.</p>}
+      {pinned && (
+        <section aria-label="Pinned output" className="grid gap-1 rounded-md border border-dashed p-2">
+          <div className="flex items-center gap-2">
+            <h4 className="flex-1 font-medium">Pinned</h4>
+            {canEdit && (
+              <Button size="xs" variant="ghost" onClick={() => onChange(unpinStep(flow, step.name))}>
+                <PinOff /> Unpin
+              </Button>
+            )}
+          </div>
+          <p className="text-muted-foreground">When the flow runs, this step doesn&apos;t: it gives back what&apos;s below, so the steps after it get the same data every time, and no service is called.</p>
+          <Textarea
+            aria-label="The pinned output, as JSON"
+            className="min-h-20 font-mono text-[11px] md:text-[11px]"
+            spellCheck={false}
+            readOnly={!canEdit}
+            value={pinText ?? JSON.stringify(flow.pinned?.[step.name] ?? null, null, 2)}
+            onChange={(event) => {
+              setPinText(event.target.value);
+              try {
+                onChange(pinStep(flow, step.name, JSON.parse(event.target.value)));
+              } catch {
+                // Still being typed.
+              }
+            }}
+            onBlur={() => setPinText(null)}
+          />
+        </section>
+      )}
+      {isTrigger && settings.pieceName === "@activepieces/piece-webhook" && <TriggerSettings flow={flow} path={path} canRun={canRun} onSave={onChange} onUseEvent={onUseEvent} />}
+      {isTrigger && settings.pieceName !== "@activepieces/piece-webhook" && <p className="rounded-md border p-2 text-muted-foreground">This trigger can&apos;t start the flow by itself yet: webhooks can, and schedules and services&apos; own triggers come next. Until then it runs when you press Run it, with what you send standing in for what this trigger would give.</p>}
       {pieceStep?.needsAuth && piece?.auth && <p className="rounded-md border p-2 text-muted-foreground">This step needs a {piece.label} connection, and rooms have no internet yet. Both are coming next, so it can&apos;t reach {piece.label} for now.</p>}
       {settings.pieceName && !piece && <p role="alert" className="text-destructive">This room&apos;s image doesn&apos;t have {settings.pieceName}.</p>}
 
-      {step.type === "CODE" && (
+      {builtin && (
+        <section aria-label="Its fields" className="grid gap-2">
+          <p className="text-muted-foreground">{builtin.description}. Built in: it works on a list of items, as n8n&apos;s does.</p>
+          {Object.entries(builtin.fields).map(([name, spec]) => (
+            <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} />
+          ))}
+        </section>
+      )}
+      {step.type === "CODE" && !builtin && (
         <>
           <div className="grid gap-1">
             <label className="grid gap-1">
@@ -346,6 +412,13 @@ export function StepPanel({
           )}
           <DataView label="What went in" value={last.input} />
           <DataView label="What came out" value={last.output} base={`${step.name}.output`} />
+          {canEdit && canPin(step) && !pinned && last.output !== undefined && (
+            <div>
+              <Button size="xs" variant="outline" title="The flow then uses this rather than running the step" onClick={() => onChange(pinStep(flow, step.name, last.output))}>
+                <Pin /> Pin this output
+              </Button>
+            </div>
+          )}
         </section>
       )}
 

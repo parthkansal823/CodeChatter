@@ -119,6 +119,6 @@ export class InterviewAiReviewService {
     const review: AiReview = { at: new Date().toISOString(), model: provider.settings.model, summary: found.summary, findings: [...reviewSignals(facts), ...found.findings, ...stills], questions: found.questions, looked, note: notes.join(" ") || null };
     // Only its own column. A score and the record's level are never the AI's to change.
     await this.db.update(schema.interviews).set({ aiReview: review }).where(eq(schema.interviews.id, id));
-    return { interview: await this.interviews.viewFor(id), orgId: row.orgId, looked };
+    return { interview: await this.interviews.viewFor(id, session.user.id), orgId: row.orgId, looked };
   }
 }

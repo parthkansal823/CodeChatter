@@ -463,11 +463,6 @@ export const interviews = pgTable(
     /** Who used the link. Set once: that's what makes it single-use. */
     candidateUserId: text().references(() => user.id, { onDelete: "set null" }),
     candidateJoinedAt: timestamp({ withTimezone: true }),
-    /** Private to interviewers. */
-    scorecard: jsonb()
-      .$type<{ scores: Array<{ id: string; score: number | null; note: string }>; overall: number | null; recommendation: "yes" | "maybe" | "no" | null; notes: string }>()
-      .notNull()
-      .default({ scores: [], overall: null, recommendation: null, notes: "" }),
     ...timestamps,
   },
   (t) => [
@@ -478,6 +473,26 @@ export const interviews = pgTable(
     index("interviews_closing_idx").on(t.closesAt).where(sql`${t.status} = 'scheduled'`),
     index().on(t.batchId),
   ],
+);
+
+/**
+ * Each interviewer's private draft or published judgement. A deleted author becomes
+ * unattributed so their submitted judgement is retained; interview deletion removes it.
+ */
+export const interviewScorecards = pgTable(
+  "interview_scorecards",
+  {
+    id: uuidv7Pk(),
+    interviewId: uuid().notNull().references(() => interviews.id, { onDelete: "cascade" }),
+    interviewerId: text().references(() => user.id, { onDelete: "set null" }),
+    scores: jsonb().$type<Array<{ id: string; score: number | null; note: string }>>().notNull().default([]),
+    overall: integer(),
+    recommendation: text().$type<"yes" | "maybe" | "no">(),
+    notes: text().notNull().default(""),
+    submittedAt: timestamp({ withTimezone: true }),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => [uniqueIndex("interview_scorecards_interview_interviewer_idx").on(t.interviewId, t.interviewerId)],
 );
 
 /**

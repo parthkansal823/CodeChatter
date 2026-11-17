@@ -7,7 +7,7 @@ import {
   RoomCode,
   RunInterviewTestsInput,
   ScheduleInterviewInput,
-  Scorecard,
+  SaveScorecardInput,
   type InterviewInvitation,
   type InterviewListItem,
   type InterviewReplay,
@@ -121,7 +121,7 @@ export class InterviewsController {
   }
 
   @Put("interviews/:id/scorecard")
-  saveScorecard(@CurrentSession() session: AuthSession, @Param("id", Id) id: string, @Body(new ZodPipe(Scorecard)) scorecard: Scorecard): Promise<InterviewerInterview> {
+  saveScorecard(@CurrentSession() session: AuthSession, @Param("id", Id) id: string, @Body(new ZodPipe(SaveScorecardInput)) scorecard: SaveScorecardInput): Promise<InterviewerInterview> {
     return this.interviews.saveScorecard(id, session.user.id, scorecard);
   }
 

@@ -494,6 +494,11 @@ What's left is in `docs/pending.md` under step 11.
 - ✅ **Nightly backups** (ChatGPT's prompt 11, checked 2026-11-07): `infra/backup/`, a `backup` service in `infra/compose.yaml`, a CronJob in the Helm chart, and `docs/deploy.md`, "Backups". A checked `pg_dump` every night at 03:00 in `BACKUP_TZ`, with a checksum, optionally to S3 and verified there; 7 daily, 4 weekly and 6 monthly kept; `restore` into a new database by default; `last-success` and `last-failure` for alerts.
   - Tests: `infra/backup/test-backup.sh` (Docker only, cleans up after itself). Checked by hand on real data: a copy of the dev database (46 MB, 28 tables, 15 migrations) restored into a throwaway Postgres, every table's rows matching but for a session written during it. The scheduler runs once after 03:00, not again after a restart, and carries on when the database is down, recording why. No password in logs, arguments or the volume.
 - ✅ **Settings pages** (ChatGPT's prompt 10, checked 2026-11-06): `/settings/account` has profile, password, two-factor sign-in (a secret and link to set up, on only once a code checks out, backup codes shown once) and where you're signed in, with Sign out for each device. `/two-factor` takes a backup code. In `apps/web/components/settings/account/`.
+- ✅ **More than one owner in a room, and handing it over** (ChatGPT's prompt 17, checked 2026-11-08):
+  - An owner can make an active member an owner (asking first, and saying what an owner can do), step down, leave, or remove another owner, **as long as the room keeps an active owner**. "Hand this room to…" makes someone an owner and the one handing over an editor in one transaction. Invite links and approvals still never give `owner` (`assignableRoles`); only `assignableMemberRoles`, for an active member, by an owner, does.
+  - **The server enforces it:** every change to a room's people now happens inside a transaction that locks the room's row (`RoomsRepository.withPeopleLock`), and the last active owner can't be demoted, removed or leave (409), so two owners demoting each other at the same moment leave one. The old rule in `setMember` ("never an owner's row") is gone, replaced by that check. Rights changing still closes what the person had open, ends their shells and tells them; interview rooms are still refused.
+  - **Checked:** the code against the brief; contracts' 243 tests and the API's 452 pass; typecheck and lint are clean. `room-people.e2e.mjs`'s three checks of the old one-owner rule were brought up to the new one.
+  - **Tests:** `packages/contracts/src/permissions.test.ts`; `apps/collab/test/room-owners.e2e.mjs` (70 checks, against the API: promoting, two owners, demoting each other, the last owner refused, two demotions at the same moment, handing over and back, invite links and approvals never giving owner, the audit log, notifications, an interview room refused); `apps/web/test/room-owners.e2e.mjs` (19, in a browser); `room-people.e2e.mjs` (62) and `room-members.e2e.mjs` (32) still pass.
 - ✅ **Preferences** (ChatGPT's prompt 16, checked 2026-11-08): `/settings/preferences`, linked from Settings, in `apps/web/components/settings/preferences/`.
   - **Appearance:** Light, Dark or Match my device, each with a small preview, applied at once; and the editor's own settings (theme, font size, tabs, line numbers, whitespace, cursor, key bindings and the switches), through the same store and save as the editor in a room, so a change reaches an open room.
   - **Notifications:** the email digest, saved as it's switched, and put back with a plain message if saving fails.
@@ -847,6 +852,68 @@ What's left is in `docs/pending.md` under step 11.
 - `model.test.ts` and `expressions.test.ts` (34: the + points and where each puts a step, branch names, turning off and notes, copying and pasting with names and expressions following, replacing, branches added and removed, the engine's tests, fields and paths, previews, putting an expression where the cursor is)
 - `apps/runner/test/automation-examples.e2e.ts`: also every router example both ways, and every test's name
 - `apps/web/test/automations.e2e.mjs` (69 checks in a browser, adding to part one's: the picker and searching it, the + at the end of a branch, data put in a field and what it comes to, the engine reading it, the menu's Duplicate, undo and redo, the other person seeing it, Delete, copy and paste from the keyboard with a name of its own, the arrows, N, D and the engine passing over a step turned off, a note, a branch added and removed, the 22 tests, and changing the trigger)
+
+### Automations, part three: trying things ✅ (2026-11-17)
+
+**What:** n8n's ways of trying a flow without running all of it again, on Activepieces' real engine.
+
+- **One step on its own:** "Run this step" on a code step or a piece's action runs only that step, with every other step standing in with what it gave on the run shown (and the trigger with what's to be sent, if it hasn't run). It's the engine's own single-step mode (`stepNameToTest` and `sampleData`). The run is listed as "one step", and the chart lights up only that step.
+- **Pinning:** "Pin this output" keeps what a step gave, in the flow's file (`pinned`). When the flow runs, a pinned step doesn't: it gives back what was pinned, so what comes after gets the same data every time and no service is called, which is how a step that needs an account can be tried around before there's a connection. The host does it by standing a code step in for each pinned one. The pin can be edited as JSON, and unpinned; the chart says "Pinned", and each run lists what was pinned. A pinned step tried on its own runs for real.
+- **Carrying on from where a run stopped:** a failed, stopped or timed-out run has "Carry on from where it stopped". It runs the flow as it is now with what the first run was sent, keeping what succeeded and not running it again, and starting at the step that didn't: fix the step, then carry on. It's the engine's own resume (`executionType: RESUME`), reading the earlier run's steps from the host. Only a run of the same flow can be carried on.
+- **What a run was sent** can be put back in "What to send", to try the same thing again.
+
+**Where:** `sandbox/image/automation/host.mjs` (`withPins`, the step and resume modes), `sandbox/image/automation.py` (checking what can be tried, and from which run), `packages/contracts/src/automations.ts`, `apps/runner/src/automations.ts`, and in `components/room/tools/automations/`: `model.ts` (`pinStep`, `unpinStep`; pins follow a step when it's copied and go when it's removed), `step-panel.tsx` and `flow-view.tsx`.
+
+**Read from Activepieces' source** (MIT, version 0.92.3-hotfix.2): how its single-step mode fills in the other steps (`test-execution-context.ts`), how a resume keeps what succeeded and skips it (`flow.operation.ts`, and the code and piece executors' `isCompleted`), and where it reads an earlier run from (`engine-file-api.ts`).
+
+**Left** (in `docs/pending.md`): running from a chosen step onward, and pinning the trigger's data.
+
+**Tests:**
+- `model.test.ts` (35 with `expressions.test.ts`: pinning, the chart, pins going with a removed step and following a copy)
+- `apps/runner/test/automations.e2e.mjs` (71 checks on the real engine, adding: one step with the data given and the steps before it not run; the trigger and a missing step refused; a pinned step that would fail not run, its data reaching the next step, and the run saying so; a pinned step tried on its own running for real; a run failing, then carried on once fixed, with the first step not run again and what it was first sent kept; a run that didn't fail, and another flow's run, refused)
+- `apps/web/test/automations.e2e.mjs` (78 checks in a browser, adding: one step and only it lit up, pinning, a pinned step not run and the branch following the pinned data, unpinning, using what a run was sent, and carrying a failed run on with the step fixed)
+
+### Automations, part four: built-in steps for data ✅ (2026-11-17)
+
+**What:** n8n's core steps for working on lists of items, written here: **Edit Fields** (set fields, keep only some, take some away; `$item.path` reads from each item), **Filter** (19 tests, keeping what passes or what doesn't), **Sort** (as text, numbers or dates, either way, with empty values last), **Limit**, **Aggregate**, **Summarize** (how many, sum, average, smallest, largest, how many different, joined, overall or by group), **Remove Duplicates**, **Split Out**, **Rename Keys**, **Merge** (one after the other, matched by a field with what to keep, side by side, every pairing), **Compare Datasets** (only in the first, only in the second, the same, and different with which fields), and **Stop and Error**. They're in the step picker under Data, each with its own form, and nine examples use them.
+
+**How:** a built-in step is a code step marked `builtin` in the flow's file. The host writes it as a module that calls ours in the image (`sandbox/image/automation/builtins.mjs`), whatever its code says, so Activepieces' engine works out its inputs' expressions as for any code step, a pinned one gives back what was pinned, and an improvement to a built-in step reaches every flow. A name that isn't a built-in step, or that tries to be a path, fails the run saying so.
+
+**Why not a piece of our own:** Activepieces' pieces from npm come with their framework bundled inside, so a piece of ours would have needed `@activepieces/pieces-framework` as a new package. A marked code step needs nothing new.
+
+**Where:** `sandbox/image/automation/builtins.mjs` (and the Dockerfile's copy of it), `host.mjs` (`writeCodeSteps`), and in `components/room/tools/automations/`: `builtins.ts` (the forms), `model.ts` (`newBuiltinStep`, the chart's Data glyph), `step-picker.tsx`, `step-panel.tsx` and `examples.ts`.
+
+**Tests:**
+- `sandbox/image/automation/builtins.test.mjs` (13, with `node --test`: every step, with paths, lists from JSON text, empty values, groups, and each way to merge)
+- `model.test.ts` (36 with `expressions.test.ts`)
+- `apps/runner/test/automations.e2e.mjs` (79 checks on the real engine, adding: Filter, Sort and Summarize chained, Stop and Error stopping the run with its message worked out, a pinned built-in step, and a name that isn't one or tries to be a path)
+- `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
+- `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
+
+### Automations, part five: turning a flow on, with webhooks ✅ (2026-11-17)
+
+**What:** a flow that starts by itself when something calls it, as n8n's Webhook node: GitHub, a CI job or a form sends to its address, and the flow runs in the room's sandbox, with nobody in the room.
+
+- **Turning it on** is on the trigger's panel: it gets a **live address**, which runs the flow, and a **test address**, which runs nothing and shows what was sent, with "Use it as what to send", to set the flow up with real data. It can be turned off and on, given a **new address** (the old one stops at once), or forgotten.
+- **What the flow gets** is what Activepieces' webhook trigger gives: the body (JSON, a form, or plain text), the headers without cookies or what the proxies add, and the query, with any method.
+- **Answering:** at once, with the run's id (202), or when the flow finishes, with what its last step gave (or 500 and why it failed), waiting up to 30 seconds.
+- **The run** says a webhook started it. A flow whose file has moved is still found, by its own id; one that's gone says so.
+
+**Kept safe:**
+- The address's token is the secret, as with Slack's and GitHub's incoming webhooks: only its hash is matched against, in constant time, and the token itself is sealed (AES-GCM, as GitHub tokens are), so people who can run the room's code can see the address again. A wrong address, another room's, or one for an interview room finds nothing (404), and says nothing about the room.
+- Each address takes 60 calls a minute; a room can have 10 flows turned on; bodies are up to 1 MB.
+- Turning on, changing and forgetting need Run rights, and each goes in the audit log.
+
+**Where:**
+- **API:** `apps/api/src/automations/` (`automation-triggers.service.ts`; `automation-triggers.controller.ts` for `/api/rooms/:id/automations/triggers`; `automation-hooks.controller.ts` for the public `/api/hooks/automations/:room/:token` and its `/test`), the bodies webhooks send in `main.ts`, and `RoomsRepository.setSettingEntry`. Triggers are kept in the room's settings, one entry each, changed in one statement so two people changing different ones don't undo each other: no migration.
+- **Sandbox:** `automation.py` finds a flow by its id when its file has moved, and passes the headers and query on; `host.mjs` gives them to the engine.
+- **Web:** `components/room/tools/automations/trigger-settings.tsx`, on the webhook trigger's panel.
+
+**Left** (in `docs/pending.md`): schedules, room events, an error flow, sub-flows, waiting and approvals, forms and chat, and a webhook checking a signature besides its address.
+
+**Tests:**
+- `apps/runner/test/automation-hooks.e2e.mjs` (28 checks, the whole way: turned on through the API and called from outside, with Activepieces' engine running it; the test address showing what it was sent, without cookies, and running nothing; answering when finished with the last step's output, the query and a header; the run saying a webhook started it; answering at once; a form, plain text and GET; turned off; a new address and the old one stopping; a moved file still found; wrong addresses and another room's; someone signed out; too many calls; and forgetting it)
+- `apps/web/test/automations.e2e.mjs` (87 checks), adding: turning on, the address, a test call shown and used as what to send, a call from outside running it and showing as "Webhook", and forgetting it
 
 ### The task board ✅ (ChatGPT 15, checked 2026-11-08)
 

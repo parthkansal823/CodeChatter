@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, u
 import { createServer } from "node:http";
 import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { zstdDecompressSync } from "node:zlib";
 
 import { Server } from "socket.io";
@@ -21,6 +22,8 @@ const STOP = join(HOME, "stop");
 const LOCK = join(HOME, "worker");
 const ROOT = new URL(".", import.meta.url).pathname;
 const ENGINE = join(ROOT, "engine", "main.js");
+const BUILTINS = pathToFileURL(join(ROOT, "builtins.mjs")).href;
+const BUILTIN_NAME = /^[a-z_]{1,40}$/;
 const MOST_RUNS = 50;
 const STEP_NAME = /^[A-Za-z0-9_]+$/;
 const ENGINE_HEAP_MB = 256;
@@ -56,7 +59,10 @@ function* stepsOf(step) {
   }
 }
 
-/** What Activepieces builds before a run: a code step is a module on disk. TypeScript's types come off, and packages aren't installed: a room has what its image has. */
+/**
+ * What Activepieces builds before a run: a code step is a module on disk. TypeScript's types come off, and packages aren't installed: a room has what its image
+ * has. A built-in step (Filter, Merge and the rest) is a code step marked `builtin`: its module calls ours in builtins.mjs, whatever the file says its code is.
+ */
 function writeCodeSteps(flow, versionId) {
   for (const step of stepsOf(flow.trigger)) {
     if (!STEP_NAME.test(step.name ?? "")) throw new Error(`"${step.name}" can't be a step's name: letters, numbers and underscores only.`);
@@ -64,6 +70,11 @@ function writeCodeSteps(flow, versionId) {
     const folder = join(CODES, versionId, step.name);
     mkdirSync(folder, { recursive: true });
     writeFileSync(join(folder, "package.json"), JSON.stringify({ type: "module" }));
+    if (step.builtin !== undefined) {
+      if (typeof step.builtin !== "string" || !BUILTIN_NAME.test(step.builtin)) throw new Error(`"${step.builtin}" isn't a built-in step.`);
+      writeFileSync(join(folder, "index.js"), `import { run } from ${JSON.stringify(BUILTINS)};\nexport const code = async (inputs) => run(${JSON.stringify(step.builtin)}, inputs);\n`);
+      continue;
+    }
     const source = String(step.settings?.sourceCode?.code ?? "");
     let plain = source;
     try {
@@ -79,10 +90,32 @@ function readStep(execution) {
   return execution?.executionState?.steps ?? {};
 }
 
+/**
+ * A flow with its pinned steps standing in for themselves: each becomes a code step that gives back what was pinned, so it isn't run (a piece that needs an
+ * account isn't called at all) and what comes after gets the same data every time. Only code and pieces' actions can be pinned. `except` stays as it is: the
+ * step being tried on its own runs for real.
+ */
+function withPins(flow, except = null) {
+  const pinned = flow.pinned && typeof flow.pinned === "object" ? flow.pinned : {};
+  const names = [];
+  const copy = JSON.parse(JSON.stringify(flow));
+  for (const step of stepsOf(copy.trigger)) {
+    if (step.name === except || !Object.hasOwn(pinned, step.name) || (step.type !== "CODE" && step.type !== "PIECE")) continue;
+    names.push(step.name);
+    step.type = "CODE";
+    // A pinned built-in step gives back what was pinned too.
+    delete step.builtin;
+    step.settings = { sourceCode: { code: `export const code = async () => (${JSON.stringify(pinned[step.name] ?? null)});\n`, packageJson: "{}" }, input: {}, errorHandlingOptions: step.settings?.errorHandlingOptions ?? { continueOnFailure: { value: false }, retryOnFailure: { value: false } } };
+  }
+  return { flow: copy, pinned: names };
+}
+
 /** One job, to its end. Never throws: whatever goes wrong is the run's result. */
 async function runJob(job) {
   const startedAt = NOW();
-  const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
+  const mode = job.mode === "step" || job.mode === "retry" ? job.mode : "run";
+  const { flow, pinned } = withPins(job.flow ?? { trigger: null }, mode === "step" ? job.step : null);
+  const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, mode, step: mode === "step" ? job.step : null, retryOf: mode === "retry" ? job.retryOf : null, pinned, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
   writeJson(LIVE, live);
   const connections = job.connections ?? {};
   let steps = {};
@@ -100,6 +133,8 @@ async function runJob(job) {
     };
     const path = url.pathname;
     if (path.startsWith("/v1/files/")) {
+      // Running again from where a run failed: the engine reads that run's steps, keeps what succeeded, and carries on from what didn't.
+      if (req.method === "GET" && mode === "retry" && path === `/v1/files/resume-${job.id}`) return send(200, { executionState: { steps: job.resumeSteps ?? {}, tags: [] } });
       if (req.method !== "PUT") return send(404);
       try {
         steps = readStep(JSON.parse((raw[0] === 0x28 ? zstdDecompressSync(raw) : raw).toString()));
@@ -183,7 +218,7 @@ async function runJob(job) {
   };
 
   try {
-    writeCodeSteps(job.flow, job.id);
+    writeCodeSteps(flow, job.id);
   } catch (error) {
     finish("FAILED", error.message);
     return;
@@ -233,7 +268,7 @@ async function runJob(job) {
     io.on("connection", async (socket) => {
       socket.on("rpc-notify", () => {});
       socket.on("rpc", (_message, ack) => ack?.(undefined));
-      const flowVersion = { id: job.id, flowId: job.flowId ?? job.path, displayName: job.flow.displayName ?? job.path, valid: true, state: "LOCKED", schemaVersion: job.flow.schemaVersion ?? "27", trigger: job.flow.trigger, agentIds: [], connectionIds: [], notes: [], updatedBy: null, backupFiles: null, created: new Date(startedAt).toISOString(), updated: new Date(startedAt).toISOString() };
+      const flowVersion = { id: job.id, flowId: job.flowId ?? job.path, displayName: flow.displayName ?? job.path, valid: true, state: "LOCKED", schemaVersion: flow.schemaVersion ?? "27", trigger: flow.trigger, agentIds: [], connectionIds: [], notes: [], updatedBy: null, backupFiles: null, created: new Date(startedAt).toISOString(), updated: new Date(startedAt).toISOString() };
       const operation = {
         projectId: "room",
         platformId: "room",
@@ -243,16 +278,22 @@ async function runJob(job) {
         timeoutInSeconds: job.seconds,
         flowVersion,
         flowRunId: job.id,
-        executionType: "BEGIN",
         // The engine only reports each step as it goes on a test run. It's the same run otherwise.
         runEnvironment: "TESTING",
         workerHandlerId: null,
         httpRequestId: null,
         streamStepProgress: "NONE",
-        stepNameToTest: null,
-        logsFileId: `logs-${job.id}`,
         executeTrigger: false,
-        triggerPayload: { type: "inline", value: { body: job.payload ?? {}, headers: {}, queryParams: {} } },
+        ...(mode === "retry"
+          ? { executionType: "RESUME", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
+          : {
+              executionType: "BEGIN",
+              logsFileId: `logs-${job.id}`,
+              triggerPayload: { type: "inline", value: { body: job.payload ?? {}, headers: job.headers ?? {}, queryParams: job.query ?? {} } },
+              // One step on its own: the engine stands every other step in with this data, and runs only that one.
+              stepNameToTest: mode === "step" ? job.step : null,
+              ...(mode === "step" ? { sampleData: { ...(job.sampleData ?? {}), ...Object.fromEntries(pinned.map((name) => [name, job.flow.pinned[name]])) } } : {}),
+            }),
       };
       try {
         const answer = await socket.timeout((job.seconds + 5) * 1000).emitWithAck("rpc", { method: "executeOperation", payload: { operationType: "EXECUTE_FLOW", operation } });

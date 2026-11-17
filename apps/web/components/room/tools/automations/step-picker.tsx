@@ -5,13 +5,15 @@
 "use client";
 
 import type { PieceInfo } from "@codechatter/contracts";
-import { ArrowLeft, Code2, GitBranch, Puzzle, Repeat, Zap } from "lucide-react";
+import { ArrowLeft, Code2, GitBranch, Puzzle, Repeat, Rows3, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
-export type Picked = { kind: "code" } | { kind: "router" } | { kind: "loop" } | { kind: "action"; pieceName: string; actionName: string } | { kind: "trigger"; pieceName: string; triggerName: string };
+import { BUILTINS } from "./builtins";
+
+export type Picked = { kind: "code" } | { kind: "router" } | { kind: "loop" } | { kind: "builtin"; name: string } | { kind: "action"; pieceName: string; actionName: string } | { kind: "trigger"; pieceName: string; triggerName: string };
 
 const MOST_SHOWN = 80;
 const words = (text: string) => text.toLowerCase().split(/\s+/).filter(Boolean);
@@ -44,6 +46,7 @@ export function StepPicker({ pieces, mode, title, onPick, onCancel }: { pieces: 
       : []),
   ].filter((item) => matches(`${item.label} ${item.about}`));
   const stepCount = sorted.reduce((sum, [, info]) => sum + stepsOf(info).length, 0);
+  const builtins = triggers ? [] : Object.entries(BUILTINS).filter(([, builtin]) => matches(`${builtin.label} ${builtin.description}`));
 
   return (
     <section aria-label={title} className="grid min-h-0 content-start gap-2 text-xs">
@@ -70,6 +73,19 @@ export function StepPicker({ pieces, mode, title, onPick, onCancel }: { pieces: 
                   <span className="grid min-w-0">
                     <span>{item.label}</span>
                     <span className="truncate text-[11px] text-muted-foreground">{item.about}</span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {!open && builtins.length > 0 && (
+            <CommandGroup heading="Data">
+              {builtins.map(([name, builtin]) => (
+                <CommandItem key={name} value={`builtin-${name}`} onSelect={() => onPick({ kind: "builtin", name })} className="text-xs">
+                  <Rows3 />
+                  <span className="grid min-w-0">
+                    <span>{builtin.label}</span>
+                    <span className="truncate text-[11px] text-muted-foreground">{builtin.description}</span>
                   </span>
                 </CommandItem>
               ))}

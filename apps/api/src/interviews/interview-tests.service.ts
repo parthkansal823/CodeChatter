@@ -184,15 +184,17 @@ export class InterviewTestsService {
   async results(id: string, userId: string): Promise<BatchResults> {
     const batch = await this.batchFor(id, userId);
     const rows = await this.db.select().from(schema.interviews).where(eq(schema.interviews.batchId, id)).orderBy(schema.interviews.candidateName);
+    if (rows.some((row) => row.candidateUserId === userId)) throw new ForbiddenException("Candidates can't view batch results.");
     const ids = rows.map((row) => row.id);
-    const [answers, runs, events, bigEdits] = ids.length
+    const [answers, runs, events, bigEdits, scorecards] = ids.length
       ? await Promise.all([
           this.db.select().from(schema.interviewAnswers).where(inArray(schema.interviewAnswers.interviewId, ids)),
           this.db.select({ interviewId: schema.interviewRuns.interviewId, questionId: schema.interviewRuns.questionId, passed: schema.interviewRuns.passed, total: schema.interviewRuns.total }).from(schema.interviewRuns).where(inArray(schema.interviewRuns.interviewId, ids)),
           this.db.select({ interviewId: schema.interviewEvents.interviewId, kind: schema.interviewEvents.kind, n: count() }).from(schema.interviewEvents).where(inArray(schema.interviewEvents.interviewId, ids)).groupBy(schema.interviewEvents.interviewId, schema.interviewEvents.kind),
           this.interviews.bigEditsByRoom(rows.map((row) => row.roomId)),
+          this.interviews.scorecardsFor(rows, userId),
         ])
-      : [[], [], [], new Map<string, number>()];
+      : [[], [], [], new Map<string, number>(), new Map()];
 
     const table: BatchResultRow[] = rows.map((row) => {
       const mine = answers.filter((answer) => answer.interviewId === row.id);
@@ -213,7 +215,8 @@ export class InterviewTestsService {
         questions: row.paper.length,
         score: scorePaper(row.paper, mine, runs.filter((run) => run.interviewId === row.id)),
         integrity: { level: integrityLevel(counts, edits), counts, bigEdits: edits },
-        recommendation: row.scorecard.recommendation,
+        recommendation: null,
+        scorecards: scorecards.get(row.id)!,
         aiToCheck: row.aiReview ? row.aiReview.findings.filter((finding) => finding.level === "look").length : null,
       };
     });
@@ -278,7 +281,7 @@ export class InterviewTestsService {
       .insert(schema.interviewAnswers)
       .values({ interviewId: id, questionId, awarded: marks })
       .onConflictDoUpdate({ target: [schema.interviewAnswers.interviewId, schema.interviewAnswers.questionId], set: { awarded: marks, updatedAt: new Date() } });
-    return this.interviews.viewFor(id);
+    return this.interviews.viewFor(id, userId);
   }
 
   /**

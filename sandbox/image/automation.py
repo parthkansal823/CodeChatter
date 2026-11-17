@@ -29,6 +29,9 @@ MOST_SECONDS = 900
 DEFAULT_SECONDS = 300
 GONE_AFTER_SECONDS = 20
 RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+STEP_NAME = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+# A run that can be taken up again from where it stopped.
+UNFINISHED = ("FAILED", "TIMEOUT", "STOPPED")
 
 
 class Refused(Exception):
@@ -116,12 +119,78 @@ def start_worker():
     subprocess.Popen(["node", HOST], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
 
 
+def steps_named(step):
+    """Every step's name, in branches and loops too."""
+    found = set()
+    while isinstance(step, dict):
+        found.add(step.get("name"))
+        found |= steps_named(step.get("firstLoopAction"))
+        for child in step.get("children") or []:
+            found |= steps_named(child)
+        step = step.get("nextAction")
+    return found
+
+
+def flow_by_id(wanted):
+    """A flow's file found by its own id, wherever it's moved to in the room's files."""
+    for folder, dirs, files in os.walk(WORKSPACE):
+        dirs[:] = [name for name in dirs if not name.startswith(".") and name != "node_modules"]
+        for name in files:
+            if not name.lower().endswith(".flow.json"):
+                continue
+            full = os.path.join(folder, name)
+            if os.path.getsize(full) > MOST_FLOW_BYTES:
+                continue
+            found = read_json(full)
+            if isinstance(found, dict) and found.get("id") == wanted and isinstance(found.get("trigger"), dict):
+                return os.path.relpath(full, WORKSPACE).replace(os.sep, "/"), found
+    return None, None
+
+
 def run(request):
     path = request.get("path")
-    flow = flow_at(path)
+    wanted = request.get("flowId")
+    try:
+        flow = flow_at(path)
+    except Refused:
+        if not wanted:
+            raise
+        flow = None
+    # Started by a trigger: the flow is the one it was turned on for, even if its file has moved or been replaced by another.
+    if wanted and (flow is None or flow_id(flow) != wanted):
+        path, flow = flow_by_id(wanted)
+        if flow is None:
+            raise Refused("The flow this was turned on for isn't in the room any more.")
     payload = request.get("payload")
     if len(json.dumps(payload)) > MOST_PAYLOAD_BYTES:
         raise Refused("What was sent to this flow is over 1 MB.")
+    mode = request.get("mode") or "run"
+    extra = {"mode": mode}
+    if mode == "step":
+        # One step on its own, with every other step's data standing in from an earlier run.
+        step = request.get("step")
+        if not isinstance(step, str) or not STEP_NAME.match(step) or step not in steps_named(flow.get("trigger")) or step == flow["trigger"].get("name"):
+            raise Refused("That isn't a step of this flow that can run on its own.")
+        sample = request.get("sampleData") or {}
+        if not isinstance(sample, dict) or len(json.dumps(sample)) > MOST_PAYLOAD_BYTES:
+            raise Refused("The data for the other steps is over 1 MB.")
+        extra.update(step=step, sampleData=sample)
+    elif mode == "retry":
+        # From where a run stopped: what succeeded is kept, and the engine carries on from what didn't, with the flow as it is now.
+        before = request.get("retryOf")
+        if not isinstance(before, str) or not RUN_ID.match(before):
+            raise Refused("That isn't a run.")
+        earlier = read_json(os.path.join(RUNS, f"{before}.json"))
+        if not earlier:
+            raise Refused("That run isn't kept any more.")
+        if earlier.get("status") not in UNFINISHED or earlier.get("mode") == "step":
+            raise Refused("Only a run that failed, stopped or took too long can carry on from where it stopped.")
+        if (earlier.get("flowId") or None) != flow_id(flow) or (not flow_id(flow) and earlier.get("path") != path):
+            raise Refused("That run was of another flow.")
+        extra.update(retryOf=before, resumeSteps=earlier.get("steps") or {})
+        payload = earlier.get("payload")
+    elif mode != "run":
+        raise Refused("That isn't a way to run a flow.")
     os.makedirs(QUEUE, exist_ok=True)
     if queued() >= MOST_QUEUED:
         raise Refused("This room already has 20 runs waiting. Try again when some have finished.")
@@ -129,7 +198,9 @@ def run(request):
     identity = f"{time.strftime('%Y%m%d-%H%M%S', time.gmtime(now))}-{uuid.uuid4().hex[:8]}"
     seconds = request.get("seconds")
     seconds = max(LEAST_SECONDS, min(MOST_SECONDS, seconds)) if isinstance(seconds, int) else DEFAULT_SECONDS
-    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "trigger": str(request.get("trigger") or "manual")[:20], "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}}
+    headers = request.get("headers") if isinstance(request.get("headers"), dict) else {}
+    query = request.get("query") if isinstance(request.get("query"), dict) else {}
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": str(request.get("trigger") or "manual")[:20], "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, **extra}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}.json"), job)
     start_worker()
     return {"id": identity, "queued": queued()}
@@ -144,7 +215,7 @@ def stop():
     return {"id": live.get("id")}
 
 
-SHOWN = ("id", "path", "flowId", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs")
+SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs")
 
 
 def runs(path):

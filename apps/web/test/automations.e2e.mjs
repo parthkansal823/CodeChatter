@@ -1,7 +1,7 @@
 // The Automations tool in a browser, with Activepieces' real engine behind it: the examples, one on the chart with its branches lit up after a real run, what went in and came out
 // of a step, changing a step and adding them, two people, a failing step, stopping a run, a file that isn't a flow, and a phone. Nothing is stood in for. Its files are removed.
 //   node test/automations.e2e.mjs        (from apps/web, with the dev stack running and the current sandbox images)
-import { check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, check, finish, launch, sleep } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -22,7 +22,8 @@ const box = (name) => chart.getByRole("button", { name: new RegExp(`^Step ${esca
 async function select(name) {
   await box(name).focus();
   await sleep(300);
-  await box(name).click();
+  // Clicking a selected box lets it go, so only one that isn't.
+  if ((await box(name).getAttribute("aria-pressed")) !== "true") await box(name).click();
 }
 const openTool = async (page = a) => {
   await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Automations", exact: true }).click();
@@ -198,6 +199,53 @@ try {
   await slug.getByRole("region", { name: "What came out" }).getByText('"901"').waitFor({ timeout: 10_000 });
   check("theEngineReadsTheMappedData", true);
 
+  // ---- Trying things: one step on its own, and pinning what it gave ----
+  const runsList = details.getByRole("list", { name: "Runs of this flow" });
+  await select("Measure it");
+  const measure = details.getByRole("region", { name: "Step Measure it" });
+  await measure.getByRole("button", { name: "Run this step" }).click();
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  check("oneStepRunsOnItsOwn", await ok(runsList.getByRole("listitem").filter({ hasText: /one step: Measure it/ }).first().waitFor({ timeout: 60_000 })));
+  await finished(/^Finished in/);
+  await sleep(500);
+  check("onlyThatStepIsLitUp", /ran fine/.test(await stepName("Measure it")) && /didn't run/.test(await stepName("Big?")), `${await stepName("Measure it")} | ${await stepName("Big?")}`);
+  await select("Measure it");
+  await measure.getByRole("button", { name: "Pin this output" }).click();
+  await sleep(500);
+  check("aPinnedStepSaysSo", /pinned/.test(await stepName("Measure it")) && (await measure.getByRole("region", { name: "Pinned output" }).isVisible()), await stepName("Measure it"));
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  await runUntil({ additions: 1, deletions: 1 }, /^Finished in/);
+  check("aPinnedStepIsntRun", await details.getByText("Pinned, so not run: Measure it.").isVisible());
+  // What was pinned (901 lines, from the run it came from) decides the branch, not what was sent (2).
+  check("whatComesAfterGetsThePinnedData", /ran fine/.test(await stepName("Ask for two reviews")), await stepName("Ask for two reviews"));
+  await select("Measure it");
+  await measure.getByRole("button", { name: "Unpin" }).click();
+  await sleep(500);
+  check("unpinningPutsItBack", !/pinned/.test(await stepName("Measure it")));
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  await details.getByRole("button", { name: "Use what it was sent" }).click();
+  check("whatARunWasSentCanBeUsedAgain", JSON.parse(await details.getByLabel("What to send, as JSON").inputValue()).additions === 1);
+
+  // ---- A built-in step, as n8n's: Filter, from the picker, run on the engine ----
+  await select("Measure it");
+  await measure.getByRole("button", { name: "Add a step after this" }).click();
+  await picker.getByPlaceholder(/^Search \d+ actions$/).fill("filter");
+  await option("Filter").click();
+  await box("Filter").waitFor({ timeout: 5000 });
+  const filterPanel = details.getByRole("region", { name: "Step Filter" });
+  check("aBuiltInStepHasAFormNotCode", (await filterPanel.getByRole("textbox", { name: "Code", exact: true }).count()) === 0 && (await filterPanel.getByRole("combobox", { name: /^Test/ }).count()) === 1);
+  await filterPanel.getByRole("textbox", { name: /^Items/ }).fill("{{trigger.output.body.tests}}");
+  await filterPanel.getByLabel("Field", { exact: true }).fill("status");
+  await filterPanel.getByLabel("Compared with", { exact: true }).fill("failed");
+  await sleep(600);
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  await runUntil({ additions: 1, deletions: 1, tests: [{ name: "kept", status: "failed" }, { name: "dropped", status: "passed" }] }, /^Finished in/);
+  await select("Filter");
+  const filtered = await filterPanel.getByRole("region", { name: "What came out" }).textContent();
+  check("aBuiltInStepRunsOnTheEngine", filtered.includes('"kept"') && !filtered.includes('"dropped"'), filtered);
+  await filterPanel.getByRole("button", { name: "Remove Filter" }).click();
+  await box("Filter").waitFor({ state: "detached", timeout: 5000 });
+
   // ---- The right-click menu, and undo and redo ----
   const slugBoxes = chart.getByRole("button", { name: /^Step Slugify,/ });
   await box("Slugify").click({ button: "right" });
@@ -265,6 +313,30 @@ try {
   check("theTriggerCanBeChanged", await ok(details.getByPlaceholder(/^Search \d+ triggers$/).waitFor({ timeout: 5000 })));
   await details.getByRole("button", { name: "Cancel" }).click();
 
+  // ---- Turning it on: a webhook's addresses, a test call, a call from outside, and forgetting it ----
+  await select("When called");
+  const starting = details.getByRole("region", { name: "Step When called" }).getByRole("region", { name: "Starting by itself" });
+  await starting.getByRole("button", { name: "Turn on" }).click();
+  const liveAddress = starting.getByRole("textbox", { name: "Live address" });
+  await liveAddress.waitFor({ timeout: 10_000 });
+  const liveUrl = (await liveAddress.inputValue()).replace(/^https?:\/\/[^/]+/, BASE);
+  check("turningItOnGivesAnAddress", liveUrl.includes(`/api/hooks/automations/${"E2ETST"}/`), liveUrl);
+  await starting.getByRole("button", { name: "Listen for a test call" }).click();
+  await fetch(`${liveUrl}/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ additions: 600, deletions: 7 }) });
+  check("aTestCallIsShown", await ok(starting.getByRole("button", { name: "Use it as what to send" }).waitFor({ timeout: 20_000 })));
+  await starting.getByRole("button", { name: "Use it as what to send" }).click();
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  check("aTestCallCanBeWhatsSent", JSON.parse(await details.getByLabel("What to send, as JSON").inputValue()).additions === 600);
+  const called = await fetch(liveUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ additions: 1, deletions: 1 }) });
+  check("calledFromOutsideItRuns", called.status === 202, called.status);
+  check("theRunSaysAWebhookStartedIt", await ok(details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").filter({ hasText: "Webhook" }).first().waitFor({ timeout: 60_000 })));
+  await select("When called");
+  await starting.getByRole("button", { name: "Forget it" }).click();
+  await starting.getByRole("group", { name: "Are you sure?" }).getByRole("button", { name: "Forget it" }).click();
+  check("itCanBeTurnedOffAndForgotten", await ok(starting.getByRole("button", { name: "Turn on" }).waitFor({ timeout: 10_000 })));
+  const forgotten = await fetch(liveUrl, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  check("aForgottenAddressFindsNothing", forgotten.status === 404, forgotten.status);
+
   await select("Slugify");
   await slug.getByRole("button", { name: "Remove Slugify" }).click();
   await box("Slugify").waitFor({ state: "detached", timeout: 5000 });
@@ -282,7 +354,19 @@ try {
   await box("Code").click();
   check("theStepShowsTheError", await added.getByRole("alert").filter({ hasText: "broke on purpose" }).isVisible());
 
+  // ---- Carrying on from where it failed, with the step fixed ----
+  await added.getByRole("textbox", { name: "Code", exact: true }).fill("export const code = async () => {\n  return { fixed: true };\n};\n");
+  await sleep(600);
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  const runsBefore = await details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").count();
+  await details.getByRole("button", { name: "Carry on from where it stopped" }).click();
+  const carriedOn = await ok(details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").filter({ hasText: /carried on/ }).first().waitFor({ timeout: 60_000 }));
+  await finished(/^Finished in/, 30_000).catch(() => {});
+  check("aFailedRunCarriesOnFromWhereItStopped", carriedOn && (await details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").count()) === runsBefore + 1);
+  check("itSaysItCarriedOn", await details.getByText("Carried on from an earlier run").isVisible());
+
   // ---- Stopping, and the steps showing while it runs ----
+  await select("Code");
   await added.getByRole("textbox", { name: "Code", exact: true }).fill("export const code = async () => {\n  await new Promise((resolve) => setTimeout(resolve, 60000));\n  return {};\n};\n");
   await sleep(600);
   await details.getByRole("button", { name: "Back to the runs" }).click();
@@ -344,6 +428,9 @@ try {
   await a.screenshot({ path: process.env.SHOT ?? "automations-failure.png" }).catch(() => {});
 } finally {
   await a.setViewportSize({ width: 1440, height: 900 }).catch(() => {});
+  // Whatever it turned on, even if it stopped halfway.
+  const triggers = await a.request.get(`${BASE}/api/rooms/E2ETST/automations/triggers`).then((response) => response.json()).catch(() => []);
+  for (const trigger of Array.isArray(triggers) ? triggers : []) if (trigger.path?.startsWith(`${FOLDER}/`)) await a.request.delete(`${BASE}/api/rooms/E2ETST/automations/triggers/${trigger.id}`, { headers: { origin: BASE } }).catch(() => {});
   await removeTheirFiles().catch(() => {});
   check("itsFilesAreRemoved", (await files.getByRole("treeitem", { name: new RegExp(`^${FOLDER}`) }).count()) === 0);
   check("noPageErrors", errors.length === 0, errors.join(" | "));

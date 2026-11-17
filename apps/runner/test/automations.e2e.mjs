@@ -293,6 +293,70 @@ try {
   const forged = await fetch(`${RUNNER}/rooms/${ROOM}/automations`, { method: "POST", headers: { authorization: token("TEAM22"), "content-type": "application/json" }, body: JSON.stringify({ op: "status" }) });
   check("anotherRoomsTokenIsRefused", forged.status === 401);
 
+  // ---- Trying things: one step on its own, pinned steps, and carrying on from where a run failed ----
+  const TRY = inFolder("trying");
+  const double = code("double", "export const code = async (inputs) => ({ x: Number(inputs.n) * 2 });", { n: "{{trigger.output.body.n}}" });
+  const plusOne = code("plus_one", "export const code = async (inputs) => ({ y: Number(inputs.x) + 1 });", { x: "{{double.output.x}}" });
+  write(TRY, { id: `flow_try_${stamp}`, ...flow("Trying", webhook({ ...double, nextAction: plusOne }, webhookVersion)) });
+  const oneStep = await runToEnd(TRY, { n: 1 }, { mode: "step", step: "plus_one", sampleData: { trigger: { body: { n: 1 } }, double: { x: 10 } } });
+  check("oneStepRunsOnItsOwnWithTheDataGiven", oneStep.run?.status === "SUCCEEDED" && oneStep.run.mode === "step" && oneStep.run.step === "plus_one" && oneStep.run.steps.plus_one?.output?.y === 11, oneStep.run ?? oneStep.started?.body);
+  check("theStepsBeforeItDidntRun", oneStep.run?.steps.double?.output?.x === 10, oneStep.run?.steps.double);
+  const triggerAlone = await ask({ op: "run", path: TRY, mode: "step", step: "trigger" });
+  check("theTriggerIsntRunOnItsOwn", triggerAlone.status === 422, triggerAlone.body);
+  const noSuchStep = await ask({ op: "run", path: TRY, mode: "step", step: "nope" });
+  check("aStepThatIsntThereIsRefused", noSuchStep.status === 422, noSuchStep.body);
+
+  // A pinned step gives back what was pinned, and isn't run: this one would fail if it were.
+  write(TRY, { id: `flow_try_${stamp}`, pinned: { double: { x: 100 } }, ...flow("Trying", webhook({ ...code("double", "export const code = async () => { throw new Error('a pinned step ran'); };"), nextAction: plusOne }, webhookVersion)) });
+  const withPin = await runToEnd(TRY, { n: 1 });
+  check("aPinnedStepIsntRun", withPin.run?.status === "SUCCEEDED" && withPin.run.steps.double?.output?.x === 100, withPin.run);
+  check("whatComesAfterGetsThePinnedData", withPin.run?.steps.plus_one?.output?.y === 101, withPin.run?.steps.plus_one);
+  check("theRunSaysWhatWasPinned", JSON.stringify(withPin.run?.pinned) === JSON.stringify(["double"]), withPin.run?.pinned);
+  const pinnedButTried = await runToEnd(TRY, { n: 1 }, { mode: "step", step: "double", sampleData: { trigger: { body: { n: 1 } } } });
+  check("aPinnedStepTriedOnItsOwnRunsForReal", pinnedButTried.run?.status === "FAILED" && /a pinned step ran/.test(JSON.stringify(pinnedButTried.run?.steps.double ?? {})), pinnedButTried.run);
+
+  // Carrying on: the first step counts how often it runs, and the second fails until it's fixed. Carrying on runs the flow as it is now, from the failure.
+  const tryCounter = `/tmp/try-count-${stamp}`;
+  const counting = code("count", `import { appendFileSync } from "node:fs";\nexport const code = async () => { appendFileSync("${tryCounter}", "x"); return { counted: true }; };`);
+  const failing = code("fragile", "export const code = async () => { throw new Error('not fixed yet'); };");
+  write(TRY, { id: `flow_try_${stamp}`, ...flow("Trying", webhook({ ...counting, nextAction: failing }, webhookVersion)) });
+  const brokenRun = await runToEnd(TRY, { n: 1 });
+  check("theFirstTryFails", brokenRun.run?.status === "FAILED" && brokenRun.run.failedStep?.name === "fragile", brokenRun.run?.status);
+  const succeededRetry = await ask({ op: "run", path: TRY, mode: "retry", retryOf: oneStep.run?.id ?? "x" });
+  check("aRunThatDidntFailCantBeCarriedOn", succeededRetry.status === 422, succeededRetry.body);
+  write(TRY, { id: `flow_try_${stamp}`, ...flow("Trying", webhook({ ...counting, nextAction: code("fragile", "export const code = async () => ({ fixed: true });") }, webhookVersion)) });
+  await sleep(1500);
+  const carried = await runToEnd(TRY, {}, { mode: "retry", retryOf: brokenRun.run?.id ?? "x" });
+  check("carryingOnFinishes", carried.run?.status === "SUCCEEDED" && carried.run.mode === "retry" && carried.run.retryOf === brokenRun.run?.id && carried.run.steps.fragile?.output?.fixed === true, carried.run);
+  const counted = await shell(`printf "COUNT=%s\\n" "$(cat ${tryCounter})"; rm -f ${tryCounter}\n`);
+  check("whatSucceededWasntRunAgain", /COUNT=x(?!x)/.test(counted), counted);
+  check("itKeepsWhatItWasFirstSent", JSON.stringify(carried.run?.payload) === JSON.stringify({ n: 1 }), carried.run?.payload);
+  const otherFlow = await ask({ op: "run", path: BROKEN, mode: "retry", retryOf: brokenRun.run?.id ?? "x" });
+  check("anotherFlowsRunCantBeCarriedOn", otherFlow.status === 422, otherFlow.body);
+
+  // ---- Built-in steps, as n8n's: our own code, in the image, with the engine working out their inputs ----
+  const builtin = (name, kind, input, next = null) => ({ name, type: "CODE", builtin: kind, displayName: name, valid: true, skip: false, settings: { sourceCode: { code: "// built in\n", packageJson: "{}" }, input, errorHandlingOptions: { continueOnFailure: { value: false }, retryOnFailure: { value: false } } }, nextAction: next });
+  const BUILT = inFolder("built-in");
+  const results = [{ name: "a", status: "failed", ms: 5 }, { name: "b", status: "passed", ms: 50 }, { name: "c", status: "failed", ms: 500 }];
+  write(BUILT, flow("Built in", webhook(builtin("failed", "filter", { items: "{{trigger.output.body.results}}", field: "status", test: "equals", value: "failed" }, builtin("sorted", "sort", { items: "{{failed.output}}", field: "ms", direction: "descending", compare_as: "number" }, builtin("summed", "summarize", { items: "{{sorted.output}}", operation: "sum", field: "ms" }))), webhookVersion)));
+  const built = await runToEnd(BUILT, { results });
+  check("builtInStepsRunOnTheEngine", built.run?.status === "SUCCEEDED", built.run?.message ?? built.run);
+  check("filterKeepsWhatPasses", JSON.stringify(built.run?.steps.failed?.output?.map((item) => item.name)) === '["a","c"]', built.run?.steps.failed?.output);
+  check("sortOrdersByNumbers", JSON.stringify(built.run?.steps.sorted?.output?.map((item) => item.name)) === '["c","a"]', built.run?.steps.sorted?.output);
+  check("summarizeAddsUp", built.run?.steps.summed?.output?.sum_ms === 505, built.run?.steps.summed?.output);
+  write(BUILT, flow("Built in", webhook(builtin("stop", "stop_and_error", { message: "Coverage dropped by {{trigger.output.body.drop}}%" }), webhookVersion)));
+  const stopped = await runToEnd(BUILT, { drop: 3 });
+  check("stopAndErrorStopsTheRunSayingWhy", stopped.run?.status === "FAILED" && /Coverage dropped by 3%/.test(JSON.stringify(stopped.run)), stopped.run?.message);
+  write(BUILT, { pinned: { failed: [{ name: "pinned" }] }, ...flow("Built in", webhook(builtin("failed", "filter", { items: "{{trigger.output.body.results}}", field: "status", test: "equals", value: "failed" }), webhookVersion)) });
+  const pinnedBuiltIn = await runToEnd(BUILT, { results });
+  check("aPinnedBuiltInStepGivesWhatWasPinned", JSON.stringify(pinnedBuiltIn.run?.steps.failed?.output) === '[{"name":"pinned"}]', pinnedBuiltIn.run?.steps.failed?.output);
+  write(BUILT, flow("Built in", webhook(builtin("odd", "not_a_step", {}), webhookVersion)));
+  const unknownBuiltIn = await runToEnd(BUILT, {});
+  check("aBuiltInStepThatIsntThereFailsTheRun", unknownBuiltIn.run?.status === "FAILED" && /no built-in step called/.test(JSON.stringify(unknownBuiltIn.run)), unknownBuiltIn.run?.message);
+  write(BUILT, flow("Built in", webhook(builtin("odd", "../../etc", {}), webhookVersion)));
+  const badBuiltIn = await runToEnd(BUILT, {});
+  check("aBuiltInNameCantBeAPath", badBuiltIn.run?.status === "FAILED" && /isn't a built-in step/.test(badBuiltIn.run?.message ?? ""), badBuiltIn.run?.message);
+
   // A flow's runs follow it, by its own id.
   const OWN = inFolder("own-id");
   const MOVED = inFolder("moved-id");

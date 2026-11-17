@@ -35,6 +35,7 @@ const SUITES = [
     ["data-summary-runner", "data-summary"],
     ["flow-runner", "flow"],
     ["automations-runner", "automations"],
+    ["automation-hooks", "automation-hooks"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -42,6 +43,7 @@ const SUITES = [
     ["notes-access", "notes-access"],
     ["interview-rules", "interviews"],
     ["room-people-access", "room-people"],
+    ["room-owners-access", "room-owners"],
     ["interview-papers", "interview-papers"],
     ["interview-recording-rules", "interview-recording"],
   ]),
@@ -92,6 +94,7 @@ const SUITES = [
     "present",
     "room-people",
     "room-members",
+    "room-owners",
     "search",
     "shortcuts",
     "mermaid",

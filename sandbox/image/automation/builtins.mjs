@@ -1,0 +1,333 @@
+// CodeChatter's own built-in steps for automations, as n8n has for working on data: Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates,
+// Split Out, Rename Keys, Merge, Compare Datasets and Stop and Error. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
+// file: host.mjs writes it as a module that calls run() here, and Activepieces' engine has already worked out its inputs' expressions. Each works on a list of
+// items, as n8n's do; a single object counts as a list of one. The Automations tool's forms for them are in apps/web/components/room/tools/automations/builtins.ts.
+
+/** Reads `a.b[0].c` from an item. An empty path is the item itself. */
+export function read(item, path) {
+  const text = String(path ?? "").trim();
+  if (!text) return item;
+  let current = item;
+  for (const part of text.replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean)) {
+    if (current === null || current === undefined) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+function write(item, path, value) {
+  const parts = String(path).replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
+  let current = item;
+  for (const part of parts.slice(0, -1)) {
+    if (current[part] === null || typeof current[part] !== "object") current[part] = {};
+    current = current[part];
+  }
+  current[parts.at(-1)] = value;
+}
+
+function remove(item, path) {
+  const parts = String(path).replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
+  const parent = parts.length > 1 ? read(item, parts.slice(0, -1).join(".")) : item;
+  if (parent && typeof parent === "object") delete parent[parts.at(-1)];
+}
+
+/** A list from whatever was given: a list as it is, JSON text read, one value as a list of one, nothing as none. */
+export function listOf(value) {
+  let current = value;
+  if (typeof current === "string") {
+    const text = current.trim();
+    if (!text) return [];
+    try {
+      current = JSON.parse(text);
+    } catch {
+      return [current];
+    }
+  }
+  if (current === undefined || current === null) return [];
+  return Array.isArray(current) ? current : [current];
+}
+
+const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+const fieldsOf = (value) =>
+  listOf(value)
+    .flatMap((each) => (typeof each === "string" ? each.split(",") : [each]))
+    .map((each) => String(each).trim())
+    .filter(Boolean);
+const objectOf = (value) => {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  }
+  if (value === undefined || value === null || value === "") return {};
+  throw new Error("That should be an object of names and values, as JSON.");
+};
+const numberOf = (value) => (typeof value === "number" ? value : Number(String(value ?? "").trim()));
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const keyOf = (item, fields) => JSON.stringify(fields.length ? fields.map((field) => read(item, field)) : item);
+
+/** The tests Filter can do, by the words the tool shows. */
+export const TESTS = {
+  equals: (a, b) => same(a, b) || String(a) === String(b),
+  not_equals: (a, b) => !(same(a, b) || String(a) === String(b)),
+  contains: (a, b) => (Array.isArray(a) ? a.some((each) => same(each, b) || String(each) === String(b)) : String(a ?? "").includes(String(b ?? ""))),
+  not_contains: (a, b) => !TESTS.contains(a, b),
+  starts_with: (a, b) => String(a ?? "").startsWith(String(b ?? "")),
+  ends_with: (a, b) => String(a ?? "").endsWith(String(b ?? "")),
+  greater: (a, b) => numberOf(a) > numberOf(b),
+  less: (a, b) => numberOf(a) < numberOf(b),
+  at_least: (a, b) => numberOf(a) >= numberOf(b),
+  at_most: (a, b) => numberOf(a) <= numberOf(b),
+  before: (a, b) => Date.parse(a) < Date.parse(b),
+  after: (a, b) => Date.parse(a) > Date.parse(b),
+  matches: (a, b) => new RegExp(String(b ?? "")).test(String(a ?? "")),
+  exists: (a) => a !== undefined && a !== null,
+  not_exists: (a) => a === undefined || a === null,
+  empty: (a) => a === undefined || a === null || a === "" || (Array.isArray(a) && !a.length) || (typeof a === "object" && !Array.isArray(a) && !Object.keys(a).length),
+  not_empty: (a) => !TESTS.empty(a),
+  is_true: (a) => a === true || a === "true",
+  is_false: (a) => a === false || a === "false",
+};
+
+/** A field's value for setting: `$item.path` reads it from the item being changed, anything else is set as it is. */
+const valueFor = (item, value) => (typeof value === "string" && value.startsWith("$item") ? read(item, value.slice(5).replace(/^\./, "")) : value);
+
+export const BUILTINS = {
+  /** Edit Fields: set fields on each item, keep only some, or take some away. */
+  edit_fields(inputs) {
+    const mode = inputs.mode || "set";
+    const fields = mode === "set" ? objectOf(inputs.fields) : fieldsOf(inputs.fields);
+    return listOf(inputs.items ?? [{}]).map((original) => {
+      const item = original && typeof original === "object" && !Array.isArray(original) ? clone(original) : { value: original };
+      if (mode === "set") {
+        for (const [path, value] of Object.entries(fields)) write(item, path, clone(valueFor(original, value)));
+        return item;
+      }
+      if (mode === "keep") {
+        const kept = {};
+        for (const path of fields) {
+          const value = read(item, path);
+          if (value !== undefined) write(kept, path, value);
+        }
+        return kept;
+      }
+      if (mode === "remove") {
+        for (const path of fields) remove(item, path);
+        return item;
+      }
+      throw new Error(`Edit Fields doesn't know how to "${mode}".`);
+    });
+  },
+
+  /** Filter: the items whose field passes a test, or those that don't. */
+  filter(inputs) {
+    const test = TESTS[inputs.test || "equals"];
+    if (!test) throw new Error(`Filter has no test called "${inputs.test}".`);
+    const keep = inputs.keep !== "failing";
+    return listOf(inputs.items).filter((item) => Boolean(test(read(item, inputs.field), inputs.value)) === keep);
+  },
+
+  /** Sort: by a field, as text, numbers or dates, either way. Items with nothing in that field go last. */
+  sort(inputs) {
+    const direction = inputs.direction === "descending" ? -1 : 1;
+    const as = inputs.compare_as || "text";
+    const value = (item) => {
+      const raw = read(item, inputs.field);
+      if (raw === undefined || raw === null || raw === "") return null;
+      if (as === "number") return numberOf(raw);
+      if (as === "date") return Date.parse(raw);
+      return String(raw);
+    };
+    return [...listOf(inputs.items)].sort((a, b) => {
+      const [x, y] = [value(a), value(b)];
+      if (x === null || Number.isNaN(x)) return y === null || Number.isNaN(y) ? 0 : 1;
+      if (y === null || Number.isNaN(y)) return -1;
+      if (as === "text") return direction * String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: "base" });
+      return direction * (x - y);
+    });
+  },
+
+  /** Limit: the first few items, or the last few. */
+  limit(inputs) {
+    const most = Math.max(0, Math.floor(numberOf(inputs.max ?? 10)) || 0);
+    const items = listOf(inputs.items);
+    return inputs.from === "end" ? items.slice(Math.max(0, items.length - most)) : items.slice(0, most);
+  },
+
+  /** Aggregate: a field from every item, into one list; or every item, into one list. */
+  aggregate(inputs) {
+    const items = listOf(inputs.items);
+    const fields = fieldsOf(inputs.fields);
+    if (!fields.length) return { items, count: items.length };
+    const out = { count: items.length };
+    // Each list is named by its field's last part, unless two would share a name: then by the whole path.
+    const last = (field) => field.split(".").at(-1);
+    const shared = new Set(fields.map(last).filter((name, index, all) => all.indexOf(name) !== index));
+    for (const field of fields) {
+      const values = items.map((item) => read(item, field));
+      out[shared.has(last(field)) ? field : last(field)] = inputs.skip_empty === false ? values : values.filter((each) => each !== undefined && each !== null && each !== "");
+    }
+    return out;
+  },
+
+  /** Summarize: count, sum, average, smallest, largest, count of different values, or values joined, for all items or for each group. */
+  summarize(inputs) {
+    const items = listOf(inputs.items);
+    const groupBy = fieldsOf(inputs.group_by);
+    const operation = inputs.operation || "count";
+    const field = inputs.field;
+    const groups = new Map();
+    for (const item of items) {
+      const key = keyOf(item, groupBy);
+      if (!groups.has(key)) groups.set(key, { by: Object.fromEntries(groupBy.map((each) => [each.split(".").at(-1), read(item, each)])), items: [] });
+      groups.get(key).items.push(item);
+    }
+    const summarize = (list) => {
+      const values = list.map((item) => read(item, field)).filter((each) => each !== undefined && each !== null && each !== "");
+      const numbers = values.map(numberOf).filter((each) => !Number.isNaN(each));
+      switch (operation) {
+        case "count":
+          return field ? values.length : list.length;
+        case "sum":
+          return numbers.reduce((total, each) => total + each, 0);
+        case "average":
+          return numbers.length ? numbers.reduce((total, each) => total + each, 0) / numbers.length : null;
+        case "min":
+          return numbers.length ? Math.min(...numbers) : null;
+        case "max":
+          return numbers.length ? Math.max(...numbers) : null;
+        case "count_unique":
+          return new Set(values.map((each) => JSON.stringify(each))).size;
+        case "join":
+          return values.map(String).join(inputs.separator ?? ", ");
+        default:
+          throw new Error(`Summarize can't "${operation}".`);
+      }
+    };
+    const name = `${operation}${field ? `_${String(field).split(".").at(-1)}` : ""}`;
+    if (!groupBy.length) return { [name]: summarize(items) };
+    return [...groups.values()].map((group) => ({ ...group.by, [name]: summarize(group.items) }));
+  },
+
+  /** Remove Duplicates: the same item, or the same values in some fields, kept once, the first time or the last. */
+  remove_duplicates(inputs) {
+    const fields = fieldsOf(inputs.fields);
+    const items = listOf(inputs.items);
+    const ordered = inputs.keep === "last" ? [...items].reverse() : items;
+    const seen = new Set();
+    const kept = ordered.filter((item) => {
+      const key = keyOf(item, fields);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return inputs.keep === "last" ? kept.reverse() : kept;
+  },
+
+  /** Split Out: a list inside each item becomes items of its own, with the item's other fields too if asked. */
+  split_out(inputs) {
+    const out = [];
+    for (const item of listOf(inputs.items)) {
+      const inside = read(item, inputs.field);
+      const list = Array.isArray(inside) ? inside : inside === undefined || inside === null ? [] : [inside];
+      for (const each of list) {
+        const piece = each && typeof each === "object" && !Array.isArray(each) ? clone(each) : { [String(inputs.field).split(".").at(-1)]: each };
+        if (inputs.keep_other_fields && item && typeof item === "object") {
+          const rest = clone(item);
+          remove(rest, inputs.field);
+          out.push({ ...rest, ...piece });
+        } else out.push(piece);
+      }
+    }
+    return out;
+  },
+
+  /** Rename Keys: fields under new names, on each item. */
+  rename_keys(inputs) {
+    const renames = objectOf(inputs.renames);
+    return listOf(inputs.items).map((original) => {
+      const item = clone(original);
+      for (const [from, to] of Object.entries(renames)) {
+        const value = read(item, from);
+        if (value === undefined) continue;
+        remove(item, from);
+        write(item, String(to), value);
+      }
+      return item;
+    });
+  },
+
+  /** Merge: two lists, one after the other, matched by a field, side by side, or every pairing. */
+  merge(inputs) {
+    const first = listOf(inputs.first);
+    const second = listOf(inputs.second);
+    const mode = inputs.mode || "append";
+    const part = (value, name) => (value === undefined || value === null ? {} : typeof value === "object" ? value : { [name]: value });
+    const combine = (a, b) => ({ ...part(a, "first"), ...part(b, "second") });
+    if (mode === "append") return [...first, ...second];
+    if (mode === "position") return Array.from({ length: Math.max(first.length, second.length) }, (_, index) => combine(first[index], second[index]));
+    if (mode === "every_pair") return first.flatMap((a) => second.map((b) => combine(a, b)));
+    if (mode === "match") {
+      const firstKey = inputs.first_key;
+      const secondKey = inputs.second_key || firstKey;
+      if (!firstKey) throw new Error("Merge needs a field to match the lists by.");
+      const index = new Map();
+      for (const b of second) {
+        const key = JSON.stringify(read(b, secondKey));
+        if (!index.has(key)) index.set(key, []);
+        index.get(key).push(b);
+      }
+      const keep = inputs.keep || "both";
+      const used = new Set();
+      const out = [];
+      for (const a of first) {
+        const matches = index.get(JSON.stringify(read(a, firstKey))) ?? [];
+        if (matches.length) {
+          matches.forEach((b) => used.add(b));
+          if (keep !== "unmatched") for (const b of matches) out.push(combine(a, b));
+        } else if (keep === "all_first" || keep === "all" || keep === "unmatched") out.push(clone(a));
+      }
+      if (keep === "all") for (const b of second) if (!used.has(b)) out.push(clone(b));
+      return out;
+    }
+    throw new Error(`Merge doesn't know how to "${mode}".`);
+  },
+
+  /** Compare Datasets: what's only in the first list, only in the second, the same in both, and different, matched by a field. */
+  compare_datasets(inputs) {
+    const firstKey = inputs.first_key;
+    const secondKey = inputs.second_key || firstKey;
+    if (!firstKey) throw new Error("Compare Datasets needs a field to match the lists by.");
+    const second = new Map(listOf(inputs.second).map((item) => [JSON.stringify(read(item, secondKey)), item]));
+    const result = { only_in_first: [], only_in_second: [], same: [], different: [] };
+    const matched = new Set();
+    for (const item of listOf(inputs.first)) {
+      const key = JSON.stringify(read(item, firstKey));
+      if (!second.has(key)) {
+        result.only_in_first.push(item);
+        continue;
+      }
+      matched.add(key);
+      const other = second.get(key);
+      if (same(item, other)) result.same.push(item);
+      else {
+        const fields = [...new Set([...Object.keys(item ?? {}), ...Object.keys(other ?? {})])].filter((field) => !same(item?.[field], other?.[field]));
+        result.different.push({ key: read(item, firstKey), first: item, second: other, fields });
+      }
+    }
+    for (const [key, item] of second) if (!matched.has(key)) result.only_in_second.push(item);
+    return result;
+  },
+
+  /** Stop and Error: stops the run, with this message, so an error flow or a person sees why. */
+  stop_and_error(inputs) {
+    throw new Error(String(inputs.message || "This flow was stopped on purpose."));
+  },
+};
+
+/** What a built-in code step calls. */
+export async function run(name, inputs) {
+  const builtin = BUILTINS[name];
+  if (!builtin) throw new Error(`There's no built-in step called "${name}".`);
+  return builtin(inputs ?? {});
+}

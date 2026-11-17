@@ -28,7 +28,7 @@ export default function TwoFactorPage() {
         ? await authClient.twoFactor.verifyBackupCode({ code: value.trim(), trustDevice: trust })
         : await authClient.twoFactor.verifyTotp({ code: value, trustDevice: trust });
       if (result.error) {
-        setError(result.error.status === 429 ? "Too many attempts. Wait a minute." : backup ? "That backup code didn't work. Each code can only be used once." : "That code didn't work. Codes change every 30 seconds.");
+        setError(result.error.code === "TOTP_CODE_ALREADY_USED" ? "That code has just been used. Wait for the next one." : result.error.code === "TOTP_REPLAY_STORE_UNAVAILABLE" ? "Couldn't check this code right now. Try again shortly." : result.error.status === 429 ? "Too many attempts. Wait a minute." : backup ? "That backup code didn't work. Each code can only be used once." : "That code didn't work. Codes change every 30 seconds.");
         setCode("");
         return;
       }

@@ -114,9 +114,10 @@ try {
 
   // Who may manage.
   record("editorsDontManagePeople", (await api(c2, people)).status === 403 && (await api(c2, `${people}/${owner}`, "PATCH", { role: "viewer" })).status === 403 && (await api(c2, `${people}/${owner}`, "DELETE")).status === 403);
-  record("theOwnerCantBeRemovedOrChanged", (await api(c1, `${people}/${owner}`, "DELETE")).status === 404 && (await api(c1, `${people}/${owner}`, "PATCH", { role: "viewer" })).status === 404);
-  record("theOwnerCantLeave", (await api(c1, `${room}/leave`, "POST")).status === 403);
-  record("nobodyBecomesOwner", (await api(c1, `${people}/${two}`, "PATCH", { role: "owner" })).status === 400 && (await api(c1, `${people}/${two}`, "PATCH", { role: "candidate" })).status === 400);
+  // A room can have several owners now (room-owners.e2e.mjs), but never none.
+  record("theLastOwnerCantBeRemovedOrChanged", (await api(c1, `${people}/${owner}`, "DELETE")).status === 409 && (await api(c1, `${people}/${owner}`, "PATCH", { role: "viewer" })).status === 409);
+  record("theLastOwnerCantLeave", (await api(c1, `${room}/leave`, "POST")).status === 409);
+  record("nobodyBecomesACandidateHere", (await api(c1, `${people}/${two}`, "PATCH", { role: "candidate" })).status === 400);
   record("noSuchPerson", (await api(c1, `${people}/nobody-at-all`, "PATCH", { role: "viewer" })).status === 404);
 
   // Changing a role reaches what they have open, and only theirs.

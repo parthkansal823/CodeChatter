@@ -1,6 +1,8 @@
 /** What the Automations tool works out without a server: reading a flow in Activepieces' own format, its chart with what ran lit up, and changing it. A flow is a tree: each step has the one after it, a router has its branches, a loop has what's inside it. */
 import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
 
+import { BUILTINS, builtinOf } from "./builtins";
+
 export type FlowStep = {
   name: string;
   type: "PIECE_TRIGGER" | "EMPTY" | "CODE" | "PIECE" | "ROUTER" | "LOOP_ON_ITEMS";
@@ -8,6 +10,8 @@ export type FlowStep = {
   valid?: boolean;
   skip?: boolean;
   settings: Record<string, unknown>;
+  /** A built-in step (builtins.ts): a code step whose code is CodeChatter's own, in the image. */
+  builtin?: string;
   nextAction?: FlowStep | null;
   firstLoopAction?: FlowStep | null;
   children?: Array<FlowStep | null>;
@@ -22,6 +26,8 @@ export type Flow = {
   description?: string;
   /** A note on a step, by its name, shown under its box. */
   stepNotes?: Record<string, string>;
+  /** Output pinned on a step, by its name: when the flow runs, the step gives this back instead of running (image/automation/host.mjs). */
+  pinned?: Record<string, unknown>;
 };
 
 export const SCHEMA_VERSION = "27";
@@ -103,6 +109,8 @@ const KIND_WORDS: Record<string, string> = { CODE: "Code", ROUTER: "Router", LOO
 
 /** What a step is, in a few words: its piece's name and what it does there, or its kind. */
 export function kindOf(step: FlowStep, pieces?: Record<string, PieceInfo>): string {
+  const builtin = builtinOf(step);
+  if (builtin) return builtin.label;
   if (step.type === "PIECE" || step.type === "PIECE_TRIGGER") {
     const settings = step.settings as { pieceName?: string; actionName?: string; triggerName?: string };
     const piece = settings.pieceName ? pieces?.[settings.pieceName] : undefined;
@@ -113,7 +121,7 @@ export function kindOf(step: FlowStep, pieces?: Record<string, PieceInfo>): stri
   return KIND_WORDS[step.type] ?? step.type;
 }
 
-export type Glyph = "trigger" | "code" | "piece" | "router" | "loop";
+export type Glyph = "trigger" | "code" | "piece" | "router" | "loop" | "data";
 /** A box on the chart: a step, or a + where one can be added. */
 export type ChartItem = { id: string; label: string; detail: string; shape: "box" | "add"; glyph: Glyph; status: ChartStatus; description: string; muted?: boolean; note?: string; place?: Place };
 /** An arrow. `place` says where a step put on it goes; `label` is a router's branch. */
@@ -155,16 +163,17 @@ export function chartOfFlow(flow: Flow, steps: Record<string, AutomationStepResu
       const kind = kindOf(step, pieces);
       const times = result && result.times > 1 ? ` · ${result.times} times` : "";
       const note = flow.stepNotes?.[step.name]?.trim() || undefined;
+      const pinned = isPinned(flow, step);
       items.push({
         id: step.name,
         label: title(step),
-        detail: `${step.skip ? "Off · " : ""}${kind}${times}`,
+        detail: `${step.skip ? "Off · " : pinned ? "Pinned · " : ""}${kind}${times}`,
         shape: "box",
-        glyph: GLYPHS[step.type] ?? "piece",
+        glyph: builtinOf(step) ? "data" : (GLYPHS[step.type] ?? "piece"),
         status,
         ...(step.skip ? { muted: true } : {}),
         ...(note ? { note } : {}),
-        description: [`Step ${title(step)}`, kind, ...(step.skip ? ["turned off"] : []), ...(ran ? [STATUS_WORDS[status]] : []), ...(result && result.times > 1 ? [`${result.times} times`] : []), ...(note ? [`note: ${note}`] : [])].join(", "),
+        description: [`Step ${title(step)}`, kind, ...(step.skip ? ["turned off"] : []), ...(pinned ? ["pinned"] : []), ...(ran ? [STATUS_WORDS[status]] : []), ...(result && result.times > 1 ? [`${result.times} times`] : []), ...(note ? [`note: ${note}`] : [])].join(", "),
       });
       if (step.type === "ROUTER") {
         const branches = (step.settings.branches ?? []) as Array<{ branchName?: string }>;
@@ -250,6 +259,12 @@ export function newCodeStep(name: string): FlowStep {
   return { name, type: "CODE", displayName: "Code", valid: true, skip: false, settings: { sourceCode: { code: "export const code = async (inputs) => {\n  return { ok: true };\n};\n", packageJson: "{}" }, input: {}, errorHandlingOptions: NO_FAILURE_HANDLING }, nextAction: null };
 }
 
+/** A built-in step, such as Filter or Merge, with its fields at their defaults. */
+export function newBuiltinStep(name: string, kind: string): FlowStep {
+  const builtin = BUILTINS[kind];
+  return { name, type: "CODE", builtin: kind, displayName: builtin?.label ?? kind, valid: true, skip: false, settings: { sourceCode: { code: `// Built in: ${builtin?.label ?? kind}. CodeChatter runs its own here.\n`, packageJson: "{}" }, input: { ...(builtin?.defaults ?? {}) }, errorHandlingOptions: NO_FAILURE_HANDLING }, nextAction: null };
+}
+
 export function newRouterStep(name: string): FlowStep {
   return { name, type: "ROUTER", displayName: "Router", valid: true, skip: false, settings: { executionType: "EXECUTE_FIRST_MATCH", branches: [{ branchName: "Branch 1", branchType: "CONDITION", conditions: [[newCondition()]] }, { branchName: "Otherwise", branchType: "FALLBACK" }] }, children: [null, null], nextAction: null };
 }
@@ -323,12 +338,30 @@ export function removeStep(flow: Flow, name: string): Flow {
   return withoutLostNotes(next);
 }
 
-/** Notes only for steps that are still there. */
+/** Notes and pins only for steps that are still there. */
 function withoutLostNotes(flow: Flow): Flow {
-  if (!flow.stepNotes) return flow;
+  if (!flow.stepNotes && !flow.pinned) return flow;
   const names = new Set(allSteps(flow.trigger).map((step) => step.name));
-  const kept = Object.fromEntries(Object.entries(flow.stepNotes).filter(([name]) => names.has(name)));
-  return { ...flow, stepNotes: kept };
+  const keep = <T,>(record: Record<string, T> | undefined) => (record ? Object.fromEntries(Object.entries(record).filter(([name]) => names.has(name))) : undefined);
+  return { ...flow, ...(flow.stepNotes ? { stepNotes: keep(flow.stepNotes) } : {}), ...(flow.pinned ? { pinned: keep(flow.pinned) } : {}) };
+}
+
+/** Only code and pieces' actions can be pinned: a trigger gets what's sent, and a router or a loop has steps of its own. */
+export const canPin = (step: FlowStep) => step.type === "CODE" || step.type === "PIECE";
+export const isPinned = (flow: Flow, step: FlowStep) => canPin(step) && Object.hasOwn(flow.pinned ?? {}, step.name);
+
+/** Pins what a step gave out, so the flow uses it rather than running the step: for trying what comes after without calling a service again, as n8n's pinned data. */
+export function pinStep(flow: Flow, name: string, output: unknown): Flow {
+  const step = findStep(flow, name);
+  if (!step || !canPin(step)) return flow;
+  return { ...flow, pinned: { ...(flow.pinned ?? {}), [name]: output ?? null } };
+}
+
+export function unpinStep(flow: Flow, name: string): Flow {
+  if (!flow.pinned || !Object.hasOwn(flow.pinned, name)) return flow;
+  const pinned = { ...flow.pinned };
+  delete pinned[name];
+  return { ...flow, pinned };
 }
 
 /** A step turned off is passed over when the flow runs, as if it weren't there, and what comes after it still runs. The trigger can't be. */
@@ -382,8 +415,13 @@ export function pasteStep(flow: Flow, place: Place, copied: FlowStep): { flow: F
     step.settings = rewrite(step.settings) as Record<string, unknown>;
   }
   const next = addStep(flow, place, fresh);
-  const notes = Object.fromEntries(Object.entries(flow.stepNotes ?? {}).flatMap(([old, note]) => (renames.has(old) ? [[renames.get(old)!, note]] : [])));
-  return { flow: Object.keys(notes).length ? { ...next, stepNotes: { ...(next.stepNotes ?? {}), ...notes } } : next, name: fresh.name };
+  const carried = <T,>(record: Record<string, T> | undefined) => Object.fromEntries(Object.entries(record ?? {}).flatMap(([old, value]) => (renames.has(old) ? [[renames.get(old)!, value]] : [])));
+  const notes = carried(flow.stepNotes);
+  const pins = carried(flow.pinned);
+  let result = next;
+  if (Object.keys(notes).length) result = { ...result, stepNotes: { ...(result.stepNotes ?? {}), ...notes } };
+  if (Object.keys(pins).length) result = { ...result, pinned: { ...(result.pinned ?? {}), ...pins } };
+  return { flow: result, name: fresh.name };
 }
 
 export function duplicateStep(flow: Flow, name: string): { flow: Flow; name: string } | null {

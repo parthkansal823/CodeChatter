@@ -537,6 +537,8 @@ export type BatchResultRow = {
   score: PaperScore;
   integrity: { level: IntegrityLevel; counts: IntegrityReport["counts"]; bigEdits: number };
   recommendation: "yes" | "maybe" | "no" | null;
+  /** The same viewer-specific disclosure rules as the individual interview. */
+  scorecards: InterviewScorecards;
   /** How many things the AI's review says are worth checking; null until it's reviewed them. */
   aiToCheck: number | null;
 };
@@ -600,6 +602,52 @@ export const Scorecard = z.object({
 });
 export type Scorecard = z.infer<typeof Scorecard>;
 
+/** Draft saves withdraw a previous submission; only an explicit submit publishes it again. */
+export const SaveScorecardInput = Scorecard.extend({ submit: z.boolean().default(false) });
+export type SaveScorecardInput = z.input<typeof SaveScorecardInput>;
+
+export type ScorecardInterviewer = { id: string | null; name: string; image: string | null };
+export type InterviewScorecard = Scorecard & {
+  interviewer: ScorecardInterviewer;
+  submittedAt: string | null;
+  /** Null for a new, not-yet-saved personal scorecard. */
+  updatedAt: string | null;
+};
+export type ScorecardSummary = {
+  criteria: Array<InterviewCriterion & { average: number | null; count: number }>;
+  overall: { average: number | null; count: number };
+  recommendations: { yes: number; maybe: number; no: number };
+  submitted: number;
+  pending: ScorecardInterviewer[];
+};
+export type InterviewScorecards = {
+  canWrite: boolean;
+  own: InterviewScorecard | null;
+  /** Submitted cards only, and empty until disclosure is permitted. Never carries another person's draft. */
+  submitted: InterviewScorecard[];
+  otherSubmittedCount: number;
+  locked: boolean;
+  summary: ScorecardSummary | null;
+};
+
+/** Aggregate only already-visible submitted cards; visibility itself is decided by the API views. */
+export function summarizeScorecards(rubric: readonly InterviewCriterion[], cards: readonly InterviewScorecard[], pending: ScorecardInterviewer[]): ScorecardSummary {
+  const submitted = cards.filter((card) => card.submittedAt !== null);
+  const average = (values: number[]) => ({ average: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null, count: values.length });
+  const recommendations = { yes: 0, maybe: 0, no: 0 };
+  for (const card of submitted) if (card.recommendation) recommendations[card.recommendation]++;
+  return {
+    criteria: rubric.map((criterion) => ({ ...criterion, ...average(submitted.flatMap((card) => {
+      const value = card.scores.find((entry) => entry.id === criterion.id)?.score;
+      return typeof value === "number" ? [value] : [];
+    })) })),
+    overall: average(submitted.flatMap((card) => card.overall === null ? [] : [card.overall])),
+    recommendations,
+    submitted: submitted.length,
+    pending,
+  };
+}
+
 /** What interviewers see in addition. Never sent to the candidate. */
 export type InterviewerInterview = Omit<CandidateInterview, "runs" | "paper" | "answers"> & {
   role: "interviewer";
@@ -616,7 +664,9 @@ export type InterviewerInterview = Omit<CandidateInterview, "runs" | "paper" | "
   candidateJoined: boolean;
   hiddenTests: Array<Pick<InterviewTest, "id" | "input" | "expected">>;
   rubric: InterviewCriterion[];
+  /** Your own values (also present with submission metadata in scorecards.own), never the former shared column. */
   scorecard: Scorecard;
+  scorecards: InterviewScorecards;
   runs: InterviewerRun[];
 };
 
