@@ -173,7 +173,7 @@ flowchart TD
 - ✅ Question bank with visible and hidden tests
 - ✅ Scheduling, interviewer and candidate roles, a single-use candidate link
 - ✅ Server-side timer that really takes the candidate's rights away
-- ✅ Hidden tests in a throwaway container; private rubric and scorecards
+- ✅ Hidden tests in a throwaway container; private rubric, and a scorecard for each interviewer, unseen by the others until they've given theirs
 - ✅ Replay, and a report
 - ✅ Live interviews on video: questions asked on the spot, from the bank or written by hand; the interviewer decides about the AI, and marks there and then
 - ✅ Assessments: many candidates at once, a random paper for each, a window to start in, a results table

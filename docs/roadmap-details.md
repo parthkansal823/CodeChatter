@@ -456,6 +456,12 @@ Found by those tests and fixed:
 - Hocuspocus's `closeConnections` detaches the document but leaves the socket open, so a candidate's editor would have gone silently stale. Revocation closes the socket.
 - A scorecard stayed on "Save" after saving, because `jsonb` returns keys in its own order. The form compares values.
 
+- ✅ **A scorecard for each interviewer** (ChatGPT's prompt 18, checked 2026-11-17). Each interviewer has their own, kept as a draft until they submit it; the last save no longer wins over someone else's.
+  - **Blind until you've decided:** an interviewer sees their own always, and the others' (who, and when they submitted) only once they've submitted theirs; before that, only how many have. Organisation owners and admins who aren't interviewers on it see every submitted one and can't write one. The candidate never sees any (`views.ts`, `scorecardView`).
+  - **Storage:** `interview_scorecards`, one row per interview and interviewer (unique on the pair, gone with the interview). Migration `0016` moved each old non-empty scorecard to a submitted row for the interview's creator, or its interviewer when there was no creator, and dropped the old column in the same migration.
+  - **Pages:** the form says Draft or Submitted, saves drafts as before, and asks before submitting (`scorecard-form.tsx`); the others' appear read-only under yours (`scorecards-review.tsx`, `scorecards-panel.tsx`), on the interview's page and in the room's interview tool. The report and the batch results show each submitted scorecard, each criterion's average, the spread of recommendations, and who hasn't submitted (`report.ts`).
+  - **Tests:** `views.test.ts` (who sees what, the candidate included) and `report.test.ts` (15: several scorecards, one, none); `apps/collab/test/interview-scorecards.e2e.mjs` (34 checks against the API: two drafts at the same moment both kept, blind before submitting, both seen after, an admin reading and refused writing, a candidate getting nothing, the old data's migration on throwaway rows); `apps/web/test/interview-scorecards.e2e.mjs` (20 checks: two people, a draft, submitting, the other's appearing, and the report). Checked: typecheck and lint clean, contracts' 243 tests and the API's 463 pass, and the interview tests from before still pass (78 and 112 in collab, 33 in the browser).
+
 What's left is in `docs/pending.md` under step 11.
 
 ## 8. Teams and admin ⬜

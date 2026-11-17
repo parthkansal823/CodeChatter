@@ -17,6 +17,8 @@ const Env = z.object({
   WEBHOOK_DELIVERY_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
   /** Assessment recordings are deleted this many days after they're made. */
   INTERVIEW_RECORDING_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
+  /** How often automations on a schedule are looked at; a flow runs at most this late. Tests make it fast. */
+  AUTOMATION_SCHEDULE_TICK_MS: z.coerce.number().int().min(500).max(600_000).default(20_000),
   DATABASE_URL: z.string().startsWith("postgres"),
   VALKEY_URL: z.string().startsWith("redis"),
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),

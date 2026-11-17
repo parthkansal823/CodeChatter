@@ -30,7 +30,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, each checked before it counts: **18** (a scorecard for each interviewer), **19** (a two-factor code works once) and **20** (instance admin: users, rooms, health). They touch different files, so they can go to ChatGPT side by side.
+1. **ChatGPT**, each checked before it counts: **19** (a two-factor code works once), **20** (instance admin: users, rooms, health), **21** (code tours), **22** (unread messages and searching a room's chat) and **23** (a reminder before an assessment closes). They touch different files, so they can go to ChatGPT side by side; 22 is the only one with a migration.
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -104,7 +104,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - AI "draw this as a diagram".
 - ⬜ **Messaging:**
   - channels and conversations;
-  - rich messages and unread tracking;
+  - rich messages, and unread tracking (🟡 **ChatGPT 22**, with search);
   - huddles;
   - slash commands and bots;
   - presence and status;
@@ -205,9 +205,8 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ The AI on real recordings: tried on real-looking stills only. `gemma4:e4b` on this laptop found about half of what was there (16 of 30, 6 false alarms), so stills are notes that say which moment to watch, and finding nothing there means nothing. Try a stronger or cloud model when there's a reason to rely on them
 - ⬜ Negative marking, and sections with a time each
 - ⬜ Showing Diagrams and Boards in the replay (files only now)
-- ⬜ An email reminder before an assessment closes
+- 🟡 An email reminder before an assessment closes (**ChatGPT 23**)
 - ⬜ Hidden tests on the Kubernetes driver (a one-off pod, as the Docker driver's throwaway container); **Run tests** refuses there until then
-- 🟡 A scorecard for each interviewer (one is shared now, and the last save wins) (**ChatGPT 18**)
 - ⬜ The report as a PDF (Markdown now)
 
 ## Step 12 · Recruiter kit
@@ -244,7 +243,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ In-browser runner (Pyodide and JavaScript with no server), so the free demo site runs code
 - ⬜ Public profile and portfolio
 - ⬜ Code and algorithm visualizer, with AI narration
-- ⬜ Code tours
+- 🟡 Code tours (**ChatGPT 21**)
 - ⬜ Task board, next: rescan only the files that changed (now every keystroke anywhere, and every move, rescans every file, in 5 ms slices); two identical TODOs in one file show as one card; a hand-written card's delete has no undo
 - ⬜ Math (KaTeX) and Mermaid inside the Markdown preview
 - ⬜ VS Code extension: join a room from VS Code

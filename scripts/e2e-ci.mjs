@@ -45,6 +45,7 @@ const SUITES = [
     ["room-people-access", "room-people"],
     ["room-owners-access", "room-owners"],
     ["interview-papers", "interview-papers"],
+    ["interview-scorecards-rules", "interview-scorecards"],
     ["interview-recording-rules", "interview-recording"],
   ]),
   ...service("apps/api", [
@@ -66,6 +67,7 @@ const SUITES = [
     "sandbox-git",
     "interviews",
     "interview-modes",
+    "interview-scorecards",
     "interview-ai-batch",
     "org-members",
     "org-rules",

@@ -19,6 +19,7 @@ let browser, firstContext, secondContext, auth, dbHandle, redis, server, transpo
 let userId, personalOrgId, secret;
 let pageErrors = [];
 let interrupted = false;
+let lastVerificationStatus = "none";
 let lastAcceptedWindow = -1;
 const usedCodes = new Set();
 
@@ -68,6 +69,9 @@ async function nextAuthenticatorCode() {
 function observe(page) {
   // Playwright call logs and raw errors may contain entered credentials/codes.
   page.on("pageerror", () => pageErrors.push("PageError"));
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/api/auth/two-factor/verify-totp") lastVerificationStatus = String(response.status());
+  });
   page.setDefaultTimeout(30_000);
   page.setDefaultNavigationTimeout(90_000);
   return page;
@@ -81,13 +85,13 @@ async function account(page) {
   await page.getByRole("heading", { name: "Account security", exact: true }).waitFor();
   await page.getByRole("button", { name: "Turn on", exact: true }).waitFor();
 }
-async function challenge(page) {
+async function challenge(page, trustDevice = false) {
   await page.goto(`${BASE}/sign-in`);
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.waitForURL(/\/two-factor(?:\?|$)/);
-  await page.getByRole("checkbox").uncheck();
+  await page.getByRole("checkbox").setChecked(trustDevice);
   await page.getByLabel("6-digit code").waitFor();
 }
 async function submitCode(page, code) {
@@ -233,13 +237,13 @@ async function run() {
   await challenge(first);
   stage = "enrollment code cannot sign in again";
   const enrollmentReplay = await submitCode(first, enrollmentCode);
-  await first.getByRole("alert").filter({ hasText: replayMessage }).waitFor();
   verify("enrollment consumes the code for subsequent sign-in too", !enrollmentReplay.ok() && !(await freshSession(firstContext)));
+  await first.getByRole("alert").filter({ hasText: replayMessage }).waitFor();
 
   stage = "independent sign-in challenge";
   secondContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, userAgent: "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0" });
   const second = observe(await secondContext.newPage());
-  await challenge(second);
+  await challenge(second, true);
   verify("both browsers are sessionless before authenticator verification", !(await freshSession(firstContext)) && !(await freshSession(secondContext)));
   stage = "first fresh code succeeds";
   const acceptedCode = await nextAuthenticatorCode();
@@ -248,9 +252,11 @@ async function run() {
   verify("the first browser signs in with a fresh code", accepted.ok() && (await freshSession(firstContext))?.user?.id === userId);
   stage = "second browser cannot replay accepted code";
   const replayed = await submitCode(second, acceptedCode);
+  verify("the independent challenge refuses the accepted code", !replayed.ok());
   await second.getByRole("alert").filter({ hasText: replayMessage }).waitFor();
   verify("another browser receives the kinder replay message", !replayed.ok() && new URL(second.url()).pathname === "/two-factor");
   verify("rejected browser gets no session and the accepted session stays valid", !(await freshSession(secondContext)) && (await freshSession(firstContext))?.user?.id === userId);
+  verify("a rejected replay cannot create a trusted-device cookie", !(await secondContext.cookies(BASE)).some((cookie) => cookie.name === "cc.trust_device" || cookie.name === "__Secure-cc.trust_device"));
   stage = "next code succeeds in the rejected challenge";
   const next = await submitCode(second, await nextAuthenticatorCode());
   await second.waitForURL(/\/dashboard(?:\?|$)/);
@@ -262,7 +268,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { interru
 try { await run(); }
 catch (error) {
   const name = /^[A-Za-z]+$/.test(error?.name ?? "") ? error.name : "Error";
-  check("two-factor replay workflow completes", false, `${stage}: ${name}`);
+  check("two-factor replay workflow completes", false, `${stage}: ${name}; last verification HTTP ${lastVerificationStatus}`);
 }
 finally {
   try { await cleanupFixture(); }

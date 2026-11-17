@@ -5,7 +5,7 @@
  */
 "use client";
 
-import type { AutomationInput, AutomationLive, AutomationManifest, AutomationRun, AutomationRunSummary } from "@codechatter/contracts";
+import { SCHEDULE_PIECE, type AutomationInput, type AutomationLive, type AutomationManifest, type AutomationRun, type AutomationRunSummary } from "@codechatter/contracts";
 import { setFileText, textOf, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Code2, GitBranch, Loader2, Play, Puzzle, Redo2, Repeat, RotateCcw, Rows3, Square, Undo2, X, Zap } from "lucide-react";
@@ -131,6 +131,8 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
     );
   }
   const flow = parsed.flow;
+  /** A flow on Activepieces' schedule piece gets what that piece gives, not a webhook's body. */
+  const onSchedule = (flow.trigger.settings as { pieceName?: string }).pieceName === SCHEDULE_PIECE;
   const save = (next: Flow) => setFileText(doc, node.id, `${JSON.stringify(next, null, 2)}\n`);
   const chart = chartOfFlow(flow, chartSteps, pieces, { adds: canEdit });
   const isAdd = new Set(chart.items.filter((item) => item.shape === "add").map((item) => item.id));
@@ -186,7 +188,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
       return;
     }
     const sample: Record<string, unknown> = Object.fromEntries(Object.entries(steps ?? {}).map(([key, result]) => [key, result.output]));
-    if (!Object.hasOwn(sample, flow.trigger.name)) sample[flow.trigger.name] = { body, headers: {}, queryParams: {} };
+    if (!Object.hasOwn(sample, flow.trigger.name)) sample[flow.trigger.name] = onSchedule ? body : { body, headers: {}, queryParams: {} };
     void run({ mode: "step", step: name, sampleData: sample });
   };
   const stop = async () => {
@@ -437,7 +439,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
                   <Textarea aria-describedby={payloadHelp} className="min-h-16 font-mono text-[11px] md:text-[11px]" spellCheck={false} value={payload} onChange={(event) => setPayload(event.target.value)} />
                 </label>
                 <span id={payloadHelp} className="text-muted-foreground">
-                  The first step gets this as {"{{trigger.output.body}}"}.
+                  {onSchedule ? "The first step gets this as the trigger's output, as a run on the schedule gets its cron_expression, timezone and scheduled_at." : <>The first step gets this as {"{{trigger.output.body}}"}.</>}
                 </span>
                 <div className="flex gap-1">
                   {runningHere ? (

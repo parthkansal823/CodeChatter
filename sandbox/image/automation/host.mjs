@@ -289,7 +289,7 @@ async function runJob(job) {
           : {
               executionType: "BEGIN",
               logsFileId: `logs-${job.id}`,
-              triggerPayload: { type: "inline", value: { body: job.payload ?? {}, headers: job.headers ?? {}, queryParams: job.query ?? {} } },
+              triggerPayload: { type: "inline", value: triggerOutputOf(flow, job) },
               // One step on its own: the engine stands every other step in with this data, and runs only that one.
               stepNameToTest: mode === "step" ? job.step : null,
               ...(mode === "step" ? { sampleData: { ...(job.sampleData ?? {}), ...Object.fromEntries(pinned.map((name) => [name, job.flow.pinned[name]])) } } : {}),
@@ -305,6 +305,15 @@ async function runJob(job) {
       }
     });
   });
+}
+
+/**
+ * What the trigger gives the flow's first step. A webhook's call, as Activepieces' webhook piece gives it; what the schedule piece gives (its cron, its timezone and
+ * the time it was for) as it is, as Activepieces runs it. Any other trigger runs only by hand, with what was sent as its body.
+ */
+function triggerOutputOf(flow, job) {
+  if (flow.trigger?.settings?.pieceName === "@activepieces/piece-schedule") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
+  return { body: job.payload ?? {}, headers: job.headers ?? {}, queryParams: job.query ?? {} };
 }
 
 /** The engine's errors come wrapped; the person wants the message. */

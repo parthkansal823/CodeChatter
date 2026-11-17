@@ -4,6 +4,8 @@
  */
 import { z } from "zod";
 
+import { scheduleProblem } from "./schedule.js";
+
 /** Flows live in the room's files, so they're edited together, versioned, and can leave. */
 export const AUTOMATION_SUFFIX = ".flow.json";
 export const isFlowFile = (name: string) => name.toLowerCase().endsWith(AUTOMATION_SUFFIX);
@@ -53,17 +55,27 @@ export type AutomationLive = (Partial<AutomationRun> & { state: "idle" | "runnin
  * Starting by itself: a flow turned on has a trigger, kept with its room (apps/api/src/automations). A webhook's address is a secret: whoever has it can start
  * the flow, so it can be replaced, and only people who can run code in the room see it.
  */
-export const TRIGGER_KINDS = ["webhook"] as const;
+export const TRIGGER_KINDS = ["webhook", "schedule"] as const;
 export const MOST_TRIGGERS = 10;
-export const AutomationTriggerInput = z.object({
-  path: FlowFile,
-  flowId: z.string().min(1).max(100),
-  kind: z.enum(TRIGGER_KINDS),
-  /** "now": answer at once with the run's id. "finished": wait for the run (up to 30 seconds) and answer with what its last step gave. */
-  respond: z.enum(["now", "finished"]).default("now"),
-});
+/** When a flow on a schedule runs: a cron expression on a timezone's clock (`schedule.ts`), worked out from its trigger's settings. */
+export const ScheduleInput = z
+  .object({ cron: z.string().trim().min(1).max(200), timezone: z.string().min(1).max(64) })
+  .superRefine((schedule, context) => {
+    const problem = scheduleProblem(schedule);
+    if (problem) context.addIssue({ code: "custom", message: problem });
+  });
+export const AutomationTriggerInput = z
+  .object({
+    path: FlowFile,
+    flowId: z.string().min(1).max(100),
+    kind: z.enum(TRIGGER_KINDS),
+    /** "now": answer at once with the run's id. "finished": wait for the run (up to 30 seconds) and answer with what its last step gave. */
+    respond: z.enum(["now", "finished"]).default("now"),
+    schedule: ScheduleInput.optional(),
+  })
+  .refine((input) => (input.kind === "schedule") === Boolean(input.schedule), { message: "A schedule needs a time to run, and only a schedule has one.", path: ["schedule"] });
 export type AutomationTriggerInput = z.infer<typeof AutomationTriggerInput>;
-export const AutomationTriggerPatch = z.object({ enabled: z.boolean().optional(), respond: z.enum(["now", "finished"]).optional(), path: FlowFile.optional() });
+export const AutomationTriggerPatch = z.object({ enabled: z.boolean().optional(), respond: z.enum(["now", "finished"]).optional(), path: FlowFile.optional(), schedule: ScheduleInput.optional() });
 export type AutomationTriggerPatch = z.infer<typeof AutomationTriggerPatch>;
 export type AutomationTrigger = {
   id: string;
@@ -72,9 +84,14 @@ export type AutomationTrigger = {
   path: string;
   enabled: boolean;
   respond: "now" | "finished";
-  /** Where to send things to start it, and to try it without running it. */
+  /** Where to send things to start it, and to try it without running it: a webhook's only. */
   url: string | null;
   testUrl: string | null;
+  /** A schedule's only: when it runs, and next will. */
+  schedule: { cron: string; timezone: string } | null;
+  nextRunAt: number | null;
+  /** Why it stopped by itself, such as its flow no longer starting on a schedule. */
+  problem: string | null;
   createdBy: string | null;
   createdAt: number;
   lastRunAt: number | null;

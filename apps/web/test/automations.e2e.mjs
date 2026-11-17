@@ -416,6 +416,34 @@ try {
   await openTool();
   check("andWorksAgainOnceItsFixed", await ok(box("Catch Webhook").or(chart.getByRole("button", { name: /^Step / })).first().waitFor({ timeout: 10_000 })));
 
+  // ---- On a schedule: the times it'll run, a wrong cron, turned on, its times changed, and forgotten ----
+  await chart.getByRole("button", { name: /^Step / }).first().click();
+  await details.getByRole("button", { name: "Change the trigger" }).click();
+  await details.getByPlaceholder(/^Search \d+ triggers$/).fill("cron expression");
+  await details.getByRole("option", { name: /Cron Expression/ }).first().click();
+  const cronStep = details.getByRole("region", { name: "Step Cron Expression" });
+  await cronStep.waitFor({ timeout: 10_000 });
+  const scheduled = cronStep.getByRole("region", { name: "Starting by itself" });
+  check("aScheduleShowsItsNextTimes", await ok(scheduled.getByRole("list", { name: "The next times it runs" }).waitFor({ timeout: 10_000 })) && (await scheduled.getByRole("list", { name: "The next times it runs" }).getByRole("listitem").count()) === 3);
+  const cronField = cronStep.getByRole("textbox", { name: "Cron Expression (required)" });
+  await cronField.fill("61 * * * *");
+  check("aWrongCronSaysWhy", await ok(scheduled.getByText("A minute is from 0 to 59, not 61.").waitFor({ timeout: 5000 })));
+  check("andCantBeTurnedOn", await scheduled.getByRole("button", { name: "Turn on" }).isDisabled());
+  await cronField.fill("*/5 * * * *");
+  await scheduled.getByRole("button", { name: "Turn on" }).click();
+  check("turnedOnItSaysWhenItNextRuns", await ok(scheduled.getByText(/^Next run .*, in /).waitFor({ timeout: 10_000 })));
+  await cronField.fill("0 9 * * *");
+  let savedCron = null;
+  for (let i = 0; i < 20 && savedCron !== "0 9 * * *"; i++) {
+    await sleep(500);
+    const listed = await a.request.get(`${BASE}/api/rooms/E2ETST/automations/triggers`).then((response) => response.json());
+    savedCron = listed.find((each) => each.kind === "schedule" && each.path?.startsWith(`${FOLDER}/`))?.schedule?.cron ?? null;
+  }
+  check("changingItsTimesWhileOnChangesWhenItRuns", savedCron === "0 9 * * *", savedCron);
+  await scheduled.getByRole("button", { name: "Forget it" }).click();
+  await scheduled.getByRole("group", { name: "Are you sure?" }).getByRole("button", { name: "Forget it" }).click();
+  check("aScheduleCanBeForgotten", await ok(scheduled.getByRole("button", { name: "Turn on" }).waitFor({ timeout: 10_000 })));
+
   // ---- On a phone ----
   await a.setViewportSize({ width: 390, height: 800 });
   await sleep(800);

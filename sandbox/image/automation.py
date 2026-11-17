@@ -32,6 +32,7 @@ RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 STEP_NAME = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 # A run that can be taken up again from where it stopped.
 UNFINISHED = ("FAILED", "TIMEOUT", "STOPPED")
+SCHEDULE_PIECE = "@activepieces/piece-schedule"
 
 
 class Refused(Exception):
@@ -161,6 +162,11 @@ def run(request):
         path, flow = flow_by_id(wanted)
         if flow is None:
             raise Refused("The flow this was turned on for isn't in the room any more.")
+    started_by = str(request.get("trigger") or "manual")[:20]
+    settings = flow["trigger"].get("settings") if isinstance(flow["trigger"].get("settings"), dict) else {}
+    # A flow turned on for a schedule may have been changed since: it's run only while it still starts on one.
+    if started_by == "schedule" and settings.get("pieceName") != SCHEDULE_PIECE:
+        raise Refused("This flow doesn't start on a schedule any more.")
     payload = request.get("payload")
     if len(json.dumps(payload)) > MOST_PAYLOAD_BYTES:
         raise Refused("What was sent to this flow is over 1 MB.")
@@ -200,10 +206,14 @@ def run(request):
     seconds = max(LEAST_SECONDS, min(MOST_SECONDS, seconds)) if isinstance(seconds, int) else DEFAULT_SECONDS
     headers = request.get("headers") if isinstance(request.get("headers"), dict) else {}
     query = request.get("query") if isinstance(request.get("query"), dict) else {}
-    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": str(request.get("trigger") or "manual")[:20], "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, **extra}
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": started_by, "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, **extra}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}.json"), job)
     start_worker()
-    return {"id": identity, "queued": queued()}
+    answer = {"id": identity, "queued": queued()}
+    if started_by == "schedule":
+        # Its schedule as the file has it now, so the timer goes by it from the next time on.
+        answer["trigger"] = {"triggerName": settings.get("triggerName"), "input": settings.get("input") if isinstance(settings.get("input"), dict) else {}}
+    return answer
 
 
 def stop():

@@ -10,6 +10,7 @@ import type { OriginPolicy } from "./origins.js";
 import { schemaShapingOptions } from "./options.js";
 import { hashPassword, isLegacyHash, verifyPassword } from "./password.js";
 import { valkeyStorage } from "./storage.js";
+import { totpReplayHooks } from "./totp-replay.js";
 
 type Organisation = { slug: string; metadata?: unknown };
 const isOwner = (role: unknown) => typeof role === "string" && role.split(",").some((value) => value.trim() === "owner");
@@ -175,6 +176,7 @@ export function isLoopback(url: string): boolean {
 
 export function createAuth(options: CreateAuthOptions) {
   const { db, redis, mail, appUrl, secret, production, oauth, origins } = options;
+  const totpReplay = totpReplayHooks(redis, secret);
   // Production cookies are Secure; over plain http the browser drops them and
   // every sign-in "succeeds" without a session. Refuse to boot instead, unless
   // it's this machine: browsers treat http://localhost as secure and keep the
@@ -298,6 +300,7 @@ export function createAuth(options: CreateAuthOptions) {
 
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        await totpReplay.before(ctx);
         // The normal hook also protects new invitations; this covers the plugin's resend fast path.
         if (ctx.path !== "/organization/invite-member") return;
         const session = await getSessionFromCtx(ctx);
@@ -313,6 +316,7 @@ export function createAuth(options: CreateAuthOptions) {
       // Upgrade v1 PBKDF2 hashes to argon2id the first time the password is
       // proven correct; the plaintext exists only during this request.
       after: createAuthMiddleware(async (ctx) => {
+        await totpReplay.after(ctx, ctx.context.returned);
         if (ctx.path !== "/sign-in/email") return;
         const session = ctx.context.newSession;
         const password = (ctx.body as { password?: unknown } | undefined)?.password;

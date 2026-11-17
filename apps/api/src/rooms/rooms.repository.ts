@@ -63,6 +63,11 @@ export class RoomsRepository {
   }
 
   /** One entry of a setting that holds entries by id, changed on its own in one statement, so two people changing different entries don't undo each other. Null takes it away. */
+  /** Rooms whose settings have this key, with their settings: the automations' timer looks for flows on a schedule this way. */
+  withSetting(key: string): Promise<Pick<RoomRow, "id" | "kind" | "settings">[]> {
+    return this.db.select({ id: schema.rooms.id, kind: schema.rooms.kind, settings: schema.rooms.settings }).from(schema.rooms).where(sql`${schema.rooms.settings} -> ${key}::text is not null`);
+  }
+
   async setSettingEntry(roomId: string, key: string, entry: string, value: unknown): Promise<void> {
     const current = sql`coalesce(${schema.rooms.settings} -> ${key}::text, '{}'::jsonb)`;
     const next = value === null ? sql`${current} - ${entry}::text` : sql`${current} || ${JSON.stringify({ [entry]: value })}::jsonb`;
