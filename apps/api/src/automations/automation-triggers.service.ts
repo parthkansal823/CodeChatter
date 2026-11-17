@@ -6,7 +6,28 @@
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-import { dueRun, MOST_TRIGGERS, nextRun, scheduleOf, scheduleProblem, type AutomationRun, type AutomationTestEvent, type AutomationTrigger, type AutomationTriggerInput, type AutomationTriggerPatch, type Schedule } from "@codechatter/contracts";
+import {
+  dueRun,
+  isRoomEvent,
+  matchesPaths,
+  MOST_TRIGGERS,
+  nextRun,
+  pathsProblem,
+  ROOM_EVENTS_QUEUE,
+  roomEventOf,
+  scheduleOf,
+  scheduleProblem,
+  type AutomationRun,
+  type AutomationTestEvent,
+  type AutomationTrigger,
+  type AutomationTriggerInput,
+  type AutomationTriggerPatch,
+  type QueuedRoomEvent,
+  type RoomEventPayload,
+  type RoomEventPerson,
+  type RoomEventSettings,
+  type Schedule,
+} from "@codechatter/contracts";
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, NotFoundException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import type { Redis } from "ioredis";
 
@@ -23,13 +44,16 @@ const TRIGGERS = "automationTriggers";
 const LAST_RUNS = "automationTriggerRuns";
 const WEBHOOK_USER = { id: "webhook", name: "Webhook" };
 const SCHEDULE_USER = { id: "schedule", name: "Schedule" };
+const EVENT_USER = { id: "event", name: "Room event" };
+/** How often the queue of room events is looked at: a flow on one starts within about this long of collab sending it. */
+const EVENTS_TICK_MS = 1000;
 /** How long a webhook told to answer when the flow finishes waits for it. */
 const MOST_WAIT_MS = 30_000;
 const TEST_EVENT_SECONDS = 600;
 /** A time on a schedule is claimed for a day: long enough that no other server runs it too. */
 const CLAIM_SECONDS = 24 * 60 * 60;
 /** What the sandbox says when a flow on a schedule can't run again until someone changes it, so it's turned off rather than tried every time. */
-const STOPS_IT = ["isn't in the room any more", "doesn't start on a schedule any more"];
+const STOPS_IT = ["isn't in the room any more", "doesn't start on a schedule any more", "doesn't start on a room event any more", "listens for another room event now"];
 
 type Stored = {
   id: string;
@@ -43,6 +67,8 @@ type Stored = {
   tokenSealed?: string;
   /** A schedule's: when it runs, and when it was last turned on, as nothing from before that is run. */
   schedule?: Schedule;
+  /** A room event's: what it listens for. */
+  event?: RoomEventSettings;
   enabledAt?: number;
   problem?: string | null;
   createdBy: string | null;
@@ -62,8 +88,11 @@ const sameSchedule = (a: Schedule | undefined, b: Schedule | undefined) => a?.cr
 export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger("Automations");
   private readonly limiter: RateLimiter;
+  private readonly eventLimiter: RateLimiter;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private events: ReturnType<typeof setInterval> | null = null;
   private ticking = false;
+  private draining = false;
 
   constructor(
     private readonly rooms: RoomsService,
@@ -74,15 +103,20 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
   ) {
     // Each address, 60 calls a minute: enough for a busy repository, not enough to keep a room's sandbox busy for someone else.
     this.limiter = new RateLimiter(redis, { limit: 60, windowSeconds: 60, prefix: "automations:hook" });
+    // A flow on a room event, 30 runs a minute: files are only sent once people stop typing, so more is a flow setting something off again and again.
+    this.eventLimiter = new RateLimiter(redis, { limit: 30, windowSeconds: 60, prefix: "automations:event" });
   }
 
   onModuleInit(): void {
     this.timer = setInterval(() => void this.tick().catch((error: unknown) => this.logger.warn(`schedules: ${String(error)}`)), this.env.AUTOMATION_SCHEDULE_TICK_MS);
     this.timer.unref();
+    this.events = setInterval(() => void this.drain().catch((error: unknown) => this.logger.warn(`room events: ${String(error)}`)), EVENTS_TICK_MS);
+    this.events.unref();
   }
 
   onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
+    if (this.events) clearInterval(this.events);
   }
 
   /** Turning flows on and off needs Run rights, as running one does; an interview isn't the place for it. */
@@ -124,6 +158,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       testUrl: url ? `${url}/test` : null,
       schedule: trigger.schedule ?? null,
       nextRunAt,
+      event: trigger.event ?? null,
       problem: trigger.problem ?? last?.problem ?? null,
       createdBy: trigger.createdBy,
       createdAt: trigger.createdAt,
@@ -156,6 +191,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     const base = { id: `trg_${randomBytes(8).toString("hex")}`, kind: input.kind, flowId: input.flowId, path: input.path, enabled: true, respond: input.respond, createdBy: userId, createdAt: now };
     let trigger: Stored;
     if (input.kind === "schedule") trigger = { ...base, schedule: input.schedule!, enabledAt: now };
+    else if (input.kind === "event") trigger = { ...base, event: input.event! };
     else {
       const token = randomBytes(24).toString("base64url");
       trigger = { ...base, tokenHash: hashOf(token), tokenSealed: sealToken(this.env.BETTER_AUTH_SECRET, token) };
@@ -167,6 +203,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
   async update(roomId: string, userId: string, id: string, patch: AutomationTriggerPatch): Promise<Change> {
     const { room, trigger, last } = await this.one(roomId, userId, id);
     if (patch.schedule && trigger.kind !== "schedule") throw new BadRequestException("Only a flow on a schedule has a time to run.");
+    if (patch.event && trigger.kind !== "event") throw new BadRequestException("Only a flow on a room event listens for one.");
     const turningOn = patch.enabled === true && !trigger.enabled;
     const next: Stored = {
       ...trigger,
@@ -174,6 +211,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       ...(patch.respond && { respond: patch.respond }),
       ...(patch.path && { path: patch.path }),
       ...(patch.schedule && { schedule: patch.schedule }),
+      ...(patch.event && { event: patch.event }),
       // Turned on again: nothing it missed while it was off is run, and why it stopped is forgotten.
       ...(turningOn && { enabledAt: Date.now(), problem: null }),
     };
@@ -276,12 +314,92 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     const schedule = trigger.schedule!;
     // What Activepieces' schedule piece gives the flow, and the time it was for.
     const payload = { cron_expression: schedule.cron, timezone: schedule.timezone, scheduled_at: new Date(slot).toISOString() };
+    return this.runTriggered(roomId, trigger, payload, last, slot);
+  }
+
+  /**
+   * Room events: what collab saw people change in the files, and what the audit log heard (AuditService), queued in Valkey. Taking from the list is atomic,
+   * so with several API servers each event is run once. Returns how many flows it started.
+   */
+  async drain(): Promise<number> {
+    if (this.draining) return 0;
+    this.draining = true;
+    let started = 0;
     try {
-      const answer = (await this.runner.automations(roomId, { op: "run", path: trigger.path, flowId: trigger.flowId, payload, trigger: "schedule" }, SCHEDULE_USER)) as { id: string; trigger?: { triggerName?: string; input?: Record<string, unknown> } };
-      await this.repository.setSettingEntry(roomId, LAST_RUNS, trigger.id, { at: Date.now(), id: answer.id, slot } satisfies LastRun);
-      // The flow is a file anyone can change, by hand or with git: when its schedule has changed, the next run goes by the new one.
-      const now = answer.trigger?.triggerName ? scheduleOf(answer.trigger.triggerName, answer.trigger.input ?? {}) : null;
-      if (now && !sameSchedule(now, schedule) && !scheduleProblem(now)) await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, schedule: now } satisfies Stored);
+      for (let round = 0; round < 10; round++) {
+        const batch = await this.redis.lpop(ROOM_EVENTS_QUEUE, 50);
+        if (!batch?.length) break;
+        for (const raw of batch) {
+          try {
+            started += await this.onEvent(raw);
+          } catch (error) {
+            this.logger.warn(`A room event wasn't handled: ${String(error)}`);
+          }
+        }
+      }
+    } finally {
+      this.draining = false;
+    }
+    return started;
+  }
+
+  private async onEvent(raw: string): Promise<number> {
+    let event: QueuedRoomEvent;
+    try {
+      event = JSON.parse(raw) as QueuedRoomEvent;
+    } catch {
+      return 0;
+    }
+    if (!event || typeof event.room !== "string" || !/^[A-Z0-9]{6}$/.test(event.room) || !isRoomEvent(event.event)) return 0;
+    const room = await this.repository.findById(event.room);
+    if (!room || room.kind === "interview") return 0;
+    const listening = Object.values(this.entries<Stored>(room.settings, TRIGGERS)).filter((trigger) => trigger.kind === "event" && trigger.enabled && trigger.event?.event === event.event);
+    if (listening.length === 0) return 0;
+    const last = this.entries<LastRun>(room.settings, LAST_RUNS);
+    // The audit log knows who by their id; collab already says their name.
+    const people = Array.isArray(event.by) ? (event.by as Array<string | RoomEventPerson>) : [];
+    const ids = people.filter((each): each is string => typeof each === "string");
+    const names = ids.length ? await this.repository.userNames(ids) : new Map<string, string>();
+    const by: RoomEventPerson[] = people.map((each) => (typeof each === "string" ? { id: each, name: names.get(each) ?? "Someone" } : { id: each.id ?? null, name: String(each.name ?? "Someone") }));
+    let started = 0;
+    for (const trigger of listening) {
+      let files = event.files;
+      if (event.event === "files.changed") {
+        files = (event.files ?? []).filter((file) => matchesPaths(file.path, trigger.event!.paths, file.kind));
+        if (files.length === 0) continue;
+      }
+      const decision = await this.eventLimiter.hit(trigger.id);
+      if (!decision.allowed) {
+        await this.repository.setSettingEntry(room.id, LAST_RUNS, trigger.id, { ...(last[trigger.id] ?? { at: Date.now(), id: null }), problem: "It was set off too often: more than 30 times a minute, so some were passed over." } satisfies LastRun);
+        continue;
+      }
+      const payload: RoomEventPayload = {
+        event: event.event,
+        at: new Date(event.at || Date.now()).toISOString(),
+        by,
+        ...(files && { files }),
+        ...(event.event === "files.changed" && event.more ? { more: event.more } : {}),
+        ...(event.data && { data: event.data }),
+      };
+      if (await this.runTriggered(room.id, trigger, payload, last[trigger.id])) started += 1;
+    }
+    return started;
+  }
+
+  /** Runs a flow its schedule or a room event started, and keeps the trigger in step with the flow's file. */
+  private async runTriggered(roomId: string, trigger: Stored, payload: unknown, last: LastRun | undefined, slot?: number): Promise<boolean> {
+    const kind = trigger.kind === "schedule" ? "schedule" : "event";
+    try {
+      const answer = (await this.runner.automations(roomId, { op: "run", path: trigger.path, flowId: trigger.flowId, payload, trigger: kind }, kind === "schedule" ? SCHEDULE_USER : EVENT_USER)) as { id: string; trigger?: { triggerName?: string; input?: Record<string, unknown>; room?: unknown } };
+      await this.repository.setSettingEntry(roomId, LAST_RUNS, trigger.id, { at: Date.now(), id: answer.id, ...(slot !== undefined && { slot }) } satisfies LastRun);
+      // The flow is a file anyone can change, by hand or with git: when what starts it has changed, the next time goes by that.
+      if (kind === "schedule") {
+        const now = answer.trigger?.triggerName ? scheduleOf(answer.trigger.triggerName, answer.trigger.input ?? {}) : null;
+        if (now && !sameSchedule(now, trigger.schedule) && !scheduleProblem(now)) await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, schedule: now } satisfies Stored);
+      } else {
+        const now = roomEventOf({ room: answer.trigger?.room });
+        if (now && JSON.stringify(now) !== JSON.stringify(trigger.event) && !pathsProblem(now.paths)) await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, event: now } satisfies Stored);
+      }
       return true;
     } catch (error) {
       const message = error instanceof HttpException ? error.message : "The room's sandbox couldn't be reached.";
@@ -289,8 +407,8 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
         await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, enabled: false, problem: `Turned off by itself: ${message}` } satisfies Stored);
       }
       // The last run that did start is still shown; this time is passed over, with why.
-      await this.repository.setSettingEntry(roomId, LAST_RUNS, trigger.id, { at: last?.at ?? Date.now(), id: last?.id ?? null, slot, problem: message } satisfies LastRun);
-      this.logger.warn(`A flow on a schedule in ${roomId} didn't run: ${message}`);
+      await this.repository.setSettingEntry(roomId, LAST_RUNS, trigger.id, { at: last?.at ?? Date.now(), id: last?.id ?? null, ...(slot !== undefined && { slot }), problem: message } satisfies LastRun);
+      this.logger.warn(`A flow started by ${kind === "schedule" ? "its schedule" : "a room event"} in ${roomId} didn't run: ${message}`);
       return false;
     }
   }

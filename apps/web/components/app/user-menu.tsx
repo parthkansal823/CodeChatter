@@ -24,6 +24,7 @@ import type { Me } from "@/lib/me";
 export function UserMenu({ me }: { me: Me }) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const session = authClient.useSession();
 
   async function signOut() {
     await authClient.signOut();
@@ -45,6 +46,7 @@ export function UserMenu({ me }: { me: Me }) {
         <DropdownMenuItem onSelect={() => router.push("/settings" as never)}>
           <Settings className="size-4" /> Settings
         </DropdownMenuItem>
+        {session.data?.user.role?.split(",").includes("admin") && <DropdownMenuItem onSelect={() => router.push("/admin" as never)}><Settings className="size-4" /> Instance admin</DropdownMenuItem>}
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Sun className="size-4" /> Theme

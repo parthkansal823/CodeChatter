@@ -168,6 +168,13 @@ def run(request):
     if started_by == "schedule" and settings.get("pieceName") != SCHEDULE_PIECE:
         raise Refused("This flow doesn't start on a schedule any more.")
     payload = request.get("payload")
+    # The same for a room event: it runs only while the flow still listens for that event.
+    room = settings.get("room") if isinstance(settings.get("room"), dict) else None
+    if started_by == "event":
+        if room is None:
+            raise Refused("This flow doesn't start on a room event any more.")
+        if not isinstance(payload, dict) or room.get("event") != payload.get("event"):
+            raise Refused("This flow listens for another room event now.")
     if len(json.dumps(payload)) > MOST_PAYLOAD_BYTES:
         raise Refused("What was sent to this flow is over 1 MB.")
     mode = request.get("mode") or "run"
@@ -213,6 +220,9 @@ def run(request):
     if started_by == "schedule":
         # Its schedule as the file has it now, so the timer goes by it from the next time on.
         answer["trigger"] = {"triggerName": settings.get("triggerName"), "input": settings.get("input") if isinstance(settings.get("input"), dict) else {}}
+    elif started_by == "event":
+        # What it listens for as the file has it now, so the next event goes by that.
+        answer["trigger"] = {"room": room}
     return answer
 
 

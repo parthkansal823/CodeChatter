@@ -4,6 +4,7 @@
  */
 import { z } from "zod";
 
+import { isRoomEvent, pathsProblem, type RoomEventSettings } from "./room-events.js";
 import { scheduleProblem } from "./schedule.js";
 
 /** Flows live in the room's files, so they're edited together, versioned, and can leave. */
@@ -55,7 +56,7 @@ export type AutomationLive = (Partial<AutomationRun> & { state: "idle" | "runnin
  * Starting by itself: a flow turned on has a trigger, kept with its room (apps/api/src/automations). A webhook's address is a secret: whoever has it can start
  * the flow, so it can be replaced, and only people who can run code in the room see it.
  */
-export const TRIGGER_KINDS = ["webhook", "schedule"] as const;
+export const TRIGGER_KINDS = ["webhook", "schedule", "event"] as const;
 export const MOST_TRIGGERS = 10;
 /** When a flow on a schedule runs: a cron expression on a timezone's clock (`schedule.ts`), worked out from its trigger's settings. */
 export const ScheduleInput = z
@@ -64,6 +65,14 @@ export const ScheduleInput = z
     const problem = scheduleProblem(schedule);
     if (problem) context.addIssue({ code: "custom", message: problem });
   });
+/** What a flow on a room event listens for (room-events.ts). */
+export const RoomEventInput = z
+  .object({ event: z.string().refine(isRoomEvent, "That isn't something that happens in a room."), paths: z.string().max(4000).optional() })
+  .superRefine((input, context) => {
+    const problem = pathsProblem(input.paths);
+    if (problem) context.addIssue({ code: "custom", message: problem, path: ["paths"] });
+  })
+  .transform((input): RoomEventSettings => (input.event === "files.changed" && input.paths?.trim() ? { event: input.event, paths: input.paths.trim() } : { event: input.event as RoomEventSettings["event"] }));
 export const AutomationTriggerInput = z
   .object({
     path: FlowFile,
@@ -72,10 +81,12 @@ export const AutomationTriggerInput = z
     /** "now": answer at once with the run's id. "finished": wait for the run (up to 30 seconds) and answer with what its last step gave. */
     respond: z.enum(["now", "finished"]).default("now"),
     schedule: ScheduleInput.optional(),
+    event: RoomEventInput.optional(),
   })
-  .refine((input) => (input.kind === "schedule") === Boolean(input.schedule), { message: "A schedule needs a time to run, and only a schedule has one.", path: ["schedule"] });
+  .refine((input) => (input.kind === "schedule") === Boolean(input.schedule), { message: "A schedule needs a time to run, and only a schedule has one.", path: ["schedule"] })
+  .refine((input) => (input.kind === "event") === Boolean(input.event), { message: "A room event needs what to listen for, and only a room event has it.", path: ["event"] });
 export type AutomationTriggerInput = z.infer<typeof AutomationTriggerInput>;
-export const AutomationTriggerPatch = z.object({ enabled: z.boolean().optional(), respond: z.enum(["now", "finished"]).optional(), path: FlowFile.optional(), schedule: ScheduleInput.optional() });
+export const AutomationTriggerPatch = z.object({ enabled: z.boolean().optional(), respond: z.enum(["now", "finished"]).optional(), path: FlowFile.optional(), schedule: ScheduleInput.optional(), event: RoomEventInput.optional() });
 export type AutomationTriggerPatch = z.infer<typeof AutomationTriggerPatch>;
 export type AutomationTrigger = {
   id: string;
@@ -90,6 +101,8 @@ export type AutomationTrigger = {
   /** A schedule's only: when it runs, and next will. */
   schedule: { cron: string; timezone: string } | null;
   nextRunAt: number | null;
+  /** A room event's only: what it listens for. */
+  event: RoomEventSettings | null;
   /** Why it stopped by itself, such as its flow no longer starting on a schedule. */
   problem: string | null;
   createdBy: string | null;

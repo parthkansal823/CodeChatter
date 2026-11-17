@@ -72,6 +72,7 @@ const dev = process.env.NODE_ENV !== "production";
 
 @Module({
   imports: [
+    import("./admin/admin.module.js").then(({ AdminModule }) => ({ module: AdminModule })),
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? (dev ? "debug" : "info"),

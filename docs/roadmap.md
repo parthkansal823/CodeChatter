@@ -139,7 +139,7 @@ flowchart TD
 
 - ✅ Organisations: teams, members, invitations
 - ✅ Managing a room's people: approve, decline, remove, change roles, leave, and an invite link from Share; more than one owner, and handing a room over. Rights changing closes what the person has open
-- ✅ Settings: profile, password, two-factor, active sessions; and preferences: the theme, the editor's settings, the email digest, and the ways to sign in
+- ✅ Settings: profile, password, two-factor (each code works once), active sessions; and preferences: the theme, the editor's settings, the email digest, and the ways to sign in
 - ✅ Audit log with filters and CSV export
 - ✅ Room roles for interviews (interviewer, candidate)
 - ⬜ Usage dashboard with quotas; instance admin
@@ -150,7 +150,7 @@ flowchart TD
 
 - ✅ Outgoing webhooks: signed, retried, with a delivery log, leases and retention
 - ✅ Dependency alerts from OSV, in a side tool
-- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here), most of n8n's editor (adding anywhere, the menu and keys, undo, data mapping, and routers with and and or), trying things (one step on its own, pinned data, and carrying a failed run on from where it stopped), n8n's built-in steps for data, from Filter and Sort to Merge and Compare Datasets, and flows turned on with a webhook, run from outside with nobody in the room. Next: triggers, connections, the internet, and the rest of n8n's features
+- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here), most of n8n's editor (adding anywhere, the menu and keys, undo, data mapping, and routers with and and or), trying things (one step on its own, pinned data, and carrying a failed run on from where it stopped), n8n's built-in steps for data, from Filter and Sort to Merge and Compare Datasets, and flows turned on with a webhook or a schedule, run with nobody in the room. Next: triggers, connections, the internet, and the rest of n8n's features
 - ⬜ Pipelines, Jenkins-style; public API and `cc` CLI; MCP server; `devcontainer.json`
 
 ## Step 10 · Hardening and launch 🟡 ← now

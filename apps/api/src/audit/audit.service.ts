@@ -1,8 +1,10 @@
+import { isRoomEvent, ROOM_EVENTS_QUEUE, type QueuedRoomEvent } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import type { Request } from "express";
+import type { Redis } from "ioredis";
 
-import { DB } from "../infra/tokens.js";
+import { DB, VALKEY } from "../infra/tokens.js";
 import { WebhooksService } from "../webhooks/webhooks.service.js";
 
 export interface AuditEntry {
@@ -23,7 +25,11 @@ export interface AuditEntry {
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
-  constructor(@Inject(DB) private readonly handle: DbHandle, private readonly webhooks: WebhooksService) {}
+  constructor(
+    @Inject(DB) private readonly handle: DbHandle,
+    private readonly webhooks: WebhooksService,
+    @Optional() @Inject(VALKEY) private readonly redis?: Redis,
+  ) {}
 
   async record(entry: AuditEntry, request?: Request): Promise<void> {
     let written: { id: string; createdAt: Date } | undefined;
@@ -43,6 +49,16 @@ export class AuditService {
       await this.webhooks.queue({ ...entry, ...written });
     } catch (error) {
       this.logger.error(`webhook queue failed for ${entry.action}: ${String(error)}`);
+    }
+    // What happens in a room can start its automations (apps/api/src/automations): queued for them, as collab queues files changing.
+    if (this.redis && entry.targetType === "room" && entry.targetId && isRoomEvent(entry.action) && entry.action !== "files.changed") {
+      const event: QueuedRoomEvent = { room: entry.targetId, event: entry.action, at: written.createdAt.getTime(), by: entry.actorId ? [entry.actorId] : [], data: entry.data ?? {} };
+      try {
+        await this.redis.rpush(ROOM_EVENTS_QUEUE, JSON.stringify(event));
+        await this.redis.ltrim(ROOM_EVENTS_QUEUE, -1000, -1);
+      } catch (error) {
+        this.logger.error(`room event queue failed for ${entry.action}: ${String(error)}`);
+      }
     }
   }
 }

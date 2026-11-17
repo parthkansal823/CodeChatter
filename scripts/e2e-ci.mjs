@@ -36,6 +36,7 @@ const SUITES = [
     ["flow-runner", "flow"],
     ["automations-runner", "automations"],
     ["automation-hooks", "automation-hooks"],
+    ["automation-schedules", "automation-schedules"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -84,6 +85,7 @@ const SUITES = [
     "api-studio-import",
     "task-board",
     "preferences",
+    "two-factor-replay",
     "automations",
     "a11y",
     "interview-recording",

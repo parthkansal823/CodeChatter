@@ -7,6 +7,7 @@ import { Redis } from "ioredis";
 
 import { loadEnv } from "./env.js";
 import { accessExtension } from "./extensions/access.js";
+import { automationEventsExtension } from "./extensions/automation-events.js";
 import { checkpointsExtension } from "./extensions/checkpoints.js";
 import { metricsExtension } from "./extensions/metrics.js";
 import { persistenceExtension } from "./extensions/persistence.js";
@@ -57,6 +58,7 @@ const server = new Server({
     accessExtension({ auth, db: handle.db, origins, serviceSecret: env.SERVICE_SECRET }),
     persistenceExtension(handle, instance),
     checkpointsExtension(handle),
+    automationEventsExtension(redis),
   ],
 });
 

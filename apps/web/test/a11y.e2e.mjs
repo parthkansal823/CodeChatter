@@ -71,7 +71,7 @@ async function step(page, name, act) {
 const { browser, signIn } = await launch();
 const themed = (context, theme) => context.addInitScript((value) => localStorage.setItem("theme", value), theme);
 const PUBLIC = ["/", "/sign-in", "/sign-up", "/forgot-password", "/reset-password?token=none", "/verify-email", "/two-factor", "/invite/none", "/interview/none"];
-const SIGNED_IN = ["/dashboard", "/explore", "/new", "/interviews", "/interviews?tab=assessments", "/interviews/new", "/interviews/questions/new", "/orgs/new", "/settings", "/settings/account", "/settings/preferences", "/settings/members", "/settings/audit", "/settings/webhooks"];
+const SIGNED_IN = ["/dashboard", "/explore", "/new", "/interviews", "/interviews?tab=assessments", "/interviews/new", "/interviews/questions/new", "/orgs/new", "/settings", "/settings/account", "/settings/preferences", "/settings/members", "/settings/audit", "/settings/webhooks", "/admin"];
 
 try {
   for (const theme of ["light", "dark"]) {

@@ -6,6 +6,7 @@
  *   pnpm --filter @codechatter/api seed:dev
  */
 import { createAuth, ensurePersonalOrg, hashPassword } from "@codechatter/auth";
+import { mutateInstanceUser } from "../admin/admin-policy.js";
 import { createDb, schema } from "@codechatter/db";
 import { createHash, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -67,6 +68,7 @@ for (const u of USERS) {
     console.log(`exists   ${u.email}`);
   }
   await ensurePersonalOrg(handle.db, user);
+  await mutateInstanceUser(handle.db, { actorId: null, targetId: user.id, change: { kind: "role", role: u.email === USERS[0].email ? "admin" : "user" }, source: "seed:dev", operator: "development seed" });
   ids.push(user.id);
 }
 
@@ -98,9 +100,8 @@ for (const room of ROOMS) {
     ])
     .onConflictDoNothing();
   console.log(`room     ${room.name} (${room.id}) ${inserted.length ? "created" : "exists"}`);
-  if (inserted.length) console.log(`invite   ${env.APP_URL}/rooms/${room.id}?invite=${inviteToken}`);
 }
 console.log(`\nSign in at ${env.APP_URL}/sign-in with any of the emails above.`);
-console.log(`Password: ${PASSWORD}`);
+console.log("Use the documented local test credentials.");
 
 await Promise.all([handle.close(), redis.quit()]);

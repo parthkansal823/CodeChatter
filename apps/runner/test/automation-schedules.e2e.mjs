@@ -114,7 +114,12 @@ try {
   for (let i = 0; i < 60 && !(await fetch(`${SECOND_API}/api/healthz`).then((r) => r.ok, () => false)); i++) await sleep(500);
   check("aSecondServerIsRunning", await fetch(`${SECOND_API}/api/healthz`).then((r) => r.ok, () => false), secondErrors.slice(-400));
 
-  const manifest = await automations({ op: "manifest" });
+  // The room's sandbox may still be starting.
+  let manifest = await automations({ op: "manifest" });
+  for (let i = 0; i < 60 && manifest.status !== 200; i++) {
+    await sleep(2000);
+    manifest = await automations({ op: "manifest" });
+  }
   const schedulePiece = manifest.body.pieces["@activepieces/piece-schedule"];
   check("theSchedulePieceIsInTheImage", Boolean(schedulePiece?.triggers?.cron_expression), Object.keys(manifest.body.pieces ?? {}).length);
   const flowWith = (trigger) => ({
@@ -135,7 +140,7 @@ try {
         skip: false,
         settings: {
           sourceCode: { code: "export const code = async (inputs) => ({ at: inputs.at, cron: inputs.cron, zone: inputs.zone });", packageJson: "{}" },
-          input: { at: "{{trigger.scheduled_at}}", cron: "{{trigger.cron_expression}}", zone: "{{trigger.timezone}}" },
+          input: { at: "{{trigger.output.scheduled_at}}", cron: "{{trigger.output.cron_expression}}", zone: "{{trigger.output.timezone}}" },
           errorHandlingOptions: { continueOnFailure: { value: false }, retryOnFailure: { value: false } },
         },
         nextAction: null,

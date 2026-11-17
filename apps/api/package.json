@@ -13,7 +13,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "seed:dev": "node --env-file-if-exists=../../.env dist/scripts/seed-dev.js",
-    "mail:test": "node --env-file-if-exists=../../.env dist/scripts/mail-test.js"
+    "mail:test": "node --env-file-if-exists=../../.env dist/scripts/mail-test.js",
+    "admin:grant": "node --env-file-if-exists=../../.env dist/scripts/admin-grant.js",
+    "admin:revoke": "node --env-file-if-exists=../../.env dist/scripts/admin-revoke.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",

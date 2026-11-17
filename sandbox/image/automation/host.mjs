@@ -312,6 +312,8 @@ async function runJob(job) {
  * the time it was for) as it is, as Activepieces runs it. Any other trigger runs only by hand, with what was sent as its body.
  */
 function triggerOutputOf(flow, job) {
+  // A room event (a `room` setting on the webhook trigger): what happened, as it is.
+  if (flow.trigger?.settings?.room) return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   if (flow.trigger?.settings?.pieceName === "@activepieces/piece-schedule") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   return { body: job.payload ?? {}, headers: job.headers ?? {}, queryParams: job.query ?? {} };
 }
