@@ -143,7 +143,8 @@ flowchart TD
 - ✅ Settings: profile, password, two-factor (each code works once), active sessions; and preferences: the theme, the editor's settings, the email digest, and the ways to sign in
 - ✅ Audit log with filters and CSV export
 - ✅ Room roles for interviews (interviewer, candidate)
-- ⬜ Usage dashboard with quotas; instance admin
+- ✅ Instance admin: users (ban, sign out everywhere, admin or not), every room, and the services' health
+- ⬜ Usage dashboard with quotas
 
 ## Step 9 · Automations and platform 🟡
 
@@ -151,7 +152,7 @@ flowchart TD
 
 - ✅ Outgoing webhooks: signed, retried, with a delivery log, leases and retention
 - ✅ Dependency alerts from OSV, in a side tool
-- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here), most of n8n's editor (adding anywhere, the menu and keys, undo, data mapping, and routers with and and or), trying things (one step on its own, pinned data, and carrying a failed run on from where it stopped), n8n's built-in steps for data, from Filter and Sort to Merge and Compare Datasets, and flows turned on with a webhook, a schedule, or something happening in the room (files changing, a commit, someone let in), run with nobody in the room, an error flow when one fails, and flows calling each other. Next: triggers, connections, the internet, and the rest of n8n's features
+- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here), most of n8n's editor (adding anywhere, the menu and keys, undo, data mapping, and routers with and and or), trying things (one step on its own, pinned data, and carrying a failed run on from where it stopped), n8n's built-in steps for data, from Filter and Sort to Merge and Compare Datasets, and flows turned on with a webhook, a schedule, or something happening in the room (files changing, a commit, someone let in), run with nobody in the room, an error flow when one fails, flows calling each other, and runs that wait (an hour, or an approval) and carry on. Next: triggers, connections, the internet, and the rest of n8n's features
 - ⬜ Pipelines, Jenkins-style; public API and `cc` CLI; MCP server; `devcontainer.json`
 
 ## Step 10 · Hardening and launch 🟡 ← now

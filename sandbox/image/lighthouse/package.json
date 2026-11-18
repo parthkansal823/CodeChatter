@@ -1,0 +1,8 @@
+{
+  "name": "codechatter-lighthouse",
+  "private": true,
+  "description": "Google's Lighthouse, run in a room's sandbox against its dev server (sandbox/image/lighthouse.py).",
+  "dependencies": {
+    "lighthouse": "13.6.0"
+  }
+}

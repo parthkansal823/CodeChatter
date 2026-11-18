@@ -53,13 +53,13 @@ test("typing {{ offers what the steps before give, narrowed as it's typed", () =
   assert.equal(all.start, 3);
   assert.equal(all.query, "");
   assert.deepEqual(all.items.slice(0, 3).map((item) => item.expression), ["{{trigger.output.body}}", "{{trigger.output.body.pr}}", "{{trigger.output.body.title}}"]);
-  assert.ok(all.items.some((item) => item.expression === "{{fetch.output.body.items[0].id}}" && item.sample === '"a1"'));
+  assert.ok(all.items.some((item) => item.expression === "{{fetch.output.body.items[0].id}}" && item.sample === "a1"));
   const narrowed = suggestionsAt("PR {{ fetch.out", 15, bases, data)!;
   assert.equal(narrowed.query, "fetch.out");
   assert.ok(narrowed.items.length > 0 && narrowed.items.every((item) => item.path.toLowerCase().includes("fetch.out")));
   // Inside the name, not just at its start, comes after.
   const inside = suggestionsAt("{{id", 4, bases, data)!;
-  assert.equal(inside.items[0].path, "fetch.output.body.items[0].id");
+  assert.equal(inside.items[0]?.path, "fetch.output.body.items[0].id");
 });
 
 test("nothing's offered outside {{ }}, and a closing }} after the cursor is replaced", () => {
@@ -69,5 +69,5 @@ test("nothing's offered outside {{ }}, and a closing }} after the cursor is repl
   assert.deepEqual({ start: closing.start, end: closing.end }, { start: 2, end: 7 });
   // Without a run's data, the steps themselves.
   assert.deepEqual(closing.items.map((item) => item.expression), ["{{a.output}}"]);
-  assert.equal(closing.items[0].type, null);
+  assert.equal(closing.items[0]?.type, null);
 });

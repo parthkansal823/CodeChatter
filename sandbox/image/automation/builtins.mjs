@@ -1,9 +1,37 @@
 // CodeChatter's own built-in steps for automations, as n8n has for working on data: Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates,
-// Split Out, Rename Keys, Merge, Compare Datasets, Stop and Error, and Call a flow. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
+// Split Out, Rename Keys, Merge, Compare Datasets, Stop and Error, Call a flow and Approval links. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
 // file: host.mjs writes it as a module that calls run() here, and Activepieces' engine has already worked out its inputs' expressions. Each works on a list of
 // items, as n8n's do; a single object counts as a list of one. The Automations tool's forms for them are in apps/web/components/room/tools/automations/builtins.ts.
 
 import { request as httpRequest } from "node:http";
+
+/**
+ * Asks the worker running this flow (host.mjs), on its engine's own loopback port. node:http, not fetch: fetch gives up on an answer after 300 seconds, and a
+ * flow called may take longer, within its caller's time.
+ */
+async function askWorker(path, ask) {
+  const port = process.env.AP_SANDBOX_WS_PORT;
+  if (!port) throw new Error("This step only works in a run.");
+  const body = JSON.stringify(ask);
+  const { status, text } = await new Promise((resolve, reject) => {
+    const request = httpRequest({ host: "127.0.0.1", port: Number(port), path, method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) } }, (response) => {
+      let got = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => (got += chunk));
+      response.on("end", () => resolve({ status: response.statusCode ?? 500, text: got }));
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+  let answer = {};
+  try {
+    answer = JSON.parse(text);
+  } catch {
+    // Not JSON: said below.
+  }
+  if (status >= 400) throw new Error(answer.error ?? "The worker couldn't do it.");
+  return answer;
+}
 
 /** Reads `a.b[0].c` from an item. An empty path is the item itself. */
 export function read(item, path) {
@@ -326,8 +354,7 @@ export const BUILTINS = {
    * output comes back; or, not waiting, it's queued and its run's id comes back. The worker running this flow does it (host.mjs, on the engine's own port).
    */
   async call_flow(inputs) {
-    const port = process.env.AP_SANDBOX_WS_PORT;
-    if (!port) throw new Error("Call a flow only works in a run.");
+    if (!process.env.AP_SANDBOX_WS_PORT) throw new Error("Call a flow only works in a run.");
     let data = inputs.data ?? {};
     if (typeof data === "string") {
       try {
@@ -336,26 +363,25 @@ export const BUILTINS = {
         throw new Error("What to send isn't valid JSON.");
       }
     }
-    // node:http, not fetch: fetch gives up on an answer after 300 seconds, and a flow called may take longer, within its caller's time.
-    const body = JSON.stringify({ flowId: String(inputs.flow ?? ""), data, wait: inputs.wait !== false && inputs.wait !== "false" });
-    const { status, text } = await new Promise((resolve, reject) => {
-      const request = httpRequest({ host: "127.0.0.1", port: Number(port), path: "/v1/codechatter/call-flow", method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) } }, (response) => {
-        let got = "";
-        response.setEncoding("utf8");
-        response.on("data", (chunk) => (got += chunk));
-        response.on("end", () => resolve({ status: response.statusCode ?? 500, text: got }));
-      });
-      request.on("error", reject);
-      request.end(body);
-    });
-    let answer = {};
-    try {
-      answer = JSON.parse(text);
-    } catch {
-      // Not JSON: said below.
-    }
-    if (status >= 400) throw new Error(answer.error ?? "The flow couldn't be called.");
+    const answer = await askWorker("/v1/codechatter/call-flow", { flowId: String(inputs.flow ?? ""), data, wait: inputs.wait !== false && inputs.wait !== "false" });
     return answer.queued ? { runId: answer.runId, queued: true } : answer.output;
+  },
+
+  /**
+   * Approval links: a link for each choice ("approve, reject"), to send to whoever decides, before the run waits for one to be clicked with Respond and Wait
+   * for Next Webhook (the webhook piece), which then gives the choice as its queryParams.action. Made before the wait, as the wait's own address only exists
+   * once the run has paused.
+   */
+  async approval_links(inputs) {
+    const choices = String(inputs.choices ?? "approve, reject")
+      .split(",")
+      .map((each) => each.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    if (!choices.length) throw new Error("Give at least one choice, such as approve.");
+    const { url } = await askWorker("/v1/codechatter/approval-links", {});
+    const links = Object.fromEntries(choices.map((choice) => [choice, `${url}?action=${encodeURIComponent(choice)}`]));
+    return { ...links, links, url };
   },
 
   /** Stop and Error: stops the run, with this message, so an error flow or a person sees why. */

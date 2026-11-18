@@ -1,4 +1,5 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
+import type { LighthouseInput } from "@codechatter/contracts";
 import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, FlowInput, LatexInput, AutomationInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
   RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, Optional, ServiceUnavailableException } from "@nestjs/common";
@@ -261,6 +262,14 @@ export class RunnerClient {
     if (input.op === "run" || input.op === "resume") void this.redis?.zadd(RECENT_AUTOMATION_ROOMS, Date.now(), roomId).catch(() => {});
     const response = await this.call(`/rooms/${roomId}/automations`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
     if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't reach the automation.");
+    if (!response.ok) throw new RunnerUnavailableError();
+    return response.json();
+  }
+
+  /** Lighthouse on one of the room's servers (apps/runner/src/lighthouse.ts). */
+  async lighthouse(roomId: string, input: LighthouseInput, user: RunnerUser): Promise<unknown> {
+    const response = await this.call(`/rooms/${roomId}/lighthouse`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "Lighthouse couldn't run.");
     if (!response.ok) throw new RunnerUnavailableError();
     return response.json();
   }

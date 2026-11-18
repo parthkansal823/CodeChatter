@@ -1,5 +1,5 @@
 import type { AuthSession } from "@codechatter/auth";
-import { can, DataSummaryInput, EvalInput, FlowInput, AutomationInput, INSTALLS_MINUTES, LatexInput, LakehouseInput, McpInput, RoomCode, SandboxImageInput, type DataSummary, type DevServerStatus, type McpOutput, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
+import { can, DataSummaryInput, EvalInput, FlowInput, AutomationInput, INSTALLS_MINUTES, LatexInput, LakehouseInput, LighthouseInput, McpInput, RoomCode, SandboxImageInput, type DataSummary, type DevServerStatus, type McpOutput, type RoomAnalysis, type RoomCheck, type SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, HttpCode, Inject, Param, Post, Put, Req, Res, ServiceUnavailableException } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { z } from "zod";
@@ -13,7 +13,8 @@ import { createPreviewTicket, type PreviewHosts } from "../preview/preview-proxy
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js";
 
-const PreviewInput = z.object({ port: z.number().int().min(1).max(65535) });
+/** `path` to open at, and `frame` for the room's own browser (a cookie that works in a frame, and the bridge in its pages). */
+const PreviewInput = z.object({ port: z.number().int().min(1).max(65535), path: z.string().max(2000).startsWith("/").optional(), frame: z.boolean().optional() });
 const FormatInput = z.object({
   path: z.string().min(1).max(1024),
   language: z.enum(["python", "c", "cpp", "shell", "go", "rust", "java", "prettier"]),
@@ -183,6 +184,21 @@ export class SandboxController {
     }
   }
 
+  /** Lighthouse on one of the room's servers, from the room's browser: it runs a browser in the sandbox, so it needs Run rights. */
+  @Post("lighthouse")
+  @HttpCode(200)
+  async lighthouse(@CurrentSession() session: AuthSession, @Param("roomId") roomId: string, @Body(new ZodPipe(LighthouseInput)) input: LighthouseInput): Promise<unknown> {
+    const code = this.room(roomId);
+    const { room } = await this.rooms.require(code, session.user.id, "code.run");
+    if (room.kind === "interview") throw new ForbiddenException("This isn't available in an interview.");
+    try {
+      return await this.runner.lighthouse(code, input, session.user);
+    } catch (error) {
+      if (error instanceof RunnerUnavailableError) throw new ServiceUnavailableException(error.message);
+      throw error;
+    }
+  }
+
   /** Automations (apps/runner/src/automations.ts): a run is the room's code in the sandbox, so it needs Run rights, and so does what it found, as a run's data can be anything. An interview isn't the place for it. */
   @Post("automations")
   @HttpCode(200)
@@ -302,7 +318,7 @@ export class SandboxController {
     const room = this.room(roomId);
     await this.rooms.require(room, session.user.id, "room.view");
     if (!this.hosts.enabled) throw new ServiceUnavailableException("Live preview needs PREVIEW_ORIGIN to be configured.");
-    return { url: createPreviewTicket({ env: this.env, hosts: this.hosts }, { roomId: room, port: input.port }, { id: session.user.id, name: session.user.name }) };
+    return { url: createPreviewTicket({ env: this.env, hosts: this.hosts }, { roomId: room, port: input.port }, { id: session.user.id, name: session.user.name }, { path: input.path, frame: input.frame }) };
   }
 
   private room(roomId: string): string {

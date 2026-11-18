@@ -7,12 +7,12 @@ import { api, ApiError } from "@/lib/api";
  * one-time link. The tab opens first, synchronously, so popup blockers allow
  * it; then it's pointed at the link.
  */
-export async function openPreview(roomId: string, port: number): Promise<void> {
+export async function openPreview(roomId: string, port: number, path?: string): Promise<void> {
   const tab = window.open("about:blank", "_blank");
   try {
     const { url } = await api<{ url: string }>(`/api/rooms/${roomId}/preview`, {
       method: "POST",
-      json: { port },
+      json: { port, ...(path && path.startsWith("/") && { path }) },
     });
     if (tab) {
       tab.opener = null;

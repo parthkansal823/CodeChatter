@@ -19,6 +19,7 @@ import { insertAt, previewOf } from "./expressions";
 import { addBranch, canPin, expressionsFor, isPinned, kindOf, pinStep, removeBranch, removeStep, setStepNote, toggleStep, unpinStep, updateStep, type Flow, type FlowStep, type Place } from "./model";
 import { RouterFields } from "./router-fields";
 import { CallFlowField } from "./error-flow-field";
+import { ExpressionInput } from "./expression-input";
 import { RoomEventSettings } from "./room-event-settings";
 import { ScheduleSettings } from "./schedule-settings";
 import { TriggerSettings } from "./trigger-settings";
@@ -40,7 +41,7 @@ function PreviewLine({ text, data }: { text: unknown; data: Record<string, unkno
 }
 
 /** One field. Any can take an expression like {{step_1.output.x}}, so text is always allowed, and what can't have a form here is typed as JSON. */
-function PieceFieldEditor({ name, spec, value, onChange, readOnly, onFocusField, data }: { name: string; spec: PieceField; value: unknown; onChange: (next: unknown) => void; readOnly: boolean; onFocusField: FocusField; data: Record<string, unknown> | null }) {
+function PieceFieldEditor({ name, spec, value, onChange, readOnly, onFocusField, data, bases }: { name: string; spec: PieceField; value: unknown; onChange: (next: unknown) => void; readOnly: boolean; onFocusField: FocusField; data: Record<string, unknown> | null; bases: string[] }) {
   const helpId = useId();
   const label = `${spec.label || name}${spec.required ? " (required)" : ""}`;
   if (spec.type === "MARKDOWN") return spec.description ? <p className="text-muted-foreground whitespace-pre-wrap">{spec.description}</p> : null;
@@ -92,11 +93,18 @@ function PieceFieldEditor({ name, spec, value, onChange, readOnly, onFocusField,
     <div className="grid gap-1">
       <label className="grid gap-1">
         {label}
-        {long ? (
-          <Textarea className="min-h-16 font-mono text-[11px] md:text-[11px]" spellCheck={false} aria-describedby={describedBy} readOnly={readOnly} value={shown(value)} onFocus={(event) => onFocusField(event.currentTarget, (text) => onChange(fromText(text)))} onChange={(event) => onChange(fromText(event.target.value))} />
-        ) : (
-          <Input className="h-7 font-mono text-xs" aria-describedby={describedBy} readOnly={readOnly} value={shown(value)} onFocus={(event) => onFocusField(event.currentTarget, (text) => onChange(text))} onChange={(event) => onChange(event.target.value)} />
-        )}
+        {/* Typing {{ offers what the steps before give. */}
+        <ExpressionInput
+          multiline={long}
+          className={long ? "min-h-16 font-mono text-[11px] md:text-[11px]" : "h-7 font-mono text-xs"}
+          describedBy={describedBy}
+          readOnly={readOnly}
+          value={shown(value)}
+          bases={bases}
+          data={data}
+          onFocus={(event) => onFocusField(event.currentTarget, (text) => onChange(long ? fromText(text) : text))}
+          onChange={(text) => onChange(long ? fromText(text) : text)}
+        />
       </label>
       <PreviewLine text={value} data={data} />
       {help}
@@ -173,7 +181,9 @@ export function StepPanel({
   const last = result?.results.at(-1);
   const handling = settings.errorHandlingOptions;
   const data = runSteps ? Object.fromEntries(Object.entries(runSteps).map(([name, each]) => [name, { output: each.output }])) : null;
-  const earlier = expressionsFor(flow, step.name)
+  // What the steps before this one give: offered as a field's {{ is typed.
+  const bases = expressionsFor(flow, step.name);
+  const earlier = bases
     .map((expression) => /^\{\{([A-Za-z0-9_]+)\./.exec(expression)?.[1])
     .filter((name, index, all): name is string => Boolean(name) && all.indexOf(name) === index);
   const focusField: FocusField = (element, write) => {
@@ -301,7 +311,7 @@ export function StepPanel({
             step.builtin === "call_flow" && name === "flow" ? (
               <CallFlowField key={name} value={input[name]} canEdit={canEdit} onChange={(value) => setInput(name, value)} />
             ) : (
-              <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} />
+              <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} bases={bases} />
             ),
           )}
         </section>
@@ -361,7 +371,7 @@ export function StepPanel({
       {pieceStep && !roomEvent && (
         <section aria-label="Its fields" className="grid gap-2">
           {Object.entries(pieceStep.fields).map(([name, spec]) => (
-            <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} />
+            <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} bases={bases} />
           ))}
         </section>
       )}

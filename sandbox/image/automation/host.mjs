@@ -122,6 +122,8 @@ async function runJob(job) {
   const writeLive = () => {
     if (!job.nested) writeJson(LIVE, live);
   };
+  // Approval links made in this run (builtins.mjs), for the wait after them: kept here, never in the run's details.
+  let reservedToken = null;
   writeLive();
   const connections = job.connections ?? {};
   let steps = {};
@@ -193,12 +195,19 @@ async function runJob(job) {
       }
       const type = asked.type === "DELAY" ? "DELAY" : "WEBHOOK";
       const resumeAt = type === "DELAY" && asked.resumeDateTime ? Date.parse(asked.resumeDateTime) : NaN;
-      const token = randomBytes(24).toString("base64url");
+      const token = type === "WEBHOOK" && reservedToken ? reservedToken : randomBytes(24).toString("base64url");
+      if (type === "WEBHOOK") reservedToken = null;
       const id = `wp_${randomBytes(8).toString("hex")}`;
       live.waitpoint = { id, type, step: String(asked.stepName ?? ""), resumeAt: Number.isFinite(resumeAt) ? resumeAt : null, token, ...(asked.responseToSend && { responseToSend: asked.responseToSend }) };
       writeLive();
       const resumeUrl = job.resumeBase ? `${job.resumeBase}/${job.id}/${token}` : `http://localhost/this-run-can-only-be-carried-on-from-the-room/${job.id}`;
       return send(200, { id, resumeUrl, type, status: "PENDING" });
+    }
+    // Approval links (builtins.mjs): the address the next wait for a call will have, made now so it can be sent first.
+    if (path === "/v1/codechatter/approval-links" && req.method === "POST") {
+      if (!job.resumeBase) return send(409, { error: "Approval links need the run to have been started through CodeChatter." });
+      reservedToken ??= randomBytes(24).toString("base64url");
+      return send(200, { url: `${job.resumeBase}/${job.id}/${reservedToken}` });
     }
     // Call a flow (builtins.mjs), from this run's own engine.
     if (path === "/v1/codechatter/call-flow" && req.method === "POST") {

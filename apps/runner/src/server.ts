@@ -16,6 +16,7 @@ import {
   FlowInput,
   LakehouseInput,
   LatexInput,
+  LighthouseInput,
   McpInput,
   QueryInput,
   RagRunnerInput,
@@ -54,6 +55,7 @@ import { askAutomations, AutomationError } from "./automations.js";
 import { askFlow, FlowError } from "./flow.js";
 import { askLakehouse, LakehouseError } from "./lakehouse.js";
 import { askLatex, LatexError } from "./latex.js";
+import { askLighthouse, LighthouseError } from "./lighthouse.js";
 import { callMcp } from "./mcp.js";
 import { RagError, searchCodebase } from "./rag.js";
 import { PREVIEW_PATH, proxyPreviewHttp, proxyPreviewUpgrade } from "./preview.js";
@@ -97,6 +99,7 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   POST /rooms/:id/lakehouse                LakehouseInput      a room's Delta tables and MLflow runs
  *   POST /rooms/:id/flow                     FlowInput           a room's dbt project: its graph, builds and data
  *   POST /rooms/:id/latex                    LatexInput          a .tex file built with TeX Live, its result and its PDF
+ *   POST /rooms/:id/lighthouse               LighthouseInput     Lighthouse on one of the room's servers: scores, what failed, its report
  *   POST /rooms/:id/automations              AutomationInput     a flow run by Activepieces' engine, its progress and its history
  *   POST /rooms/:id/data-summary             DataSummaryInput    DataSummary (DuckDB's numbers for a table)
  *   POST /rooms/:id/mcp                      McpInput            McpOutput (the MCP Inspector in the sandbox)
@@ -206,6 +209,8 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     if (automations && req.method === "POST") return handleAutomations(req, res, automations[1]!);
     const latex = /^\/rooms\/([A-Z0-9]{6})\/latex$/.exec(url.pathname);
     if (latex && req.method === "POST") return handleLatex(req, res, latex[1]!);
+    const lighthouse = /^\/rooms\/([A-Z0-9]{6})\/lighthouse$/.exec(url.pathname);
+    if (lighthouse && req.method === "POST") return handleLighthouse(req, res, lighthouse[1]!);
     const dataSummary = /^\/rooms\/([A-Z0-9]{6})\/data-summary$/.exec(url.pathname);
     if (dataSummary && req.method === "POST") return handleDataSummary(req, res, dataSummary[1]!);
     const rag = /^\/rooms\/([A-Z0-9]{6})\/rag$/.exec(url.pathname);
@@ -584,6 +589,23 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     } catch (error) {
       if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
       if (error instanceof AutomationError) return json(res, 422, { error: error.message });
+      throw error;
+    }
+  }
+
+  /** Lighthouse on one of the room's servers (lighthouse.ts): it runs in the sandbox, so it wakes the room and keeps it awake while it runs. */
+  async function handleLighthouse(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
+    if (!authorize(req, roomId)) return json(res, 401, { error: "Not allowed." });
+    const input = LighthouseInput.safeParse(await readJson(req, 64 * 1024));
+    if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a request." });
+    try {
+      const session = rooms.get(roomId);
+      session.touch();
+      await session.ready();
+      return json(res, 200, await askLighthouse(session.sandbox, input.data));
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return json(res, 409, { error: error.message });
+      if (error instanceof LighthouseError) return json(res, 422, { error: error.message });
       throw error;
     }
   }

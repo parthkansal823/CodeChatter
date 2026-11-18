@@ -199,6 +199,24 @@ try {
   await slug.getByRole("region", { name: "What came out" }).getByText('"901"').waitFor({ timeout: 10_000 });
   check("theEngineReadsTheMappedData", true);
 
+  // ---- Typing {{ offers what the steps before give, narrowed as it's typed ----
+  await slugText.fill("");
+  await slugText.pressSequentially("Lines: {{meas", { delay: 30 });
+  const offered = slug.getByRole("listbox", { name: "What it can be" });
+  check("typingBracesOffersExpressions", await ok(offered.waitFor({ timeout: 5000 })) && (await offered.getByRole("option", { name: /^measure\.output\.lines/ }).count()) === 1, await offered.innerText().catch(() => "no list"));
+  check("narrowedByWhatsTyped", (await offered.getByRole("option").allInnerTexts()).every((text) => text.includes("meas")));
+  await slugText.press("ArrowDown");
+  await slugText.press("ArrowUp");
+  const chosen = await offered.getByRole("option", { selected: true }).innerText();
+  await slugText.press("Enter");
+  check("enterPutsItIn", (await slugText.inputValue()) === `Lines: {{${chosen.split(/\s/)[0]}}}` && (await offered.count()) === 0, await slugText.inputValue());
+  await slugText.pressSequentially(" {{", { delay: 30 });
+  await offered.waitFor({ timeout: 5000 });
+  await slugText.press("Escape");
+  check("escapeClosesTheList", (await offered.count()) === 0 && (await slug.count()) === 1);
+  await slugText.fill("{{measure.output.lines}}");
+  await sleep(400);
+
   // ---- Trying things: one step on its own, and pinning what it gave ----
   const runsList = details.getByRole("list", { name: "Runs of this flow" });
   await select("Measure it");

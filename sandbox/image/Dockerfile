@@ -211,6 +211,13 @@ RUN set -eu; \
     node prepare.mjs; \
     rm prepare.mjs
 
+# Lighthouse (apps/runner/src/lighthouse.ts), for the room's browser: Google's own, from a lockfile so that all its packages are checked against
+# their hashes, with no install scripts. It runs the image's Chromium (below) against a server in the sandbox.
+FROM node:24-slim AS lighthouse
+COPY image/lighthouse/package.json image/lighthouse/package-lock.json /out/lib/codechatter/lighthouse/
+COPY image/lighthouse.py /out/lib/codechatter/lighthouse.py
+RUN set -eu;     cd /out/lib/codechatter/lighthouse;     npm ci --omit=dev --ignore-scripts --no-audit --no-fund;     rm -rf /root/.npm;     node node_modules/lighthouse/cli/index.js --version
+
 # The lakehouse (apps/runner/src/lakehouse.ts), for the full image, as it needs Java: Spark, Delta Lake and MLflow, pinned by
 # hash, in a folder of their own that Python looks in last, so they don't change what the room's Python imports. Delta Lake's
 # jars go in with Spark's, checked against the SHA-256 worked out when they were pinned (and Maven Central's SHA-1 then), so
@@ -238,6 +245,8 @@ COPY image/lakehouse_info.py /out/lib/codechatter/lakehouse_info.py
 FROM core AS base
 # clangd, the C and C++ language server (apps/runner/src/lsp.ts); its own layer.
 RUN apt-get update  && apt-get install -y --no-install-recommends clangd  && rm -rf /var/lib/apt/lists/*
+# Chromium, for Lighthouse in the room's browser; its own layer.
+RUN apt-get update  && apt-get install -y --no-install-recommends chromium fonts-liberation  && rm -rf /var/lib/apt/lists/*  && chromium --version
 COPY --from=formatters /out/ /usr/local/bin/
 COPY --from=lsp /out/ /usr/local/
 COPY --from=jsdebug /out/js-debug /usr/local/lib/js-debug
@@ -250,6 +259,7 @@ COPY --from=flow /out/ /usr/local/
 COPY --from=automl /out/ /usr/local/
 COPY --from=automl /pth/ /usr/lib/python3/dist-packages/
 COPY --from=automation /out/ /usr/local/
+COPY --from=lighthouse /out/ /usr/local/
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -314,6 +324,8 @@ RUN set -eu; apt-get update  && apt-get install -y --no-install-recommends curl 
 # Toolchains live under /usr, where the jail lets programs run.
 FROM core AS full
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked     rm -f /etc/apt/apt.conf.d/docker-clean  && apt-get update  && apt-get install -y --no-install-recommends       golang-go rustc cargo ruby php-cli perl lua5.4 r-base-core       gfortran nasm fp-compiler fp-units-rtl gnucobol3 swi-prolog-nox sqlite3       ocaml-nox ghc elixir erlang-nox racket clojure       mono-mcs mono-runtime gdc gnat groovy crystal       curl unzip
+# Chromium, for Lighthouse in the room's browser; its own layer, so the languages' layer above stays as it is.
+RUN apt-get update  && apt-get install -y --no-install-recommends chromium fonts-liberation  && rm -rf /var/lib/apt/lists/*  && chromium --version
 COPY --from=kotlin /out/kotlinc /usr/local/lib/kotlinc
 COPY --from=k8s /out/k8s /usr/local/lib/k8s
 RUN ln -s ../lib/kotlinc/bin/kotlinc /usr/local/bin/kotlinc  && ln -s ../lib/k8s/kubectl ../lib/k8s/helm ../lib/k8s/kwokctl /usr/local/bin/
@@ -349,6 +361,7 @@ COPY --from=flow /out/ /usr/local/
 COPY --from=automl /out/ /usr/local/
 COPY --from=automl /pth/ /usr/lib/python3/dist-packages/
 COPY --from=automation /out/ /usr/local/
+COPY --from=lighthouse /out/ /usr/local/
 COPY --from=lakehouse /out/ /usr/local/
 RUN echo /usr/local/lib/codechatter/lakehouse > /usr/lib/python3/dist-packages/codechatter-lakehouse.pth
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail

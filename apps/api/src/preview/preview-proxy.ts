@@ -3,14 +3,16 @@ import { RoomCode } from "@codechatter/contracts";
 import { Logger } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { createHash } from "node:crypto";
-import { request, type IncomingMessage, type Server } from "node:http";
+import { request, type IncomingHttpHeaders, type IncomingMessage, type Server } from "node:http";
 import type { Duplex } from "node:stream";
+import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
 import type { Redis } from "ioredis";
 
 import type { Env } from "../config/env.js";
 import type { RoomsService } from "../rooms/rooms.service.js";
 import type { LiveSockets } from "../realtime/live-sockets.js";
 import type { RunnerClient } from "../runner/runner.client.js";
+import { previewBridge } from "./preview-bridge.js";
 
 /**
  * Live preview of dev servers running in a room's sandbox, on their own
@@ -23,7 +25,59 @@ import type { RunnerClient } from "../runner/runner.client.js";
  *   3. That becomes a host-only cookie for this room and port only.
  *   4. Every request is checked (cookie + current room access) and forwarded
  *      to the runner, which tunnels it into the sandbox.
+ *
+ * The room's own browser shows the same pages in a frame (web components/room/browser). Its link asks for a cookie that works there (SameSite=None,
+ * partitioned to the room's site), its pages may be framed by the app and nothing else, and each gets the bridge script (preview-bridge.ts), which tells
+ * the room where it is, its console, its requests, and what was clicked in "click to code".
  */
+const BRIDGE = "/__cc/bridge.js";
+/** Pages bigger than this are passed on as they are, without the bridge. */
+const MOST_PAGE_BYTES = 10 * 1024 * 1024;
+
+/** Where to go after the link, if it's a path on this server. */
+function safePath(to: string | null): string {
+  return to && to.startsWith("/") && !to.startsWith("//") && !to.includes("\\") && to.length <= 2000 ? to : "/";
+}
+
+/** A page with the bridge in its head, so it runs before the page's own scripts. */
+export function withBridge(html: string): string {
+  const tag = `<script src="${BRIDGE}"></script>`;
+  const head = /<head(\s[^>]*)?>/i.exec(html);
+  if (head) return html.slice(0, head.index + head[0].length) + tag + html.slice(head.index + head[0].length);
+  const top = /<html(\s[^>]*)?>/i.exec(html);
+  if (top) return html.slice(0, top.index + top[0].length) + tag + html.slice(top.index + top[0].length);
+  return tag + html;
+}
+
+/** A framed page's headers: the room's site may frame it, and nothing else; its own frame rules would stop the room showing it. */
+export function framedHeaders(headers: IncomingHttpHeaders, appOrigin: string): IncomingHttpHeaders {
+  const out: IncomingHttpHeaders = { ...headers };
+  delete out["x-frame-options"];
+  for (const name of ["content-security-policy", "content-security-policy-report-only"] as const) {
+    const policy = out[name];
+    if (typeof policy !== "string") continue;
+    const kept = policy
+      .split(";")
+      .map((part) => part.trim())
+      .filter((part) => part && !/^frame-ancestors\b/i.test(part));
+    out[name] = kept.length ? kept.join("; ") : undefined;
+    if (!kept.length) delete out[name];
+  }
+  out["content-security-policy"] = [out["content-security-policy"], `frame-ancestors ${appOrigin}`].filter(Boolean).join("; ");
+  return out;
+}
+
+function decoded(body: Buffer, encoding: string | undefined): Buffer | null {
+  try {
+    if (!encoding || encoding === "identity") return body;
+    if (encoding === "gzip" || encoding === "x-gzip") return gunzipSync(body);
+    if (encoding === "br") return brotliDecompressSync(body);
+    if (encoding === "deflate") return inflateSync(body);
+    return null;
+  } catch {
+    return null;
+  }
+}
 const COOKIE = "cc_preview";
 const HOST = /^p(\d{2,5})-([a-z0-9]{6})\.(.+)$/;
 
@@ -63,9 +117,10 @@ export class PreviewHosts {
 
 type Deps = { env: Env; hosts: PreviewHosts; rooms: RoomsService; runner: RunnerClient; redis: Redis; live: LiveSockets };
 
-export function createPreviewTicket(deps: Pick<Deps, "env" | "hosts">, target: PreviewTarget, user: { id: string; name: string }): string {
+export function createPreviewTicket(deps: Pick<Deps, "env" | "hosts">, target: PreviewTarget, user: { id: string; name: string }, options: { path?: string; frame?: boolean } = {}): string {
   const ticket = signServiceToken(deps.env.SERVICE_SECRET, { aud: "preview", sub: `${target.roomId}:${target.port}`, uid: user.id, name: user.name }, 60);
-  return deps.hosts.url(target, `/__cc/auth?t=${encodeURIComponent(ticket)}`);
+  const extra = `${options.path && options.path !== "/" ? `&to=${encodeURIComponent(safePath(options.path))}` : ""}${options.frame ? "&frame=1" : ""}`;
+  return deps.hosts.url(target, `/__cc/auth?t=${encodeURIComponent(ticket)}${extra}`);
 }
 
 function readCookie(header: string | undefined, name: string): string | undefined {
@@ -133,6 +188,11 @@ export function previewProxy(deps: Deps) {
     if (!target) return next();
     void (async () => {
       const url = new URL(req.url, "http://preview");
+      const appOrigin = new URL(deps.env.APP_URL).origin;
+      if (url.pathname === BRIDGE) {
+        res.status(200).set({ "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).send(previewBridge(appOrigin));
+        return;
+      }
       if (url.pathname === "/__cc/auth") {
         const ticket = url.searchParams.get("t") ?? "";
         const claims = verifyServiceToken(deps.env.SERVICE_SECRET, ticket, "preview");
@@ -144,8 +204,11 @@ export function previewProxy(deps: Deps) {
           return;
         }
         const cookie = signServiceToken(deps.env.SERVICE_SECRET, { aud: "preview", sub: claims.sub, uid: claims.uid, name: claims.name }, 12 * 3600);
-        res.cookie(COOKIE, cookie, { httpOnly: true, sameSite: "lax", secure: deps.hosts.secure, path: "/", maxAge: 12 * 3600 * 1000 });
-        res.redirect(302, "/");
+        // In the room's browser the page is in a frame on another site: its cookie must be sent there (SameSite=None, which needs Secure: browsers
+        // allow that on http://*.localhost too), kept to frames on the room's site (partitioned).
+        const framed = url.searchParams.get("frame") === "1";
+        res.cookie(COOKIE, cookie, framed ? { httpOnly: true, sameSite: "none", secure: true, partitioned: true, path: "/", maxAge: 12 * 3600 * 1000 } : { httpOnly: true, sameSite: "lax", secure: deps.hosts.secure, path: "/", maxAge: 12 * 3600 * 1000 });
+        res.redirect(302, safePath(url.searchParams.get("to")));
         return;
       }
       const user = await viewer(req, target);
@@ -153,17 +216,58 @@ export function previewProxy(deps: Deps) {
         res.status(403).type("text/plain").send("Open this preview from the room (you need access to the room).");
         return;
       }
+      // A page shown in the room's browser: asked for uncompressed, so the bridge can go in it.
+      const framed = req.headers["sec-fetch-dest"] === "iframe" && req.method === "GET";
+      const headers = forwardHeaders(req, target, user);
+      if (framed) headers["accept-encoding"] = "identity";
       const upstream = request({
         protocol: runnerUrl.protocol,
         hostname: runnerUrl.hostname,
         port: runnerUrl.port,
         method: req.method,
         path: runnerPath(target, req.url),
-        headers: forwardHeaders(req, target, user),
+        headers,
       });
       upstream.on("response", (answer) => {
-        res.writeHead(answer.statusCode ?? 502, answer.headers);
-        answer.pipe(res);
+        const html = /^text\/html\b/i.test(String(answer.headers["content-type"] ?? ""));
+        if (!framed || !html) {
+          res.writeHead(answer.statusCode ?? 502, framed ? framedHeaders(answer.headers, appOrigin) : answer.headers);
+          answer.pipe(res);
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        let passed = false;
+        answer.on("data", (chunk: Buffer) => {
+          if (passed) return;
+          size += chunk.length;
+          chunks.push(chunk);
+          // Too big to hold: what's come so far, then the rest, as it is.
+          if (size > MOST_PAGE_BYTES) {
+            passed = true;
+            res.writeHead(answer.statusCode ?? 502, framedHeaders(answer.headers, appOrigin));
+            res.write(Buffer.concat(chunks));
+            answer.pipe(res);
+          }
+        });
+        answer.on("end", () => {
+          if (passed) return;
+          const raw = Buffer.concat(chunks);
+          const body = decoded(raw, typeof answer.headers["content-encoding"] === "string" ? answer.headers["content-encoding"].toLowerCase() : undefined);
+          const out = framedHeaders(answer.headers, appOrigin);
+          if (!body) {
+            res.writeHead(answer.statusCode ?? 502, out);
+            res.end(raw);
+            return;
+          }
+          const page = Buffer.from(withBridge(body.toString("utf8")), "utf8");
+          delete out["content-encoding"];
+          delete out["transfer-encoding"];
+          out["content-length"] = String(page.length);
+          res.writeHead(answer.statusCode ?? 502, out);
+          res.end(page);
+        });
+        answer.on("error", () => res.destroy());
       });
       upstream.on("error", (error) => {
         logger.warn(`preview ${target.roomId}:${target.port}: ${error.message}`);

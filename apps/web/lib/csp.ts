@@ -13,7 +13,15 @@ export type CspInput = {
   drawioOrigin?: string | null;
   /** LIVEKIT_URL, when calls go somewhere other than this site's /livekit. */
   livekitUrl?: string | null;
+  /** PREVIEW_ORIGIN: the room's browser shows dev servers in a frame, each on its own host under it (p3000-room.preview…). */
+  previewOrigin?: string | null;
 };
+
+/** Every room's preview host under PREVIEW_ORIGIN, and nothing else. */
+function previewFrames(url: string | null | undefined): string[] {
+  const parsed = originOf(url);
+  return parsed ? [`${parsed.protocol}//*.${parsed.host}`] : [];
+}
 
 const originOf = (url: string | null | undefined): URL | null => {
   try {
@@ -31,7 +39,7 @@ function livekitSources(url: string | null | undefined): string[] {
   return [`${secure ? "wss" : "ws"}://${parsed.host}`, `${secure ? "https" : "http"}://${parsed.host}`];
 }
 
-export function appCsp({ nonce, dev, drawioOrigin, livekitUrl }: CspInput): string {
+export function appCsp({ nonce, dev, drawioOrigin, livekitUrl, previewOrigin }: CspInput): string {
   const drawio = originOf(drawioOrigin)?.origin;
   const directives: Array<[string, ...string[]]> = [
     ["default-src", "'self'"],
@@ -46,7 +54,7 @@ export function appCsp({ nonce, dev, drawioOrigin, livekitUrl }: CspInput): stri
     ["connect-src", "'self'", "blob:", "data:", ...livekitSources(livekitUrl)],
     ["worker-src", "'self'", "blob:"],
     // blob: for the PDF viewer. A blob: document inherits this policy, so it can't run scripts either.
-    ["frame-src", "'self'", "blob:", ...(drawio ? [drawio] : [])],
+    ["frame-src", "'self'", "blob:", ...(drawio ? [drawio] : []), ...previewFrames(previewOrigin)],
     ["frame-ancestors", "'self'"],
     ["object-src", "'none'"],
     ["base-uri", "'none'"],

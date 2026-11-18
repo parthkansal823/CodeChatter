@@ -11,6 +11,7 @@ export * from "./flow.js";
 export * from "./automations.js";
 export * from "./schedule.js";
 export * from "./room-events.js";
+export * from "./lighthouse.js";
 export * from "./latex.js";
 export * from "./analysis.js";
 export * from "./audit.js";

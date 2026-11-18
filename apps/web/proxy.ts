@@ -39,6 +39,8 @@ export async function proxy(request: NextRequest) {
     dev: process.env.NODE_ENV === "development",
     drawioOrigin: DRAWIO_URL,
     livekitUrl: process.env.LIVEKIT_URL,
+    // As the API has it (apps/api/src/config/env.ts): in development, preview.localhost; in production, only if it's set.
+    previewOrigin: process.env.PREVIEW_ORIGIN || (process.env.NODE_ENV === "production" ? null : "http://preview.localhost:8080"),
   });
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);

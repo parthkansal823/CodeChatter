@@ -153,6 +153,12 @@ export const BUILTINS: Record<string, Builtin> = {
     },
     defaults: { flow: "", data: {}, wait: true },
   },
+  approval_links: {
+    label: "Approval links",
+    description: "A link for each choice, to send to whoever decides, before Respond and Wait for Next Webhook waits for one to be clicked",
+    fields: { choices: text("Choices", "Comma-separated: each gets a link, as this step's output (approve, reject…). The wait after it gives the one clicked as queryParams.action.", true) },
+    defaults: { choices: "approve, reject" },
+  },
   stop_and_error: {
     label: "Stop and Error",
     description: "Stop the run here, saying why",

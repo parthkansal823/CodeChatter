@@ -40,6 +40,7 @@ const SUITES = [
     ["automation-events", "automation-events"],
     ["automation-error-flow", "automation-error-flow"],
     ["automation-subflows", "automation-subflows"],
+    ["automation-wait", "automation-wait"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -59,6 +60,7 @@ const SUITES = [
     ["api-notifications", "notifications"],
     ["api-source-control", "source-control"],
     ["api-interview-ai-review", "interview-ai-review"],
+    ["api-admin", "admin"],
     ["api-prompts", "prompts"],
     ["api-ai-gateway", "gateway"],
     ["api-ai-traces", "traces"],
@@ -89,6 +91,7 @@ const SUITES = [
     "task-board",
     "preferences",
     "two-factor-replay",
+    "admin",
     "automations",
     "a11y",
     "interview-recording",

@@ -158,3 +158,34 @@ test("Call a flow: asks the worker on its own port, and gives back what it answe
     server.close();
   }
 });
+
+test("Approval links: one for each choice, at the address the wait after them will have", async () => {
+  const { createServer } = await import("node:http");
+  let asked = 0;
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      asked += 1;
+      res.setHeader("content-type", "application/json");
+      if (req.url !== "/v1/codechatter/approval-links") return res.writeHead(404).end("{}");
+      res.end(JSON.stringify({ url: "https://code.example/api/hooks/automations/resume/ROOM01/20261118-100000-abcd1234/TOKENTOKENTOKENTOKEN" }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const before = process.env.AP_SANDBOX_WS_PORT;
+  process.env.AP_SANDBOX_WS_PORT = String(server.address().port);
+  try {
+    const base = "https://code.example/api/hooks/automations/resume/ROOM01/20261118-100000-abcd1234/TOKENTOKENTOKENTOKEN";
+    const links = await run("approval_links", {});
+    assert.deepEqual(links, { approve: `${base}?action=approve`, reject: `${base}?action=reject`, links: { approve: `${base}?action=approve`, reject: `${base}?action=reject` }, url: base });
+    const own = await run("approval_links", { choices: "ship it, wait a day" });
+    assert.deepEqual(Object.keys(own.links), ["ship it", "wait a day"]);
+    assert.equal(own.links["ship it"], `${base}?action=ship%20it`);
+    await assert.rejects(run("approval_links", { choices: " , " }), /at least one choice/);
+    assert.equal(asked, 2);
+  } finally {
+    if (before === undefined) delete process.env.AP_SANDBOX_WS_PORT;
+    else process.env.AP_SANDBOX_WS_PORT = before;
+    server.close();
+  }
+});

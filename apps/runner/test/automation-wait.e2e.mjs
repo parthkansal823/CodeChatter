@@ -80,12 +80,15 @@ try {
   const piece = (name, pieceName, actionName, input, next = null) => ({ name, type: "PIECE", displayName: name, valid: true, skip: false, settings: { pieceName, pieceVersion: pieces[pieceName].version, actionName, input, propertySettings: {}, errorHandlingOptions: handling }, nextAction: next });
   const code = (name, source, input = {}) => ({ name, type: "CODE", displayName: name, valid: true, skip: false, settings: { sourceCode: { code: source, packageJson: "{}" }, input, errorHandlingOptions: handling }, nextAction: null });
   const flow = (id, name, first) => ({ id, displayName: name, schemaVersion: "27", trigger: { name: "trigger", type: "PIECE_TRIGGER", displayName: "When called", valid: true, settings: { pieceName: "@activepieces/piece-webhook", pieceVersion: pieces["@activepieces/piece-webhook"].version, triggerName: "catch_webhook", input: { authType: "none", authFields: {} }, propertySettings: {} }, nextAction: first } });
-  const paths = { delay: `${FOLDER}/delay.flow.json`, long: `${FOLDER}/long.flow.json`, approval: `${FOLDER}/approval.flow.json` };
+  const paths = { delay: `${FOLDER}/delay.flow.json`, long: `${FOLDER}/long.flow.json`, approval: `${FOLDER}/approval.flow.json`, links: `${FOLDER}/links.flow.json` };
   // Waits 25 seconds (over the 10 a Delay keeps to itself), then says it's done, with what started it.
   createFileAtPath(doc, paths.delay, JSON.stringify(flow(`flow_delay_${stamp}`, "Waits a little", piece("pause", "@activepieces/piece-delay", "delayFor", { delayFor: 25, unit: "seconds" }, code("after", "export const code = async (inputs) => ({ done: true, order: inputs.order });", { order: "{{trigger.output.body.order}}" }))), null, 2));
   createFileAtPath(doc, paths.long, JSON.stringify(flow(`flow_long_${stamp}`, "Waits an hour", piece("pause", "@activepieces/piece-delay", "delayFor", { delayFor: 1, unit: "hours" }, code("after", "export const code = async () => ({ done: true });"))), null, 2));
   // Answers its caller, then waits for its next call (an approval's link), and says what was decided.
   createFileAtPath(doc, paths.approval, JSON.stringify(flow(`flow_approval_${stamp}`, "Asks for approval", piece("ask", "@activepieces/piece-webhook", "return_response_and_wait_for_next_webhook", { responseType: "json", fields: { status: 200, body: { asked: true } } }, code("decide", "export const code = async (inputs) => ({ decision: inputs.decision, by: inputs.by });", { decision: "{{ask.output.queryParams.action}}", by: "{{ask.output.queryParams.by}}" }))), null, 2));
+  // Approval links, sent (here, kept) before the run waits for one to be clicked.
+  const linksStep = { name: "links", type: "CODE", displayName: "Approval links", valid: true, skip: false, builtin: "approval_links", settings: { sourceCode: { code: "export const code = async () => null;", packageJson: "{}" }, input: { choices: "approve, reject" }, errorHandlingOptions: handling }, nextAction: null };
+  createFileAtPath(doc, paths.links, JSON.stringify(flow(`flow_links_${stamp}`, "Approval by link", { ...linksStep, nextAction: piece("ask", "@activepieces/piece-webhook", "return_response_and_wait_for_next_webhook", { responseType: "json", fields: { status: 200, body: { asked: true } } }, code("decide", "export const code = async (inputs) => ({ decision: inputs.decision });", { decision: "{{ask.output.queryParams.action}}" })) }), null, 2));
   await sleep(1500);
 
   // ---- A Delay pauses the run; the API's timer carries it on when its time comes ----
@@ -127,6 +130,20 @@ try {
   check("andTheRunFinishes", approvalDone?.status === "SUCCEEDED" && approvalDone.steps?.decide?.output?.decision === "approve", approvalDone?.status);
   const second = await fetch(`${local}&action=reject`, { signal: AbortSignal.timeout(30_000) });
   check("aSecondCallFindsNothing", second.status === 404, second.status);
+  // ---- Approval links: made before the wait, so they can be sent; clicking one in a browser carries the run on ----
+  const linksId = await start(paths.links);
+  const waiting = await settled(linksId);
+  const links = waiting?.steps?.links?.output;
+  check("approvalLinksAreMadeBeforeTheWait", waiting?.status === "PAUSED" && waiting.waitpoint?.type === "WEBHOOK" && typeof links?.approve === "string" && links.approve.includes(`/api/hooks/automations/resume/${ROOM}/${linksId}/`) && links.approve.endsWith("?action=approve") && links.reject.endsWith("?action=reject"), { status: waiting?.status, links });
+  const clickedAt = Date.now();
+  const clicked = await fetch(links.approve.replace(/^https?:\/\/[^/]+/, BASE), { headers: { accept: "text/html" }, signal: AbortSignal.timeout(30_000) });
+  const thanks = await clicked.text();
+  check("clickingOneInABrowserSaysThanks", clicked.status === 200 && /text\/html/.test(clicked.headers.get("content-type") ?? "") && /Thanks/.test(thanks) && /\(approve\)/.test(thanks), { status: clicked.status, thanks: thanks.slice(0, 200) });
+  const linksDone = await settled(linksId, clickedAt);
+  check("andTheRunCarriesOnWithTheChoice", linksDone?.status === "SUCCEEDED" && linksDone.steps?.decide?.output?.decision === "approve", linksDone?.status);
+  const late = await fetch(links.reject.replace(/^https?:\/\/[^/]+/, BASE), { headers: { accept: "text/html" }, signal: AbortSignal.timeout(30_000) });
+  check("theOtherLinkThenSaysNothingsWaiting", late.status === 404 && /Nothing is waiting here/.test(await late.text()), late.status);
+
   // What the step answers its caller with is kept with it.
   const hookAnswer = await automations({ op: "run-details", id: approvalId });
   check("theStepKeptWhatToAnswer", JSON.stringify(hookAnswer.body?.steps?.ask?.input?.fields?.body ?? null) === JSON.stringify({ asked: true }), hookAnswer.body?.steps?.ask?.input);

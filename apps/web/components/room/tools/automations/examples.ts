@@ -573,6 +573,36 @@ const DIGEST_EXAMPLES: Example[] = DIGEST_JOBS.flatMap((job) =>
   })),
 );
 
+/** Waiting: for an approval, or a time. They pause, so they're tried by hand, not run here to the end. */
+const WAITING: Example[] = [
+  {
+    id: "approve-before-deploy",
+    title: "Ask for approval before deploying",
+    about: "Sends Approve and Reject links to Slack, waits for one to be clicked, then deploys or says why not.",
+    category: OPS,
+    runsHere: false,
+    flow: () =>
+      chain(webhook("A release is ready"), [
+        data("links", "approval_links", "Approval links", { choices: "approve, reject" }),
+        DESTINATIONS[0]!.step("Release {{trigger.output.body.version}} is ready. Approve: {{links.output.approve}} Reject: {{links.output.reject}}"),
+        action("decision", "webhook", "return_response_and_wait_for_next_webhook", "Wait for the answer", { responseType: "json", fields: { status: 200, body: { waiting: "for approval" } } }, false),
+        branch("approved", "Approved?", "{{decision.output.queryParams.action}}", "TEXT_EXACTLY_MATCHES", "approve", action("deploy", "netlify", "start_deploy", "Deploy", { siteId: "", clearCache: false }), { ...DESTINATIONS[0]!.step("Release {{trigger.output.body.version}} wasn't approved, so it wasn't deployed."), name: "tell", displayName: "Say why not" }, "Approved", "Rejected"),
+      ]),
+  },
+  {
+    id: "follow-up-tomorrow",
+    title: "Follow up on a new issue a day later",
+    about: "Waits a day, as n8n's Wait does, then asks on the issue whether it's still a problem.",
+    category: ISSUES,
+    runsHere: false,
+    flow: () =>
+      chain(pieceTrigger("github", "trigger_issues", "An issue", { repository: "" }), [
+        action("wait", "delay", "delayFor", "Wait a day", { delayFor: 1, unit: "days" }, false),
+        action("nudge", "github", "createCommentOnAIssue", "Ask", { repository: "", issue_number: "{{trigger.output.issue.number}}", comment: "Is this still happening?" }),
+      ]),
+  },
+];
+
 const ONE_OFFS: Example[] = [
   { id: "page-on-outage", title: "Page someone when production is down", about: "Your monitoring calls this, and PagerDuty does the rest.", category: OPS, runsHere: false, flow: () => chain(webhook("An outage"), [action("page", "pagerduty", "create_incident", "Open an incident", { fromEmail: "", serviceId: "", title: "{{trigger.output.body.title}}", urgency: "high" })]) },
   { id: "deploy-on-release", title: "Deploy to Netlify on a release", about: "A release on GitHub starts a deploy.", category: OPS, runsHere: false, flow: () => chain(pieceTrigger("github", "new_release", "A release", { repository: "" }), [action("deploy", "netlify", "start_deploy", "Start a deploy", { siteId: "", clearCache: false })]) },
@@ -584,7 +614,7 @@ const ONE_OFFS: Example[] = [
   { id: "mail-release-notes", title: "Mail release notes as HTML", about: "Markdown to HTML with one piece, and mailed with another.", category: RELEASES, runsHere: false, flow: () => chain(webhook("A new release"), [action("html", "text-helper", "markdown_to_html", "To HTML", { markdown: "{{trigger.output.body.notes}}", flavor: "github", headerLevelStart: 1, tables: true, noHeaderId: true, simpleLineBreaks: false, openLinksInNewWindow: false }, false), action("mail", "smtp", "send-email", "Mail it", { from: "", to: [], subject: "Release notes", body_type: "html", body: "{{html.output}}" })]) },
 ];
 
-export const EXAMPLES: Example[] = [...RUNS_HERE, ...WITH_PIECES, ...WITH_BUILTINS, ...NOTIFICATIONS, ...TICKET_EXAMPLES, ...SYNCS, ...AI_EXAMPLES, ...DIGEST_EXAMPLES, ...ONE_OFFS];
+export const EXAMPLES: Example[] = [...RUNS_HERE, ...WITH_PIECES, ...WITH_BUILTINS, ...NOTIFICATIONS, ...TICKET_EXAMPLES, ...SYNCS, ...AI_EXAMPLES, ...DIGEST_EXAMPLES, ...WAITING, ...ONE_OFFS];
 export const EXAMPLE_CATEGORIES = [...new Set(EXAMPLES.map((example) => example.category))].sort();
 
 /** A flow ready for a room: each piece at the version this room's image has. */

@@ -9,6 +9,7 @@ import {
   Eye,
   FileCode2,
   Globe2,
+  Monitor,
   Image as ImageIcon,
   Bug,
   GitBranch,
@@ -102,6 +103,7 @@ import { StatusBar } from "@/components/room/status-bar";
 import { TaskPicker } from "@/components/room/task-picker";
 import { TabBar } from "@/components/room/tab-bar";
 import { AppsLauncher } from "@/components/room/apps-launcher";
+import { BrowserPane } from "@/components/room/browser/browser-pane";
 import { TitleBar } from "@/components/room/title-bar";
 import { AI_TOOL_ID, useOpenAiOnRequest } from "@/components/room/tools/ai/ai-requests";
 import { ROOM_TOOLS } from "@/components/room/tools/registry";
@@ -297,12 +299,12 @@ function Workspace() {
   // Live web preview, split beside the editor.
   const previewPanel = usePanelRef();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [paneShows, setPaneShows] = useState<"web" | "paper">("web");
+  const [paneShows, setPaneShows] = useState<"web" | "paper" | "browser">("web");
   const hasHtml = useMemo(
     () => [...files.values()].some((n) => n.kind === "file" && /\.html?$/i.test(n.name)),
     [files],
   );
-  const openPane = (shows: "web" | "paper") => {
+  const openPane = (shows: "web" | "paper" | "browser") => {
     setPaneShows(shows);
     if (previewPanel.current?.isCollapsed()) {
       previewPanel.current.expand();
@@ -310,7 +312,7 @@ function Workspace() {
     }
   };
   const openPreview = () => openPane("web");
-  const togglePane = (shows: "web" | "paper") => (previewOpen && paneShows === shows ? previewPanel.current?.collapse() : openPane(shows));
+  const togglePane = (shows: "web" | "paper" | "browser") => (previewOpen && paneShows === shows ? previewPanel.current?.collapse() : openPane(shows));
   const togglePreview = () => togglePane("web");
 
   // \cite completes from the room's .bib files.
@@ -589,6 +591,7 @@ function Workspace() {
           { id: "layout", label: researching ? "Switch to the code layout" : "Switch to the research layout", run: () => setLayout(researching ? "code" : "research") },
           { id: "paper-pdf", label: "Show the paper's PDF", run: () => openPane("paper") },
         ]),
+    { id: "browser", label: "Open the browser (a dev server's page, with its console and network)", run: () => openPane("browser") },
     { id: "chat", label: "Open chat", run: () => setRight("chat") },
     { id: "people", label: "See who's here", run: () => setRight("people") },
     ...sideTools.map((tool) => ({
@@ -813,6 +816,17 @@ function Workspace() {
                                   <Globe2 /> Preview
                                 </Button>
                               )}
+                              {room.kind !== "interview" && (
+                                <Button
+                                  size="xs"
+                                  variant={previewOpen && paneShows === "browser" ? "secondary" : "ghost"}
+                                  aria-pressed={previewOpen && paneShows === "browser"}
+                                  title="A dev server's page, with its console and network, and click to code"
+                                  onClick={() => togglePane("browser")}
+                                >
+                                  <Monitor /> Browser
+                                </Button>
+                              )}
                               {activeFile && (
                                 <Button
                                   size="icon-xs"
@@ -931,6 +945,14 @@ function Workspace() {
                     {previewOpen &&
                       (paneShows === "paper" ? (
                         <PaperPane activeFile={activeFile} onClose={() => previewPanel.current?.collapse()} />
+                      ) : paneShows === "browser" ? (
+                        <BrowserPane
+                          onClose={() => previewPanel.current?.collapse()}
+                          onOpenCode={(place) => {
+                            setMainToolId(null);
+                            openAt.current(place.path, { startLine: place.line, startColumn: place.column, endLine: place.line, endColumn: place.column });
+                          }}
+                        />
                       ) : (
                         <WebPreview
                           preferred={activeFile?.path ?? null}
