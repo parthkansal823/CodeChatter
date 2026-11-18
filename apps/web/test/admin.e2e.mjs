@@ -170,7 +170,7 @@ try {
   const roomRow = admin.page.getByRole("table", { name: "Instance rooms", exact: true }).getByRole("row").filter({ hasText: roomId });
   await roomRow.waitFor();
   verify("room search shows owner, organisation, visibility and sandbox status", (await roomRow.innerText()).includes(name) && (await roomRow.innerText()).includes("private") && /Running|Stopped|Couldn't tell/.test(await roomRow.innerText()));
-  verify("the page explains that admin does not grant file access", await admin.page.getByText("Being an instance admin does not grant access to a room or its files. Room links work only for its members.", { exact: true }).isVisible());
+  verify("the page explains that admin does not grant file access", await admin.page.getByText("Being an instance admin does not grant access to a room or its files. Normal room permissions still apply.", { exact: true }).isVisible());
   await shot("admin-rooms");
   const boundary = await admin.page.goto(`${BASE}/rooms/${roomId}`);
   verify("the admin cannot open a private room they do not belong to", boundary?.status() === 404);

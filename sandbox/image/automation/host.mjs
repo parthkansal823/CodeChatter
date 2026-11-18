@@ -118,7 +118,11 @@ async function runJob(job) {
   const mode = job.mode === "step" || job.mode === "retry" ? job.mode : "run";
   const { flow, pinned } = withPins(job.flow ?? { trigger: null }, mode === "step" ? job.step : null);
   const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, mode, step: mode === "step" ? job.step : null, retryOf: mode === "retry" ? job.retryOf : null, pinned, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
-  writeJson(LIVE, live);
+  // A flow called by another runs inside its run: the live view stays the caller's.
+  const writeLive = () => {
+    if (!job.nested) writeJson(LIVE, live);
+  };
+  writeLive();
   const connections = job.connections ?? {};
   let steps = {};
   let engine = null;
@@ -141,7 +145,7 @@ async function runJob(job) {
       try {
         steps = readStep(JSON.parse((raw[0] === 0x28 ? zstdDecompressSync(raw) : raw).toString()));
         live.steps = steps;
-        writeJson(LIVE, live);
+        writeLive();
       } catch {
         // Details that can't be read don't stop the run.
       }
@@ -154,7 +158,7 @@ async function runJob(job) {
         const report = JSON.parse(raw.toString());
         live.status = report.status ?? live.status;
         if (report.failedStep) live.failedStep = report.failedStep;
-        writeJson(LIVE, live);
+        writeLive();
       } catch {
         // The same.
       }
@@ -167,7 +171,7 @@ async function runJob(job) {
         if (step?.name) {
           steps = { ...steps, [step.name]: step.output };
           live.steps = steps;
-          writeJson(LIVE, live);
+          writeLive();
         }
       } catch {
         // Details that can't be read don't stop the run.
@@ -175,6 +179,17 @@ async function runJob(job) {
       return send(200);
     }
     if (path === "/v1/engine/step-progress" || path === "/v1/engine/flow-response") return send(200);
+    // Call a flow (builtins.mjs), from this run's own engine.
+    if (path === "/v1/codechatter/call-flow" && req.method === "POST") {
+      let call;
+      try {
+        call = JSON.parse(raw.toString());
+      } catch {
+        return send(400, { error: "That isn't a call." });
+      }
+      const answer = await callFlow(job, call, startedAt);
+      return send(answer.status, answer.body);
+    }
     if (path.startsWith("/v1/store-entries")) {
       const key = url.searchParams.get("key");
       if (req.method === "POST") {
@@ -213,7 +228,7 @@ async function runJob(job) {
     // A flow that failed, with an error flow, starts it: n8n's error workflow. Not for a step tried alone, nor an error flow's own failure, so it can't loop.
     if ((status === "FAILED" || status === "TIMEOUT") && mode !== "step" && job.trigger !== "error" && typeof job.flow?.errorFlow === "string") Object.assign(live, queueErrorFlow(job, live));
     writeJson(join(RUNS, `${job.id}.json`), { ...live, payload: job.payload ?? null });
-    writeJson(LIVE, live);
+    writeLive();
     rmSync(join(CODES, job.id), { recursive: true, force: true });
     for (const old of readdirSync(RUNS).sort().reverse().slice(MOST_RUNS)) rmSync(join(RUNS, old), { force: true });
     engine?.kill("SIGKILL");
@@ -240,10 +255,12 @@ async function runJob(job) {
     };
     beat = setInterval(() => {
       live.beat = NOW();
-      writeJson(LIVE, live);
+      writeLive();
     }, BEAT_MS);
+    // Stop stops every run going on, a called flow's and its caller's.
     stopTimer = setInterval(() => {
-      if (existsSync(STOP)) {
+      if (stopping || existsSync(STOP)) {
+        stopping = true;
         rmSync(STOP, { force: true });
         settle("STOPPED", "It was stopped.");
       }
@@ -316,12 +333,64 @@ async function runJob(job) {
  * the time it was for) as it is, as Activepieces runs it. Any other trigger runs only by hand, with what was sent as its body.
  */
 function triggerOutputOf(flow, job) {
-  // An error flow: the failed run and its flow, as n8n's Error Trigger gives them.
-  if (job.trigger === "error") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
+  // An error flow: the failed run and its flow, as n8n's Error Trigger gives them. A called flow: what its caller sent.
+  if (job.trigger === "error" || job.trigger === "flow") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   // A room event (a `room` setting on the webhook trigger): what happened, as it is.
   if (flow.trigger?.settings?.room) return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   if (flow.trigger?.settings?.pieceName === "@activepieces/piece-schedule") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   return { body: job.payload ?? {}, headers: job.headers ?? {}, queryParams: job.query ?? {} };
+}
+
+/** Asks automation.py, as the runner does: to find a flow, or queue one. */
+function askScript(request) {
+  const done = spawnSync("python3", [SCRIPT], { input: JSON.stringify(request), encoding: "utf8", timeout: 20_000 });
+  try {
+    return JSON.parse(done.stdout);
+  } catch {
+    return { error: "The automation couldn't be reached." };
+  }
+}
+
+/** A run's id, as automation.py makes them: when, and something random. */
+function newRunId() {
+  const iso = new Date().toISOString();
+  return `${iso.slice(0, 10).replaceAll("-", "")}-${iso.slice(11, 19).replaceAll(":", "")}-${randomBytes(4).toString("hex")}`;
+}
+
+/** How deep flows may call each other: a flow calling itself stops here, rather than until the memory runs out. */
+const MOST_DEPTH = 5;
+/** Set when Stop is pressed, so a called flow and the run that called it both stop. */
+let stopping = false;
+
+/**
+ * Call a flow (n8n's Execute Workflow). The flow called must start on "Called by another flow": that's what lets it be called. Waiting, it runs here and now,
+ * inside the caller's run and its time, as its own run of its own flow, and what its last step gave goes back; not waiting, it's queued for after.
+ */
+async function callFlow(caller, call, callerStartedAt) {
+  const flowId = typeof call?.flowId === "string" ? call.flowId : "";
+  if (!/^[\w-]{1,100}$/.test(flowId)) return { status: 400, body: { error: "Choose the flow to call." } };
+  const depth = (caller.depth ?? 0) + 1;
+  if (depth > MOST_DEPTH) return { status: 409, body: { error: `Flows called each other more than ${MOST_DEPTH} deep, so it stopped there: a flow calling itself, perhaps.` } };
+  const found = askScript({ op: "find", flowId });
+  if (!found.flow) return { status: 404, body: { error: found.error ?? "That flow isn't in the room any more." } };
+  const name = found.flow.displayName || found.path;
+  if (found.flow.trigger?.settings?.room?.event !== "flow.called") return { status: 409, body: { error: `${name} can't be called: its trigger isn't "Called by another flow".` } };
+  const by = `Called by ${String(caller.flow?.displayName ?? caller.path).slice(0, 60)}`;
+  const data = call.data === undefined ? {} : call.data;
+  if (call.wait === false) {
+    const queued = askScript({ op: "run", path: found.path, flowId, payload: data, trigger: "flow", by, noWorker: true });
+    return typeof queued.id === "string" ? { status: 200, body: { runId: queued.id, queued: true } } : { status: 409, body: { error: queued.error ?? `${name} couldn't be queued.` } };
+  }
+  const left = caller.seconds - Math.ceil((NOW() - callerStartedAt) / 1000) - 2;
+  if (left < 3) return { status: 409, body: { error: `There wasn't time left to run ${name}.` } };
+  const id = newRunId();
+  await runJob({ id, path: found.path, flowId, flow: found.flow, payload: data, headers: {}, query: {}, trigger: "flow", by, seconds: left, connections: caller.connections ?? {}, mode: "run", depth, nested: true });
+  const run = readJson(join(RUNS, `${id}.json`));
+  if (run?.status !== "SUCCEEDED") {
+    const why = run?.failedStep?.message ?? run?.message ?? "it didn't say why";
+    return { status: 409, body: { error: `${name} ${run?.status === "TIMEOUT" ? "took too long" : run?.status === "STOPPED" ? "was stopped" : "failed"}: ${why}`, runId: id } };
+  }
+  return { status: 200, body: { output: Object.values(run.steps ?? {}).at(-1)?.output ?? null, runId: id } };
 }
 
 /**
@@ -345,15 +414,9 @@ function queueErrorFlow(job, live) {
     },
     workflow: { id: job.flowId ?? null, name: job.flow.displayName ?? job.path, path: job.path },
   };
-  const request = { op: "run", path: job.path, flowId: errorFlow, payload, trigger: "error", by: `${String(job.flow.displayName ?? job.path).slice(0, 60)} failed`, noWorker: true };
-  const done = spawnSync("python3", [SCRIPT], { input: JSON.stringify(request), encoding: "utf8", timeout: 20_000 });
-  try {
-    const answer = JSON.parse(done.stdout);
-    if (typeof answer.id === "string") return { errorRun: answer.id, errorProblem: null };
-    return { errorRun: null, errorProblem: String(answer.error ?? "Its error flow couldn't be started.").slice(0, 300) };
-  } catch {
-    return { errorRun: null, errorProblem: "Its error flow couldn't be started." };
-  }
+  const answer = askScript({ op: "run", path: job.path, flowId: errorFlow, payload, trigger: "error", by: `${String(job.flow.displayName ?? job.path).slice(0, 60)} failed`, noWorker: true });
+  if (typeof answer.id === "string") return { errorRun: answer.id, errorProblem: null };
+  return { errorRun: null, errorProblem: String(answer.error ?? "Its error flow couldn't be started.").slice(0, 300) };
 }
 
 /** The engine's errors come wrapped; the person wants the message. */
@@ -375,6 +438,7 @@ mkdirSync(QUEUE, { recursive: true });
 mkdirSync(RUNS, { recursive: true });
 try {
   for (;;) {
+    stopping = false;
     const next = readdirSync(QUEUE).filter((name) => name.endsWith(".json")).sort()[0];
     if (!next) break;
     const file = join(QUEUE, next);

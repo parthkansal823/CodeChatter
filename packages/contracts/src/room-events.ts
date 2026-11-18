@@ -17,6 +17,8 @@ export const ROOM_EVENTS = {
   "room.update": { label: "The room's settings change", about: "Its name, description or who can see it." },
   "sandbox.image": { label: "The sandbox's image changes", about: "Someone switches the room to another sandbox image." },
   // Not turned on like the rest: a flow names this one as its error flow, and its failing runs it, in the sandbox (n8n's Error Trigger).
+  // The same: another flow calls this one with "Call a flow" (n8n's Execute Workflow Trigger), so only flows that start on this can be called.
+  "flow.called": { label: "Called by another flow", about: "Another flow runs this one with its \"Call a flow\" step, with what it sends, and gets back what this one's last step gives." },
   "flow.failed": { label: "Another flow fails", about: "A flow that names this one under \"If it fails, run\" fails or takes too long. It gets the run, its error and the flow, as n8n's Error Trigger gives them." },
 } as const;
 export type RoomEventName = keyof typeof ROOM_EVENTS;
@@ -24,6 +26,10 @@ export const ROOM_EVENT_NAMES = Object.keys(ROOM_EVENTS) as RoomEventName[];
 export const isRoomEvent = (name: unknown): name is RoomEventName => typeof name === "string" && Object.hasOwn(ROOM_EVENTS, name);
 /** The event that runs a flow as another's error flow: chosen on the failing flow, so there's nothing to turn on. */
 export const ERROR_FLOW_EVENT = "flow.failed" satisfies RoomEventName;
+/** The event a flow starts on to be called by others: chosen in the calling step, so there's nothing to turn on either. */
+export const CALLED_FLOW_EVENT = "flow.called" satisfies RoomEventName;
+/** Room events that start a flow from another flow, in the sandbox, rather than being turned on. */
+export const FLOW_TO_FLOW_EVENTS: readonly RoomEventName[] = [ERROR_FLOW_EVENT, CALLED_FLOW_EVENT];
 
 /** What a flow on a room event listens for: the event, and for files, which (globs, one a line or comma-separated; nothing means all). */
 export type RoomEventSettings = { event: RoomEventName; paths?: string };

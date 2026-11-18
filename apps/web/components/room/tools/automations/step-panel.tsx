@@ -18,6 +18,7 @@ import { DataView, SchemaOf } from "./data-view";
 import { insertAt, previewOf } from "./expressions";
 import { addBranch, canPin, expressionsFor, isPinned, kindOf, pinStep, removeBranch, removeStep, setStepNote, toggleStep, unpinStep, updateStep, type Flow, type FlowStep, type Place } from "./model";
 import { RouterFields } from "./router-fields";
+import { CallFlowField } from "./error-flow-field";
 import { RoomEventSettings } from "./room-event-settings";
 import { ScheduleSettings } from "./schedule-settings";
 import { TriggerSettings } from "./trigger-settings";
@@ -295,9 +296,14 @@ export function StepPanel({
       {builtin && (
         <section aria-label="Its fields" className="grid gap-2">
           <p className="text-muted-foreground">{builtin.description}. Built in: it works on a list of items, as n8n&apos;s does.</p>
-          {Object.entries(builtin.fields).map(([name, spec]) => (
-            <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} />
-          ))}
+          {Object.entries(builtin.fields).map(([name, spec]) =>
+            // Call a flow chooses from the flows that can be called, rather than an id typed in.
+            step.builtin === "call_flow" && name === "flow" ? (
+              <CallFlowField key={name} value={input[name]} canEdit={canEdit} onChange={(value) => setInput(name, value)} />
+            ) : (
+              <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} />
+            ),
+          )}
         </section>
       )}
       {step.type === "CODE" && !builtin && (

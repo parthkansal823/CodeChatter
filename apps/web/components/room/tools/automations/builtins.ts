@@ -143,6 +143,16 @@ export const BUILTINS: Record<string, Builtin> = {
     fields: { first, second, first_key: text("Field in the first", "To match by.", true), second_key: text("Field in the second", "If it's called something else there.") },
     defaults: { first: "", second: "", first_key: "", second_key: "" },
   },
+  call_flow: {
+    label: "Call a flow",
+    description: "Run another flow in the room with what you send, and get what its last step gave, as n8n's Execute Workflow",
+    fields: {
+      flow: text("Flow", "One whose trigger is Called by another flow.", true),
+      data: json("What to send", "It's the called flow's trigger output."),
+      wait: check("Wait for it to finish", "Off: it's started after this run, and this step gives its run's id."),
+    },
+    defaults: { flow: "", data: {}, wait: true },
+  },
   stop_and_error: {
     label: "Stop and Error",
     description: "Stop the run here, saying why",

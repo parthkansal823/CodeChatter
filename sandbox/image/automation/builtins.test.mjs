@@ -123,3 +123,38 @@ test("Stop and Error, and a step that isn't there", async () => {
   await assert.rejects(run("nope", {}), /no built-in step called "nope"/);
   assert.deepEqual(await run("limit", { items: [1, 2, 3], max: 1 }), [1]);
 });
+
+test("Call a flow: asks the worker on its own port, and gives back what it answers", async () => {
+  const { createServer } = await import("node:http");
+  const heard = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      const call = JSON.parse(body);
+      heard.push({ path: req.url, call });
+      res.setHeader("content-type", "application/json");
+      if (call.flowId === "flow_broken") return res.writeHead(409).end(JSON.stringify({ error: "Doubler failed: no number" }));
+      if (!call.wait) return res.end(JSON.stringify({ runId: "20261118-100000-abcd1234", queued: true }));
+      res.end(JSON.stringify({ output: { doubled: call.data.n * 2 }, runId: "20261118-100000-0000ffff" }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const before = process.env.AP_SANDBOX_WS_PORT;
+  process.env.AP_SANDBOX_WS_PORT = String(server.address().port);
+  try {
+    assert.deepEqual(await run("call_flow", { flow: "flow_doubler", data: { n: 21 } }), { doubled: 42 });
+    assert.deepEqual(heard[0], { path: "/v1/codechatter/call-flow", call: { flowId: "flow_doubler", data: { n: 21 }, wait: true } });
+    // What to send typed as JSON text, and not waiting.
+    assert.deepEqual(await run("call_flow", { flow: "flow_doubler", data: '{"n": 1}', wait: false }), { runId: "20261118-100000-abcd1234", queued: true });
+    assert.deepEqual(heard[1].call, { flowId: "flow_doubler", data: { n: 1 }, wait: false });
+    await assert.rejects(run("call_flow", { flow: "flow_broken", data: {} }), /Doubler failed: no number/);
+    await assert.rejects(run("call_flow", { flow: "flow_doubler", data: "{ not json" }), /isn't valid JSON/);
+    delete process.env.AP_SANDBOX_WS_PORT;
+    await assert.rejects(run("call_flow", { flow: "flow_doubler" }), /only works in a run/);
+  } finally {
+    if (before === undefined) delete process.env.AP_SANDBOX_WS_PORT;
+    else process.env.AP_SANDBOX_WS_PORT = before;
+    server.close();
+  }
+});

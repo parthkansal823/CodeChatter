@@ -1,7 +1,9 @@
 // CodeChatter's own built-in steps for automations, as n8n has for working on data: Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates,
-// Split Out, Rename Keys, Merge, Compare Datasets and Stop and Error. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
+// Split Out, Rename Keys, Merge, Compare Datasets, Stop and Error, and Call a flow. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
 // file: host.mjs writes it as a module that calls run() here, and Activepieces' engine has already worked out its inputs' expressions. Each works on a list of
 // items, as n8n's do; a single object counts as a list of one. The Automations tool's forms for them are in apps/web/components/room/tools/automations/builtins.ts.
+
+import { request as httpRequest } from "node:http";
 
 /** Reads `a.b[0].c` from an item. An empty path is the item itself. */
 export function read(item, path) {
@@ -317,6 +319,43 @@ export const BUILTINS = {
     }
     for (const [key, item] of second) if (!matched.has(key)) result.only_in_second.push(item);
     return result;
+  },
+
+  /**
+   * Call a flow (n8n's Execute Workflow): another flow in the room, one that starts on "Called by another flow", runs with what's sent, and its last step's
+   * output comes back; or, not waiting, it's queued and its run's id comes back. The worker running this flow does it (host.mjs, on the engine's own port).
+   */
+  async call_flow(inputs) {
+    const port = process.env.AP_SANDBOX_WS_PORT;
+    if (!port) throw new Error("Call a flow only works in a run.");
+    let data = inputs.data ?? {};
+    if (typeof data === "string") {
+      try {
+        data = data.trim() ? JSON.parse(data) : {};
+      } catch {
+        throw new Error("What to send isn't valid JSON.");
+      }
+    }
+    // node:http, not fetch: fetch gives up on an answer after 300 seconds, and a flow called may take longer, within its caller's time.
+    const body = JSON.stringify({ flowId: String(inputs.flow ?? ""), data, wait: inputs.wait !== false && inputs.wait !== "false" });
+    const { status, text } = await new Promise((resolve, reject) => {
+      const request = httpRequest({ host: "127.0.0.1", port: Number(port), path: "/v1/codechatter/call-flow", method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body) } }, (response) => {
+        let got = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => (got += chunk));
+        response.on("end", () => resolve({ status: response.statusCode ?? 500, text: got }));
+      });
+      request.on("error", reject);
+      request.end(body);
+    });
+    let answer = {};
+    try {
+      answer = JSON.parse(text);
+    } catch {
+      // Not JSON: said below.
+    }
+    if (status >= 400) throw new Error(answer.error ?? "The flow couldn't be called.");
+    return answer.queued ? { runId: answer.runId, queued: true } : answer.output;
   },
 
   /** Stop and Error: stops the run, with this message, so an error flow or a person sees why. */

@@ -38,10 +38,13 @@ export async function mutateInstanceUser(db: Db, input: {
           and (coalesce(${schema.user.banned}, false) = false or ${schema.user.banExpires} <= now())
         `);
         assertRoleChange({ actorId: input.actorId, targetId: target.id, targetIsAdmin: isInstanceAdmin(target.role), targetIsUsable: !isBanned(target), nextRole: change.role, usableAdmins: admins?.n ?? 0 });
-        if (target.role === change.role) return { id: target.id, changed: false };
-        values = { role: change.role };
+        // A console/API retry must finish session revocation even if the role
+        // committed before a previous revocation failed. Seeding alone stays
+        // idempotent so it never signs out shared test accounts on a repeat run.
+        if (target.role === change.role && input.source === "seed:dev") return { id: target.id, changed: false };
+        values = target.role === change.role ? undefined : { role: change.role };
         action = "instance.user.role";
-        data = { ...data, before: target.role ?? "user", role: change.role };
+        data = { ...data, before: target.role ?? "user", role: change.role, unchanged: target.role === change.role };
         break;
       }
       case "ban":

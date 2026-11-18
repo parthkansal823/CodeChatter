@@ -5,7 +5,7 @@
  */
 "use client";
 
-import { ERROR_FLOW_EVENT, pathsProblem, ROOM_EVENT_NAMES, ROOM_EVENTS, type AutomationTrigger, type RoomEventName, type RoomEventPayload, type RoomEventSettings } from "@codechatter/contracts";
+import { CALLED_FLOW_EVENT, ERROR_FLOW_EVENT, FLOW_TO_FLOW_EVENTS, pathsProblem, ROOM_EVENT_NAMES, ROOM_EVENTS, type AutomationTrigger, type RoomEventName, type RoomEventPayload, type RoomEventSettings } from "@codechatter/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Power, Trash2 } from "lucide-react";
 import { useEffect, useEffectEvent, useId, useState } from "react";
@@ -27,6 +27,8 @@ const same = (a: RoomEventSettings | null, b: RoomEventSettings | null) => JSON.
 /** What a flow on this event is given, to try it with before anything happens. */
 export function exampleOf(event: RoomEventName, me: { id: string; name: string }): RoomEventPayload | Record<string, unknown> {
   const base = { event, at: new Date().toISOString(), by: [{ id: me.id, name: me.name }] };
+  // A flow called gets what its caller sends.
+  if (event === CALLED_FLOW_EVENT) return { orderId: 1042, total: 99.5 };
   // An error flow gets what n8n's Error Trigger gives (automation/host.mjs).
   if (event === ERROR_FLOW_EVENT)
     return {
@@ -142,8 +144,12 @@ export function RoomEventSettings({ flow, path, room: settings, canRun, canEdit,
         </div>
       </section>
 
-      {settings.event === ERROR_FLOW_EVENT ? (
-        <p className="rounded-md border p-2 text-muted-foreground">There&apos;s nothing to turn on: choose this flow under &quot;If it fails, run&quot; on each flow it&apos;s for, and it runs when one of them fails.</p>
+      {FLOW_TO_FLOW_EVENTS.includes(settings.event) ? (
+        <p className="rounded-md border p-2 text-muted-foreground">
+          {settings.event === ERROR_FLOW_EVENT
+            ? "There's nothing to turn on: choose this flow under \"If it fails, run\" on each flow it's for, and it runs when one of them fails."
+            : "There's nothing to turn on: another flow's \"Call a flow\" step runs it, and gets what its last step gives."}
+        </p>
       ) : !canRun ? (
         <p className="text-muted-foreground">Turning a flow on needs Run rights in this room.</p>
       ) : triggers.isPending ? (

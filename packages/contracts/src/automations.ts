@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 
-import { ERROR_FLOW_EVENT, isRoomEvent, pathsProblem, type RoomEventSettings } from "./room-events.js";
+import { CALLED_FLOW_EVENT, ERROR_FLOW_EVENT, isRoomEvent, pathsProblem, type RoomEventSettings } from "./room-events.js";
 import { scheduleProblem } from "./schedule.js";
 
 /** Flows live in the room's files, so they're edited together, versioned, and can leave. */
@@ -71,7 +71,8 @@ export const RoomEventInput = z
     event: z
       .string()
       .refine(isRoomEvent, "That isn't something that happens in a room.")
-      .refine((event) => event !== ERROR_FLOW_EVENT, "An error flow isn't turned on: choose it under \"If it fails, run\" on the flow it's for."),
+      .refine((event) => event !== ERROR_FLOW_EVENT, "An error flow isn't turned on: choose it under \"If it fails, run\" on the flow it's for.")
+      .refine((event) => event !== CALLED_FLOW_EVENT, "A flow called by others isn't turned on: choose it in another flow's \"Call a flow\" step."),
     paths: z.string().max(4000).optional(),
   })
   .superRefine((input, context) => {

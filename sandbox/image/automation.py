@@ -228,6 +228,17 @@ def run(request):
     return answer
 
 
+def find(request):
+    """A flow by its id, wherever its file is: the worker calling it from another flow (host.mjs) asks. The runner never sends this."""
+    wanted = request.get("flowId")
+    if not isinstance(wanted, str) or not wanted:
+        raise Refused("That isn't a flow.")
+    path, flow = flow_by_id(wanted)
+    if flow is None:
+        raise Refused("That flow isn't in the room any more.")
+    return {"path": path, "flow": flow}
+
+
 def stop():
     live = status()
     if live.get("state") != "running":
@@ -296,6 +307,8 @@ def main():
         return one_run(request.get("id"))
     if op == "manifest":
         return manifest()
+    if op == "find":
+        return find(request)
     raise Refused("That isn't something this can do.")
 
 

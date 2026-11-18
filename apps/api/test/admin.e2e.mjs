@@ -214,8 +214,10 @@ try {
   verify("an admin can grant another disposable account instance-admin rights", (await admin(`admin/users/${target.id}/role`, "POST", { role: "admin" })).status === 200);
   const promoted = await signIn(target);
   verify("the promoted account can use instance administration", (await promoted("admin/access")).status === 200);
+  verify("retrying an already-saved role still completes session revocation", (await admin(`admin/users/${target.id}/role`, "POST", { role: "admin" })).status === 200 && await until(async () => !(await sessionOf(promoted))));
+  const promotedAgain = await signIn(target);
   verify("an admin can revoke another account's instance-admin rights", (await admin(`admin/users/${target.id}/role`, "POST", { role: "user" })).status === 200);
-  verify("a demoted account immediately loses administration despite its prior session", (await promoted("admin/access")).status === 404);
+  verify("a demoted account immediately loses administration despite its prior session", (await promotedAgain("admin/access")).status === 404);
 
   stage = "audit completeness";
   const events = await database.db.select().from(schema.auditEvents).where(and(eq(schema.auditEvents.actorId, operator.id), eq(schema.auditEvents.targetId, target.id), isNull(schema.auditEvents.orgId)));
