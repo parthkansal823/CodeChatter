@@ -1056,6 +1056,18 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automation-hooks.e2e.mjs` (28 checks, the whole way: turned on through the API and called from outside, with Activepieces' engine running it; the test address showing what it was sent, without cookies, and running nothing; answering when finished with the last step's output, the query and a header; the run saying a webhook started it; answering at once; a form, plain text and GET; turned off; a new address and the old one stopping; a moved file still found; wrong addresses and another room's; someone signed out; too many calls; and forgetting it)
 - `apps/web/test/automations.e2e.mjs` (87 checks), adding: turning on, the address, a test call shown and used as what to send, a call from outside running it and showing as "Webhook", and forgetting it
 
+### Code tours ✅ (ChatGPT 21, checked 2026-11-18)
+
+**What:** a guided walk through the room's code, as CodeTour does in VS Code: a tour is stops, each at lines of a file with a title and a note in Markdown. **Tours** is beside the code (Apps, "Beside the code").
+
+- **Making one:** "Add this line to a tour" (or the selected lines) from the editor's right-click menu and the palette asks which tour, or a new one, and the stop's title and note. Stops are edited, reordered (dragging, or the keyboard as on the task board) and removed in the tool.
+- **Playing one:** each stop opens its file at its lines, marked in the editor with the note beside them; Next and Back (the keyboard too), and "Stop 3 of 8". Playing is each person's own: one person's place moves nobody else.
+- **Stops follow the code:** a stop keeps its file by id (so renames and moves keep it) and its lines as Yjs positions, so text added above moves it with them. A deleted file, or lines wholly removed, says so and can be skipped, rather than landing on other code.
+- **Together:** one `room:ID:tours` document. Each tour and stop is its own map, ordered by rank with the id to break ties, so two people adding stops at once both keep theirs. Collab lets only those who can edit files change it: a viewer plays tours, sees no controls to change them, and a forged change is refused and not kept.
+- **Where:** `packages/workspace-model/src/tours.ts`; web `components/room/tools/tours/` and `editor/tour-marks.ts` (the action and the marked lines), wired in `wire-editor.ts` and `overlays.tsx`.
+- **Tests:** `packages/workspace-model/src/tours.test.ts` (with the package's 68), browser `apps/web/test/code-tours.e2e.mjs` 20/20 (two people, a stop following its lines, a deleted file, removed lines, a viewer refused by collab, cleaned up even on failure). Run here: 68/68, then 20/20. One run failed to give test2 back their editor role while the dev API was restarting (another change was being written); it was put back by hand, and the next run passed.
+- **Left** (pending.md): putting a stop whose lines are gone on other lines, import and export, undo for a deleted stop.
+
 ### The task board ✅ (ChatGPT 15, checked 2026-11-08)
 
 **What:** one board per room, with **To do**, **Doing** and **Done**. Some cards are written by hand; the rest are the `TODO`, `FIXME`, `HACK` and `XXX` comments in the room's code, which turn up by themselves and open their line when clicked.
@@ -1482,8 +1494,15 @@ The **API** tool in the activity bar. Browser tests: `apps/web/test/api-studio.e
   - ⬜ a cookies tab
 - ✅ **Tests:**
   - checks: body contains, header exists, JSON value equals or exists
-  - test scripts with `expect()`, run in a worker
   - a collection runner, and history
+- ✅ **Scripts** (2026-11-18), as Postman's: the Scripts tab has one to run **before sending** and one **after the response**, written together in the shared document, with snippets (set a variable, add a header, status is 200, a JSON value, save a value for the next request).
+  - **What they can do:** Postman's `pm`: `pm.environment` (and `pm.variables`, `pm.globals`, `pm.collectionVariables`, all the person's own values, as values set from a response are), `pm.request` (its address, method, headers and a text body: changed for that send only, the request staying as written), `pm.response` (`json()`, `text()`, `code`, `responseTime`, headers, and `pm.response.to.have.status(200)`, `.to.be.ok`, `.to.have.header()`), `pm.test` (async too) and `pm.expect` (chai's words: `to.equal`, `eql`, `include`, `property`, `below`, `a`, `match`, `oneOf` and the rest, with chai's messages: `expected "GET" to equal "DELETE"`), and `console`.
+  - **Where they show:** `pm.test` results join the Tests tab's checks (2/3 on the tab); what they log shows as **Console**, marked before or after; a script that stops says why and at which line of it. A script before sending that stops means the request isn't sent.
+  - **Safe to run someone else's:** each runs in a worker inside a hidden frame of `/frames/script`, whose policy allows no network at all (the worker inherits it), no eval, and gives it an opaque origin, so it can't read the app or its cookies; the worker also takes away `fetch`, `XMLHttpRequest`, `WebSocket`, storage and nested workers. It's stopped after 5 seconds (a loop that never ends), and what it sends back is read as untrusted. `pm.sendRequest` says plainly that scripts have no network.
+  - **Postman's own scripts** come with a collection only when asked: the import preview offers "Bring their scripts too" (off by default), and each request gets its collection's, folders' and own scripts in the order Postman runs them, each marked with where it came from.
+  - **Fixed on the way:** the worker for this had been written but nothing ran it (`script-worker-source.ts` was dead code, and the bug list said so); the Tests tab had claimed test scripts already.
+  - **Where:** `components/room/tools/api-studio/scripts.ts` (what goes in and out), `script-sandbox.ts` (the frame), `script-worker-source.ts` (the worker and `pm`), `scripts-editor.tsx` (the tab), `execute.ts` (before and after a send), `response-pane.tsx` (Console), `import-postman.ts` and `import-dialog.tsx`; `app/frames/script/route.ts` and `SCRIPT_FRAME_CSP` in `lib/csp.ts`.
+  - **Tests:** `scripts.test.ts` (5: the request in and out, `pm` in a real worker context with variables, headers, logs and seven tests, no network, a mistake's line, results read safely) and `import-postman.test.ts` (scripts only when asked, in Postman's order); browser `api-studio.e2e.mjs` 20/20 (two people seeing a script, a script changing where a request goes, 2/3 tests and why one failed, the Console, no network, a loop stopped, a mistake's line, a collection's scripts offered, not taken, and run when brought).
 - 🟡 **Import and export:**
   - ✅ cURL import
   - ✅ code snippets for curl, fetch, axios, Python and Go

@@ -1,0 +1,4 @@
+# Git in a room's sandbox (/etc/gitconfig). /workspace belongs to the file-sync agent, and terminals and Run work as another user, so git would
+# refuse the repository as "dubious ownership" and no git command would work there. Every repository in a sandbox is the room's own.
+[safe]
+	directory = *

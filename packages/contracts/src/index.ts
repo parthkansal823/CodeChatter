@@ -17,6 +17,7 @@ export * from "./analysis.js";
 export * from "./audit.js";
 export * from "./blobs.js";
 export * from "./chat.js";
+export * from "./chat-unread.js";
 export * from "./check.js";
 export * from "./databases.js";
 export * from "./dependencies.js";

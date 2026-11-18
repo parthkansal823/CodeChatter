@@ -88,6 +88,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - line anchors (`#L10`) and hover previews in code links;
   - offline first.
 - ⬜ **API studio:**
+  - scripts, later: `pm.sendRequest` (scripts have no network now), `require` of Postman's libraries (lodash, moment, CryptoJS), and a folder's or the collection's own scripts (imported ones are copied into each request);
   - multipart and OAuth 2.0;
   - a cookies tab;
   - a mock server;
@@ -194,7 +195,6 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Bugs to look at
 
-- ⬜ `apps/web/components/room/tools/api-studio/script-worker-source.ts` is dead code: nothing imports it, and the `script-sandbox.ts` it mentions is gone. Delete it, or build the pre-request scripts it was for. Those would need a frame with their own policy, like `/frames/document`.
 
 ## Step 11 · Interview mode: after launch (**Claude**)
 
@@ -242,7 +242,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ In-browser runner (Pyodide and JavaScript with no server), so the free demo site runs code
 - ⬜ Public profile and portfolio
 - ⬜ Code and algorithm visualizer, with AI narration
-- 🟡 Code tours (**ChatGPT 21**)
+- ⬜ Code tours, later: a way to put a stop whose lines are gone back on other lines, import and export of tours, and undo for a deleted stop
 - ⬜ Task board, next: rescan only the files that changed (now every keystroke anywhere, and every move, rescans every file, in 5 ms slices); two identical TODOs in one file show as one card; a hand-written card's delete has no undo
 - ⬜ Math (KaTeX) and Mermaid inside the Markdown preview
 - ⬜ VS Code extension: join a room from VS Code

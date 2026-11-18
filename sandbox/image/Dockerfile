@@ -260,6 +260,7 @@ COPY --from=automl /out/ /usr/local/
 COPY --from=automl /pth/ /usr/lib/python3/dist-packages/
 COPY --from=automation /out/ /usr/local/
 COPY --from=lighthouse /out/ /usr/local/
+COPY image/gitconfig /etc/gitconfig
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).
@@ -364,6 +365,7 @@ COPY --from=automation /out/ /usr/local/
 COPY --from=lighthouse /out/ /usr/local/
 COPY --from=lakehouse /out/ /usr/local/
 RUN echo /usr/local/lib/codechatter/lakehouse > /usr/lib/python3/dist-packages/codechatter-lakehouse.pth
+COPY image/gitconfig /etc/gitconfig
 COPY --from=jail /cc-jail /usr/local/bin/cc-jail
 COPY --from=agent /out/ /opt/ccagent/
 # Marks it, so a rebuild can remove the copy it replaces (pnpm docker:tidy).

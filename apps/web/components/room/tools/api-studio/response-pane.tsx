@@ -14,6 +14,7 @@ import type { RunState } from "./execute";
 import { formatBytes, formatMs, statusTone } from "./format";
 import { LinesView } from "./lines-view";
 import { setExample, type RequestData } from "./model";
+import type { RunLog } from "./scripts";
 import { StudioTabs, TabCount } from "./studio-tabs";
 import { useStudio } from "./studio-context";
 
@@ -73,10 +74,11 @@ export function ResponsePane({ request }: { request: RequestData }) {
   }
   if (run.problem) {
     return (
-      <section aria-label="Response" className="p-4">
+      <section aria-label="Response" className="grid content-start gap-3 p-4">
         <Notice tone="warning" title={run.problem === "Cancelled." ? "Cancelled" : "Couldn't send"}>
           {run.problem === "Cancelled." ? "The request was cancelled before an answer came back." : run.problem}
         </Notice>
+        <ScriptLogs logs={run.logs} />
       </section>
     );
   }
@@ -298,9 +300,27 @@ function Preview({ kind, type, body, binary }: { kind: "html" | "image"; type: s
   return <iframe title="Response preview" sandbox="" srcDoc={`<!doctype html>${csp}${body}`} className="size-full bg-white" />;
 }
 
+/** What the request's scripts logged, before sending and after the response. */
+function ScriptLogs({ logs }: { logs: RunLog[] }) {
+  if (logs.length === 0) return null;
+  return (
+    <section aria-label="Console" className="grid gap-1">
+      <h4 className="text-xs font-medium text-muted-foreground">Console</h4>
+      <ol className="grid gap-0.5 rounded-md border bg-panel p-2 font-mono text-xs">
+        {logs.map((log, index) => (
+          <li key={index} className={cn("break-words whitespace-pre-wrap", log.level === "error" ? "text-destructive" : log.level === "warn" ? "text-warning" : "")}>
+            <span className="text-muted-foreground">{log.when === "before" ? "before" : "after"} · </span>
+            {log.text}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export function Checks({ run }: { run: RunState }) {
-  if (run.checks.length === 0 && run.extracted.length === 0) {
-    return <p className="text-sm text-muted-foreground">This request has no tests. Add some in the Tests tab to check every response.</p>;
+  if (run.checks.length === 0 && run.extracted.length === 0 && run.logs.length === 0) {
+    return <p className="text-sm text-muted-foreground">This request has no tests. Add some in the Tests tab, or write a script under Scripts, to check every response.</p>;
   }
   return (
     <div className="grid gap-3">
@@ -333,6 +353,7 @@ export function Checks({ run }: { run: RunState }) {
           </ul>
         </div>
       )}
+      <ScriptLogs logs={run.logs} />
     </div>
   );
 }

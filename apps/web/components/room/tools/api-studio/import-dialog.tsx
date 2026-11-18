@@ -48,7 +48,7 @@ function curlPlan(text: string): Plan {
   return { ...builder.finish(), format: "curl", own: Object.fromEntries(builder.taken) };
 }
 
-function parseInput(source: string): Parsed {
+function parseInput(source: string, scripts = false): Parsed {
   if (new TextEncoder().encode(source).byteLength > MAX_BYTES) return { error: "Use a file or text no larger than 5 MB." };
   const text = source.replace(/^\uFEFF/, "");
   if (!text.trim()) return null;
@@ -64,7 +64,7 @@ function parseInput(source: string): Parsed {
         }
       } catch { /* The format parser supplies a safe error without quoting the input. */ }
     }
-    return { value: postman ? parsePostman(text) : parseOpenApi(text) };
+    return { value: postman ? parsePostman(text, { scripts }) : parseOpenApi(text) };
   } catch (error) {
     return { error: /^\s*(?:\$\s+)?curl\b/i.test(text) ? "Couldn't read that cURL command. Check its quotes and options." : error instanceof Error ? error.message : "Couldn't read this API document." };
   }
@@ -116,10 +116,11 @@ function ImportPanel() {
   const [text, setText] = useState("");
   const [fileError, setFileError] = useState("");
   const [reading, setReading] = useState(false);
+  const [withScripts, setWithScripts] = useState(false);
   const readEpoch = useRef(0);
   const adding = useRef(false);
   const deferred = useDeferredValue(text);
-  const parsed = parseInput(deferred);
+  const parsed = parseInput(deferred, withScripts);
   const plan = parsed?.value;
   const folders = new Map(plan?.folders.map((folder) => [folder.id, folder]));
   const waiting = reading || deferred !== text;
@@ -180,7 +181,15 @@ function ImportPanel() {
         {!waiting && parsed?.error && <p role="alert" className="text-destructive">{parsed.error}</p>}
         {!waiting && plan && <section aria-label="Import preview" className="grid gap-3 rounded-md border p-3">
           <div><p role="status" className="font-medium">Detected {format}: {plan.name}</p><p className="text-xs text-muted-foreground">{plan.format === "curl" ? `One request, added at the top of the collection.${plan.variables.length ? " A new environment holds its secret variables." : ""}` : `${plan.folders.length + 1} folders, ${plan.requests.length} requests, ${plan.variables.length} variables. A new folder and environment will be added. Existing items stay as they are.`}</p></div>
-          <p className="text-xs text-muted-foreground">{plan.format === "curl" ? "No request is sent while importing. Credentials in it go into secret variables, and their values stay on this device only." : "No API request is sent while importing. Scripts are excluded. Recognized credentials become empty secret variables; review other values before sharing."}</p>
+          <p className="text-xs text-muted-foreground">{plan.format === "curl" ? "No request is sent while importing. Credentials in it go into secret variables, and their values stay on this device only." : `No API request is sent while importing. ${plan.format === "postman" && withScripts ? "Scripts are brought, to run when you send." : "Scripts are left out."} Recognized credentials become empty secret variables; review other values before sharing.`}</p>
+          {plan.format === "postman" && (plan.counts.scripts > 0 || withScripts) && (
+            <label className="flex items-start gap-2 text-xs">
+              <input type="checkbox" className="mt-0.5" checked={withScripts} onChange={(event) => setWithScripts(event.target.checked)} />
+              <span>
+                Bring their scripts too ({plan.counts.scripts} {plan.counts.scripts === 1 ? "request has" : "requests have"} some). They run when you send, in a sandbox with no network, but they can change where a request goes: read them first, under Scripts.
+              </span>
+            </label>
+          )}
           {plan.folders.length > 0 && <details><summary className="min-h-6 cursor-pointer py-1">Folders ({plan.folders.length})</summary><ul className="max-h-32 overflow-y-auto pl-4 text-xs">{plan.folders.map((folder) => <li key={folder.id} className="py-0.5 break-words">{folderPath(folders, folder.id)}</li>)}</ul></details>}
           <details open><summary className="min-h-6 cursor-pointer py-1">Requests ({plan.requests.length})</summary><ul className="max-h-40 overflow-y-auto pl-4 text-xs">{plan.requests.map((request, index) => <li key={index} className="py-0.5 break-words"><span className="font-mono text-muted-foreground">{request.method}</span> {request.folderId && `${folderPath(folders, request.folderId)} / `}{request.name}</li>)}</ul></details>
           {plan.variables.length > 0 && <details open><summary className="min-h-6 cursor-pointer py-1">Variables ({plan.variables.length})</summary><ul className="max-h-32 overflow-y-auto pl-4 text-xs">{plan.variables.map((variable) => <li key={variable.key} className="py-0.5 break-words"><span className="font-mono">{variable.key}</span>{variable.secret && " (secret)"}{!variable.value && !plan.own?.[variable.key] && " - needs a value"}</li>)}</ul><p className="mt-1 text-xs text-muted-foreground">Add missing values in Environments after importing. Secret values stay on each device.</p></details>}

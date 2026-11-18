@@ -17,11 +17,12 @@ import { methodTone } from "./format";
 import { KeyValueTable } from "./key-value-table";
 import { duplicateRequest, renameNode, setField, type RequestData } from "./model";
 import { StudioTabs, TabCount } from "./studio-tabs";
+import { ScriptsEditor } from "./scripts-editor";
 import { useStudio } from "./studio-context";
 import { TestsEditor } from "./tests-editor";
 import { UrlInput } from "./url-input";
 
-type Tab = "params" | "headers" | "body" | "auth" | "tests";
+type Tab = "params" | "headers" | "body" | "auth" | "tests" | "scripts";
 
 export function RequestPane({ request }: { request: RequestData }) {
   const { doc, canEdit, canSend, send, cancel, runs, peers, lookup, select, openDialog } = useStudio();
@@ -129,6 +130,7 @@ export function RequestPane({ request }: { request: RequestData }) {
           { id: "body", label: <>Body {request.body.mode !== "none" && <span className="text-2xs font-normal text-muted-foreground">{request.body.mode === "graphql" ? "GraphQL" : request.body.mode === "json" ? "JSON" : request.body.mode === "form" ? "Form" : "Text"}</span>}</> },
           { id: "auth", label: <>Auth {request.auth.type !== "none" && <span className="size-1.5 rounded-full bg-brand" aria-label="Auth is set" />}</> },
           { id: "tests", label: <>Tests <TabCount n={request.assertions.length + request.extracts.length} /></> },
+          { id: "scripts", label: <>Scripts {(request.preScript.trim() || request.testScript.trim()) && <span className="size-1.5 rounded-full bg-brand" aria-label="Has a script" />}</> },
         ]}
       >
         <span className="hidden items-center gap-1 text-xs text-muted-foreground lg:flex">
@@ -142,6 +144,7 @@ export function RequestPane({ request }: { request: RequestData }) {
         {tab === "body" && <BodyEditor request={request} />}
         {tab === "auth" && <AuthEditor request={request} />}
         {tab === "tests" && <TestsEditor request={request} />}
+        {tab === "scripts" && <ScriptsEditor request={request} />}
       </div>
     </section>
   );

@@ -30,6 +30,9 @@ function __show(value) {
   try { return JSON.stringify(value); } catch (e) { return String(value); }
 }
 
+// In what an assertion says, a string is shown in quotes, as chai does: expected "GET" to equal "DELETE".
+function __said(value) { return typeof value === "string" ? JSON.stringify(value) : __show(value); }
+
 function __deepEqual(a, b) {
   if (a === b) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return Number.isNaN(a) && Number.isNaN(b);
@@ -66,13 +69,13 @@ function __expect(actual) {
   Object.defineProperty(P, "not", { get: function () { return new Assertion(this._v, !this._not, this._deep); } });
   Object.defineProperty(P, "deep", { get: function () { return new Assertion(this._v, this._not, true); } });
   P._check = function (ok, message) {
-    if (this._not ? ok : !ok) throw new Error("expected " + __show(this._v) + (this._not ? " not " : " ") + message);
+    if (this._not ? ok : !ok) throw new Error("expected " + __said(this._v) + (this._not ? " not " : " ") + message);
     return this;
   };
   P.equal = P.equals = P.eq = function (expected) {
-    return this._check(this._deep ? __deepEqual(this._v, expected) : this._v === expected, "to equal " + __show(expected));
+    return this._check(this._deep ? __deepEqual(this._v, expected) : this._v === expected, "to equal " + __said(expected));
   };
-  P.eql = function (expected) { return this._check(__deepEqual(this._v, expected), "to deeply equal " + __show(expected)); };
+  P.eql = function (expected) { return this._check(__deepEqual(this._v, expected), "to deeply equal " + __said(expected)); };
   P.above = P.greaterThan = P.gt = function (n) { return this._check(this._v > n, "to be above " + n); };
   P.below = P.lessThan = P.lt = function (n) { return this._check(this._v < n, "to be below " + n); };
   P.least = P.gte = function (n) { return this._check(this._v >= n, "to be at least " + n); };
@@ -85,12 +88,12 @@ function __expect(actual) {
     else if (v && typeof v === "object") ok = typeof item === "object" && item !== null
       ? Object.keys(item).every(function (k) { return __deepEqual(v[k], item[k]); })
       : Object.prototype.hasOwnProperty.call(v, item);
-    return this._check(ok, "to include " + __show(item));
+    return this._check(ok, "to include " + __said(item));
   };
   P.property = function (name, value) {
     var has = this._v !== null && this._v !== undefined && Object.prototype.hasOwnProperty.call(Object(this._v), name);
-    if (arguments.length < 2) return this._check(has, "to have property " + __show(name));
-    return this._check(has && __deepEqual(this._v[name], value), "to have property " + __show(name) + " of " + __show(value));
+    if (arguments.length < 2) return this._check(has, "to have property " + __said(name));
+    return this._check(has && __deepEqual(this._v[name], value), "to have property " + __said(name) + " of " + __said(value));
   };
   P.lengthOf = P.length = function (n) { return this._check(this._v != null && this._v.length === n, "to have length " + n); };
   P.a = P.an = function (type) {
@@ -99,7 +102,7 @@ function __expect(actual) {
     return this._check(actualType === t, "to be a" + (/^[aeiou]/.test(t) ? "n " : " ") + t);
   };
   P.match = function (re) { return this._check(new RegExp(re).test(String(this._v)), "to match " + String(re)); };
-  P.oneOf = function (list) { var v = this._v; return this._check(list.some(function (x) { return __deepEqual(x, v); }), "to be one of " + __show(list)); };
+  P.oneOf = function (list) { var v = this._v; return this._check(list.some(function (x) { return __deepEqual(x, v); }), "to be one of " + __said(list)); };
   P.status = function (code) {
     var v = this._v && typeof this._v === "object" && "code" in this._v ? this._v.code : this._v;
     if (this._not ? v === code : v !== code) throw new Error("expected status " + (this._not ? "not " : "") + code + ", got " + v);

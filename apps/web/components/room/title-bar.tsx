@@ -1,5 +1,6 @@
 "use client";
 
+import { chatUnreadLabel } from "@codechatter/contracts";
 import { ChevronRight, GitFork, Moon, MoreHorizontal, Presentation, Search, Sun, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 import { LogoMark } from "@/components/brand/logo";
 import { NotificationsBell } from "@/components/notifications/notifications-bell";
 import { CallButton } from "@/components/room/call/call-dock";
+import { useChatUnread } from "@/components/room/chat-panel";
 import { ForkDialog } from "@/components/room/fork-dialog";
 import { ShareMenu } from "@/components/room/share-menu";
 import { VisibilityMenu } from "@/components/room/visibility-menu";
@@ -39,6 +41,7 @@ export type SidePanel = {
  */
 export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePanel }) {
   const { room, me, mySlot, status } = useRoom();
+  const chatUnread = useChatUnread(me.user.id, room.id).state?.count ?? 0;
   const peers = usePeers();
   // Go to file's key, as you've set it (keybindings.ts).
   const quickOpenKey = useEditorSettings((state) => keysFor("quick-open", state.keybindings)[0]);
@@ -127,13 +130,16 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
         <span aria-hidden className="mx-1 h-5 w-px bg-border" />
         {side && (
           <div role="group" aria-label="Side panel" className="flex items-center gap-0.5">
-            {side.items.map(({ id, label, icon: Icon, badge = 0 }) => (
+            {side.items.map(({ id, label, icon: Icon, badge: suppliedBadge = 0 }) => {
+              const badge = id === "chat" ? chatUnread : suppliedBadge;
+              const badgeLabel = id === "chat" ? chatUnreadLabel(badge) : badge > 9 ? "9+" : String(badge);
+              return (
               <Tooltip key={id}>
                 <TooltipTrigger asChild>
                   <Button
                     variant={side.panel === id ? "secondary" : "ghost"}
                     size="icon-sm"
-                    aria-label={badge ? `${label}, ${badge} unread` : label}
+                    aria-label={badge ? `${label}, ${badgeLabel} unread` : label}
                     aria-pressed={side.panel === id}
                     onClick={() => side.toggle(id)}
                     className="relative"
@@ -141,14 +147,15 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
                     <Icon />
                     {badge > 0 && (
                       <span className="absolute top-0.5 right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 text-[9px] leading-none font-semibold text-brand-foreground tabular-nums">
-                        {badge > 9 ? "9+" : badge}
+                        {badgeLabel}
                       </span>
                     )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{label}</TooltipContent>
               </Tooltip>
-            ))}
+              );
+            })}
           </div>
         )}
         <div className="ml-1 flex items-center gap-1.5">

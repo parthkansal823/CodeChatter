@@ -84,12 +84,13 @@ export class EventsGateway implements OnGatewayInit, OnModuleDestroy {
         return;
       }
       const change = parseRoomAccessMessage(message);
-      void Promise.allSettled([this.recheckListeners(change.roomId, change.userId), this.live.recheck(change), this.calls.recheck(change)]).then((results) => {
+      void Promise.allSettled([this.recheckListeners(change.roomId, change.userId), this.live.recheck(change), this.calls.recheck(change), this.messages.unreadAccessChanged(change.roomId, change.userId)]).then((results) => {
         for (const result of results) if (result.status === "rejected") this.logger.warn(`room access: ${String(result.reason)}`);
       });
     });
     void this.accessChanges.subscribe(ROOM_ACCESS_CHANNEL, SESSION_ENDED_CHANNEL);
     this.notifications.setPush((userId, item) => this.server.to(userChannel(userId)).emit("notification:new", item));
+    this.messages.setUnreadPush((userId, event) => this.server.to(userChannel(userId)).emit("chat:unread", event));
     server.use(async (socket, next) => {
       try {
         if (!this.origins.isAllowed(socket.handshake.headers.origin)) return next(new Error("forbidden origin"));

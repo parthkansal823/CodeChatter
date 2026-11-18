@@ -34,6 +34,7 @@ export function runEventOf(roomId: string, run: RunInfo, exit: RunExit, output: 
 /** Reads the Tests tab's stream as it goes past (one JSON line per event) and says what happened, once it has. */
 export class TestsWatcher {
   private buffer = "";
+  private readonly decoder = new TextDecoder();
   private readonly cases: TestsEventData["cases"] = [];
   private compileError: string | undefined;
   private error: string | undefined;
@@ -44,8 +45,9 @@ export class TestsWatcher {
     private readonly asked: number,
   ) {}
 
-  feed(chunk: string | Buffer): void {
-    this.buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+  feed(chunk: string | Uint8Array): void {
+    // The runner's stream is bytes: a character can be split between two of them.
+    this.buffer += typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });
     for (let newline = this.buffer.indexOf("\n"); newline !== -1; newline = this.buffer.indexOf("\n")) {
       const line = this.buffer.slice(0, newline).trim();
       this.buffer = this.buffer.slice(newline + 1);

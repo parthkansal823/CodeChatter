@@ -1,12 +1,19 @@
-/** Read bounded Postman v2 collections as plain import data, excluding scripts, files and shared credential values. */
+/**
+ * Read bounded Postman v2 collections as plain import data, excluding files and shared credential values. Scripts are left out unless asked for: then a
+ * request gets its collection's, folders' and own pre-request and test scripts, in the order Postman runs them (they run in a sandbox with no network:
+ * script-sandbox.ts).
+ */
 import type { KeyValue, RequestAuth, RequestBody } from "@codechatter/contracts";
 
 import { ImportBuilder, array, emptyImportAuth, emptyImportBody, encodeStructuredQuery, importUrl, multipartBody, parseImportInput, record, safeExample, string, type ImportPlan } from "./import-openapi";
 
 type Obj = Record<string, unknown>;
 
+const SCRIPT_LIMIT = 64 * 1024;
+type Scripts = { pre: string[]; test: string[] };
+
 /** Collection/folder auth is inherited only when a child does not explicitly override it. */
-export function parsePostman(text: string): ImportPlan {
+export function parsePostman(text: string, options: { scripts?: boolean } = {}): ImportPlan {
   const document = record(parseImportInput(text));
   const info = record(document?.info);
   if (!document || !info || !/\/v2\.(?:0|1)\.\d+\//.test(string(info.schema))) throw new Error("Choose a Postman Collection v2.0 or v2.1 JSON file.");
@@ -41,6 +48,28 @@ export function parsePostman(text: string): ImportPlan {
     return out;
   };
   const hasScript = (value: unknown): boolean => array(value).some((event) => Boolean(record(event)?.script));
+  /** One level's scripts of a kind (collection, folder, item or request), marked with where they came from. */
+  const scriptsOf = (events: unknown, where: string): Scripts => {
+    const out: Scripts = { pre: [], test: [] };
+    if (!options.scripts) return out;
+    for (const raw of array(events)) {
+      const event = record(raw);
+      const script = record(event?.script);
+      if (!event || !script || (event.listen !== "prerequest" && event.listen !== "test")) continue;
+      const code = (Array.isArray(script.exec) ? script.exec.map((line) => string(line)).join("\n") : string(script.exec)).trim();
+      if (code) (event.listen === "prerequest" ? out.pre : out.test).push(`// From ${where}\n${code}`);
+    }
+    return out;
+  };
+  const joined = (parts: string[]) => {
+    const code = parts.join("\n\n");
+    if (code.length > SCRIPT_LIMIT) {
+      builder.plan.counts.truncated++;
+      return code.slice(0, SCRIPT_LIMIT);
+    }
+    return code;
+  };
+  const both = (a: Scripts, b: Scripts): Scripts => ({ pre: [...a.pre, ...b.pre], test: [...a.test, ...b.test] });
   const rowList = (values: unknown, kind: "header" | "query" | "form"): KeyValue[] => {
     const rows: KeyValue[] = [];
     // The v2.0 header-list also accepts newline-separated header text.
@@ -102,7 +131,9 @@ export function parsePostman(text: string): ImportPlan {
     else builder.unsupported("Unsupported body formats were skipped.");
     return out;
   };
-  const stack: Array<{ items: unknown[]; parentId: string | null; auth: Obj | undefined; scripts: boolean; depth: number }> = [{ items: array(document.item), parentId: null, auth: record(document.auth), scripts: hasScript(document.event), depth: 0 }];
+  const stack: Array<{ items: unknown[]; parentId: string | null; auth: Obj | undefined; scripts: boolean; code: Scripts; depth: number }> = [
+    { items: array(document.item), parentId: null, auth: record(document.auth), scripts: hasScript(document.event), code: scriptsOf(document.event, "the collection"), depth: 0 },
+  ];
   while (stack.length) {
     const group = stack.pop()!;
     if (group.depth > 200) throw new Error("That collection is nested more than 200 levels. Split or simplify it.");
@@ -116,7 +147,7 @@ export function parsePostman(text: string): ImportPlan {
       const scripts = group.scripts || hasScript(item.event);
       if (Array.isArray(item.item)) {
         const id = builder.folder(item.name, group.parentId);
-        children.push({ items: item.item, parentId: id, auth, scripts, depth: group.depth + 1 });
+        children.push({ items: item.item, parentId: id, auth, scripts, code: both(group.code, scriptsOf(item.event, `the folder "${builder.clip(item.name, 80)}"`)), depth: group.depth + 1 });
         continue;
       }
       const req = typeof item.request === "string" ? { url: item.request, method: "GET" } : record(item.request);
@@ -129,10 +160,24 @@ export function parsePostman(text: string): ImportPlan {
       const body = makeBody(req.body, headers);
       const finalAuth = requestAuth(inheritedAuth(req.auth, auth));
       if (!url.url) { builder.unsupported("Requests without a URL were skipped."); continue; }
-      builder.add({ folderId: group.parentId, name: builder.clip(item.name, 120) || `${method} ${url.url}`.slice(0, 120), method, url: url.url, params: url.params, headers, body, auth: finalAuth });
+      const code = both(group.code, both(scriptsOf(item.event, "this request"), scriptsOf(req.event, "this request")));
+      builder.add({
+        folderId: group.parentId,
+        name: builder.clip(item.name, 120) || `${method} ${url.url}`.slice(0, 120),
+        method,
+        url: url.url,
+        params: url.params,
+        headers,
+        body,
+        auth: finalAuth,
+        ...(code.pre.length && { preScript: joined(code.pre) }),
+        ...(code.test.length && { testScript: joined(code.test) }),
+      });
     }
     stack.push(...children.reverse());
   }
   if (!builder.plan.requests.length) throw new Error("No supported HTTP requests were found in that collection.");
-  return builder.finish();
+  const plan = builder.finish();
+  if (options.scripts) plan.warnings = plan.warnings.map((warning) => (warning === "Scripts were not imported." ? "Their scripts were brought too. They run when you send, in a sandbox with no network: read them first." : warning));
+  return plan;
 }

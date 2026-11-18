@@ -1,12 +1,14 @@
 "use client";
 
-import type { RoomSummary } from "@codechatter/contracts";
+import { chatUnreadLabel, type RoomSummary } from "@codechatter/contracts";
 import { Globe2, Lock, MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { PresenceAvatar, slotFor } from "@/components/presence/presence";
+import { useMe } from "@/components/app/app-shell";
+import { useChatUnread } from "@/components/room/chat-panel";
 import { templateName } from "@/components/rooms/templates";
 import { useDeleteRoom } from "@/components/rooms/use-rooms";
 import {
@@ -33,6 +35,8 @@ const ROLE_LABEL: Record<RoomSummary["role"], string> = {
 };
 
 export function RoomsTable({ rooms }: { rooms: RoomSummary[] }) {
+  const me = useMe();
+  const unread = useChatUnread(me.user.id).rooms;
   const remove = useDeleteRoom();
   const [confirming, setConfirming] = useState<RoomSummary | null>(null);
 
@@ -50,13 +54,16 @@ export function RoomsTable({ rooms }: { rooms: RoomSummary[] }) {
             </tr>
           </thead>
           <tbody>
-            {rooms.map((room) => (
+            {rooms.map((room) => {
+              const count = unread.find((item) => item.roomId === room.id)?.count ?? 0;
+              return (
               <tr key={room.id} className="group relative border-b transition-colors hover:bg-accent/60">
                 <td className="py-3 pr-4 pl-6 sm:pl-8">
                   {/* The whole row opens the room; the link sits on the name for a11y. */}
                   <Link href={`/rooms/${room.id}` as never} className="font-medium after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-ring">
                     {room.name}
                   </Link>
+                  {count > 0 && <span aria-label={`${chatUnreadLabel(count)} unread messages`} className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[10px] font-semibold text-brand-foreground tabular-nums">{chatUnreadLabel(count)}</span>}
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="font-mono">{room.id}</span>
                     <span aria-hidden className="h-3 w-px bg-border" />
@@ -96,7 +103,8 @@ export function RoomsTable({ rooms }: { rooms: RoomSummary[] }) {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

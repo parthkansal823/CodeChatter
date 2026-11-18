@@ -109,7 +109,7 @@ flowchart TD
 
 - 🟡 **Docs** (like Notion): block editor, page tree, templates, comments, history, publish
 - 🟡 **Knowledge base** (like Obsidian): links, graph view, organising, code links
-- 🟡 **API studio** (like Postman): collections, request builder, environments, tests, cURL, OpenAPI and Postman import, snippets with axios
+- 🟡 **API studio** (like Postman): collections, request builder, environments, tests, scripts before sending and after the response (Postman's `pm`), cURL, OpenAPI and Postman import, snippets with axios
 - 🟡 **Design canvas** (like Figma): multiplayer vectors, layers, components, auto layout, export, CSS handoff
 - 🟡 **Diagrams** (draw.io): edited together live, in the app's look, with export. Production hosting ⬜
 - ⬜ **Messaging** (like Slack): channels, threads, huddles, bots, search
@@ -223,5 +223,6 @@ They're scheduled beside the step they need.
   - resource monitor, ports panel, competitive-programming helper, every language, service add-ons;
   - tutor, mock interviewer, complexity and screenshot-to-code AI modes;
   - Markdown preview, Vim keys and Zen mode;
-  - a task board, with TODO and FIXME comments as cards.
-- **Still open** (in pending.md): in-browser runner, public profile, visualizer, code tours, math in Markdown, a VS Code extension, interface languages.
+  - a task board, with TODO and FIXME comments as cards;
+  - code tours: stops at lines of the room's code, with notes, played by each person on their own.
+- **Still open** (in pending.md): in-browser runner, public profile, visualizer, math in Markdown, a VS Code extension, interface languages.

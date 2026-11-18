@@ -42,7 +42,9 @@ describe("the Tests tab's tests", () => {
       line({ type: "case", index: 1, verdict: "failed", stdout: "4\n", stderr: "", exitCode: 0, timeMs: 10 }) +
       line({ type: "case", index: 2, verdict: "timeout", stdout: "", stderr: "", exitCode: null, timeMs: 2000 }) +
       line({ type: "done", passed: 1, total: 3 });
-    for (let at = 0; at < stream.length; at += 7) watcher.feed(Buffer.from(stream.slice(at, at + 7)));
+    // As the runner sends it: bytes, cut anywhere (here inside the "é" too).
+    const bytes = new TextEncoder().encode(stream.replace(String.raw`"4\n"`, String.raw`"4é\n"`));
+    for (let at = 0; at < bytes.length; at += 7) watcher.feed(new Uint8Array(bytes.subarray(at, at + 7)));
     expect(watcher.result()).toEqual({
       path: "a.cpp",
       passed: 1,
@@ -50,7 +52,7 @@ describe("the Tests tab's tests", () => {
       failed: true,
       cases: [
         { index: 0, verdict: "passed", timeMs: 12, stdout: "3\n", stderr: "" },
-        { index: 1, verdict: "failed", timeMs: 10, stdout: "4\n", stderr: "" },
+        { index: 1, verdict: "failed", timeMs: 10, stdout: "4é\n", stderr: "" },
         { index: 2, verdict: "timeout", timeMs: 2000, stdout: "", stderr: "" },
       ],
     });

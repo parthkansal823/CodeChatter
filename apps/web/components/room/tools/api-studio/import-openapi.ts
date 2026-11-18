@@ -4,7 +4,19 @@ import { parseDocument } from "yaml";
 
 export type ImportFolder = { id: string; name: string; parentId: string | null };
 export type ImportVariable = { key: string; value: string; secret: boolean; enabled: boolean };
-export type ImportRequest = { folderId: string | null; name: string; method: HttpMethod; url: string; headers: KeyValue[]; params: KeyValue[]; body: RequestBody; auth: RequestAuth };
+export type ImportRequest = {
+  folderId: string | null;
+  name: string;
+  method: HttpMethod;
+  url: string;
+  headers: KeyValue[];
+  params: KeyValue[];
+  body: RequestBody;
+  auth: RequestAuth;
+  /** A Postman collection's scripts, only when asked for (parsePostman's `scripts`). */
+  preScript?: string;
+  testScript?: string;
+};
 export type ImportCounts = { remoteRefs: number; files: number; scripts: number; unsupported: number; secretValues: number; truncated: number; cycles: number };
 export type ImportPlan = { name: string; format: "openapi" | "swagger" | "postman"; folders: ImportFolder[]; requests: ImportRequest[]; variables: ImportVariable[]; warnings: string[]; counts: ImportCounts };
 type Obj = Record<string, unknown>;

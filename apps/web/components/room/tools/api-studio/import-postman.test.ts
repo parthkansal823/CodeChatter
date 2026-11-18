@@ -187,3 +187,30 @@ test("dynamic placeholders preserve send-time generation and unsupported ones re
   assert.deepEqual(resolved.missing, ["$unknownDynamic"]);
   assert.ok(plan.warnings.some((warning) => warning.includes("Unsupported dynamic variables need manual values")));
 });
+
+test("scripts come only when asked for, in the order Postman runs them", () => {
+  const value = collection({
+    event: [{ listen: "prerequest", script: { exec: ["pm.environment.set('a', 1);"] } }, { listen: "test", script: { exec: "pm.test('top', () => {});" } }],
+    item: [
+      {
+        name: "Pets",
+        event: [{ listen: "prerequest", script: { exec: ["console.log('folder');"] } }],
+        item: [{ name: "List", event: [{ listen: "test", script: { exec: ["pm.test('mine', () => pm.response.to.have.status(200));"] } }], request: { method: "GET", url: "https://example.test/pets" } }],
+      },
+      { name: "Plain", request: { method: "GET", url: "https://example.test/plain" } },
+    ],
+  });
+  const without = parsePostman(JSON.stringify(value));
+  assert.equal(without.counts.scripts, 2);
+  assert.ok(without.requests.every((request) => request.preScript === undefined && request.testScript === undefined));
+  assert.ok(without.warnings.includes("Scripts were not imported."));
+
+  const withThem = parsePostman(JSON.stringify(value), { scripts: true });
+  const list = withThem.requests.find((request) => request.name === "List")!;
+  assert.equal(list.preScript, "// From the collection\npm.environment.set('a', 1);\n\n// From the folder \"Pets\"\nconsole.log('folder');");
+  assert.equal(list.testScript, "// From the collection\npm.test('top', () => {});\n\n// From this request\npm.test('mine', () => pm.response.to.have.status(200));");
+  const plain = withThem.requests.find((request) => request.name === "Plain")!;
+  assert.equal(plain.preScript, "// From the collection\npm.environment.set('a', 1);");
+  assert.ok(!withThem.warnings.includes("Scripts were not imported."));
+  assert.ok(withThem.warnings.some((warning) => warning.includes("read them first")));
+});

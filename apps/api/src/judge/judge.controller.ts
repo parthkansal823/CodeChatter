@@ -46,7 +46,7 @@ export class JudgeController {
       for await (const chunk of upstream) {
         if (res.destroyed) break;
         res.write(chunk);
-        watcher.feed(chunk as Buffer | string);
+        watcher.feed(chunk);
       }
     } catch (error) {
       this.logger.warn(`judge ${room.data}: ${String(error)}`);

@@ -13,8 +13,10 @@ import type * as Y from "yjs";
 
 import { api, ApiError } from "@/lib/api";
 
-import { getSelectedEnvironment, getValues, patchValues, recordHistory, variableLookup } from "./local-store";
+import { getSelectedEnvironment, getValues, patchValues, recordHistory, variableLookup, variableSnapshot } from "./local-store";
 import { readEnvironments, readRequest } from "./model";
+import { runScript } from "./script-sandbox";
+import { checksOf, logsOf, scriptRequestOf, scriptResponseOf, sentRequestOf, stoppedBecause, withScriptRequest, type RunLog } from "./scripts";
 
 export type ExtractedValue = { variable: string; value?: string; error?: string };
 
@@ -33,6 +35,8 @@ export type RunState = {
   sentUrl: string;
   checks: CheckResult[];
   extracted: ExtractedValue[];
+  /** What the request's scripts logged (console.log and the rest). */
+  logs: RunLog[];
 };
 
 export const SENDING: RunState = {
@@ -45,6 +49,7 @@ export const SENDING: RunState = {
   sentUrl: "",
   checks: [],
   extracted: [],
+  logs: [],
 };
 
 export type ExecuteOptions = {
@@ -79,21 +84,35 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
   const startedAt = Date.now();
   const done = (patch: Partial<RunState>): RunState => ({ ...SENDING, phase: "done", startedAt, finishedAt: Date.now(), ...patch });
 
-  const request = readRequest(doc, requestId);
-  if (!request) return done({ problem: "This request was deleted." });
+  const written = readRequest(doc, requestId);
+  if (!written) return done({ problem: "This request was deleted." });
 
   const selected = getSelectedEnvironment(roomId, userId);
   const env = readEnvironments(doc).find((e) => e.id === selected) ?? null;
   const envKey = env?.id ?? "";
+  const logs: RunLog[] = [];
+  const scriptChecks: CheckResult[] = [];
+
+  // The script before sending: it can set variables, and change this send's request (as Postman's pre-request script does).
+  let request = written;
+  if (written.preScript.trim()) {
+    const ran = await runScript(written.preScript, { kind: "pre", name: written.name, variables: variableSnapshot(env, getValues(roomId, userId, envKey)), request: scriptRequestOf(written) });
+    logs.push(...logsOf(ran, "before"));
+    if (Object.keys(ran.variables).length) patchValues(roomId, userId, envKey, ran.variables);
+    if (ran.error) return done({ problem: `The script before sending ${stoppedBecause(ran).replace(/^It /, "")}`, logs });
+    scriptChecks.push(...checksOf(ran, "before"));
+    request = withScriptRequest(written, ran.request);
+  }
+  if (signal?.aborted) return done({ problem: "Cancelled.", logs });
   const lookup = variableLookup(env, getValues(roomId, userId, envKey));
 
   const missingInUrl = substituteVariables(request.url, lookup).missing;
   if (missingInUrl.length) {
     const names = missingInUrl.map((n) => `{{${n}}}`).join(", ");
-    return done({ problem: `${names} ${missingInUrl.length > 1 ? "have" : "has"} no value. Pick an environment, or add ${missingInUrl.length > 1 ? "them" : "it"} under Environments.` });
+    return done({ problem: `${names} ${missingInUrl.length > 1 ? "have" : "has"} no value. Pick an environment, or add ${missingInUrl.length > 1 ? "them" : "it"} under Environments.`, logs });
   }
   const resolved = resolveRequest(request, lookup);
-  if (resolved.problems.length) return done({ problem: resolved.problems.join(" ") });
+  if (resolved.problems.length) return done({ problem: resolved.problems.join(" "), logs });
   const warnings = resolved.missing.length ? [`No value for ${resolved.missing.map((n) => `{{${n}}}`).join(", ")}. They were sent as written.`] : [];
 
   let result: HttpSendResult;
@@ -113,7 +132,7 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
       timeMs: Date.now() - startedAt,
       size: 0,
     });
-    return done({ problem, warnings, sentUrl: resolved.input.url });
+    return done({ problem, warnings, sentUrl: resolved.input.url, logs });
   }
 
   let checks: CheckResult[];
@@ -125,9 +144,24 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
     const changes: Record<string, string> = {};
     for (const item of extracted) if (item.value !== undefined) changes[item.variable] = item.value;
     if (Object.keys(changes).length) patchValues(roomId, userId, envKey, changes);
+    // The script after the response: its pm.test results join the checks, and it can set variables for the next request.
+    if (request.testScript.trim()) {
+      const ran = await runScript(request.testScript, {
+        kind: "test",
+        name: request.name,
+        variables: variableSnapshot(env, getValues(roomId, userId, envKey)),
+        request: sentRequestOf(resolved.input),
+        response: scriptResponseOf(result),
+      });
+      logs.push(...logsOf(ran, "after"));
+      if (Object.keys(ran.variables).length) patchValues(roomId, userId, envKey, ran.variables);
+      checks.push(...checksOf(ran, "after"));
+    }
   } else {
     checks = request.assertions.filter((a) => a.enabled).map((a) => ({ id: a.id, name: describeAssertion(a), passed: false, message: "The request got no response." }));
+    if (request.testScript.trim()) checks.push({ id: "after-script-error", name: "The script after the response", passed: false, message: "It didn't run: the request got no response." });
   }
+  checks = [...scriptChecks, ...checks];
 
   recordHistory(roomId, userId, {
     id: randomId(),
@@ -142,5 +176,5 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
     size: result.ok ? result.size : 0,
   });
 
-  return done({ result, warnings, sentUrl: resolved.input.url, checks, extracted });
+  return done({ result, warnings, sentUrl: resolved.input.url, checks, extracted, logs });
 }

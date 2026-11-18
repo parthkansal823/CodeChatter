@@ -120,6 +120,13 @@
       "when": 1794892584727,
       "tag": "0016_curly_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795005455535,
+      "tag": "0017_slippery_blue_blade",
+      "breakpoints": true
     }
   ]
 }

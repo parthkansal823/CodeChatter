@@ -177,6 +177,7 @@ try {
       "cd /workspace",
       'if [ -e .git ]; then echo "HAD GIT"; exit 0; fi',
       "git init -q -b cc-events-test",
+      'echo "MADE GIT"',
       'git -c user.name="Asha Test" -c user.email=asha@example.com commit -q --allow-empty -m "First of the test"',
       'git -c user.name="Asha Test" -c user.email=asha@example.com commit -q --allow-empty -m "Second of the test"',
       "echo COMMITTED",
@@ -245,9 +246,11 @@ try {
 
   // ---- Commits made with git in the sandbox ----
   const committed = await runQuietly(`${FOLDER}/commit.sh`);
-  madeGit = committed.includes("COMMITTED");
-  check("gitCommitsInTheSandbox", madeGit, committed.slice(-400));
-  if (madeGit) {
+  // Made here, so it's taken away again even if the commits fail.
+  madeGit = committed.includes("MADE GIT");
+  const didCommit = committed.includes("COMMITTED");
+  check("gitCommitsInTheSandbox", didCommit, committed.slice(-400));
+  if (didCommit) {
     let commits = [];
     let gitRuns = [];
     for (const until = Date.now() + 60_000; Date.now() < until && commits.length < 2; await sleep(1500)) {

@@ -87,6 +87,17 @@ export const roomMembers = pgTable(
   (t) => [primaryKey({ columns: [t.roomId, t.userId] }), index().on(t.userId, t.status, t.updatedAt.desc())],
 );
 
+/** Per-person chat cursors also cover public visitors; deleting a message must not erase their read position. */
+export const roomChatReads = pgTable(
+  "room_chat_reads",
+  {
+    roomId: text().notNull().references(() => rooms.id, { onDelete: "cascade" }),
+    userId: text().notNull().references(() => user.id, { onDelete: "cascade" }),
+    lastReadMessageId: uuid(),
+  },
+  (t) => [primaryKey({ columns: [t.roomId, t.userId] })],
+);
+
 /**
  * Append-only Yjs update log. Each row is one locally originated update (or a
  * replica's catch-up diff), timestamped: this is the source for history,
@@ -149,7 +160,12 @@ export const messages = pgTable(
     deletedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index().on(t.roomId, t.id.desc()), uniqueIndex().on(t.roomId, t.clientId)],
+  (t) => [
+    index().on(t.roomId, t.id.desc()),
+    uniqueIndex().on(t.roomId, t.clientId),
+    index("messages_chat_unread_idx").on(t.roomId, t.id, t.userId)
+      .where(sql`${t.userId} IS NOT NULL AND ${t.deletedAt} IS NULL AND ${t.kind} NOT IN ('system', 'github')`),
+  ],
 );
 
 export const notifications = pgTable(
