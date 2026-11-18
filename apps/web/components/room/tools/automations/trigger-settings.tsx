@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
 
 import { DataView } from "./data-view";
+import { HookAuthSettings } from "./hook-auth-settings";
 import type { Flow } from "./model";
 
 const failure = (error: unknown) => (error instanceof ApiError ? error.message : "Couldn't reach the server. Try again.");
@@ -130,6 +131,7 @@ export function TriggerSettings({ flow, path, canRun, onSave, onUseEvent }: { fl
               <p className="text-muted-foreground">
                 A {heard.method} came in at {new Date(heard.at).toLocaleTimeString()}.
               </p>
+              {heard.authorized === false && <p className="text-destructive">The live address would refuse it: {heard.why}</p>}
               <DataView label="What it sent" value={heard.body} />
               <div>
                 <Button size="xs" variant="outline" onClick={() => onUseEvent(heard.body)}>
@@ -145,6 +147,7 @@ export function TriggerSettings({ flow, path, canRun, onSave, onUseEvent }: { fl
               <option value="finished">When the flow finishes, with what its last step gave</option>
             </select>
           </label>
+          <HookAuthSettings auth={trigger.auth ?? { kind: "none" }} busy={busy} onSave={(auth) => act(() => api(`/api/rooms/${room.id}/automations/triggers/${trigger.id}`, { method: "PATCH", json: { auth } }))} />
           {trigger.lastRunAt && <p className="text-muted-foreground">Last called {new Date(trigger.lastRunAt).toLocaleString()}.</p>}
           <div className="flex flex-wrap gap-1">
             <Button size="xs" variant="outline" disabled={busy} onClick={() => void act(() => api(`/api/rooms/${room.id}/automations/triggers/${trigger.id}`, { method: "PATCH", json: { enabled: !trigger.enabled } }))}>

@@ -1,10 +1,14 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
 import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, FlowInput, LatexInput, AutomationInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
   RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
-import { BadRequestException, ConflictException, HttpException, Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException, Inject, Injectable, Optional, ServiceUnavailableException } from "@nestjs/common";
+import type { Redis } from "ioredis";
 
 import type { Env } from "../config/env.js";
-import { ENV } from "../infra/tokens.js";
+import { ENV, VALKEY } from "../infra/tokens.js";
+
+/** Rooms that ran automations lately, by when: the automations' timer asks them which runs are waiting (automation-triggers.service.ts). */
+export const RECENT_AUTOMATION_ROOMS = "automations:recent-rooms";
 
 export type RunnerUser = { id: string; name: string };
 
@@ -24,7 +28,10 @@ export class RunnerClient {
   /** Each room's sandbox image, as its settings say (RoomsService notes it on every check of a room). */
   private readonly images = new Map<string, "base" | "full" | "default">();
 
-  constructor(@Inject(ENV) private readonly env: Env) {}
+  constructor(
+    @Inject(ENV) private readonly env: Env,
+    @Optional() @Inject(VALKEY) private readonly redis?: Redis,
+  ) {}
 
   noteImage(roomId: string, image: "base" | "full" | "default"): void {
     this.images.set(roomId, image);
@@ -249,7 +256,10 @@ export class RunnerClient {
 
   /** A flow run by Activepieces' engine in the sandbox (apps/runner/src/automations.ts). */
   async automations(roomId: string, input: AutomationInput, user: RunnerUser): Promise<unknown> {
-    const response = await this.call(`/rooms/${roomId}/automations`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(input) });
+    // Where a run that waits for a call is carried on from: the API's own address, whatever a browser sent.
+    const body = input.op === "run" ? { ...input, resumeBase: `${this.env.APP_URL.replace(/\/$/, "")}/api/hooks/automations/resume/${roomId}` } : input;
+    if (input.op === "run" || input.op === "resume") void this.redis?.zadd(RECENT_AUTOMATION_ROOMS, Date.now(), roomId).catch(() => {});
+    const response = await this.call(`/rooms/${roomId}/automations`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
     if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't reach the automation.");
     if (!response.ok) throw new RunnerUnavailableError();
     return response.json();

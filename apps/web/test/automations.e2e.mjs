@@ -321,6 +321,17 @@ try {
   await liveAddress.waitFor({ timeout: 10_000 });
   const liveUrl = (await liveAddress.inputValue()).replace(/^https?:\/\/[^/]+/, BASE);
   check("turningItOnGivesAnAddress", liveUrl.includes(`/api/hooks/automations/${"E2ETST"}/`), liveUrl);
+  // Who may call it: a signature, saved and shown without its secret, then back to the address alone.
+  const whoMay = starting.getByRole("region", { name: "Who may call it" });
+  await whoMay.getByRole("combobox", { name: "Who may call it" }).selectOption("signature");
+  await whoMay.getByLabel("Shared secret").fill("shared webhook secret");
+  await whoMay.getByRole("button", { name: "Save who may call it" }).click();
+  check("aSignatureCanBeAskedFor", await ok(whoMay.getByText(/Now: Calls must sign their body in the x-hub-signature-256 header/).waitFor({ timeout: 10_000 })) && (await whoMay.getByLabel("Shared secret").inputValue()) === "");
+  const refused = await fetch(liveUrl, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  check("anUnsignedCallIsRefused", refused.status === 401, refused.status);
+  await whoMay.getByRole("combobox", { name: "Who may call it" }).selectOption("none");
+  await whoMay.getByRole("button", { name: "Save who may call it" }).click();
+  check("andBackToTheAddressAlone", await ok(whoMay.getByText(/Now: Anyone with the address can call it/).waitFor({ timeout: 10_000 })));
   await starting.getByRole("button", { name: "Listen for a test call" }).click();
   await fetch(`${liveUrl}/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ additions: 600, deletions: 7 }) });
   check("aTestCallIsShown", await ok(starting.getByRole("button", { name: "Use it as what to send" }).waitFor({ timeout: 20_000 })));
@@ -329,7 +340,9 @@ try {
   check("aTestCallCanBeWhatsSent", JSON.parse(await details.getByLabel("What to send, as JSON").inputValue()).additions === 600);
   const called = await fetch(liveUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ additions: 1, deletions: 1 }) });
   check("calledFromOutsideItRuns", called.status === 202, called.status);
-  check("theRunSaysAWebhookStartedIt", await ok(details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").filter({ hasText: "Webhook" }).first().waitFor({ timeout: 60_000 })));
+  const firstLine = (error) => String(error).split(/\r?\n/)[0];
+  const byWebhook = await details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").filter({ hasText: "Webhook" }).first().waitFor({ timeout: 60_000 }).then(() => true, firstLine);
+  check("theRunSaysAWebhookStartedIt", byWebhook === true, `${byWebhook} | ${await details.getByRole("list", { name: "Runs of this flow" }).innerText().catch(firstLine)}`);
   await select("When called");
   await starting.getByRole("button", { name: "Forget it" }).click();
   await starting.getByRole("group", { name: "Are you sure?" }).getByRole("button", { name: "Forget it" }).click();

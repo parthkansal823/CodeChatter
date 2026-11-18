@@ -908,6 +908,34 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
 - `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
 
+### Automations, part ten: who may call a webhook ✅ (2026-11-18)
+
+**What:** as n8n's Webhook node, a webhook can ask more of a call than knowing its secret address: **a header** with a secret value (an API key), **basic auth**, or **a signature of the body** made with a shared secret, as GitHub sends in `X-Hub-Signature-256` (`sha256=` and the HMAC-SHA256 in hex) and Shopify in base64, with the header and what comes before the signature set to suit the service.
+
+- **On the webhook's panel,** "Who may call it" chooses, saves, and says what it asks now; a secret is typed in, kept sealed (AES-GCM, as GitHub tokens are) and never shown again ("Set: type a new one to change it").
+- **The live address** refuses a call that doesn't show it (401, saying what was missing or didn't match, never the secret). **The test address** still takes it, and says whether the live one would have, so a service can be set up and its signature checked before turning it on.
+- **Checked the same way every time:** comparisons take the same time whatever matches; a signature is checked against the body exactly as it came (kept for JSON, forms and text), so a body changed on the way fails.
+- Headers that are the browser's or the server's (`Cookie`, `Host`, `Authorization` for a header secret) can't be chosen; a secret is at least 8 characters.
+
+**Where:** `apps/api/src/automations/hook-auth.ts` (new), `automation-triggers.service.ts` and `automation-hooks.controller.ts`, `main.ts` (the raw body), contracts' `AutomationHookAuthInput`, web `components/room/tools/automations/hook-auth-settings.tsx` on `trigger-settings.tsx`.
+
+**Tests:** `apps/api/src/automations/hook-auth.test.ts` (7: each kind, a header's name in any case, a signature on a changed body, GitHub's and Shopify's forms, a secret that can't be read, nothing shown back, settings refused); `apps/runner/test/automation-hooks.e2e.mjs` (37 checks), adding a signature asked for and never shown, an unsigned call and a forged one refused, a signed one run, the test address saying it would be refused, a header and basic auth, a short secret refused, and back to the address alone; `apps/web/test/automations.e2e.mjs` (106 checks), adding the panel.
+
+### Automations, part nine: sub-flows ✅ (2026-11-18)
+
+**What:** n8n's Execute Workflow. A built-in step, **Call a flow** (with the data steps), runs another flow in the room with what it sends, and gives what that flow's last step gave, so a long flow can be split into pieces, and one piece used by several.
+
+- **Who may be called:** only a flow whose trigger is This room: **Called by another flow** (n8n's Execute Workflow Trigger), so a flow isn't run from elsewhere by surprise. The step offers just those; one named in the file that can't be called is still shown, to be put right. There's nothing to turn on (the API refuses it, and its panel says why).
+- **Waiting** (the default), the called flow runs there and then, inside the caller's run and the time it has left, as its own run of its own flow ("Called by Caller"); its last step's output is this step's. **Not waiting,** it's queued for after, and the step gives its run's id.
+- **What's stopped, and why:** a flow that can't be called; one that fails, took too long or was stopped ("Fails when called failed: No stock left"); and flows calling each other more than 5 deep, such as one calling itself. Stop stops the caller and the flow it called.
+- **How:** the step asks the worker running its flow (`automation/host.mjs`), on the engine's own loopback port, which runs the called flow with a second engine and answers when it's done; the live view stays the caller's. `node:http`, not `fetch`, as `fetch` gives up on an answer after 300 seconds.
+
+**Where:** `sandbox/image/automation/builtins.mjs` (`call_flow`), `automation/host.mjs` (`callFlow`, nested runs), `automation.py` (`find`), contracts' `room-events.ts` (`flow.called`), web `components/room/tools/automations/builtins.ts` and `error-flow-field.tsx` (`CallFlowField`, and `useOtherFlows` shared with the error flow).
+
+**Tests:**
+- `sandbox/image/automation/builtins.test.mjs` (14, adding Call a flow against a stand-in worker: waiting, not waiting, JSON typed as text, a failure's reason, and outside a run)
+- `apps/runner/test/automation-subflows.e2e.mjs` (13 checks: calling and getting the last step's output, used by the next step; the called run its own, saying who called it, with the live view left alone; not waiting, queued and run after; a flow that can't be called refused and not run; a called flow's failure failing the step with its reason; a flow calling itself stopped 5 deep, with a run for each level; and a called flow refused as a room event to turn on)
+
 ### Automations, part eight: an error flow ✅ (2026-11-17)
 
 **What:** n8n's error workflow. A flow names another under **If it fails, run** (its details, beside "What it's for"); when one of its runs fails or takes too long, that flow runs, with what went wrong.

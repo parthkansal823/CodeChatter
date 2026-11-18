@@ -38,7 +38,16 @@ export const AutomationInput = z.discriminatedUnion("op", [
     query: z.record(z.string(), z.string()).optional(),
     /** What started it: shown with the run. */
     trigger: z.enum(["manual", "webhook", "schedule", "event"]).optional(),
+    /** Where a run waiting for a call is resumed from outside: set by the API, never taken from a browser (RunnerClient). */
+    resumeBase: z.string().url().max(300).optional(),
   }),
+  /**
+   * A run waiting (a Delay, or "Respond and wait for the next webhook"), carried on from where it stopped. One waiting for a call needs the token in its
+   * address; one waiting for a time doesn't, so the API (or a person, early) can carry it on.
+   */
+  z.object({ op: z.literal("resume"), id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."), token: z.string().max(100).optional(), payload: z.unknown().optional() }),
+  /** The runs waiting in the room, for the API's timer. Looking doesn't wake a room. */
+  z.object({ op: z.literal("waits") }),
   z.object({ op: z.literal("status") }),
   z.object({ op: z.literal("stop") }),
   z.object({ op: z.literal("runs"), path: FlowFile.optional() }),
@@ -48,7 +57,9 @@ export const AutomationInput = z.discriminatedUnion("op", [
 export type AutomationInput = z.infer<typeof AutomationInput>;
 
 export type AutomationStepResult = { type: string; status: string; input?: unknown; output?: unknown; errorMessage?: string; duration?: number };
-export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry"; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
+/** What a waiting run waits for: a time, or a call to its address (its token is never shown). */
+export type AutomationWaitpoint = { type: "DELAY" | "WEBHOOK"; step: string; resumeAt: number | null };
+export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry" | "resume"; waitpoint?: AutomationWaitpoint | null; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
 export type AutomationRun = AutomationRunSummary & { steps: Record<string, AutomationStepResult>; failedStep?: { name: string; displayName?: string; message?: string }; payload?: unknown; /** Steps that gave back what was pinned on them rather than running. */ pinned?: string[] };
 export type AutomationLive = (Partial<AutomationRun> & { state: "idle" | "running" | "finished"; id: string | null; steps: Record<string, AutomationStepResult>; queued: number });
 
@@ -93,7 +104,21 @@ export const AutomationTriggerInput = z
   .refine((input) => (input.kind === "schedule") === Boolean(input.schedule), { message: "A schedule needs a time to run, and only a schedule has one.", path: ["schedule"] })
   .refine((input) => (input.kind === "event") === Boolean(input.event), { message: "A room event needs what to listen for, and only a room event has it.", path: ["event"] });
 export type AutomationTriggerInput = z.infer<typeof AutomationTriggerInput>;
-export const AutomationTriggerPatch = z.object({ enabled: z.boolean().optional(), respond: z.enum(["now", "finished"]).optional(), path: FlowFile.optional(), schedule: ScheduleInput.optional(), event: RoomEventInput.optional() });
+/** What a call to a webhook must show besides its address (apps/api/src/automations/hook-auth.ts). Secrets go in, and never come back out. */
+const HeaderName = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9-]{1,64}$/, "A header's name is letters, digits and dashes.")
+  .refine((name) => !["cookie", "host", "content-length", "content-type", "authorization"].includes(name.toLowerCase()), "Choose another header: that one is the browser's or the server's.");
+const Secret = z.string().min(8, "Make the secret at least 8 characters.").max(512);
+export const AutomationHookAuthInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("none") }),
+  z.object({ kind: z.literal("header"), header: HeaderName, value: Secret }),
+  z.object({ kind: z.literal("basic"), user: z.string().trim().min(1).max(100).refine((user) => !user.includes(":"), "A user name can't have a colon in it."), password: Secret }),
+  z.object({ kind: z.literal("signature"), header: HeaderName.default("X-Hub-Signature-256"), prefix: z.string().max(40).default("sha256="), secret: Secret }),
+]);
+export type AutomationHookAuthInput = z.infer<typeof AutomationHookAuthInput>;
+export const AutomationTriggerPatch = z.object({ enabled: z.boolean().optional(), respond: z.enum(["now", "finished"]).optional(), path: FlowFile.optional(), schedule: ScheduleInput.optional(), event: RoomEventInput.optional(), auth: AutomationHookAuthInput.optional() });
 export type AutomationTriggerPatch = z.infer<typeof AutomationTriggerPatch>;
 export type AutomationTrigger = {
   id: string;
@@ -110,6 +135,8 @@ export type AutomationTrigger = {
   nextRunAt: number | null;
   /** A room event's only: what it listens for. */
   event: RoomEventSettings | null;
+  /** A webhook's only: what a call must show besides the address, without its secret. */
+  auth: { kind: "none" | "header" | "basic" | "signature"; header?: string; user?: string; prefix?: string } | null;
   /** Why it stopped by itself, such as its flow no longer starting on a schedule. */
   problem: string | null;
   createdBy: string | null;
@@ -118,7 +145,7 @@ export type AutomationTrigger = {
   lastRunId: string | null;
 };
 /** What a test call to a webhook was sent, for setting a flow up with real data. */
-export type AutomationTestEvent = { body: unknown; headers: Record<string, string>; query: Record<string, string>; method: string; at: number };
+export type AutomationTestEvent = { body: unknown; headers: Record<string, string>; query: Record<string, string>; method: string; at: number; /** Whether it showed what the live address would ask for, and why not. */ authorized?: boolean; why?: string | null };
 
 export type PieceField = { type: string; label: string; description: string; required: boolean; default?: unknown; options?: Array<{ label: string; value: unknown }>; fields?: Record<string, PieceField> };
 export type PieceStep = { label: string; description: string; needsAuth: boolean; fields: Record<string, PieceField>; kind?: string };

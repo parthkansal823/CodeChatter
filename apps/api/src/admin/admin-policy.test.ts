@@ -19,17 +19,21 @@ describe("instance administrator authority", () => {
   });
 
   it("forbids console or API demotion of the last usable administrator", () => {
-    for (const actorId of [null, "last"]) expect(() => assertRoleChange({ actorId, targetId: "last", targetIsAdmin: true, targetIsUsable: true, nextRole: "user", usableAdmins: 1 })).toThrow("Keep at least one");
+    for (const actorId of [null, "last"]) expect(() => assertRoleChange({ actorId, targetId: "last", targetIsAdmin: true, targetIsUsable: true, nextRole: "user", usableAdmins: 1, totalAdmins: 1 })).toThrow("Keep at least one");
+  });
+
+  it("preserves the last admin role even when that account is currently banned", () => {
+    expect(() => assertRoleChange({ actorId: null, targetId: "last", targetIsAdmin: true, targetIsUsable: false, nextRole: "user", usableAdmins: 0, totalAdmins: 1 })).toThrow("Keep at least one");
   });
 
   it("forbids self-demotion even when another administrator exists", () => {
-    expect(() => assertRoleChange({ actorId: "a", targetId: "a", targetIsAdmin: true, targetIsUsable: true, nextRole: "user", usableAdmins: 2 })).toThrow("own instance admin rights");
+    expect(() => assertRoleChange({ actorId: "a", targetId: "a", targetIsAdmin: true, targetIsUsable: true, nextRole: "user", usableAdmins: 2, totalAdmins: 2 })).toThrow("own instance admin rights");
   });
 
   it("permits removing another admin and an unusable banned admin without removing the last usable one", () => {
-    expect(() => assertRoleChange({ actorId: "a", targetId: "b", targetIsAdmin: true, targetIsUsable: true, nextRole: "user", usableAdmins: 2 })).not.toThrow();
-    expect(() => assertRoleChange({ actorId: null, targetId: "b", targetIsAdmin: true, targetIsUsable: false, nextRole: "user", usableAdmins: 1 })).not.toThrow();
-    expect(() => assertRoleChange({ actorId: null, targetId: "first", targetIsAdmin: false, targetIsUsable: true, nextRole: "admin", usableAdmins: 0 })).not.toThrow();
+    expect(() => assertRoleChange({ actorId: "a", targetId: "b", targetIsAdmin: true, targetIsUsable: true, nextRole: "user", usableAdmins: 2, totalAdmins: 2 })).not.toThrow();
+    expect(() => assertRoleChange({ actorId: null, targetId: "b", targetIsAdmin: true, targetIsUsable: false, nextRole: "user", usableAdmins: 1, totalAdmins: 2 })).not.toThrow();
+    expect(() => assertRoleChange({ actorId: null, targetId: "first", targetIsAdmin: false, targetIsUsable: true, nextRole: "admin", usableAdmins: 0, totalAdmins: 0 })).not.toThrow();
   });
 });
 

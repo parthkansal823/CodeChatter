@@ -30,7 +30,9 @@ import { StepPicker, type Picked } from "./step-picker";
 const GLYPHS: Record<Glyph, FlowchartNode["icon"]> = { trigger: Zap, code: Code2, piece: Puzzle, router: GitBranch, loop: Repeat, data: Rows3 };
 const failure = (error: unknown) => (error instanceof ApiError ? error.message : "Couldn't reach the server. Try again.");
 const when = (at: number | null | undefined) => (at ? new Date(at).toLocaleString([], { dateStyle: "short", timeStyle: "medium" }) : "–");
-const STATUS_WORDS: Record<string, string> = { SUCCEEDED: "Finished", FAILED: "Failed", STOPPED: "Stopped", TIMEOUT: "Took too long", RUNNING: "Running", PAUSED: "Paused" };
+const STATUS_WORDS: Record<string, string> = { SUCCEEDED: "Finished", FAILED: "Failed", STOPPED: "Stopped", TIMEOUT: "Took too long", RUNNING: "Running", PAUSED: "Waiting" };
+/** What a waiting run waits for, in a few words. */
+const waitingFor = (run: AutomationRunSummary) => (run.waitpoint?.type === "DELAY" && run.waitpoint.resumeAt ? `until ${new Date(run.waitpoint.resumeAt).toLocaleString()}` : run.waitpoint?.type === "WEBHOOK" ? "for a call to its address" : "");
 const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = MAC ? "⌘" : "Ctrl+";
 const typing = (target: EventTarget | null) => target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
@@ -52,9 +54,11 @@ function RunsList({ runs, shownId, onShow, titleOf }: { runs: AutomationRunSumma
     <ul aria-label="Runs of this flow" className="grid gap-0.5">
       {runs.map((run) => (
         <li key={run.id}>
-          <button type="button" aria-current={shownId === run.id ? "true" : undefined} className={cn("flex min-h-6 w-full flex-wrap items-center gap-x-2 rounded-sm px-1 text-left hover:bg-accent", shownId === run.id && "bg-accent", run.status !== "SUCCEEDED" && "font-medium text-destructive")} onClick={() => onShow(run.id)}>
+          <button type="button" aria-current={shownId === run.id ? "true" : undefined} className={cn("flex min-h-6 w-full flex-wrap items-center gap-x-2 rounded-sm px-1 text-left hover:bg-accent", shownId === run.id && "bg-accent", run.status !== "SUCCEEDED" && run.status !== "PAUSED" && "font-medium text-destructive", run.status === "PAUSED" && "font-medium")} onClick={() => onShow(run.id)}>
             <span>
               {STATUS_WORDS[run.status] ?? run.status}
+              {run.status === "PAUSED" && waitingFor(run) ? ` ${waitingFor(run)}` : ""}
+              {run.mode === "resume" ? " · waited" : ""}
               {run.mode === "step" && run.step ? ` · one step: ${titleOf(run.step)}` : run.mode === "retry" ? " · carried on" : ""}
             </span>
             <span className={cn(run.status === "SUCCEEDED" && "text-muted-foreground")}>
@@ -194,6 +198,17 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
     const sample: Record<string, unknown> = Object.fromEntries(Object.entries(steps ?? {}).map(([key, result]) => [key, result.output]));
     if (!Object.hasOwn(sample, flow.trigger.name)) sample[flow.trigger.name] = onSchedule || onRoomEvent ? body : { body, headers: {}, queryParams: {} };
     void run({ mode: "step", step: name, sampleData: sample });
+  };
+  /** A run waiting for a time, carried on now rather than then. */
+  const carryOn = async (id: string) => {
+    setProblem(null);
+    try {
+      await ask({ op: "resume", id });
+      setAnnouncement("Carrying on.");
+      void queryClient.invalidateQueries({ queryKey: ["automations", room.id, "status"] });
+    } catch (error) {
+      setProblem(error instanceof ApiError ? error.message : "Couldn't carry it on. Try again.");
+    }
   };
   const stop = async () => {
     try {
@@ -472,11 +487,28 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
             )}
             {!runningHere && shown && (
               <section aria-label="The run shown" className="grid gap-1">
-                <p role="status" className={cn("font-medium", shown.status !== "SUCCEEDED" && "text-destructive")}>
+                <p role="status" className={cn("font-medium", shown.status !== "SUCCEEDED" && shown.status !== "PAUSED" && "text-destructive")}>
                   {STATUS_WORDS[shown.status] ?? shown.status}
+                  {shown.status === "PAUSED" && waitingFor(shown) ? ` ${waitingFor(shown)}` : ""}
                   {shown.durationMs !== undefined ? ` in ${(shown.durationMs / 1000).toFixed(1)} s` : ""}
                 </p>
-                {shown.message && shown.status !== "SUCCEEDED" && (
+                {shown.status === "PAUSED" && (
+                  <div className="grid gap-1">
+                    <p className="text-muted-foreground">
+                      {shown.waitpoint?.type === "WEBHOOK"
+                        ? "It carries on when its address is called: the step that waits gives the address, as its nextWebhookUrl, to send to whoever answers (an approval's link, say)."
+                        : "It carries on by itself then, even with nobody in the room."}
+                    </p>
+                    {canRun && shown.waitpoint?.type === "DELAY" && (
+                      <div>
+                        <Button size="xs" variant="outline" onClick={() => void carryOn(shown.id)}>
+                          <Play /> Carry on now
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {shown.message && shown.status !== "SUCCEEDED" && shown.status !== "PAUSED" && (
                   <p className="break-words text-destructive">
                     {shown.failedStep?.displayName ? `${shown.failedStep.displayName}: ` : ""}
                     {(() => {

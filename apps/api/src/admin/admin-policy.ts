@@ -9,9 +9,9 @@ export const isBanned = (person: { banned: boolean | null; banExpires: Date | nu
 export type InstanceMutation = { kind: "role"; role: "admin" | "user" } | { kind: "ban"; reason: string; expiresAt: Date | null } | { kind: "unban" } | { kind: "sessions" };
 
 /** A row lock alone cannot protect two concurrent demotions of different administrators. */
-export function assertRoleChange(input: { actorId: string | null; targetId: string; targetIsAdmin: boolean; targetIsUsable: boolean; nextRole: "admin" | "user"; usableAdmins: number }): void {
+export function assertRoleChange(input: { actorId: string | null; targetId: string; targetIsAdmin: boolean; targetIsUsable: boolean; nextRole: "admin" | "user"; usableAdmins: number; totalAdmins: number }): void {
   if (input.nextRole !== "user") return;
-  if (input.targetIsAdmin && input.targetIsUsable && input.usableAdmins <= 1) throw new ConflictException("Keep at least one active instance admin.");
+  if (input.targetIsAdmin && (input.totalAdmins <= 1 || (input.targetIsUsable && input.usableAdmins <= 1))) throw new ConflictException("Keep at least one active instance admin.");
   if (input.actorId === input.targetId) throw new BadRequestException("You can't remove your own instance admin rights.");
 }
 
@@ -33,11 +33,10 @@ export async function mutateInstanceUser(db: Db, input: {
     let data: Record<string, unknown> = { source: input.source, ...(input.operator && { operator: input.operator }) };
     switch (change.kind) {
       case "role": {
-        const [admins] = await tx.select({ n: count() }).from(schema.user).where(sql`
+        const [admins] = await tx.select({ n: count(), usable: sql<number>`count(*) filter (where coalesce(${schema.user.banned}, false) = false or ${schema.user.banExpires} <= now())`.mapWith(Number) }).from(schema.user).where(sql`
           'admin' = any(string_to_array(coalesce(${schema.user.role}, 'user'), ','))
-          and (coalesce(${schema.user.banned}, false) = false or ${schema.user.banExpires} <= now())
         `);
-        assertRoleChange({ actorId: input.actorId, targetId: target.id, targetIsAdmin: isInstanceAdmin(target.role), targetIsUsable: !isBanned(target), nextRole: change.role, usableAdmins: admins?.n ?? 0 });
+        assertRoleChange({ actorId: input.actorId, targetId: target.id, targetIsAdmin: isInstanceAdmin(target.role), targetIsUsable: !isBanned(target), nextRole: change.role, usableAdmins: admins?.usable ?? 0, totalAdmins: admins?.n ?? 0 });
         // A console/API retry must finish session revocation even if the role
         // committed before a previous revocation failed. Seeding alone stays
         // idempotent so it never signs out shared test accounts on a repeat run.

@@ -565,9 +565,9 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     const by = claims.name ?? "";
     try {
       // The tool asks this all the time it's open. Looking doesn't wake a room or keep it awake, but a run going on does.
-      if (input.data.op === "status" || input.data.op === "runs") {
+      if (input.data.op === "status" || input.data.op === "runs" || input.data.op === "waits") {
         const running = rooms.peek(roomId);
-        if (!running?.sandbox.agent?.alive) return json(res, 200, input.data.op === "runs" ? { runs: [] } : { state: "idle", id: null, steps: {}, queued: 0 });
+        if (!running?.sandbox.agent?.alive) return json(res, 200, input.data.op === "runs" ? { runs: [] } : input.data.op === "waits" ? { waits: [] } : { state: "idle", id: null, steps: {}, queued: 0 });
         const answer = await askAutomations(running.sandbox, input.data, by);
         if ((answer as { state?: string }).state === "running") running.touch();
         return json(res, 200, answer);

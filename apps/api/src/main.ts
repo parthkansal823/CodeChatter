@@ -54,12 +54,14 @@ express.use(
   "/api/github/webhooks",
   json({ limit: "5mb", verify: (req, _res, raw) => void ((req as unknown as { rawBody: Buffer }).rawBody = raw) }),
 );
+const keepRawBody = (req: unknown, _res: unknown, raw: Buffer) => void ((req as { rawBody: Buffer }).rawBody = raw);
 // A call to an automation's webhook: JSON, a form or plain text, as the services that call webhooks send them (automations/automation-hooks.controller.ts).
 express.use(
   "/api/hooks/automations",
-  json({ limit: "1mb", verify: (req, _res, raw) => void ((req as unknown as { rawBody: Buffer }).rawBody = raw) }),
-  urlencoded({ extended: false, limit: "1mb" }),
-  text({ type: ["text/*", "application/xml"], limit: "1mb" }),
+  // The body as it came is kept too: a signature is checked against it.
+  json({ limit: "1mb", verify: keepRawBody }),
+  urlencoded({ extended: false, limit: "1mb", verify: keepRawBody }),
+  text({ type: ["text/*", "application/xml"], limit: "1mb", verify: keepRawBody }),
 );
 // A commit carries the room's changed files, up to what an import takes; everything else stays at 1 MB.
 express.use("/api/rooms/:roomId/repo/commit", json({ limit: "30mb" }));

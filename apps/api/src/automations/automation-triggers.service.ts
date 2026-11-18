@@ -28,7 +28,7 @@ import {
   type RoomEventSettings,
   type Schedule,
 } from "@codechatter/contracts";
-import { BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, NotFoundException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import type { Redis } from "ioredis";
 
 import { RateLimiter } from "../ai/rate-limit.js";
@@ -37,11 +37,16 @@ import { openToken, sealToken } from "../github/token-box.js";
 import { ENV, VALKEY } from "../infra/tokens.js";
 import { RoomsRepository } from "../rooms/rooms.repository.js";
 import { RoomsService } from "../rooms/rooms.service.js";
-import { RunnerClient } from "../runner/runner.client.js";
+import { RECENT_AUTOMATION_ROOMS, RunnerClient } from "../runner/runner.client.js";
+import { hookAuthProblem, shownAuthOf, storedAuthOf, type StoredHookAuth } from "./hook-auth.js";
 
 const TRIGGERS = "automationTriggers";
 /** When each last ran, kept apart from the trigger itself, so a run doesn't undo a change someone's just made. */
 const LAST_RUNS = "automationTriggerRuns";
+/** Runs waiting for a time (a Delay), by run: kept with the room, so they're carried on when it comes even if the sandbox has stopped meanwhile. */
+const WAITS = "automationWaits";
+/** How long after a room's last automation its waiting runs are looked for. */
+const RECENT_MS = 30 * 60_000;
 const WEBHOOK_USER = { id: "webhook", name: "Webhook" };
 const SCHEDULE_USER = { id: "schedule", name: "Schedule" };
 const EVENT_USER = { id: "event", name: "Room event" };
@@ -65,6 +70,8 @@ type Stored = {
   /** A webhook's. */
   tokenHash?: string;
   tokenSealed?: string;
+  /** What a call must show besides the address (hook-auth.ts). */
+  auth?: StoredHookAuth;
   /** A schedule's: when it runs, and when it was last turned on, as nothing from before that is run. */
   schedule?: Schedule;
   /** A room event's: what it listens for. */
@@ -76,7 +83,8 @@ type Stored = {
 };
 /** `slot` is the time on the schedule a run was for; `problem`, why the last time didn't run. */
 type LastRun = { at: number; id: string | null; slot?: number; problem?: string | null };
-export type HookCall = { method: string; body: unknown; headers: Record<string, string>; query: Record<string, string> };
+/** `raw` is the body as it came, which a signature is checked against. */
+export type HookCall = { method: string; body: unknown; headers: Record<string, string>; query: Record<string, string>; raw: Buffer };
 export type Change = { orgId: string; trigger: AutomationTrigger };
 
 const hashOf = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -159,6 +167,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       schedule: trigger.schedule ?? null,
       nextRunAt,
       event: trigger.event ?? null,
+      auth: trigger.kind === "webhook" ? shownAuthOf(trigger.auth) : null,
       problem: trigger.problem ?? last?.problem ?? null,
       createdBy: trigger.createdBy,
       createdAt: trigger.createdAt,
@@ -204,6 +213,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     const { room, trigger, last } = await this.one(roomId, userId, id);
     if (patch.schedule && trigger.kind !== "schedule") throw new BadRequestException("Only a flow on a schedule has a time to run.");
     if (patch.event && trigger.kind !== "event") throw new BadRequestException("Only a flow on a room event listens for one.");
+    if (patch.auth && trigger.kind !== "webhook") throw new BadRequestException("Only a webhook is called from outside.");
     const turningOn = patch.enabled === true && !trigger.enabled;
     const next: Stored = {
       ...trigger,
@@ -212,6 +222,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       ...(patch.path && { path: patch.path }),
       ...(patch.schedule && { schedule: patch.schedule }),
       ...(patch.event && { event: patch.event }),
+      ...(patch.auth && { auth: storedAuthOf(patch.auth, (secret) => sealToken(this.env.BETTER_AUTH_SECRET, secret)) }),
       // Turned on again: nothing it missed while it was off is run, and why it stopped is forgotten.
       ...(turningOn && { enabledAt: Date.now(), problem: null }),
     };
@@ -252,12 +263,17 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     if (!trigger) throw new NotFoundException("There's no automation at this address.");
     const decision = await this.limiter.hit(trigger.id);
     if (!decision.allowed) throw new HttpException(`Too many calls to this automation. Try again in ${decision.retryAfterSeconds ?? 60} seconds.`, 429);
+    // What it must show besides the address: the test address says whether it did, the live one refuses it if not.
+    const sealed = trigger.auth && trigger.auth.kind !== "none" ? trigger.auth.secretSealed : null;
+    const problem = hookAuthProblem(trigger.auth, sealed ? openToken(this.env.BETTER_AUTH_SECRET, sealed) : null, call);
     if (test) {
-      const event: AutomationTestEvent = { ...call, at: Date.now() };
+      const { raw: _raw, ...shown } = call;
+      const event: AutomationTestEvent = { ...shown, at: Date.now(), authorized: problem === null, why: problem };
       await this.redis.set(`automations:test:${roomId}:${trigger.id}`, JSON.stringify(event), "EX", TEST_EVENT_SECONDS);
-      return { status: 200, body: { ok: true, test: true } };
+      return { status: 200, body: { ok: true, test: true, authorized: problem === null } };
     }
     if (!trigger.enabled) throw new ConflictException("This automation is turned off.");
+    if (problem) throw new UnauthorizedException(`This call didn't show what this automation asks for: ${problem}`);
     const started = (await this.runner.automations(roomId, { op: "run", path: trigger.path, flowId: trigger.flowId, payload: call.body ?? {}, headers: call.headers, query: call.query, trigger: "webhook" }, WEBHOOK_USER)) as { id: string };
     await this.repository.setSettingEntry(roomId, LAST_RUNS, trigger.id, { at: Date.now(), id: started.id } satisfies LastRun);
     if (trigger.respond === "now") return { status: 202, body: { id: started.id } };
@@ -270,6 +286,10 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       } catch (error) {
         if (error instanceof ConflictException) continue;
         throw error;
+      }
+      if (run.status === "PAUSED") {
+        const answer = (run as { waitpoint?: { responseToSend?: { status?: number; body?: unknown } } | null }).waitpoint?.responseToSend;
+        return answer ? { status: typeof answer.status === "number" ? answer.status : 200, body: answer.body ?? null } : { status: 202, body: { id: run.id, status: "waiting" } };
       }
       if (run.status !== "SUCCEEDED") return { status: 500, body: { id: run.id, status: run.status, error: run.failedStep?.message ?? run.message ?? "The flow didn't finish." } };
       const steps = Object.values(run.steps ?? {});
@@ -304,10 +324,91 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
           if (await this.runScheduled(room.id, trigger, slot, last[trigger.id])) started += 1;
         }
       }
+      started += await this.carryOnWaits(now);
     } finally {
       this.ticking = false;
     }
     return started;
+  }
+
+  /**
+   * Runs waiting for a time: learnt from rooms that ran automations lately (the sandbox says, without waking), kept with the room, and carried on when it
+   * comes, waking the room's sandbox if it has stopped. Each is claimed first, so with several API servers one carries it on.
+   */
+  private async carryOnWaits(now: number): Promise<number> {
+    await this.redis.zremrangebyscore(RECENT_AUTOMATION_ROOMS, "-inf", now - RECENT_MS);
+    for (const roomId of await this.redis.zrangebyscore(RECENT_AUTOMATION_ROOMS, now - RECENT_MS, "+inf")) {
+      try {
+        const room = await this.repository.findById(roomId);
+        if (!room || room.kind === "interview") continue;
+        const known = this.entries<{ at: number }>(room.settings, WAITS);
+        const { waits = [] } = (await this.runner.automations(roomId, { op: "waits" }, SCHEDULE_USER)) as { waits?: Array<{ id: string; path: string; type: string; resumeAt: number | null }> };
+        for (const wait of waits) {
+          if (wait.type === "DELAY" && typeof wait.resumeAt === "number" && known[wait.id]?.at !== wait.resumeAt) await this.repository.setSettingEntry(roomId, WAITS, wait.id, { at: wait.resumeAt, path: wait.path });
+        }
+      } catch (error) {
+        this.logger.warn(`The waiting runs in ${roomId} couldn't be looked at: ${String(error)}`);
+      }
+    }
+    let resumed = 0;
+    for (const room of await this.repository.withSetting(WAITS)) {
+      for (const [runId, wait] of Object.entries(this.entries<{ at: number }>(room.settings, WAITS))) {
+        if (typeof wait?.at !== "number" || wait.at > now) continue;
+        if ((await this.redis.set(`automations:wait:${room.id}:${runId}`, "1", "EX", 60, "NX")) !== "OK") continue;
+        try {
+          await this.runner.automations(room.id, { op: "resume", id: runId }, SCHEDULE_USER);
+          resumed += 1;
+        } catch (error) {
+          // Carried on already (by a person, early), or no longer kept: there's nothing left to wait for. Anything else is tried again.
+          if (!(error instanceof ConflictException)) continue;
+        }
+        await this.repository.setSettingEntry(room.id, WAITS, runId, null);
+      }
+    }
+    return resumed;
+  }
+
+  /**
+   * A call to a waiting run's address (the webhook piece's "respond and wait for the next call", an approval's link): it carries on with what was sent. The
+   * token in the address is the run's own, checked in the sandbox. With /sync, the caller waits for the run, as a webhook told to answer when it finishes.
+   */
+  async resumeHook(roomId: string, runId: string, token: string, call: HookCall, sync: boolean): Promise<{ status: number; body: unknown }> {
+    const room = await this.repository.findById(roomId);
+    if (!room || room.kind === "interview") throw new NotFoundException("Nothing is waiting at this address.");
+    const decision = await this.limiter.hit(`resume:${runId}`);
+    if (!decision.allowed) throw new HttpException(`Too many calls. Try again in ${decision.retryAfterSeconds ?? 60} seconds.`, 429);
+    const asked = Date.now();
+    try {
+      await this.runner.automations(roomId, { op: "resume", id: runId, token, payload: { body: call.body ?? {}, headers: call.headers, queryParams: call.query } }, WEBHOOK_USER);
+    } catch (error) {
+      if (error instanceof ConflictException) throw new NotFoundException("Nothing is waiting at this address.");
+      throw error;
+    }
+    if (!sync) return { status: 200, body: { id: runId, resumed: true } };
+    return this.answerWhenDone(roomId, runId, asked);
+  }
+
+  /** What a caller waiting for a run is told: its last step's output; what a step that waits again said to answer; or why it failed. */
+  private async answerWhenDone(roomId: string, runId: string, since: number): Promise<{ status: number; body: unknown }> {
+    for (const until = Date.now() + MOST_WAIT_MS; Date.now() < until; ) {
+      await sleep(400);
+      let run: AutomationRun & { waitpoint?: { responseToSend?: { status?: number; body?: unknown } } | null };
+      try {
+        run = (await this.runner.automations(roomId, { op: "run-details", id: runId }, WEBHOOK_USER)) as typeof run;
+      } catch (error) {
+        if (error instanceof ConflictException) continue;
+        throw error;
+      }
+      // The same run carries on: what counts is it finishing after the call.
+      if (!run.finishedAt || run.finishedAt < since) continue;
+      if (run.status === "PAUSED") {
+        const answer = run.waitpoint?.responseToSend;
+        return answer ? { status: typeof answer.status === "number" ? answer.status : 200, body: answer.body ?? null } : { status: 202, body: { id: run.id, status: "waiting" } };
+      }
+      if (run.status !== "SUCCEEDED") return { status: 500, body: { id: run.id, status: run.status, error: run.failedStep?.message ?? run.message ?? "The flow didn't finish." } };
+      return { status: 200, body: Object.values(run.steps ?? {}).at(-1)?.output ?? null };
+    }
+    return { status: 202, body: { id: runId, status: "running" } };
   }
 
   private async runScheduled(roomId: string, trigger: Stored, slot: number, last: LastRun | undefined): Promise<boolean> {

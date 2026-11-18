@@ -115,7 +115,7 @@ function withPins(flow, except = null) {
 /** One job, to its end. Never throws: whatever goes wrong is the run's result. */
 async function runJob(job) {
   const startedAt = NOW();
-  const mode = job.mode === "step" || job.mode === "retry" ? job.mode : "run";
+  const mode = job.mode === "step" || job.mode === "retry" || job.mode === "resume" ? job.mode : "run";
   const { flow, pinned } = withPins(job.flow ?? { trigger: null }, mode === "step" ? job.step : null);
   const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, mode, step: mode === "step" ? job.step : null, retryOf: mode === "retry" ? job.retryOf : null, pinned, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
   // A flow called by another runs inside its run: the live view stays the caller's.
@@ -140,7 +140,7 @@ async function runJob(job) {
     const path = url.pathname;
     if (path.startsWith("/v1/files/")) {
       // Running again from where a run failed: the engine reads that run's steps, keeps what succeeded, and carries on from what didn't.
-      if (req.method === "GET" && mode === "retry" && path === `/v1/files/resume-${job.id}`) return send(200, { executionState: { steps: job.resumeSteps ?? {}, tags: [] } });
+      if (req.method === "GET" && (mode === "retry" || mode === "resume") && path === `/v1/files/resume-${job.id}`) return send(200, { executionState: { steps: job.resumeSteps ?? {}, tags: [] } });
       if (req.method !== "PUT") return send(404);
       try {
         steps = readStep(JSON.parse((raw[0] === 0x28 ? zstdDecompressSync(raw) : raw).toString()));
@@ -157,7 +157,8 @@ async function runJob(job) {
       try {
         const report = JSON.parse(raw.toString());
         live.status = report.status ?? live.status;
-        if (report.failedStep) live.failedStep = report.failedStep;
+        // The engine wraps a step's error in its own JSON: the plain message is what people, an error flow and a flow's caller want.
+        if (report.failedStep) live.failedStep = { ...report.failedStep, ...(typeof report.failedStep.message === "string" && { message: errorOf(report.failedStep.message) }) };
         writeLive();
       } catch {
         // The same.
@@ -179,6 +180,26 @@ async function runJob(job) {
       return send(200);
     }
     if (path === "/v1/engine/step-progress" || path === "/v1/engine/flow-response") return send(200);
+    /**
+     * A step that waits (Activepieces' Delay, or the webhook piece's "respond and wait for the next call"): the run pauses here, and carries on later. One
+     * waiting for a call gets an address with a token of its own, through the API (job.resumeBase); one waiting for a time, when the API's timer says so.
+     */
+    if (path === "/v1/waitpoints" && req.method === "POST") {
+      let asked = {};
+      try {
+        asked = JSON.parse(raw.toString());
+      } catch {
+        // What it asks for is checked below.
+      }
+      const type = asked.type === "DELAY" ? "DELAY" : "WEBHOOK";
+      const resumeAt = type === "DELAY" && asked.resumeDateTime ? Date.parse(asked.resumeDateTime) : NaN;
+      const token = randomBytes(24).toString("base64url");
+      const id = `wp_${randomBytes(8).toString("hex")}`;
+      live.waitpoint = { id, type, step: String(asked.stepName ?? ""), resumeAt: Number.isFinite(resumeAt) ? resumeAt : null, token, ...(asked.responseToSend && { responseToSend: asked.responseToSend }) };
+      writeLive();
+      const resumeUrl = job.resumeBase ? `${job.resumeBase}/${job.id}/${token}` : `http://localhost/this-run-can-only-be-carried-on-from-the-room/${job.id}`;
+      return send(200, { id, resumeUrl, type, status: "PENDING" });
+    }
     // Call a flow (builtins.mjs), from this run's own engine.
     if (path === "/v1/codechatter/call-flow" && req.method === "POST") {
       let call;
@@ -225,9 +246,13 @@ async function runJob(job) {
     clearInterval(beat);
     const finishedAt = NOW();
     Object.assign(live, { state: "finished", status, message, finishedAt, durationMs: finishedAt - startedAt, steps, beat: finishedAt });
+    // Only a run that's waiting keeps what it waits for.
+    if (status !== "PAUSED") live.waitpoint = null;
+    if (mode === "resume") rmSync(join(HOME, `resume-${job.id}.lock`), { force: true });
     // A flow that failed, with an error flow, starts it: n8n's error workflow. Not for a step tried alone, nor an error flow's own failure, so it can't loop.
     if ((status === "FAILED" || status === "TIMEOUT") && mode !== "step" && job.trigger !== "error" && typeof job.flow?.errorFlow === "string") Object.assign(live, queueErrorFlow(job, live));
-    writeJson(join(RUNS, `${job.id}.json`), { ...live, payload: job.payload ?? null });
+    // What started it stays its payload when it carries on; where it's carried on from goes with it, for a waitpoint after this one.
+    writeJson(join(RUNS, `${job.id}.json`), { ...live, payload: (mode === "resume" ? job.triggerPayload : job.payload) ?? null, resumeBase: job.resumeBase ?? null });
     writeLive();
     rmSync(join(CODES, job.id), { recursive: true, force: true });
     for (const old of readdirSync(RUNS).sort().reverse().slice(MOST_RUNS)) rmSync(join(RUNS, old), { force: true });
@@ -305,7 +330,10 @@ async function runJob(job) {
         httpRequestId: null,
         streamStepProgress: "NONE",
         executeTrigger: false,
-        ...(mode === "retry"
+        ...(mode === "resume"
+          ? // Carrying on from a waitpoint: the step that waited gets what the call to its address sent (or nothing, after a time).
+            { executionType: "RESUME", resumeReason: "WAITPOINT", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: job.payload && typeof job.payload === "object" ? job.payload : { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
+          : mode === "retry"
           ? { executionType: "RESUME", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
           : {
               executionType: "BEGIN",

@@ -123,10 +123,10 @@ try {
 
   // ---- What's stopped, and why ----
   const plain = await run(paths.callsPlain);
-  check("aFlowThatCantBeCalledIsnt", plain?.status === "FAILED" && /can't be called: its trigger isn't "Called by another flow"/.test(plain.failedStep?.message ?? plain.message ?? ""), plain?.failedStep ?? plain?.message);
+  check("aFlowThatCantBeCalledIsnt", plain?.status === "FAILED" && plain.failedStep?.message === "Not callable can't be called: its trigger isn't \"Called by another flow\".", plain?.failedStep ?? plain?.message);
   check("andDidntRun", (await runsOf(paths.plain)).length === 0);
   const failing = await run(paths.callsFailing);
-  check("aCalledFlowFailingFailsTheStep", failing?.status === "FAILED" && /Fails when called failed: .*No stock left/.test(failing.failedStep?.message ?? failing.message ?? ""), failing?.failedStep ?? failing?.message);
+  check("aCalledFlowFailingFailsTheStep", failing?.status === "FAILED" && failing.failedStep?.message === "Fails when called failed: No stock left", failing?.failedStep ?? failing?.message);
   const self = await run(paths.self);
   check("aFlowCallingItselfStopsAtTheDepth", self?.status === "FAILED" && /more than 5 deep/.test(JSON.stringify(self)), self?.failedStep ?? self?.message);
   check("withARunForEachLevel", (await runsOf(paths.self)).length === 6, (await runsOf(paths.self)).length);

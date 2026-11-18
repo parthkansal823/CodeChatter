@@ -190,6 +190,33 @@ try {
   const outsider = await fetch(`${BASE}/api/rooms/${ROOM}/automations/triggers`).then((response) => response.status);
   check("someoneSignedOutCantSeeThem", outsider === 401, outsider);
 
+  // ---- Who may call it: a signature of the body, a header, basic auth ----
+  const { createHmac } = await import("node:crypto");
+  const setAuth = (auth) => owner(`/api/rooms/${ROOM}/automations/triggers/${triggerId}`, { method: "PATCH", json: { auth } });
+  const signed = await setAuth({ kind: "signature", secret: "shared webhook secret" });
+  check("aSignatureCanBeAskedFor", signed.status === 200 && signed.body.auth?.kind === "signature" && signed.body.auth.header === "x-hub-signature-256" && !JSON.stringify(signed.body).includes("shared webhook secret"), signed.body);
+  const bodyText = JSON.stringify({ value: 6 });
+  const signature = `sha256=${createHmac("sha256", "shared webhook secret").update(bodyText).digest("hex")}`;
+  const unsigned = await hook(fresh, { body: { value: 6 } });
+  check("anUnsignedCallIsRefused", unsigned.status === 401 && /x-hub-signature-256 header is missing/.test(JSON.stringify(unsigned.body)), unsigned);
+  const forged = await hook(fresh, { body: { value: 7 }, headers: { "x-hub-signature-256": signature } });
+  check("aSignatureForAnotherBodyIsRefused", forged.status === 401 && /doesn't match the body/.test(JSON.stringify(forged.body)), forged);
+  const good = await fetch(fresh, { method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": signature }, body: bodyText, signal: AbortSignal.timeout(60_000) });
+  const goodRun = await finished((await good.json()).id);
+  check("aSignedCallRuns", good.status === 202 && goodRun?.steps.echo?.output?.doubled === 12, { status: good.status, run: goodRun?.status });
+  const testedUnsigned = await hook(`${fresh}/test`, { body: { value: 1 } });
+  const testEvent = await owner(`/api/rooms/${ROOM}/automations/triggers/${triggerId}/test-event`);
+  check("theTestAddressSaysItWouldBeRefused", testedUnsigned.status === 200 && testedUnsigned.body.authorized === false && testEvent.body?.authorized === false && /missing/.test(testEvent.body?.why ?? ""), testEvent.body);
+  await setAuth({ kind: "header", header: "X-Api-Key", value: "key-1234567890" });
+  check("aHeaderCanBeAskedFor", (await hook(fresh, { body: { value: 1 }, headers: { "x-api-key": "wrong-key-value" } })).status === 401 && (await hook(fresh, { body: { value: 1 }, headers: { "x-api-key": "key-1234567890" } })).status === 202);
+  await setAuth({ kind: "basic", user: "ci", password: "a long password" });
+  const basic = (password) => ({ authorization: `Basic ${Buffer.from(`ci:${password}`).toString("base64")}` });
+  check("basicAuthCanBeAskedFor", (await hook(fresh, { body: { value: 1 }, headers: basic("guess") })).status === 401 && (await hook(fresh, { body: { value: 1 }, headers: basic("a long password") })).status === 202);
+  const tooShort = await setAuth({ kind: "header", header: "X-Api-Key", value: "short" });
+  check("aShortSecretIsRefused", tooShort.status === 400, tooShort);
+  await setAuth({ kind: "none" });
+  check("andItCanGoBackToTheAddressAlone", (await hook(fresh, { body: { value: 1 } })).status === 202);
+
   // ---- Too many calls ----
   let limited = 0;
   for (let i = 0; i < 70 && !limited; i++) if ((await hook(`${fresh}/test`, { body: { i } })).status === 429) limited = i + 1;

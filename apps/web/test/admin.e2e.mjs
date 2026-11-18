@@ -31,7 +31,12 @@ async function profile(address, secret = PASSWORD) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   contexts.push(context);
   const page = await context.newPage();
-  page.on("pageerror", () => pageErrors.push("PageError"));
+  page.on("pageerror", (error) => {
+    pageErrors.push("PageError");
+    // UI diagnostics only: redact fixture credentials, URLs and labelled auth material.
+    const message = error.message.split("\n")[0].replaceAll(password, "[redacted]").replaceAll(PASSWORD, "[redacted]").replace(/https?:\/\/\S+/g, "[url]").replace(/(?:password|token|secret|cookie|authorization)\s*[:=]\s*\S+/gi, "[redacted]").slice(0, 180);
+    console.error(`PAGE ERROR  ${new URL(page.url()).pathname}: ${message}`);
+  });
   page.setDefaultTimeout(30_000);
   page.setDefaultNavigationTimeout(90_000);
   const person = { context, page };
@@ -114,8 +119,11 @@ try {
   roomId = room.body.id;
   stage = "admin menu and users";
   await admin.page.goto(`${BASE}/dashboard`);
+  stage = "open admin user menu";
   await admin.page.getByRole("button", { name: /test1@codechatter\.local/ }).click();
+  stage = "follow instance-admin menu link";
   await admin.page.getByRole("menuitem", { name: "Instance admin", exact: true }).click();
+  stage = "render instance administration";
   await admin.page.getByRole("heading", { name: "Instance admin", exact: true }).waitFor();
   verify("the admin link opens all three administration sections", await admin.page.getByRole("tab", { name: "Users", exact: true }).isVisible() && await admin.page.getByRole("tab", { name: "Rooms", exact: true }).isVisible() && await admin.page.getByRole("tab", { name: "Health", exact: true }).isVisible());
   await searchUsers("test1@codechatter.local");
@@ -196,8 +204,14 @@ try {
   contexts.push(outside);
   const outsideResponse = await outside.request.get(`${BASE}/admin`, { maxRedirects: 0 });
   verify("signed-out visitors get a plain 404 too", outsideResponse.status() === 404);
+  const staleCookies = await admin.context.cookies(BASE);
+  verify("the browser test ends its own admin session", (await request(admin, "auth/sign-out", "POST", {})).status === 200);
+  await outside.addCookies(staleCookies);
+  const staleResponse = await outside.request.get(`${BASE}/admin`, { maxRedirects: 0 });
+  verify("a revoked admin-session cookie still gets a plain 404", staleResponse.status() === 404);
 } catch (error) {
   check("instance-admin browser workflow completes", false, `${stage}: ${/^[A-Za-z]+$/.test(error?.name ?? "") ? error.name : "Error"}`);
+  if (admin?.page && process.env.SHOTS) await shot("admin-failure").catch(() => {});
 } finally {
   try { await cleanup(); } catch { check("exact disposable fixture cleanup completes", false); }
   for (const person of [admin, ordinary, subject]) if (person) await request(person, "auth/sign-out", "POST", {}).catch(() => {});

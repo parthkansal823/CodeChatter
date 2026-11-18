@@ -4,6 +4,7 @@ it with Activepieces' engine, and reads what happened. Runs carry on after this 
 
 Takes {"op", ...} on stdin, and prints one JSON object. It's asked often while something runs, so it imports nothing heavy.
 """
+import hmac
 import json
 import os
 import re
@@ -86,6 +87,14 @@ def queued():
         return 0
 
 
+def shown(run_file):
+    """A run as it's shown: a waitpoint's token is the secret in its address, and stays here."""
+    waitpoint = run_file.get("waitpoint")
+    if isinstance(waitpoint, dict):
+        run_file = {**run_file, "waitpoint": {"type": waitpoint.get("type"), "step": waitpoint.get("step"), "resumeAt": waitpoint.get("resumeAt")}}
+    return run_file
+
+
 def status():
     live = read_json(LIVE)
     if not live:
@@ -96,7 +105,7 @@ def status():
         write_json(LIVE, live, 0o644)
         write_json(os.path.join(RUNS, f"{live['id']}.json"), live, 0o644)
         release_lock()
-    return {**live, "queued": queued()}
+    return {**shown(live), "queued": queued()}
 
 
 def release_lock():
@@ -213,7 +222,10 @@ def run(request):
     seconds = max(LEAST_SECONDS, min(MOST_SECONDS, seconds)) if isinstance(seconds, int) else DEFAULT_SECONDS
     headers = request.get("headers") if isinstance(request.get("headers"), dict) else {}
     query = request.get("query") if isinstance(request.get("query"), dict) else {}
-    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": started_by, "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, **extra}
+    resume_base = request.get("resumeBase")
+    if not isinstance(resume_base, str) or not resume_base.startswith(("http://", "https://")) or len(resume_base) > 300:
+        resume_base = None
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": started_by, "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, "resumeBase": resume_base, **extra}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}.json"), job)
     # A flow's error flow is queued by the worker that's running it (host.mjs), which goes on to it: a second worker would run the queue twice.
     if not request.get("noWorker"):
@@ -248,7 +260,7 @@ def stop():
     return {"id": live.get("id")}
 
 
-SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem")
+SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem", "waitpoint")
 
 
 def runs(path):
@@ -272,7 +284,7 @@ def runs(path):
     for name in sorted(os.listdir(RUNS), reverse=True):
         run_file = read_json(os.path.join(RUNS, name))
         if run_file and belongs(run_file):
-            found.append({key: run_file.get(key) for key in SHOWN})
+            found.append(shown({key: run_file.get(key) for key in SHOWN}))
     return {"runs": found}
 
 
@@ -282,7 +294,58 @@ def one_run(identity):
     found = read_json(os.path.join(RUNS, f"{identity}.json"))
     if not found:
         raise Refused("That run isn't kept any more.")
-    return found
+    return shown(found)
+
+
+def waits():
+    """The runs waiting: the API's timer carries on those waiting for a time when it comes, even after the sandbox has stopped and started again."""
+    found = []
+    if os.path.isdir(RUNS):
+        for name in os.listdir(RUNS):
+            run_file = read_json(os.path.join(RUNS, name))
+            if run_file and run_file.get("status") == "PAUSED" and isinstance(run_file.get("waitpoint"), dict):
+                waitpoint = run_file["waitpoint"]
+                found.append({"id": run_file.get("id"), "path": run_file.get("path"), "flowId": run_file.get("flowId"), "type": waitpoint.get("type"), "resumeAt": waitpoint.get("resumeAt")})
+    return {"waits": found}
+
+
+def resume(request):
+    """Carries a waiting run on, as the same run, from where it stopped. One waiting for a call needs its address's token; once only, whoever's first."""
+    identity = request.get("id")
+    if not isinstance(identity, str) or not RUN_ID.match(identity):
+        raise Refused("That isn't a run.")
+    earlier = read_json(os.path.join(RUNS, f"{identity}.json"))
+    waitpoint = earlier.get("waitpoint") if earlier and isinstance(earlier.get("waitpoint"), dict) else None
+    if not earlier or earlier.get("status") != "PAUSED" or not waitpoint:
+        raise Refused("That run isn't waiting.")
+    if waitpoint.get("type") == "WEBHOOK":
+        token = request.get("token")
+        if not isinstance(token, str) or not hmac.compare_digest(token.encode(), str(waitpoint.get("token") or "").encode()):
+            raise Refused("That run isn't waiting.")
+    payload = request.get("payload")
+    if payload is None:
+        payload = {}
+    if len(json.dumps(payload)) > MOST_PAYLOAD_BYTES:
+        raise Refused("What was sent to this flow is over 1 MB.")
+    try:
+        flow = flow_at(earlier.get("path"))
+        if flow_id(flow) != earlier.get("flowId"):
+            raise Refused("moved")
+        path = earlier.get("path")
+    except Refused:
+        path, flow = flow_by_id(earlier.get("flowId")) if earlier.get("flowId") else (None, None)
+        if flow is None:
+            raise Refused("The flow this run is of isn't in the room any more.")
+    # Two calls to its address at the same moment carry it on once.
+    try:
+        os.close(os.open(os.path.join(HOME, f"resume-{identity}.lock"), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        raise Refused("That run isn't waiting.")
+    now = time.time()
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": {}, "query": {}, "trigger": earlier.get("trigger") or "manual", "by": earlier.get("by"), "seconds": DEFAULT_SECONDS, "connections": request.get("connections") or {}, "resumeBase": earlier.get("resumeBase"), "mode": "resume", "resumeSteps": earlier.get("steps") or {}, "triggerPayload": earlier.get("payload"), "waitedFrom": earlier.get("startedAt")}
+    write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}-resume.json"), job)
+    start_worker()
+    return {"id": identity, "queued": queued()}
 
 
 def manifest():
@@ -309,6 +372,10 @@ def main():
         return manifest()
     if op == "find":
         return find(request)
+    if op == "waits":
+        return waits()
+    if op == "resume":
+        return resume(request)
     raise Refused("That isn't something this can do.")
 
 

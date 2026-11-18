@@ -108,3 +108,43 @@ export function insertAt(text: string, start: number, end: number, expression: s
   const to = Math.max(at, Math.min(end, text.length));
   return { text: `${text.slice(0, at)}${expression}${text.slice(to)}`, cursor: at + expression.length };
 }
+
+/** What's at a path in a run's data (`fetch.output.body.items[0]`), or undefined. */
+function valueAt(data: Record<string, unknown>, path: string): unknown {
+  const parts = partsOf(path);
+  if (!parts) return undefined;
+  let current: unknown = data;
+  for (const part of parts) {
+    if (current === null || typeof current !== "object") return undefined;
+    current = (current as Record<string | number, unknown>)[part];
+  }
+  return current;
+}
+
+export type Suggestion = { expression: string; path: string; type: string | null; sample: string | null };
+
+/**
+ * Typing `{{` in a field offers what it can be, as n8n's editor does: what the steps before this one give (`bases`, from expressionsFor), and, with a run's
+ * data, every field inside them. Narrowed by what's typed after the `{{`; null when the cursor isn't inside one.
+ */
+export function suggestionsAt(text: string, caret: number, bases: string[], data: Record<string, unknown> | null, most = 40): { start: number; end: number; query: string; items: Suggestion[] } | null {
+  const before = text.slice(0, caret);
+  const open = before.lastIndexOf("{{");
+  if (open < 0 || before.indexOf("}}", open) >= 0) return null;
+  const query = before.slice(open + 2).trim();
+  if (query.includes("{") || query.length > 120) return null;
+  const found: Suggestion[] = [];
+  for (const base of bases) {
+    const path = base.replace(/^\{\{\s*|\s*\}\}$/g, "");
+    const value = data ? valueAt(data, path) : undefined;
+    found.push({ expression: `{{${path}}}`, path, type: value === undefined ? null : typeOf(value), sample: value === undefined ? null : sampleOf(value) });
+    if (value !== undefined) for (const field of fieldsOf(value, path)) found.push({ expression: field.expression, path: field.path, type: field.type, sample: field.sample });
+  }
+  const wanted = query.toLowerCase();
+  const matching = found.filter((item) => item.path.toLowerCase().includes(wanted));
+  // What starts with what's typed first, then the rest, each in the order the steps run.
+  const ranked = [...matching.filter((item) => item.path.toLowerCase().startsWith(wanted)), ...matching.filter((item) => !item.path.toLowerCase().startsWith(wanted))];
+  // A "}}" already after the cursor is the end of this one, and is replaced too.
+  const end = text.slice(caret, caret + 2) === "}}" ? caret + 2 : caret;
+  return { start: open, end, query, items: ranked.slice(0, most) };
+}

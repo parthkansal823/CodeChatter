@@ -1,6 +1,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { adminPageGate } from "@/components/admin/admin-gate";
 import { appCsp, newNonce } from "@/lib/csp";
 import { pageGate } from "@/lib/page-gate";
 import { SHOWCASE } from "@/lib/showcase";
@@ -31,7 +32,7 @@ function gate(request: NextRequest): NextResponse | null {
  * reads the policy from the request's headers and puts the nonce on its scripts; the root
  * layout reads x-nonce for the theme's script.
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const nonce = newNonce();
   const policy = appCsp({
     nonce,
@@ -39,11 +40,14 @@ export function proxy(request: NextRequest) {
     drawioOrigin: DRAWIO_URL,
     livekitUrl: process.env.LIVEKIT_URL,
   });
-  const redirect = gate(request);
-  if (redirect) return redirect;
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);
   headers.set("content-security-policy", policy);
+  const redirect = await adminPageGate(request, headers) ?? gate(request);
+  if (redirect) {
+    redirect.headers.set("content-security-policy", policy);
+    return redirect;
+  }
   const response = NextResponse.next({ request: { headers } });
   response.headers.set("content-security-policy", policy);
   return response;

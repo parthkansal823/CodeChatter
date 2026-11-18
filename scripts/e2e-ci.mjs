@@ -39,6 +39,7 @@ const SUITES = [
     ["automation-schedules", "automation-schedules"],
     ["automation-events", "automation-events"],
     ["automation-error-flow", "automation-error-flow"],
+    ["automation-subflows", "automation-subflows"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],

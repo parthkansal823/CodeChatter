@@ -9,7 +9,7 @@ const SCRIPT = "/usr/local/lib/codechatter/automation.py";
 export class AutomationError extends Error {}
 
 export async function askAutomations(sandbox: RoomSandbox, input: AutomationInput, by: string, trigger = "manual"): Promise<unknown> {
-  const request = input.op === "run" ? { op: input.op, path: input.path, payload: input.payload ?? {}, seconds: input.seconds, mode: input.mode, step: input.step, sampleData: input.sampleData, retryOf: input.retryOf, flowId: input.flowId, headers: input.headers, query: input.query, by, trigger: input.trigger ?? trigger } : input;
+  const request = input.op === "run" ? { op: input.op, path: input.path, payload: input.payload ?? {}, seconds: input.seconds, mode: input.mode, step: input.step, sampleData: input.sampleData, retryOf: input.retryOf, flowId: input.flowId, headers: input.headers, query: input.query, by, trigger: input.trigger ?? trigger, resumeBase: input.resumeBase } : input;
   const done = await runScript(sandbox, SCRIPT, request, { seconds: 60, maxOutput: 32 * 1024 * 1024 });
   if (done.missing) throw new AutomationError("This room's sandbox doesn't have automations yet. Restarting the sandbox brings it up to date.");
   if (done.code === 124) throw new AutomationError("That took too long and was stopped.");
