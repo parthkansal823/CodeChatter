@@ -33,6 +33,20 @@ export function finish() {
 }
 
 /** `args`: extra browser switches (the call test's fake camera and microphone). */
+/** Opens one of the room's apps, or a panel beside the code, from the activity bar's Apps list (components/room/apps-launcher.tsx). */
+export async function openApp(page, name) {
+  // Exactly "Apps": "Your apps", the ones in the bar, would match too.
+  const list = page.getByRole("group", { name: "Apps", exact: true });
+  if (!(await list.isVisible().catch(() => false))) await page.getByRole("navigation", { name: "Panels" }).getByRole("button", { name: "Apps", exact: true }).click();
+  await list.getByRole("button", { name, exact: true }).click();
+}
+
+/** Chooses something from the title bar's More menu (Present, Fork…, the theme). */
+export async function fromMore(page, name) {
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
+}
+
 export async function launch({ args = [] } = {}) {
   const browser = await chromium.launch({ channel: "msedge", headless: process.env.HEADED !== "1", args });
   // Every suite also proves the policy doesn't break what it tests.

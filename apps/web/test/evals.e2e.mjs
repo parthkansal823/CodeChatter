@@ -2,7 +2,7 @@
 // failures per column, what failed and why, what changed from the last run, and Stop. promptfoo is stood in for, so this is the page:
 // apps/runner/test/evals.e2e.mjs runs the real thing. The prompt is deleted at the end.
 //   node test/evals.e2e.mjs        (from apps/web, with the dev stack running)
-import { BASE, ROOM, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -34,7 +34,7 @@ for (const page of [a, b]) {
 }
 
 const open = async (page) => {
-  await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Prompts", exact: true }).click();
+  await openApp(page, "Prompts");
   const tool = page.getByRole("region", { name: "Prompts" });
   await tool.waitFor({ timeout: 20_000 });
   return tool;

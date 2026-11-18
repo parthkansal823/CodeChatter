@@ -101,6 +101,7 @@ import { useRoomRepo } from "@/components/room/source-control/use-repo";
 import { StatusBar } from "@/components/room/status-bar";
 import { TaskPicker } from "@/components/room/task-picker";
 import { TabBar } from "@/components/room/tab-bar";
+import { AppsLauncher } from "@/components/room/apps-launcher";
 import { TitleBar } from "@/components/room/title-bar";
 import { AI_TOOL_ID, useOpenAiOnRequest } from "@/components/room/tools/ai/ai-requests";
 import { ROOM_TOOLS } from "@/components/room/tools/registry";
@@ -192,6 +193,13 @@ function Workspace() {
   const mainTools = tools.filter((tool) => tool.placement === "main");
   const shownApps = appsFor(layout, mainTools);
   const [mainToolId, setMainToolId] = useState<string | null>(null);
+  // The bar keeps the apps you pinned (Research, its own), and the one open now; the rest are under Apps.
+  const pinnedApps = useEditorSettings((state) => state.pinnedApps);
+  const barApps = researching
+    ? shownApps
+    : [...pinnedApps.flatMap((id) => shownApps.filter((tool) => tool.id === id)), ...shownApps.filter((tool) => tool.id === mainToolId && !pinnedApps.includes(tool.id))];
+  const togglePin = (id: string) =>
+    useEditorSettings.getState().update({ pinnedApps: pinnedApps.includes(id) ? pinnedApps.filter((each) => each !== id) : [...pinnedApps, id] });
   const mainTool = tools.find((tool) => tool.id === mainToolId && tool.placement === "main") ?? null;
 
   const files = useMemo(() => new Map(flatten(tree).map((n) => [n.id, n])), [tree]);
@@ -606,13 +614,14 @@ function Workspace() {
           toggle: toggleRight,
           items: [
             { id: "chat", label: "Chat", icon: MessageSquare, badge: right === "chat" ? 0 : unread },
-            ...sideTools.map((tool) => ({ id: tool.id, label: tool.label, icon: tool.icon })),
+            // The rest of the panels are tabs once it's open, and under Apps.
+            ...sideTools.filter((tool) => tool.id === "ai" || tool.id === "interview").map((tool) => ({ id: tool.id, label: tool.label, icon: tool.icon })),
           ],
         }}
       />
       {room.kind === "interview" && <InterviewBanner onOpen={() => setRight("interview")} />}
       <div className="flex min-h-0 flex-1">
-        {/* Activity bar: your code first, then the room's apps, terminals at the foot. Chat, People and AI open from the title bar. */}
+        {/* Activity bar: your code first, then the apps you pinned and Apps for the rest, terminals at the foot. Chat, People and AI open from the title bar. */}
         {!zen && (
           <nav
             aria-label="Panels"
@@ -675,8 +684,8 @@ function Workspace() {
               </ActivityButton>
             )}
             <span aria-hidden className="my-1 h-px w-6 shrink-0 bg-border" />
-            <div role="group" aria-label="Apps" className="flex flex-col items-center gap-1">
-              {shownApps.map((tool) => {
+            <div role="group" aria-label="Your apps" className="flex flex-col items-center gap-1">
+              {barApps.map((tool) => {
                 const active = mainToolId === tool.id;
                 return (
                   <ActivityButton
@@ -690,6 +699,16 @@ function Workspace() {
                 );
               })}
             </div>
+            <AppsLauncher
+              apps={shownApps}
+              sides={sideTools}
+              activeId={mainToolId}
+              pinned={pinnedApps}
+              canPin={!researching}
+              onOpen={setMainToolId}
+              onOpenSide={(id) => setRight(id)}
+              onTogglePin={togglePin}
+            />
             <div className="mt-auto">
               <ActivityButton
                 label={panelOpen ? "Hide output and terminals" : "Output and terminals"}

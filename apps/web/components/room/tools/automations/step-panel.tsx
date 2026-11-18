@@ -4,7 +4,7 @@
  */
 "use client";
 
-import { SCHEDULE_PIECE, type AutomationStepResult, type PieceField, type PieceInfo } from "@codechatter/contracts";
+import { roomEventOf, SCHEDULE_PIECE, type AutomationStepResult, type PieceField, type PieceInfo } from "@codechatter/contracts";
 import { Loader2, Pin, PinOff, Play, Plus, Replace, Trash2, Zap } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import { DataView, SchemaOf } from "./data-view";
 import { insertAt, previewOf } from "./expressions";
 import { addBranch, canPin, expressionsFor, isPinned, kindOf, pinStep, removeBranch, removeStep, setStepNote, toggleStep, unpinStep, updateStep, type Flow, type FlowStep, type Place } from "./model";
 import { RouterFields } from "./router-fields";
+import { RoomEventSettings } from "./room-event-settings";
 import { ScheduleSettings } from "./schedule-settings";
 import { TriggerSettings } from "./trigger-settings";
 
@@ -165,6 +166,8 @@ export function StepPanel({
       into.input = { ...(into.input ?? {}), [name]: value };
     });
   const isTrigger = step.type === "PIECE_TRIGGER" || step.type === "EMPTY";
+  // A room event rides on the webhook trigger, so it has the webhook's fields; it shows its own instead.
+  const roomEvent = isTrigger ? roomEventOf(settings) : null;
   const builtin = builtinOf(step);
   const last = result?.results.at(-1);
   const handling = settings.errorHandlingOptions;
@@ -282,9 +285,10 @@ export function StepPanel({
           />
         </section>
       )}
-      {isTrigger && settings.pieceName === "@activepieces/piece-webhook" && <TriggerSettings flow={flow} path={path} canRun={canRun} onSave={onChange} onUseEvent={onUseEvent} />}
+      {roomEvent && <RoomEventSettings flow={flow} path={path} room={roomEvent} canRun={canRun} canEdit={canEdit} onSave={onChange} onUseEvent={onUseEvent} />}
+      {isTrigger && !roomEvent && settings.pieceName === "@activepieces/piece-webhook" && <TriggerSettings flow={flow} path={path} canRun={canRun} onSave={onChange} onUseEvent={onUseEvent} />}
       {isTrigger && settings.pieceName === SCHEDULE_PIECE && <ScheduleSettings flow={flow} path={path} canRun={canRun} onSave={onChange} />}
-      {isTrigger && settings.pieceName && settings.pieceName !== "@activepieces/piece-webhook" && settings.pieceName !== SCHEDULE_PIECE && <p className="rounded-md border p-2 text-muted-foreground">This trigger can&apos;t start the flow by itself yet: webhooks and schedules can, and services&apos; own triggers come next. Until then it runs when you press Run it, with what you send standing in for what this trigger would give.</p>}
+      {isTrigger && !roomEvent && settings.pieceName && settings.pieceName !== "@activepieces/piece-webhook" && settings.pieceName !== SCHEDULE_PIECE && <p className="rounded-md border p-2 text-muted-foreground">This trigger can&apos;t start the flow by itself yet: webhooks and schedules can, and services&apos; own triggers come next. Until then it runs when you press Run it, with what you send standing in for what this trigger would give.</p>}
       {pieceStep?.needsAuth && piece?.auth && <p className="rounded-md border p-2 text-muted-foreground">This step needs a {piece.label} connection, and rooms have no internet yet. Both are coming next, so it can&apos;t reach {piece.label} for now.</p>}
       {settings.pieceName && !piece && <p role="alert" className="text-destructive">This room&apos;s image doesn&apos;t have {settings.pieceName}.</p>}
 
@@ -348,7 +352,7 @@ export function StepPanel({
         </div>
       )}
       {step.type === "ROUTER" && <RouterFields step={step} canEdit={canEdit} onStep={edit} onAddBranch={() => onChange(addBranch(flow, step.name))} onRemoveBranch={(index) => onChange(removeBranch(flow, step.name, index))} onFieldFocus={focusField} />}
-      {pieceStep && (
+      {pieceStep && !roomEvent && (
         <section aria-label="Its fields" className="grid gap-2">
           {Object.entries(pieceStep.fields).map(([name, spec]) => (
             <PieceFieldEditor key={name} name={name} spec={spec} value={input[name]} readOnly={!canEdit} onChange={(value) => setInput(name, value)} onFocusField={focusField} data={data} />

@@ -215,7 +215,9 @@ def run(request):
     query = request.get("query") if isinstance(request.get("query"), dict) else {}
     job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": started_by, "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, **extra}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}.json"), job)
-    start_worker()
+    # A flow's error flow is queued by the worker that's running it (host.mjs), which goes on to it: a second worker would run the queue twice.
+    if not request.get("noWorker"):
+        start_worker()
     answer = {"id": identity, "queued": queued()}
     if started_by == "schedule":
         # Its schedule as the file has it now, so the timer goes by it from the next time on.
@@ -235,7 +237,7 @@ def stop():
     return {"id": live.get("id")}
 
 
-SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs")
+SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem")
 
 
 def runs(path):

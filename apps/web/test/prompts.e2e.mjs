@@ -2,7 +2,7 @@
 // streaming side by side with their numbers, a run kept and an earlier prompt put back, Stop, and what a model that fails shows.
 // The model is stood in for, so what it was sent can be read. The prompt is deleted at the end.
 //   node test/prompts.e2e.mjs        (from apps/web, with the dev stack running)
-import { BASE, ROOM, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -35,7 +35,7 @@ for (const page of [a, b]) {
 }
 
 const open = async (page) => {
-  await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Prompts", exact: true }).click();
+  await openApp(page, "Prompts");
   const tool = page.getByRole("region", { name: "Prompts" });
   await tool.waitFor({ timeout: 20_000 });
   return tool;

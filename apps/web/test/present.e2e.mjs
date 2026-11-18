@@ -6,7 +6,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { check, finish, launch } from "./browser.mjs";
+import { check, finish, launch, fromMore } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
 const long = `pres_${stamp}.txt`;
@@ -47,8 +47,7 @@ try {
   await newFile(long, Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n") + "\n");
 
   // test1 presents.
-  const present = a.getByRole("button", { name: "Present", exact: true });
-  await present.click();
+  await fromMore(a, "Present");
   check("presentPressed", (await a.getByRole("button", { name: "Presenting", exact: true }).getAttribute("aria-pressed")) === "true");
   check("othersFollowAtOnce", await ok(banner(b).getByText("test1 is presenting: their file and scroll follow here.").waitFor({ timeout: 15_000 })), await banner(b).innerText().catch(() => "(no banner)"));
   check("presentersFileOpens", await ok(activeTab(b, long).waitFor({ timeout: 15_000 })));

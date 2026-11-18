@@ -2,7 +2,7 @@
 // the rows a check found, a check and recipes made from the screen and built, a CSV added, stopping, and a phone. Only two failures are stood in
 // for. Its files and everything dbt made are removed.
 //   node test/flow.e2e.mjs        (from apps/web, with the dev stack running and the current sandbox images)
-import { BASE, ROOM, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -16,7 +16,6 @@ const { browser, errors, signIn } = await launch();
 const { page: a } = await signIn("test1@codechatter.local");
 const files = a.getByRole("tree", { name: "Files" });
 const row = (name) => files.getByRole("treeitem", { name: new RegExp(`^${escape(name)}`) });
-const apps = a.getByRole("group", { name: "Apps" });
 
 /** Runs a shell line in the room, through its own Run button. */
 async function runInRoom(line) {
@@ -52,7 +51,7 @@ async function removeProject(page = a) {
 const tool = a.getByRole("region", { name: "Flow" });
 const details = tool.getByRole("complementary", { name: "Details" });
 const openTool = async () => {
-  await apps.getByRole("button", { name: "Flow", exact: true }).click();
+  await openApp(a, "Flow");
   await tool.waitFor({ timeout: 20_000 });
 };
 const chart = tool.getByRole("group", { name: "Datasets and the recipes that make them" });
@@ -108,7 +107,7 @@ try {
 
   // Someone else has it open too.
   const { page: b } = await signIn("test2@codechatter.local");
-  await b.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Flow", exact: true }).click();
+  await openApp(b, "Flow");
   const theirTool = b.getByRole("region", { name: "Flow" });
   const theirChart = theirTool.getByRole("group", { name: "Datasets and the recipes that make them" });
   check("theyCanSeeTheChart", await ok(theirChart.getByRole("button", { name: /^Dataset clean_orders,/ }).waitFor({ timeout: 40_000 })));

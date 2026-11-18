@@ -16,10 +16,14 @@ export const ROOM_EVENTS = {
   "room.member.leave": { label: "Someone leaves", about: "Someone leaves the room." },
   "room.update": { label: "The room's settings change", about: "Its name, description or who can see it." },
   "sandbox.image": { label: "The sandbox's image changes", about: "Someone switches the room to another sandbox image." },
+  // Not turned on like the rest: a flow names this one as its error flow, and its failing runs it, in the sandbox (n8n's Error Trigger).
+  "flow.failed": { label: "Another flow fails", about: "A flow that names this one under \"If it fails, run\" fails or takes too long. It gets the run, its error and the flow, as n8n's Error Trigger gives them." },
 } as const;
 export type RoomEventName = keyof typeof ROOM_EVENTS;
 export const ROOM_EVENT_NAMES = Object.keys(ROOM_EVENTS) as RoomEventName[];
 export const isRoomEvent = (name: unknown): name is RoomEventName => typeof name === "string" && Object.hasOwn(ROOM_EVENTS, name);
+/** The event that runs a flow as another's error flow: chosen on the failing flow, so there's nothing to turn on. */
+export const ERROR_FLOW_EVENT = "flow.failed" satisfies RoomEventName;
 
 /** What a flow on a room event listens for: the event, and for files, which (globs, one a line or comma-separated; nothing means all). */
 export type RoomEventSettings = { event: RoomEventName; paths?: string };

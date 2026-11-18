@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 
-import { isRoomEvent, pathsProblem, type RoomEventSettings } from "./room-events.js";
+import { ERROR_FLOW_EVENT, isRoomEvent, pathsProblem, type RoomEventSettings } from "./room-events.js";
 import { scheduleProblem } from "./schedule.js";
 
 /** Flows live in the room's files, so they're edited together, versioned, and can leave. */
@@ -48,7 +48,7 @@ export const AutomationInput = z.discriminatedUnion("op", [
 export type AutomationInput = z.infer<typeof AutomationInput>;
 
 export type AutomationStepResult = { type: string; status: string; input?: unknown; output?: unknown; errorMessage?: string; duration?: number };
-export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry"; step?: string | null; retryOf?: string | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
+export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry"; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
 export type AutomationRun = AutomationRunSummary & { steps: Record<string, AutomationStepResult>; failedStep?: { name: string; displayName?: string; message?: string }; payload?: unknown; /** Steps that gave back what was pinned on them rather than running. */ pinned?: string[] };
 export type AutomationLive = (Partial<AutomationRun> & { state: "idle" | "running" | "finished"; id: string | null; steps: Record<string, AutomationStepResult>; queued: number });
 
@@ -67,7 +67,13 @@ export const ScheduleInput = z
   });
 /** What a flow on a room event listens for (room-events.ts). */
 export const RoomEventInput = z
-  .object({ event: z.string().refine(isRoomEvent, "That isn't something that happens in a room."), paths: z.string().max(4000).optional() })
+  .object({
+    event: z
+      .string()
+      .refine(isRoomEvent, "That isn't something that happens in a room.")
+      .refine((event) => event !== ERROR_FLOW_EVENT, "An error flow isn't turned on: choose it under \"If it fails, run\" on the flow it's for."),
+    paths: z.string().max(4000).optional(),
+  })
   .superRefine((input, context) => {
     const problem = pathsProblem(input.paths);
     if (problem) context.addIssue({ code: "custom", message: problem, path: ["paths"] });

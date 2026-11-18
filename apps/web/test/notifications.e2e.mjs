@@ -5,7 +5,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { check, finish, launch } from "./browser.mjs";
+import { check, finish, launch, openApp } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
 const file = `ntf_${stamp}.py`;
@@ -76,7 +76,7 @@ try {
   await a.keyboard.press("Escape");
 
   // The Activity panel.
-  await a.getByRole("button", { name: "Activity", exact: true }).click();
+  await openApp(a, "Activity");
   const activity = a.getByRole("region", { name: "Activity" });
   check("activityShowsEdits", await ok(activity.getByText(/edited the code/).first().waitFor({ timeout: 15_000 })), await activity.innerText().catch(() => ""));
 } catch (error) {

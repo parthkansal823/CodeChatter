@@ -19,7 +19,9 @@ let researchRoom = null;
 
 const pdfPane = a.getByRole("region", { name: "PDF" });
 const references = a.getByRole("region", { name: "References" });
-const apps = a.getByRole("group", { name: "Apps" });
+// Research keeps its own apps in the bar; the rest are under Apps.
+const apps = a.getByRole("group", { name: "Your apps" });
+const appsButton = a.getByRole("navigation", { name: "Panels" }).getByRole("button", { name: "Apps", exact: true });
 const editor = a.locator(".monaco-editor").first();
 const built = pdfPane.getByRole("status").filter({ hasText: /\d+ pages?, built at/ });
 const build = async () => {
@@ -56,7 +58,7 @@ try {
   check("aResearchRoomIsMade", created.ok(), created.status());
   researchRoom = (await created.json()).id;
   await a.goto(`${BASE}/rooms/${researchRoom}`);
-  await apps.waitFor({ timeout: 40_000 });
+  await appsButton.waitFor({ timeout: 40_000 });
 
   check("itOpensInTheResearchLayout", await ok(a.getByRole("button", { name: /^Research layout/ }).waitFor({ timeout: 15_000 })));
   check("thePaperIsOpen", await ok(a.getByRole("tab", { name: /main\.tex/ }).waitFor({ timeout: 20_000 })));
@@ -178,14 +180,16 @@ try {
   // ---- Switching layouts ----
   await a.getByRole("button", { name: /^Research layout/ }).click();
   check("itCanGoBackToTheCodeLayout", await ok(a.getByRole("button", { name: /^Code layout/ }).waitFor({ timeout: 5000 })));
-  check("whereEveryAppIsBack", await ok(apps.getByRole("button", { name: "API", exact: true }).waitFor({ timeout: 5000 })) && (await a.getByRole("button", { name: "Run and debug", exact: true }).count()) === 1);
+  await appsButton.click();
+  check("whereEveryAppIsBack", await ok(a.getByRole("group", { name: "Apps", exact: true }).getByRole("button", { name: "API", exact: true }).waitFor({ timeout: 5000 })) && (await a.getByRole("button", { name: "Run and debug", exact: true }).count()) === 1);
+  await a.keyboard.press("Escape");
   await a.reload();
-  await apps.waitFor({ timeout: 40_000 });
+  await appsButton.waitFor({ timeout: 40_000 });
   check("andItsRemembered", await ok(a.getByRole("button", { name: /^Code layout/ }).waitFor({ timeout: 15_000 })));
 
   // ---- A person's own room in the code layout, and two people ----
   await a.goto(`${BASE}/rooms/${ROOM}`);
-  await apps.waitFor({ timeout: 40_000 });
+  await appsButton.waitFor({ timeout: 40_000 });
   const name = `paper_${stamp}.tex`;
   const row = files.getByRole("treeitem", { name: new RegExp(`^${escape(name)}`) });
   await a.getByRole("button", { name: "New file" }).click();

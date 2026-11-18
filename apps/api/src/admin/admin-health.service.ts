@@ -9,12 +9,12 @@ import { DB, ENV, VALKEY } from "../infra/tokens.js";
 
 type Check = AdminHealth["checks"][number];
 
-/** These current gauges are unlabelled; never interpret missing/NaN as zero. */
+/** Registry-wide service labels accompany these gauges; missing/NaN is never zero. */
 export function readPrometheusGauge(text: string, name: string): number | null {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = text.match(new RegExp(`^${escaped}\\s+([^\\s]+)(?:\\s+[^\\s]+)?\\s*$`, "m"));
-  if (!match) return null;
-  const value = Number(match[1]);
+  const matches = [...text.matchAll(new RegExp(`^${escaped}(?:\\{[^\\r\\n]*\\})?\\s+([^\\s]+)(?:\\s+[^\\s]+)?\\s*$`, "gm"))];
+  if (matches.length !== 1) return null;
+  const value = Number(matches[0]![1]);
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
@@ -76,7 +76,7 @@ export class AdminHealthService {
   async read(): Promise<AdminHealth> {
     // COLLAB_INTERNAL_URL already exists in the runner configuration. Operators
     // may supply it to the API too; never invent a production service hostname.
-    const collab = process.env.COLLAB_INTERNAL_URL || (this.env.NODE_ENV !== "production" ? "http://127.0.0.1:4100" : undefined);
+    const collab = process.env.COLLAB_INTERNAL_URL?.replace(/^ws:/, "http:").replace(/^wss:/, "https:") || (this.env.NODE_ENV !== "production" ? "http://127.0.0.1:4100" : undefined);
     const [database, valkey, runner, runnerMetrics, collabMetrics] = await Promise.all([
       this.probe("database", "Database", () => this.handle.sql`select 1`),
       this.probe("valkey", "Valkey", () => this.redis.ping()),

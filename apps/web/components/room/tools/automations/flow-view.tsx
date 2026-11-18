@@ -5,7 +5,7 @@
  */
 "use client";
 
-import { SCHEDULE_PIECE, type AutomationInput, type AutomationLive, type AutomationManifest, type AutomationRun, type AutomationRunSummary } from "@codechatter/contracts";
+import { ROOM_EVENT_CARRIER, roomEventOf, SCHEDULE_PIECE, type AutomationInput, type AutomationLive, type AutomationManifest, type AutomationRun, type AutomationRunSummary } from "@codechatter/contracts";
 import { setFileText, textOf, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Code2, GitBranch, Loader2, Play, Puzzle, Redo2, Repeat, RotateCcw, Rows3, Square, Undo2, X, Zap } from "lucide-react";
@@ -22,7 +22,8 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { copyStep, stepToPaste } from "./clipboard";
-import { addStep, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
+import { addStep, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newRoomEventTrigger, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
+import { ErrorFlowField } from "./error-flow-field";
 import { StepPanel } from "./step-panel";
 import { StepPicker, type Picked } from "./step-picker";
 
@@ -60,6 +61,7 @@ function RunsList({ runs, shownId, onShow, titleOf }: { runs: AutomationRunSumma
               {when(run.startedAt)}
               {run.durationMs !== undefined ? ` · ${(run.durationMs / 1000).toFixed(1)} s` : ""}
               {run.by ? ` · ${run.by}` : ""}
+              {run.errorRun ? " · its error flow ran" : run.errorProblem ? ` · its error flow didn't: ${run.errorProblem}` : ""}
             </span>
           </button>
         </li>
@@ -133,6 +135,8 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
   const flow = parsed.flow;
   /** A flow on Activepieces' schedule piece gets what that piece gives, not a webhook's body. */
   const onSchedule = (flow.trigger.settings as { pieceName?: string }).pieceName === SCHEDULE_PIECE;
+  /** And one on a room event, what happened, as it is. */
+  const onRoomEvent = roomEventOf(flow.trigger.settings) !== null;
   const save = (next: Flow) => setFileText(doc, node.id, `${JSON.stringify(next, null, 2)}\n`);
   const chart = chartOfFlow(flow, chartSteps, pieces, { adds: canEdit });
   const isAdd = new Set(chart.items.filter((item) => item.shape === "add").map((item) => item.id));
@@ -188,7 +192,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
       return;
     }
     const sample: Record<string, unknown> = Object.fromEntries(Object.entries(steps ?? {}).map(([key, result]) => [key, result.output]));
-    if (!Object.hasOwn(sample, flow.trigger.name)) sample[flow.trigger.name] = onSchedule ? body : { body, headers: {}, queryParams: {} };
+    if (!Object.hasOwn(sample, flow.trigger.name)) sample[flow.trigger.name] = onSchedule || onRoomEvent ? body : { body, headers: {}, queryParams: {} };
     void run({ mode: "step", step: name, sampleData: sample });
   };
   const stop = async () => {
@@ -325,6 +329,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
     else if (picked.kind === "builtin") made = newBuiltinStep(newStepName(flow, picked.name), picked.name);
     else if (picked.kind === "action" && pieces[picked.pieceName]) made = newPieceStep(newStepName(flow, picked.actionName), picked.pieceName, pieces[picked.pieceName]!, picked.actionName);
     else if (picked.kind === "trigger" && pieces[picked.pieceName]) made = newTrigger(picked.pieceName, pieces[picked.pieceName]!, picked.triggerName);
+    else if (picked.kind === "room-event" && pieces[ROOM_EVENT_CARRIER.pieceName]) made = newRoomEventTrigger(picked.event, pieces[ROOM_EVENT_CARRIER.pieceName]!);
     if (!made) return;
     if (picking.mode === "add") {
       save(addStep(flow, picking.place, made));
@@ -431,6 +436,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
               ) : (
                 flow.description && <p className="whitespace-pre-wrap">{flow.description}</p>
               )}
+              <ErrorFlowField flow={flow} fileId={node.id} canEdit={canEdit} onSave={save} />
             </div>
             {canRun && (
               <section aria-label="Run it" className="grid gap-1">
@@ -439,7 +445,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
                   <Textarea aria-describedby={payloadHelp} className="min-h-16 font-mono text-[11px] md:text-[11px]" spellCheck={false} value={payload} onChange={(event) => setPayload(event.target.value)} />
                 </label>
                 <span id={payloadHelp} className="text-muted-foreground">
-                  {onSchedule ? "The first step gets this as the trigger's output, as a run on the schedule gets its cron_expression, timezone and scheduled_at." : <>The first step gets this as {"{{trigger.output.body}}"}.</>}
+                  {onSchedule ? "The first step gets this as the trigger's output, as a run on the schedule gets its cron_expression, timezone and scheduled_at." : onRoomEvent ? "The first step gets this as the trigger's output, as a run started by the room gets what happened: its event, who, and the files." : <>The first step gets this as {"{{trigger.output.body}}"}.</>}
                 </span>
                 <div className="flex gap-1">
                   {runningHere ? (

@@ -78,9 +78,9 @@ export function ShareMenu() {
           </Button>
         </PopoverTrigger>
         {/* The editor takes focus when it finishes loading: that shouldn't close this on someone who just opened it. Clicking elsewhere still does. */}
-        <PopoverContent align="end" className="grid w-80 gap-3 text-xs" aria-label="Share this room" onFocusOutside={(event) => event.preventDefault()}>
-          <div className="flex items-center gap-2">
-            <span className="flex-1 text-muted-foreground">
+        <PopoverContent align="end" className="grid w-80 grid-cols-1 gap-3 text-xs" aria-label="Share this room" onFocusOutside={(event) => event.preventDefault()}>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 flex-1 text-muted-foreground">
               Room code <span className="font-mono text-foreground">{room.id}</span>
             </span>
             <Button variant="ghost" size="icon-xs" aria-label="Copy room code" onClick={() => void copy(room.id, "Room code")}>
@@ -89,8 +89,8 @@ export function ShareMenu() {
           </div>
 
           {invites ? (
-            <div className="grid gap-1.5">
-              <div className="flex items-center gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-1.5">
+              <div className="flex min-w-0 items-center gap-2">
                 <code data-testid="invite-link" className="min-w-0 flex-1 truncate rounded-md border bg-panel px-2 py-1">
                   {url ?? (link.isError ? "Couldn't load the link" : "Loading…")}
                 </code>
@@ -107,11 +107,11 @@ export function ShareMenu() {
           )}
 
           {manages && (
-            <div className="grid gap-2 border-t pt-3">
-              <label className="grid gap-1 text-muted-foreground">
+            <div className="grid min-w-0 grid-cols-1 gap-2 border-t pt-3">
+              <label className="grid min-w-0 grid-cols-1 gap-1 text-muted-foreground">
                 Who can join
                 <Select value={shownPolicy} disabled={policy.isPending} onValueChange={(value) => policy.mutate(value as JoinPolicy)}>
-                  <SelectTrigger aria-label="Who can join" size="sm" className="h-7 w-full text-xs text-foreground">
+                  <SelectTrigger aria-label="Who can join" size="sm" className="h-7 w-full min-w-0 text-xs text-foreground">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

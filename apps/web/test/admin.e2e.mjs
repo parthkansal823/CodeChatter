@@ -1,6 +1,7 @@
 /** Exercise instance-admin views and confirmed account changes with a disposable account and private room, leaving seeded roles and memberships untouched. */
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 try { process.loadEnvFile(fileURLToPath(new URL("../../../.env", import.meta.url))); }
@@ -40,6 +41,9 @@ async function profile(address, secret = PASSWORD) {
 }
 async function freshSession(person) {
   return (await request(person, "auth/get-session?disableCookieCache=true")).body;
+}
+async function shot(label) {
+  if (process.env.SHOTS) await admin.page.screenshot({ path: join(process.env.SHOTS, `${label}.png`), fullPage: true });
 }
 async function searchUsers(value) {
   await admin.page.getByLabel("Name or email", { exact: true }).fill(value);
@@ -114,23 +118,32 @@ try {
   await admin.page.getByRole("menuitem", { name: "Instance admin", exact: true }).click();
   await admin.page.getByRole("heading", { name: "Instance admin", exact: true }).waitFor();
   verify("the admin link opens all three administration sections", await admin.page.getByRole("tab", { name: "Users", exact: true }).isVisible() && await admin.page.getByRole("tab", { name: "Rooms", exact: true }).isVisible() && await admin.page.getByRole("tab", { name: "Health", exact: true }).isVisible());
+  await searchUsers("test1@codechatter.local");
+  const selfRow = admin.page.getByRole("table", { name: "Instance users", exact: true }).getByRole("row").filter({ has: admin.page.getByText("test1@codechatter.local", { exact: true }) });
+  await selfRow.waitFor();
+  verify("the admin's own ban and demotion controls are disabled", await selfRow.getByRole("button", { name: "Ban", exact: true }).isDisabled() && await selfRow.getByRole("button", { name: "Remove admin", exact: true }).isDisabled());
   await searchUsers(name);
   await subjectRow().waitFor();
   verify("users can be found by name with joined, security and organisation metadata", (await subjectRow().innerText()).includes("Email verified") && (await subjectRow().innerText()).includes("Two-factor off") && (await subjectRow().innerText()).includes("workspace"));
   await searchUsers(email);
   await subjectRow().waitFor();
   verify("users can be found by email and pagination starts on page one", await admin.page.getByRole("navigation", { name: "Users pages", exact: true }).getByRole("button", { name: "Previous", exact: true }).isDisabled());
+  await shot("admin-users");
   stage = "ban confirmation";
   await subjectRow().getByRole("button", { name: "Ban", exact: true }).click();
   await admin.page.getByRole("alertdialog").getByRole("button", { name: "Cancel", exact: true }).click();
   verify("cancelling the ban does not change the account", (await userState())?.banned === false);
   await subjectRow().getByRole("button", { name: "Ban", exact: true }).click();
+  await admin.page.getByRole("alertdialog").getByRole("button", { name: "Ban account", exact: true }).click();
+  await admin.page.getByRole("alertdialog").getByText("Add a reason for this ban.", { exact: true }).waitFor();
+  verify("a ban requires a reason before any account change", (await userState())?.banned === false);
   await admin.page.getByRole("alertdialog").getByLabel("Reason", { exact: true }).fill("Disposable browser moderation check");
   const end = await admin.page.evaluate(() => { const value = new Date(Date.now() + 3_600_000); const pad = (n) => String(n).padStart(2, "0"); return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`; });
   await admin.page.getByRole("alertdialog").getByLabel("End time (optional)", { exact: true }).fill(end);
   await confirmAction("Ban account");
   await subjectRow().getByRole("button", { name: "Unban", exact: true }).waitFor();
   verify("a confirmed ban records its reason and optional end", (await subjectRow().innerText()).includes("Disposable browser moderation check") && Boolean((await userState())?.banExpires));
+  await shot("admin-banned");
   const denied = await request(subject, "auth/sign-in/email", "POST", { email, password });
   verify("the banned account cannot sign in and loses its prior session", denied.status !== 200 && !(await freshSession(subject)));
   stage = "unban and session revocation";
@@ -158,6 +171,7 @@ try {
   await roomRow.waitFor();
   verify("room search shows owner, organisation, visibility and sandbox status", (await roomRow.innerText()).includes(name) && (await roomRow.innerText()).includes("private") && /Running|Stopped|Couldn't tell/.test(await roomRow.innerText()));
   verify("the page explains that admin does not grant file access", await admin.page.getByText("Being an instance admin does not grant access to a room or its files. Room links work only for its members.", { exact: true }).isVisible());
+  await shot("admin-rooms");
   const boundary = await admin.page.goto(`${BASE}/rooms/${roomId}`);
   verify("the admin cannot open a private room they do not belong to", boundary?.status() === 404);
   stage = "health and phone";
@@ -165,9 +179,12 @@ try {
   await admin.page.getByRole("tab", { name: "Health", exact: true }).click();
   await admin.page.getByRole("table", { name: "Instance health", exact: true }).waitFor();
   verify("health displays service states and check times", await admin.page.getByRole("table", { name: "Instance health", exact: true }).getByRole("row").count() > 1 && await admin.page.getByText(/^Last checked /).isVisible());
+  await shot("admin-health");
   await admin.page.getByRole("button", { name: "Check now", exact: true }).click();
   await admin.page.setViewportSize({ width: 390, height: 844 });
+  await admin.page.evaluate(() => { document.documentElement.classList.add("dark"); document.documentElement.classList.remove("light"); });
   verify("the health page fits a phone with horizontally scrollable tables", await admin.page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth));
+  await shot("admin-phone-dark");
   stage = "ordinary user cannot discover admin";
   await ordinary.page.goto(`${BASE}/dashboard`);
   await ordinary.page.getByRole("button", { name: /test2@codechatter\.local/ }).click();

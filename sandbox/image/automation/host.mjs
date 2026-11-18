@@ -1,7 +1,7 @@
 // Runs a room's automations, one at a time, with Activepieces' real engine and no Activepieces server. image/automation.py queues a job and starts this; it works
 // through the queue and exits. For each job it starts a socket.io server for the engine to connect to, hands it the flow, and answers on loopback the few things
 // the engine asks a server for: where to put the run's details, and a room's stored values and connections. The room's jail is the sandbox: AP_EXECUTION_MODE says so.
-import { fork } from "node:child_process";
+import { fork, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -22,6 +22,8 @@ const STOP = join(HOME, "stop");
 const LOCK = join(HOME, "worker");
 const ROOT = new URL(".", import.meta.url).pathname;
 const ENGINE = join(ROOT, "engine", "main.js");
+/** Queues runs (an error flow, here), as it does for the runner. */
+const SCRIPT = join(ROOT, "..", "automation.py");
 const BUILTINS = pathToFileURL(join(ROOT, "builtins.mjs")).href;
 const BUILTIN_NAME = /^[a-z_]{1,40}$/;
 const MOST_RUNS = 50;
@@ -208,6 +210,8 @@ async function runJob(job) {
     clearInterval(beat);
     const finishedAt = NOW();
     Object.assign(live, { state: "finished", status, message, finishedAt, durationMs: finishedAt - startedAt, steps, beat: finishedAt });
+    // A flow that failed, with an error flow, starts it: n8n's error workflow. Not for a step tried alone, nor an error flow's own failure, so it can't loop.
+    if ((status === "FAILED" || status === "TIMEOUT") && mode !== "step" && job.trigger !== "error" && typeof job.flow?.errorFlow === "string") Object.assign(live, queueErrorFlow(job, live));
     writeJson(join(RUNS, `${job.id}.json`), { ...live, payload: job.payload ?? null });
     writeJson(LIVE, live);
     rmSync(join(CODES, job.id), { recursive: true, force: true });
@@ -312,10 +316,44 @@ async function runJob(job) {
  * the time it was for) as it is, as Activepieces runs it. Any other trigger runs only by hand, with what was sent as its body.
  */
 function triggerOutputOf(flow, job) {
+  // An error flow: the failed run and its flow, as n8n's Error Trigger gives them.
+  if (job.trigger === "error") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   // A room event (a `room` setting on the webhook trigger): what happened, as it is.
   if (flow.trigger?.settings?.room) return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   if (flow.trigger?.settings?.pieceName === "@activepieces/piece-schedule") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   return { body: job.payload ?? {}, headers: job.headers ?? {}, queryParams: job.query ?? {} };
+}
+
+/**
+ * Queues a failed flow's error flow, with what n8n's Error Trigger gives: the run (its id, the error, the step it failed at, what started it) and the flow.
+ * automation.py finds the error flow by its id, as for any trigger, and queues it; this worker goes on to it once this run is done.
+ */
+function queueErrorFlow(job, live) {
+  const errorFlow = job.flow.errorFlow;
+  if (!/^[\w-]{1,100}$/.test(errorFlow)) return { errorRun: null, errorProblem: "Its error flow isn't a flow's id." };
+  if (errorFlow === job.flowId) return { errorRun: null, errorProblem: "A flow can't be its own error flow." };
+  const payload = {
+    execution: {
+      id: job.id,
+      url: null,
+      retryOf: job.retryOf ?? null,
+      error: { message: live.failedStep?.message ?? live.message ?? "It failed.", step: live.failedStep?.name ?? null },
+      lastNodeExecuted: live.failedStep?.name ?? null,
+      mode: job.trigger ?? "manual",
+      startedAt: new Date(live.startedAt).toISOString(),
+      stoppedAt: new Date(live.finishedAt).toISOString(),
+    },
+    workflow: { id: job.flowId ?? null, name: job.flow.displayName ?? job.path, path: job.path },
+  };
+  const request = { op: "run", path: job.path, flowId: errorFlow, payload, trigger: "error", by: `${String(job.flow.displayName ?? job.path).slice(0, 60)} failed`, noWorker: true };
+  const done = spawnSync("python3", [SCRIPT], { input: JSON.stringify(request), encoding: "utf8", timeout: 20_000 });
+  try {
+    const answer = JSON.parse(done.stdout);
+    if (typeof answer.id === "string") return { errorRun: answer.id, errorProblem: null };
+    return { errorRun: null, errorProblem: String(answer.error ?? "Its error flow couldn't be started.").slice(0, 300) };
+  } catch {
+    return { errorRun: null, errorProblem: "Its error flow couldn't be started." };
+  }
 }
 
 /** The engine's errors come wrapped; the person wants the message. */

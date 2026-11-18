@@ -1,26 +1,27 @@
 "use client";
 
-import { ChevronRight, Presentation, Search, type LucideIcon } from "lucide-react";
+import { ChevronRight, GitFork, Moon, MoreHorizontal, Presentation, Search, Sun, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useTheme } from "next-themes";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { LogoMark } from "@/components/brand/logo";
 import { NotificationsBell } from "@/components/notifications/notifications-bell";
 import { CallButton } from "@/components/room/call/call-dock";
-import { ForkButton } from "@/components/room/fork-dialog";
+import { ForkDialog } from "@/components/room/fork-dialog";
 import { ShareMenu } from "@/components/room/share-menu";
 import { VisibilityMenu } from "@/components/room/visibility-menu";
 import { PresenceAvatar } from "@/components/presence/presence";
 import { usePeers } from "@/components/room/hooks";
 import { useRoomPeople } from "@/components/room/people/use-room-people";
 import { useRoom } from "@/components/room/room-context";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { copyText } from "@/lib/clipboard";
 import { keyLabel, keysFor } from "@/components/room/editor/keybindings";
 import { useEditorSettings } from "@/components/room/editor/settings-store";
 import { openQuickOpen, useEditorUi } from "@/components/room/editor/ui-store";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,10 @@ export type SidePanel = {
   items: Array<{ id: string; label: string; icon: LucideIcon; badge?: number }>;
 };
 
-/** `actions` sit before Share (the workspace puts Run there). `side` adds the Chat and AI toggles; the avatars open People. */
+/**
+ * `actions` sit before Call and Share (the workspace puts Run there). `side` adds the Chat and AI toggles; the avatars open People. What's used now and then
+ * (presenting, forking, the theme) is under More, so the bar stays short.
+ */
 export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePanel }) {
   const { room, me, mySlot, status } = useRoom();
   const peers = usePeers();
@@ -92,7 +96,7 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
         </button>
       </div>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-1.5">
         <PeopleButton side={side}>
           <div className="flex items-center gap-1.5" aria-label={`${peers.length + 1} people here`}>
             {peers.slice(0, 5).map((peer) => (
@@ -120,6 +124,7 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
             />
           </div>
         </PeopleButton>
+        <span aria-hidden className="mx-1 h-5 w-px bg-border" />
         {side && (
           <div role="group" aria-label="Side panel" className="flex items-center gap-0.5">
             {side.items.map(({ id, label, icon: Icon, badge = 0 }) => (
@@ -146,27 +151,69 @@ export function TitleBar({ actions, side }: { actions?: ReactNode; side?: SidePa
             ))}
           </div>
         )}
-        {actions}
-        <CallButton />
-        {room.kind !== "interview" && <ForkButton />}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={presenting ? "secondary" : "ghost"}
-              size="sm"
-              aria-pressed={presenting}
-              onClick={() => useEditorUi.getState().setPresenting(!presenting)}
-            >
-              <Presentation /> {presenting ? "Presenting" : "Present"}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{presenting ? "Stop presenting" : "Everyone in the room follows your file and scroll"}</TooltipContent>
-        </Tooltip>
-        <ShareMenu />
+        <div className="ml-1 flex items-center gap-1.5">
+          {actions}
+          <CallButton />
+          {/* While presenting, it says so here, and stops in one click. */}
+          {presenting && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="secondary" size="sm" aria-pressed onClick={() => useEditorUi.getState().setPresenting(false)}>
+                  <Presentation /> Presenting
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Stop presenting</TooltipContent>
+            </Tooltip>
+          )}
+          <ShareMenu />
+        </div>
+        <MoreMenu presenting={presenting} />
         <NotificationsBell />
-        <ThemeToggle />
       </div>
     </header>
+  );
+}
+
+/** Presenting, forking and the theme: used now and then, so one click further away. */
+function MoreMenu({ presenting }: { presenting: boolean }) {
+  const { room } = useRoom();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [forking, setForking] = useState(false);
+  return (
+    <>
+      {/* Not modal: a modal menu hides the whole page from screen readers while its buttons can still take focus. */}
+      <DropdownMenu modal={false}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="More">
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>More</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuItem onSelect={() => useEditorUi.getState().setPresenting(!presenting)}>
+            <Presentation /> {presenting ? "Stop presenting" : "Present"}
+          </DropdownMenuItem>
+          <p className="px-2 pb-1.5 pl-8 text-[11px] text-muted-foreground">Everyone in the room follows your file and scroll.</p>
+          {room.kind !== "interview" && (
+            <DropdownMenuItem onSelect={() => setForking(true)}>
+              <GitFork /> Fork…
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
+            <Sun className="hidden dark:block" />
+            <Moon className="dark:hidden" />
+            <span className="dark:hidden">Dark theme</span>
+            <span className="hidden dark:inline">Light theme</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {room.kind !== "interview" && <ForkDialog open={forking} onOpenChange={setForking} />}
+    </>
   );
 }
 

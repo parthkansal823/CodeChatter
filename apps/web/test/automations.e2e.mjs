@@ -1,7 +1,7 @@
 // The Automations tool in a browser, with Activepieces' real engine behind it: the examples, one on the chart with its branches lit up after a real run, what went in and came out
 // of a step, changing a step and adding them, two people, a failing step, stopping a run, a file that isn't a flow, and a phone. Nothing is stood in for. Its files are removed.
 //   node test/automations.e2e.mjs        (from apps/web, with the dev stack running and the current sandbox images)
-import { BASE, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -26,7 +26,7 @@ async function select(name) {
   if ((await box(name).getAttribute("aria-pressed")) !== "true") await box(name).click();
 }
 const openTool = async (page = a) => {
-  await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Automations", exact: true }).click();
+  await openApp(page, "Automations");
   await page.getByRole("region", { name: "Automations", exact: true }).waitFor({ timeout: 20_000 });
 };
 /** Runs what's on screen, with `payload`, and waits for its answer. */
@@ -443,6 +443,42 @@ try {
   await scheduled.getByRole("button", { name: "Forget it" }).click();
   await scheduled.getByRole("group", { name: "Are you sure?" }).getByRole("button", { name: "Forget it" }).click();
   check("aScheduleCanBeForgotten", await ok(scheduled.getByRole("button", { name: "Turn on" }).waitFor({ timeout: 10_000 })));
+
+  // ---- On something happening in the room: files changing, which ones, an example to try it with, turned on and forgotten ----
+  await details.getByRole("button", { name: "Change the trigger" }).click();
+  await details.getByPlaceholder(/^Search \d+ triggers$/).fill("files change");
+  check("theRoomsOwnEventsAreAmongTheTriggers", await ok(details.getByRole("group", { name: "This room" }).waitFor({ timeout: 5000 })));
+  await details.getByRole("option", { name: /^Files change/ }).first().click();
+  const onFiles = details.getByRole("region", { name: "Step Files change" });
+  await onFiles.waitFor({ timeout: 10_000 });
+  check("itSaysWhatItIs", /This room: Files change/.test(await chart.getByRole("button", { name: /^Step Files change/ }).getAttribute("aria-label")));
+  check("itHasNoWebhookFields", (await onFiles.getByRole("region", { name: "Its fields" }).count()) === 0 && (await onFiles.getByRole("textbox", { name: "Live address" }).count()) === 0);
+  const which = onFiles.getByRole("textbox", { name: "Which files" });
+  await which.fill("/etc/*");
+  check("aPatternOutsideTheRoomSaysSo", await ok(onFiles.getByText(/should be a path inside the room/).waitFor({ timeout: 5000 })));
+  await which.fill("src/**/*.py");
+  await onFiles.getByRole("button", { name: "Use it as what to send" }).click();
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  check("anExampleCanBeWhatsSent", JSON.parse(await details.getByLabel("What to send, as JSON").inputValue()).event === "files.changed");
+  await chart.getByRole("button", { name: /^Step Files change/ }).click();
+  const listening = onFiles.getByRole("region", { name: "Starting by itself" });
+  await listening.getByRole("button", { name: "Turn on" }).click();
+  check("aRoomEventTurnsOn", await ok(listening.getByText("Waiting for it to happen.").waitFor({ timeout: 10_000 })));
+  const savedEvent = (await a.request.get(`${BASE}/api/rooms/E2ETST/automations/triggers`).then((response) => response.json())).find((each) => each.kind === "event" && each.path?.startsWith(`${FOLDER}/`));
+  check("itListensForThoseFiles", savedEvent?.event?.event === "files.changed" && savedEvent.event.paths === "src/**/*.py", savedEvent);
+  await listening.getByRole("button", { name: "Forget it" }).click();
+  await listening.getByRole("group", { name: "Are you sure?" }).getByRole("button", { name: "Forget it" }).click();
+  check("aRoomEventCanBeForgotten", await ok(listening.getByRole("button", { name: "Turn on" }).waitFor({ timeout: 10_000 })));
+
+  // ---- An error flow: nothing to turn on, and each flow names its own under "If it fails, run" ----
+  await details.getByRole("button", { name: "Change the trigger" }).click();
+  await details.getByPlaceholder(/^Search \d+ triggers$/).fill("another flow fails");
+  await details.getByRole("option", { name: /^Another flow fails/ }).first().click();
+  const onFailure = details.getByRole("region", { name: "Step Another flow fails" });
+  check("anErrorFlowHasNothingToTurnOn", await ok(onFailure.getByText(/There's nothing to turn on/).waitFor({ timeout: 10_000 })) && (await onFailure.getByRole("region", { name: "Starting by itself" }).count()) === 0);
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  const ifItFails = details.getByRole("combobox", { name: "If it fails, run" });
+  check("aFlowCanNameItsErrorFlow", await ok(ifItFails.waitFor({ timeout: 5000 })) && (await ifItFails.getByRole("option", { name: "Nothing" }).count()) === 1);
 
   // ---- On a phone ----
   await a.setViewportSize({ width: 390, height: 800 });

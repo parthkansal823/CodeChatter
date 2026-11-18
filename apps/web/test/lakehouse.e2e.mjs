@@ -1,7 +1,7 @@
 // The Lakehouse tool in a browser, for real, with nothing stood in for but one failure: its example notebook runs Spark, Delta Lake and
 // MLflow in the room's kernel, and the tool shows the tables, reads an old version, and lists the runs. Its files and tables are removed.
 //   node test/lakehouse.e2e.mjs        (from apps/web, with the dev stack running on the full sandbox image)
-import { BASE, ROOM, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -16,7 +16,8 @@ const { browser, errors, signIn } = await launch();
 const { page: a } = await signIn("test1@codechatter.local");
 const files = a.getByRole("tree", { name: "Files" });
 const row = (name) => files.getByRole("treeitem", { name: new RegExp(`^${escape(name)}`) });
-const apps = a.getByRole("group", { name: "Apps" });
+// The open app shows in the bar, and closes from there.
+const apps = a.getByRole("group", { name: "Your apps" });
 
 /** Runs a shell line in the room, through its own Run button. */
 async function runInRoom(line) {
@@ -48,7 +49,7 @@ try {
 
   // A room without it says what to do.
   await a.route("**/api/rooms/*/lakehouse", (route) => route.fulfill({ status: 409, contentType: "application/problem+json", body: JSON.stringify({ detail: "This room's sandbox doesn't have Spark, Delta Lake and MLflow. They come with the full image: its owner can choose that in the Ports panel." }) }));
-  await apps.getByRole("button", { name: "Lakehouse", exact: true }).click();
+  await openApp(a, "Lakehouse");
   const tool = a.getByRole("region", { name: "Lakehouse" });
   await tool.waitFor({ timeout: 20_000 });
   check("aRoomWithoutItSaysWhatToDo", await ok(tool.getByRole("alert").getByText(/full image.*Ports panel/).waitFor({ timeout: 15_000 })));
@@ -79,7 +80,7 @@ try {
   check("aTableOffersAnExplanation", (await notebook.getByRole("button", { name: "Explain this data" }).count()) >= 3);
 
   // What it made, in the tool.
-  await apps.getByRole("button", { name: "Lakehouse", exact: true }).click();
+  await openApp(a, "Lakehouse");
   await tool.waitFor({ timeout: 20_000 });
   const tables = tool.getByRole("navigation", { name: "Tables in this room" });
   check("itsTablesAreListed", await ok(tables.getByRole("button", { name: "gold_city_totals" }).waitFor({ timeout: 30_000 })));

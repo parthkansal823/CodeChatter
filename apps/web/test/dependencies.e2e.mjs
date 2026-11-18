@@ -7,7 +7,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ROOM, check, finish, launch } from "./browser.mjs";
+import { ROOM, check, finish, launch, openApp } from "./browser.mjs";
 
 if (ROOM !== "E2ETST") throw new Error("This test must use the seeded E2ETST room.");
 const folder = `deps_${Date.now().toString(36)}_${process.pid}`;
@@ -58,7 +58,7 @@ try {
   await newFile(path);
   await paste(lock("4.17.20"));
   check("lock file created through Files and Monaco", true);
-  const response = await nextCheck(() => page.getByRole("button", { name: "Dependencies", exact: true }).click());
+  const response = await nextCheck(() => openApp(page, "Dependencies"));
   check("opening the tool checks automatically", response.status() === 200, `HTTP ${response.status()}`);
   if (response.status() !== 200) throw new Error("OSV check failed; this browser test needs internet access to api.osv.dev.");
   const panel = page.getByRole("region", { name: "Dependencies", exact: true });

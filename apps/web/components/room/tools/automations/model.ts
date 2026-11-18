@@ -1,5 +1,5 @@
 /** What the Automations tool works out without a server: reading a flow in Activepieces' own format, its chart with what ran lit up, and changing it. A flow is a tree: each step has the one after it, a router has its branches, a loop has what's inside it. */
-import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
+import { ROOM_EVENT_CARRIER, ROOM_EVENTS, roomEventOf, type AutomationStepResult, type PieceInfo, type RoomEventName } from "@codechatter/contracts";
 
 import { BUILTINS, builtinOf } from "./builtins";
 
@@ -19,6 +19,8 @@ export type FlowStep = {
 export type Flow = {
   /** Stays with the flow when its file moves, so its runs do too. */
   id?: string;
+  /** The flow that runs when a run of this one fails (error-flow-field.tsx), by its id. */
+  errorFlow?: string;
   displayName: string;
   schemaVersion: string;
   trigger: FlowStep;
@@ -111,6 +113,8 @@ const KIND_WORDS: Record<string, string> = { CODE: "Code", ROUTER: "Router", LOO
 export function kindOf(step: FlowStep, pieces?: Record<string, PieceInfo>): string {
   const builtin = builtinOf(step);
   if (builtin) return builtin.label;
+  const event = step.type === "PIECE_TRIGGER" ? roomEventOf(step.settings) : null;
+  if (event) return `This room: ${ROOM_EVENTS[event.event].label}`;
   if (step.type === "PIECE" || step.type === "PIECE_TRIGGER") {
     const settings = step.settings as { pieceName?: string; actionName?: string; triggerName?: string };
     const piece = settings.pieceName ? pieces?.[settings.pieceName] : undefined;
@@ -278,6 +282,21 @@ export function newPieceStep(name: string, pieceName: string, piece: PieceInfo, 
   const action = piece.actions[actionName];
   const input = Object.fromEntries(Object.entries(action?.fields ?? {}).flatMap(([key, field]) => (field.default === undefined ? [] : [[key, field.default]])));
   return { name, type: "PIECE", displayName: action?.label ?? piece.label, valid: true, skip: false, settings: { pieceName, pieceVersion: piece.version, actionName, input, propertySettings: {}, errorHandlingOptions: NO_FAILURE_HANDLING }, nextAction: null };
+}
+
+/**
+ * A trigger on something happening in the room (contracts' room-events.ts): Activepieces' webhook trigger, which the engine runs as it is, with a `room`
+ * setting saying what it listens for. Files changing listens to every file until it's told which.
+ */
+export function newRoomEventTrigger(event: RoomEventName, webhook: PieceInfo): FlowStep {
+  return {
+    name: "trigger",
+    type: "PIECE_TRIGGER",
+    displayName: ROOM_EVENTS[event].label,
+    valid: true,
+    settings: { pieceName: ROOM_EVENT_CARRIER.pieceName, pieceVersion: webhook.version, triggerName: ROOM_EVENT_CARRIER.triggerName, input: { authType: "none", authFields: {} }, propertySettings: {}, room: { event } },
+    nextAction: null,
+  };
 }
 
 export function newTrigger(pieceName: string, piece: PieceInfo, triggerName: string): FlowStep {

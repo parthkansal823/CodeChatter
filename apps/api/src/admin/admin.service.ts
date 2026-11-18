@@ -12,7 +12,6 @@ import type { Env } from "../config/env.js";
 import { AUTH, DB, ENV } from "../infra/tokens.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient } from "../runner/runner.client.js";
-import { deadline } from "./admin-health.service.js";
 import { isBanned, isInstanceAdmin, mutateInstanceUser, type InstanceMutation } from "./admin-policy.js";
 
 const literal = (value: string) => value.replace(/[\\%_]/g, "\\$&");
@@ -47,10 +46,17 @@ export class AdminService {
     // Bound fanout: metadata inspection must not create containers or flood a runner.
     const runner = new RunnerClient(this.env);
     let cursor = 0;
+    const until = Date.now() + 3_000;
     await Promise.all(Array.from({ length: Math.min(4, found.length) }, async () => {
       while (cursor < found.length) {
         const row = found[cursor++]!;
-        try { status.set(row.id, (await deadline(runner.status(row.id, { id: actorId, name: "Instance admin" }), 2_000)).running ? "running" : "stopped"); }
+        if (Date.now() >= until) { status.set(row.id, "unknown"); continue; }
+        try {
+          const response = await fetch(new URL(`/rooms/${row.id}/sandbox`, this.env.RUNNER_URL), { headers: runner.headers(row.id, { id: actorId, name: "Instance admin" }), signal: AbortSignal.timeout(Math.max(1, Math.min(2_000, until - Date.now()))), redirect: "error" });
+          if (!response.ok) throw new Error("SandboxStatusUnavailable");
+          const body = await response.json() as { running?: unknown };
+          status.set(row.id, body.running === true ? "running" : body.running === false ? "stopped" : "unknown");
+        }
         catch { status.set(row.id, "unknown"); }
       }
     }));

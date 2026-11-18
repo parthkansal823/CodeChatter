@@ -73,6 +73,12 @@ Statuses here match the pathway. When a piece is finished, its write-up is added
   - the activity bar has your Files, then the room's apps as their own group (Docs, API, Design, Whiteboard, Diagrams), with terminals at the foot
   - Chat (with its unread count) and AI open from small toggles in the title bar, and clicking the people there opens People
   - that side panel starts closed, so the code gets the room, and each room remembers whether you opened it
+- ✅ **A tidier room** (2026-11-17, the owner: "pura UI cluttered hai"), for a laptop or desktop screen:
+  - **The activity bar** keeps the code's own views (Files, Search, Outline, Source control, History, Comments, Run and debug), then the apps you pinned and the one open now, then **Apps**: a list of every app, grouped (Write and plan, Data, Build and run, Check and improve), each saying in a line what it's for, with a search, and the panels beside the code (AI, Notes, Activity, Dependencies). An app is pinned to the bar from there; pins follow you to any browser with the editor's settings (`pinnedApps`). The Research layout keeps its own apps in the bar. It was 21 icons with no names.
+  - **The title bar** has who's here, Chat and AI, Run, Call, Share, **More** (Present, Fork, the theme) and the bell, rather than fourteen things; Notes, Activity and Dependencies are tabs in the side panel once it's open, and under Apps. Presenting shows "Presenting" there, to stop in one click.
+  - **Share** no longer runs off its edge: a long invite link ends in "…", with its Copy button beside it.
+  - **Where:** `components/room/apps-launcher.tsx` (new), `room-workspace.tsx`, `title-bar.tsx`, `fork-dialog.tsx` (`ForkDialog`, for the menu), `share-menu.tsx`, `tools/registry.ts` (each app's `description` and `group`), `editor/settings.ts` (`pinnedApps`).
+  - **Tests:** the browser tests open apps with `openApp` and the More menu with `fromMore` (`test/browser.mjs`); `a11y.e2e.mjs` adds the Apps list and More, open, in both themes. Run after the change: a11y (158 checks), automations (93), analysis (24), prompts (38), task-board (21), public-rooms (15), present (14), notes (11), notifications (11).
   - read-only mode for viewers
 - ✅ Room chat: history, offline outbox, code snippets, unread badge.
 
@@ -902,6 +908,41 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
 - `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
 
+### Automations, part eight: an error flow ✅ (2026-11-17)
+
+**What:** n8n's error workflow. A flow names another under **If it fails, run** (its details, beside "What it's for"); when one of its runs fails or takes too long, that flow runs, with what went wrong.
+
+- **The error flow** starts on This room: **Another flow fails**, so it says what it is on the chart; only such flows are offered, and one named in the file that isn't is still shown, to be put right. It has nothing to turn on (the API refuses it, and its panel says why): the failing flow names it.
+- **What it gets** is what n8n's Error Trigger gives: `execution` (the run's `id`, `retryOf`, `error` with its `message` and the `step` it failed at, `lastNodeExecuted`, `mode`, what started it, and when), and `workflow` (`id`, `name`, `path`). The run says "Sync the orders failed" where others say Webhook or Schedule.
+- **The failed run says so:** "its error flow ran", or why it didn't (the flow isn't in the room any more).
+- **No loops, no surprises:** a step tried on its own doesn't start it, nor does a run that was stopped; an error flow that fails doesn't start another.
+- **Where it happens:** in the sandbox, as n8n does it in-process: when a run ends failed, `automation/host.mjs` asks `automation.py` to queue the error flow, found by its id wherever its file is, and the worker already running goes on to it (`noWorker`, so there's never a second worker on the same queue).
+
+**Where:** `sandbox/image/automation/host.mjs` (`queueErrorFlow`), `sandbox/image/automation.py`, contracts' `room-events.ts` (`flow.failed`, `ERROR_FLOW_EVENT`) and `automations.ts` (`errorRun`, `errorProblem`), web `components/room/tools/automations/error-flow-field.tsx`, and the error flow's note in `room-event-settings.tsx`.
+
+**Tests:**
+- `apps/runner/test/automation-error-flow.e2e.mjs` (12 checks: a failing run starting its error flow, which gets the run, the error, the step and the flow as n8n's does; the failed run saying so; a step tried alone not starting it; an error flow that fails not starting another; one that isn't there saying so; and an error flow refused as a room event to turn on)
+- `apps/web/test/automations.e2e.mjs` (103 checks), adding: an error flow's trigger having nothing to turn on, and "If it fails, run"
+
+### Automations, part seven: room events ✅ (2026-11-17)
+
+**What:** a flow that runs when something happens in its room: files changing, a commit pushed or a pull request opened from Source control, the room published to GitHub, someone let in or leaving, the room's settings or its sandbox's image changing. n8n has nothing like it, as it isn't an IDE: "when someone changes a Python file, run the linter and post what it found", "when a commit is pushed, write release notes".
+
+- **Choosing it:** "Change the trigger" lists **This room** first, with each event and what it means. The trigger's panel chooses the event and, for files, which ones: globs, one a line or comma-separated (`src/**/*.py`), every file when empty; a pattern outside the room says so. It shows an example of what the flow is given, with "Use it as what to send" to try it, and turns it on, as a schedule's does.
+- **What the flow gets:** `event`, `at`, `by` (who, by id and name), and for files `files` (each `path`, `kind`, `change`: added, changed, renamed, moved, deleted or restored, and `from` when it moved), or the event's `data` (a commit's branch, a pull request's number and address).
+- **Files changing** is seen by collab, which has each room's files open (`apps/collab/src/extensions/automation-events.ts`): what people change through their own connection, collected per file (added then edited is added; added then deleted is nothing; renamed back is nothing; many keystrokes are one change), sent 3 seconds after they stop, or at most 15 seconds after the first change. **What the sandbox writes doesn't count**, so a flow that writes files can't set itself off; nor does the server's own seeding, or another collab server's share (it counts its own).
+- **The rest** come from the audit log: `AuditService.record` queues the room actions that are events.
+- **Running them:** both go on one Valkey list, taken from atomically by the API every second (`AutomationTriggersService.drain`), so with several API servers each event runs once; the flows listening for it, and for files only those whose files match, run in the room's sandbox. A flow is run at most 30 times a minute by events, and says so when some were passed over. The queue is kept to 1,000, so it can't grow without end while the API is away.
+- **The file wins,** as with schedules: a run sends back what the flow's file listens for now, and the trigger follows it; a flow whose trigger is no longer a room event, or listens for another one now, turns itself off and says why, rather than run for the wrong thing.
+- **In the flow file** the trigger is Activepieces' webhook trigger with a `room` setting: the engine needs a piece trigger to start a run, and taken to Activepieces the flow still works, as a webhook.
+
+**Where:** `packages/contracts/src/room-events.ts` (the events, what they give, globs); `apps/collab/src/extensions/automation-events.ts`; `apps/api/src/audit/audit.service.ts`, `apps/api/src/automations/automation-triggers.service.ts` (`drain`, `onEvent`, `runTriggered`, shared with schedules) and `RoomsRepository.userNames`; `sandbox/image/automation.py` and `automation/host.mjs`; web `components/room/tools/automations/room-event-settings.tsx`, "This room" in `step-picker.tsx`, `newRoomEventTrigger` in `model.ts`.
+
+**Tests:**
+- `packages/contracts/src/room-events.test.ts` (7: globs, several at once, folders, settings that can't be used, reading a flow's event) and `apps/collab/src/extensions/automation-events.test.ts` (8: only a person's own connection, every kind of change with who, the sandbox's and the server's not counting, changes that cancel out, deleted paths, many keystrokes as one, the event queued once the edits stop, and a long stream still sent)
+- `apps/runner/test/automation-events.e2e.mjs` (17 checks: a person's edits through collab, as a browser makes them, running a flow with the files it listens for and who; other files and the sandbox's changes not running it; many edits as one run; the room's settings changing, from the audit log; a flow listening for another event now turning itself off and not running; what can't be used refused)
+- `apps/web/test/automations.e2e.mjs` (101 checks), adding: the room's events among the triggers, its panel in place of the webhook's, a pattern outside the room, the example used as what to send, turning on and what it listens for, and forgetting it
+
 ### Automations, part six: schedules ✅ (2026-11-17)
 
 **What:** a flow that runs by itself at set times, as n8n's Schedule Trigger, with nobody in the room. The trigger is Activepieces' own schedule piece, already in the image: every few minutes, every hour, day, week or month, or a cron expression, each with its timezone.
@@ -938,7 +979,7 @@ What's left is in `docs/pending.md` under step 11.
 - **Sandbox:** `automation.py` finds a flow by its id when its file has moved, and passes the headers and query on; `host.mjs` gives them to the engine.
 - **Web:** `components/room/tools/automations/trigger-settings.tsx`, on the webhook trigger's panel.
 
-**Left** (in `docs/pending.md`): room events, an error flow, sub-flows, waiting and approvals, forms and chat, and a webhook checking a signature besides its address.
+**Left** (in `docs/pending.md`): an error flow, sub-flows, waiting and approvals, forms and chat, and a webhook checking a signature besides its address.
 
 **Tests:**
 - `apps/runner/test/automation-hooks.e2e.mjs` (28 checks, the whole way: turned on through the API and called from outside, with Activepieces' engine running it; the test address showing what it was sent, without cookies, and running nothing; answering when finished with the last step's output, the query and a header; the run saying a webhook started it; answering at once; a form, plain text and GET; turned off; a new address and the old one stopping; a moved file still found; wrong addresses and another room's; someone signed out; too many calls; and forgetting it)

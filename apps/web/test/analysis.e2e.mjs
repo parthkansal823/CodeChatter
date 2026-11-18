@@ -3,7 +3,7 @@
 //   node test/analysis.e2e.mjs        (from apps/web, with the dev stack running)
 import { randomBytes } from "node:crypto";
 
-import { BASE, ROOM, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -34,7 +34,7 @@ try {
   await a.keyboard.insertText(`import subprocess\n\nTOKEN = "${TOKEN}"\n\ndef run(command):\n    subprocess.call(command, shell=True)\n`);
   await sleep(3000);
 
-  await a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Analysis", exact: true }).click();
+  await openApp(a, "Analysis");
   const tool = a.getByRole("region", { name: "Analysis" });
   await tool.waitFor({ timeout: 15_000 });
   check("itExplainsItselfFirst", await tool.getByText(/gitleaks for secrets/).isVisible());
@@ -79,12 +79,13 @@ try {
   // It stays when you look away and come back.
   await place.click();
   check("itsPlaceOpensTheFile", await ok(a.getByRole("tab", { name: new RegExp(name.replace(".", "\\.")), selected: true }).waitFor({ timeout: 10_000 })));
-  await a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Analysis", exact: true }).click();
+  await openApp(a, "Analysis");
   check("theReportIsStillThere", await ok(a.getByRole("region", { name: "Analysis" }).getByRole("region", { name: "Secrets" }).waitFor({ timeout: 10_000 })));
 } catch (error) {
   check("noUnexpectedError", false, String(error).slice(0, 300));
 } finally {
-  const editorButton = a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Analysis", exact: true });
+  // The open app shows in the bar, and closes from there.
+  const editorButton = a.getByRole("group", { name: "Your apps" }).getByRole("button", { name: "Analysis", exact: true });
   if (await a.getByRole("region", { name: "Analysis" }).isVisible().catch(() => false)) await editorButton.click().catch(() => {});
   await sleep(500);
   await row().focus().catch(() => {});

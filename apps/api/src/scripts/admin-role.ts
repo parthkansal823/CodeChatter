@@ -33,7 +33,7 @@ export async function runAdminRole(role: "admin" | "user"): Promise<void> {
       const memberships = await handle.db.select({ roomId: schema.roomMembers.roomId }).from(schema.roomMembers).where(eq(schema.roomMembers.userId, target.id));
       await Promise.all(memberships.map((m) => connection.publish(ROOM_ACCESS_CHANNEL, roomAccessMessage({ roomId: m.roomId, userId: target.id }))));
     }
-    console.log(role === "admin" ? "Instance admin granted. Sign in again to use /admin." : "Instance admin revoked. Existing sessions ended.");
+    console.log(!result.changed ? "The account already has the requested instance role." : role === "admin" ? "Instance admin granted. Sign in again to use /admin." : "Instance admin revoked. Existing sessions ended.");
   } catch (error) {
     // Print only our known policy messages; never database/Redis exceptions.
     const status = error as { getStatus?: () => number; message?: string };

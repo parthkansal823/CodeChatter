@@ -4,8 +4,8 @@
  */
 "use client";
 
-import type { PieceInfo } from "@codechatter/contracts";
-import { ArrowLeft, Code2, GitBranch, Puzzle, Repeat, Rows3, Zap } from "lucide-react";
+import { ROOM_EVENT_NAMES, ROOM_EVENTS, type PieceInfo, type RoomEventName } from "@codechatter/contracts";
+import { ArrowLeft, Code2, GitBranch, House, Puzzle, Repeat, Rows3, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 
 import { BUILTINS } from "./builtins";
 
-export type Picked = { kind: "code" } | { kind: "router" } | { kind: "loop" } | { kind: "builtin"; name: string } | { kind: "action"; pieceName: string; actionName: string } | { kind: "trigger"; pieceName: string; triggerName: string };
+export type Picked = { kind: "code" } | { kind: "router" } | { kind: "loop" } | { kind: "builtin"; name: string } | { kind: "action"; pieceName: string; actionName: string } | { kind: "trigger"; pieceName: string; triggerName: string } | { kind: "room-event"; event: RoomEventName };
 
 const MOST_SHOWN = 80;
 const words = (text: string) => text.toLowerCase().split(/\s+/).filter(Boolean);
@@ -47,6 +47,8 @@ export function StepPicker({ pieces, mode, title, onPick, onCancel }: { pieces: 
   ].filter((item) => matches(`${item.label} ${item.about}`));
   const stepCount = sorted.reduce((sum, [, info]) => sum + stepsOf(info).length, 0);
   const builtins = triggers ? [] : Object.entries(BUILTINS).filter(([, builtin]) => matches(`${builtin.label} ${builtin.description}`));
+  // What happens in the room: CodeChatter's own, first among the triggers.
+  const roomEvents = triggers ? ROOM_EVENT_NAMES.filter((name) => matches(`this room ${ROOM_EVENTS[name].label} ${ROOM_EVENTS[name].about}`)) : [];
 
   return (
     <section aria-label={title} className="grid min-h-0 content-start gap-2 text-xs">
@@ -73,6 +75,19 @@ export function StepPicker({ pieces, mode, title, onPick, onCancel }: { pieces: 
                   <span className="grid min-w-0">
                     <span>{item.label}</span>
                     <span className="truncate text-[11px] text-muted-foreground">{item.about}</span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {!open && roomEvents.length > 0 && (
+            <CommandGroup heading="This room">
+              {roomEvents.map((name) => (
+                <CommandItem key={name} value={`room-${name}`} onSelect={() => onPick({ kind: "room-event", event: name })} className="text-xs">
+                  <House />
+                  <span className="grid min-w-0">
+                    <span>{ROOM_EVENTS[name].label}</span>
+                    <span className="truncate text-[11px] text-muted-foreground">{ROOM_EVENTS[name].about}</span>
                   </span>
                 </CommandItem>
               ))}

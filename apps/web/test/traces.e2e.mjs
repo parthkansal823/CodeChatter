@@ -1,7 +1,7 @@
 // The AI calls view in a browser: the room's calls with their numbers, filtering by where they came from, opening one, and someone
 // else's conversation staying closed. The list is stood in for, so this is the page: apps/api/test/traces.e2e.mjs tests what's in it.
 //   node test/traces.e2e.mjs        (from apps/web, with the dev stack running)
-import { BASE, ROOM, check, finish, launch } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -22,7 +22,7 @@ try {
   check("signedOutIsRefused", refused.status() === 401, refused.status());
   await outside.close();
 
-  await a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Prompts", exact: true }).click();
+  await openApp(a, "Prompts");
   const tool = a.getByRole("region", { name: "Prompts" });
   await tool.waitFor({ timeout: 20_000 });
   await tool.getByRole("button", { name: "AI calls" }).click();

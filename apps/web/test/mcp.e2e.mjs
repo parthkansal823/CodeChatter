@@ -2,7 +2,7 @@
 // added to .mcp.json, its tools make forms, what's wrong with a form is said, a call's answer and a tool's failure show, and so do
 // resources and prompts. A server that won't start says so. Its files are removed.
 //   node test/mcp.e2e.mjs        (from apps/web, with the dev stack running and the current sandbox images)
-import { BASE, ROOM, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -21,7 +21,7 @@ try {
   check("signedOutIsRefused", refused.status() === 401, refused.status());
   await outside.close();
 
-  await a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "MCP", exact: true }).click();
+  await openApp(a, "MCP");
   const tool = a.getByRole("region", { name: "MCP servers" });
   await tool.waitFor({ timeout: 20_000 });
   check("itExplainsItselfFirst", await ok(tool.getByText(/how AI tools reach other programs/).waitFor({ timeout: 10_000 })));
@@ -91,7 +91,7 @@ try {
 } catch (error) {
   check("noUnexpectedError", false, String(error).slice(0, 500));
 } finally {
-  const apps = a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "MCP", exact: true });
+  const apps = a.getByRole("group", { name: "Your apps" }).getByRole("button", { name: "MCP", exact: true });
   if (await a.getByRole("region", { name: "MCP servers" }).isVisible().catch(() => false)) await apps.click().catch(() => {});
   await sleep(500);
   for (const name of [/^\.mcp\.json/, /^mcp-example/]) {

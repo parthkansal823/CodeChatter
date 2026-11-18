@@ -4,7 +4,7 @@
 //   A11Y_OUT=path.json keeps every finding in full.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 
-import { BASE, ROOM, check, finish, launch, sleep } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, sleep, openApp } from "./browser.mjs";
 
 // axe-core comes with eslint-plugin-jsx-a11y: read from where pnpm keeps it, rather than adding a package for a test.
 const STORE = new URL("../../../node_modules/.pnpm/", import.meta.url);
@@ -118,6 +118,10 @@ try {
     }
     await step(page, `${theme} room, Share`, () => page.getByRole("button", { name: "Share" }).click());
     await page.keyboard.press("Escape");
+    await step(page, `${theme} room, the apps list`, () => page.getByRole("navigation", { name: "Panels" }).getByRole("button", { name: "Apps", exact: true }).click());
+    await page.keyboard.press("Escape");
+    await step(page, `${theme} room, More`, () => page.getByRole("button", { name: "More", exact: true }).click());
+    await page.keyboard.press("Escape");
     const sidePanel = page.getByRole("tablist", { name: "Side panel" });
     if (!(await sidePanel.isVisible().catch(() => false))) await page.getByRole("button", { name: /side panel|chat/i }).first().click().catch(() => {});
     for (const tab of await sidePanel.getByRole("tab").allInnerTexts()) {
@@ -134,14 +138,14 @@ try {
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
     for (const app of ["Docs", "API", "Tasks", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Automations", "Design", "Whiteboard", "Diagrams"]) {
-      await step(page, `${theme} room, ${app}`, () => page.getByRole("group", { name: "Apps" }).getByRole("button", { name: app, exact: true }).click());
+      await step(page, `${theme} room, ${app}`, () => openApp(page, app));
     }
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
     await page.route("**/api/rooms/*/ai/prompt", (route) => {
       const events = [{ type: "delta", text: "An answer." }, { type: "done", stop: "end", usage: { inputTokens: 5, outputTokens: 5, estimated: true }, timing: { firstMs: 200, totalMs: 900 } }];
       return route.fulfill({ status: 200, contentType: "text/event-stream", body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") });
     });
-    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Prompts", exact: true }).click();
+    await openApp(page, "Prompts");
     const prompts = page.getByRole("region", { name: "Prompts" });
     await prompts.getByRole("button", { name: "New prompt" }).first().click();
     await prompts.getByRole("button", { name: "Run", exact: true }).click();
@@ -192,7 +196,7 @@ try {
       };
       return route.fulfill({ json: answers[op] });
     });
-    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Lakehouse", exact: true }).click();
+    await openApp(page, "Lakehouse");
     const lakehouse = page.getByRole("region", { name: "Lakehouse" });
     await step(page, `${theme} room, a lakehouse table and its versions`, () => lakehouse.getByRole("group", { name: "Versions of gold" }).waitFor({ timeout: 15_000 }));
     await lakehouse.getByRole("button", { name: "Experiments" }).click();
@@ -231,7 +235,7 @@ try {
       };
       return route.fulfill({ json: answers[op] });
     });
-    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Flow", exact: true }).click();
+    await openApp(page, "Flow");
     const flow = page.getByRole("region", { name: "Flow" });
     const flowDetails = flow.getByRole("complementary", { name: "Details" });
     await step(page, `${theme} room, the Flow chart and a failed build`, () => flow.getByRole("button", { name: /^Dataset clean,/ }).waitFor({ timeout: 20_000 }));
@@ -254,7 +258,7 @@ try {
     await step(page, `${theme} room, an AutoML recipe`, () => flowDetails.getByRole("form", { name: "New recipe" }).getByLabel("Column to predict").waitFor({ timeout: 5000 }));
     await page.unroute("**/api/rooms/*/flow");
     // An API import's preview. Nothing is added: it's cancelled.
-    await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "API", exact: true }).click();
+    await openApp(page, "API");
     await page.getByRole("button", { name: "Import", exact: true }).click();
     const importing = page.getByRole("dialog", { name: "Import", exact: true });
     await importing.getByRole("textbox", { name: "cURL command or API document", exact: true }).fill(JSON.stringify({ openapi: "3.1.0", info: { title: "Audit", version: "1" }, servers: [{ url: "https://api.example.test" }], paths: { "/things/{id}": { get: { summary: "A thing", tags: ["Things"], security: [{ Bearer: [] }] } } }, components: { securitySchemes: { Bearer: { type: "http", scheme: "bearer" } } } }));

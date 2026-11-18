@@ -45,6 +45,8 @@ export type EditorSettings = {
   editorTheme: string;
   /** Your keyboard shortcuts, by command (keybindings.ts): replacing that command's defaults. */
   keybindings: KeyOverrides;
+  /** The room apps you keep in the activity bar, in order (tools/registry.ts ids); the rest are under Apps. */
+  pinnedApps: string[];
 };
 
 export const FONT_SIZE = { min: 10, max: 32, default: 14 } as const;
@@ -71,6 +73,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   keymap: "standard",
   editorTheme: "auto",
   keybindings: {},
+  pinnedApps: [],
 };
 
 export const clampFontSize = (size: number) =>
@@ -104,6 +107,8 @@ export function sanitizeSettings(raw: unknown): EditorSettings {
     else if (key === "keymap" && KEYMAPS.includes(value as never)) out[key] = value;
     else if (key === "editorTheme" && typeof value === "string" && /^(auto|vs|vs-dark|hc-black|hc-light|custom-[a-z0-9]{1,40})$/.test(value)) out[key] = value;
     else if (key === "keybindings") out[key] = sanitizeOverrides(value);
+    else if (key === "pinnedApps" && Array.isArray(value))
+      out[key] = [...new Set(value.filter((id): id is string => typeof id === "string" && /^[a-z0-9-]{1,40}$/.test(id)))].slice(0, 20);
   }
   return out as EditorSettings;
 }

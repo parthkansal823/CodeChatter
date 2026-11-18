@@ -6,7 +6,7 @@ import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/pro
 import { deleteTask, findByPath, readTasks, taskMaps, textOf, trash } from "@codechatter/workspace-model";
 import * as Y from "yjs";
 
-import { BASE, ROOM, check, finish, launch } from "./browser.mjs";
+import { BASE, ROOM, check, finish, launch, openApp } from "./browser.mjs";
 
 const WebSocket = createRequire(new URL("../../collab/package.json", import.meta.url))("ws");
 const stamp = Date.now().toString(36);
@@ -68,7 +68,7 @@ const column = (page, name) => board(page).getByRole("region", { name, exact: tr
 const card = (page, name) => board(page).getByRole("group", { name: `Task: ${name}`, exact: true });
 
 async function openBoard(page) {
-  if (!await board(page).count()) await page.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Tasks", exact: true }).click();
+  if (!await board(page).count()) await openApp(page, "Tasks");
   await board(page).waitFor();
   await column(page, "To do").waitFor();
 }

@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import { io } from "socket.io-client";
 
-import { BASE, check, finish, launch } from "./browser.mjs";
+import { BASE, check, finish, launch, fromMore } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
 const name = `Public e2e ${stamp}`;
@@ -66,7 +66,7 @@ try {
   await b.screenshot({ path: join(process.env.SHOT_DIR ?? tmpdir(), "public-room.png") });
 
   // test2 forks it.
-  await b.getByRole("button", { name: "Fork", exact: true }).click();
+  await fromMore(b, "Fork…");
   const dialog = b.getByRole("dialog", { name: `Fork ${name}` });
   await dialog.getByLabel("New room's name").fill(`My fork ${stamp}`);
   await dialog.getByRole("button", { name: "Fork", exact: true }).click();

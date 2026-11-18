@@ -365,7 +365,8 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     for (const trigger of listening) {
       let files = event.files;
       if (event.event === "files.changed") {
-        files = (event.files ?? []).filter((file) => matchesPaths(file.path, trigger.event!.paths, file.kind));
+        // A folder renamed, moved or deleted takes its files with it; one just made doesn't change any.
+        files = (event.files ?? []).filter((file) => matchesPaths(file.path, trigger.event!.paths, file.kind === "folder" && (file.change === "renamed" || file.change === "moved" || file.change === "deleted") ? "folder" : "file"));
         if (files.length === 0) continue;
       }
       const decision = await this.eventLimiter.hit(trigger.id);
@@ -397,7 +398,9 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
         const now = answer.trigger?.triggerName ? scheduleOf(answer.trigger.triggerName, answer.trigger.input ?? {}) : null;
         if (now && !sameSchedule(now, trigger.schedule) && !scheduleProblem(now)) await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, schedule: now } satisfies Stored);
       } else {
-        const now = roomEventOf({ room: answer.trigger?.room });
+        const found = roomEventOf({ room: answer.trigger?.room });
+        // Kept trimmed, as the API keeps what it's sent.
+        const now = found?.paths ? { ...found, paths: found.paths.trim() } : found;
         if (now && JSON.stringify(now) !== JSON.stringify(trigger.event) && !pathsProblem(now.paths)) await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, event: now } satisfies Stored);
       }
       return true;

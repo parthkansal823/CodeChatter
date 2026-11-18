@@ -55,9 +55,21 @@ async function copyInto(roomId: string, files: Map<string, string>, userId: stri
  * room's other tools (docs, designs, chat) stay here.
  */
 export function ForkButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)} title="A copy of this room's code that's yours">
+        <GitFork /> Fork
+      </Button>
+      <ForkDialog open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+/** Making a fork, opened from the title bar's More menu or a button. */
+export function ForkDialog({ open, onOpenChange: setOpen }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { room, doc, me } = useRoom();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState(`${room.name} (fork)`.slice(0, 80));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,9 +104,6 @@ export function ForkButton() {
 
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)} title="A copy of this room's code that's yours">
-        <GitFork /> Fork
-      </Button>
       <Dialog open={open} onOpenChange={(next) => !busy && setOpen(next)}>
         <DialogContent className="sm:max-w-md">
           <form

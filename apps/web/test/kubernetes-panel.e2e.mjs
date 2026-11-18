@@ -8,7 +8,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { check, finish, launch } from "./browser.mjs";
+import { check, finish, launch, openApp } from "./browser.mjs";
 
 const ok = (promise) =>
   promise.then(
@@ -54,7 +54,7 @@ try {
   await a.locator(".monaco-editor .view-lines").first().click();
   await a.keyboard.insertText(manifest);
 
-  await a.getByRole("group", { name: "Apps" }).getByRole("button", { name: "Kubernetes" }).click();
+  await openApp(a, "Kubernetes");
   const tool = a.locator("h2", { hasText: "Kubernetes" });
   check("toolOpens", await ok(tool.waitFor({ timeout: 15_000 })));
 

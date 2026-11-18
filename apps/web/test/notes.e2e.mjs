@@ -6,7 +6,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { check, finish, launch } from "./browser.mjs";
+import { check, finish, launch, openApp } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
 const shared = `Standup at ten ${stamp}`;
@@ -26,7 +26,7 @@ const tab = (page, name) => notes(page).getByRole("tab", { name });
 const content = (page, label) => notes(page).getByRole("textbox", { name: label });
 
 async function openNotes(page) {
-  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await openApp(page, "Notes");
   await notes(page).waitFor({ timeout: 15_000 });
 }
 async function clear(page, label) {
