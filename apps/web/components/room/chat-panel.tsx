@@ -3,6 +3,7 @@
 import {
   MAX_MESSAGE_LENGTH,
   highlightChatSearch,
+  isCountedChatMessage as countsFor,
   type ChatMessage,
   type ChatMessageContext,
   type ChatSearchPage,
@@ -96,12 +97,6 @@ export function useChatUnread(userId: string, roomId?: string) {
   };
 }
 
-function countsFor(message: ChatMessage, userId: string) {
-  return Boolean(
-    message.author && message.author.id !== userId && message.kind !== "system" && message.kind !== "github",
-  );
-}
-
 export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (count: number) => void }) {
   "use no memo";
   // Visibility and the contiguous read prefix come from mutable DOM observers, not a render-time guess.
@@ -134,6 +129,7 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
   const contextRequest = useRef(0);
   const contextAbort = useRef<AbortController | null>(null);
   const contextId = useRef<string | null>(null);
+  const contextTraffic = useRef(0);
   const latest = useRef<{
     messages: ChatMessage[];
     state: ChatUnreadState | undefined;
@@ -166,6 +162,7 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
   const results = (search.data?.pages ?? []).flatMap((page) => page.messages);
 
   function addToCache(message: ChatMessage) {
+    contextTraffic.current++;
     queryClient.setQueryData<InfiniteData<Page>>(key, (data) => {
       if (!data || data.pages.some((page) => page.some((item) => item.id === message.id))) return data;
       const [first = [], ...rest] = data.pages;
@@ -174,10 +171,9 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
     setConversation((current) => {
       if (!current || current.hasMoreAfter || current.messages.some((item) => item.id === message.id))
         return current;
-      return {
-        ...current,
-        messages: [...current.messages, message].sort((a, b) => a.id.localeCompare(b.id)),
-      };
+      // A detached HTTP window is a contiguous snapshot. A live arrival does not
+      // prove there are no unseen messages between its end and this new id.
+      return { ...current, hasMoreAfter: true };
     });
   }
 
@@ -209,6 +205,9 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
     contextAbort.current?.abort();
     const controller = new AbortController();
     contextAbort.current = controller;
+    contextId.current = messageId;
+    const traffic = contextTraffic.current;
+    pendingScroll.current = null;
     setContextLoading(true);
     setContextError("");
     stickToBottom.current = false;
@@ -217,50 +216,85 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
         `/api/rooms/${room.id}/messages/context?around=${messageId}`,
         { signal: controller.signal },
       );
-      if (contextRequest.current !== request) return;
+      if (controller.signal.aborted || contextRequest.current !== request) return;
       setSearchQuery(null);
-      setConversation({ ...window, targetId: messageId });
+      setConversation({
+        ...window,
+        targetId: messageId,
+        hasMoreAfter: window.hasMoreAfter || contextTraffic.current !== traffic,
+      });
       scrollTarget.current = messageId;
     } catch {
       if (controller.signal.aborted || contextRequest.current !== request) return;
+      contextId.current = null;
       setConversation(null);
       setContextError("Could not open that message. It may have been deleted.");
     } finally {
-      if (contextRequest.current === request) setContextLoading(false);
+      if (contextRequest.current === request) {
+        contextAbort.current = null;
+        setContextLoading(false);
+      }
     }
   }
 
   async function loadConversation(direction: "before" | "after") {
-    if (!conversation || contextLoading) return;
+    if (!conversation || contextLoading || contextAbort.current) return;
     const edge = direction === "before" ? conversation.messages[0]?.id : conversation.messages.at(-1)?.id;
     if (!edge) return;
     const targetId = conversation.targetId;
-    if (direction === "before" && scroller.current)
-      pendingScroll.current = { height: scroller.current.scrollHeight, top: scroller.current.scrollTop };
+    if (contextId.current !== targetId) return;
+    const request = ++contextRequest.current;
+    const controller = new AbortController();
+    contextAbort.current = controller;
+    const traffic = contextTraffic.current;
+    const previousScroll =
+      direction === "before" && scroller.current
+        ? { height: scroller.current.scrollHeight, top: scroller.current.scrollTop }
+        : null;
     setContextLoading(true);
     try {
-      const page = await api<Page>(`/api/rooms/${room.id}/messages?limit=${PAGE}&${direction}=${edge}`);
+      const page = await api<Page>(`/api/rooms/${room.id}/messages?limit=${PAGE}&${direction}=${edge}`, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || contextRequest.current !== request) return;
+      pendingScroll.current = previousScroll;
       setConversation((current) => {
-        if (!current || current.targetId !== targetId) return current;
+        if (
+          controller.signal.aborted ||
+          contextRequest.current !== request ||
+          !current ||
+          current.targetId !== targetId
+        )
+          return current;
         const ids = new Set(current.messages.map((message) => message.id));
         const added = page.filter((message) => !ids.has(message.id)).reverse();
         return {
           ...current,
           messages:
             direction === "before" ? [...added, ...current.messages] : [...current.messages, ...added],
-          [direction === "before" ? "hasMoreBefore" : "hasMoreAfter"]: page.length === PAGE,
+          hasMoreBefore: direction === "before" ? page.length === PAGE : current.hasMoreBefore,
+          hasMoreAfter:
+            (direction === "after" ? page.length === PAGE : current.hasMoreAfter) ||
+            contextTraffic.current !== traffic,
         };
       });
     } catch {
-      setContextError("Could not load more messages. Try again.");
+      if (!controller.signal.aborted && contextRequest.current === request)
+        setContextError("Could not load more messages. Try again.");
     } finally {
-      setContextLoading(false);
+      if (contextRequest.current === request) {
+        contextAbort.current = null;
+        setContextLoading(false);
+      }
     }
   }
 
   function backToLatest() {
     contextRequest.current++;
     contextAbort.current?.abort();
+    contextAbort.current = null;
+    contextId.current = null;
+    pendingScroll.current = null;
     setConversation(null);
     setContextLoading(false);
     setContextError("");
@@ -284,11 +318,14 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
   useEffect(() => {
     const socket = getSocket();
     const join = async () => {
+      contextTraffic.current++;
       const result = await socket.emitWithAck("room:join", room.id);
       setConnected(result.ok);
       if (result.ok) {
         pendingRef.current.filter((item) => item.status === "failed").forEach((item) => void deliver(item));
         void queryClient.invalidateQueries({ queryKey: key });
+        const targetId = contextId.current;
+        if (targetId) void openContext(targetId);
       }
     };
     const onMessage = (message: ChatMessage) => {
@@ -296,12 +333,22 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
     };
     const onChange = (event: ChatUnreadEvent) => {
       if (event.roomId !== room.id || event.reason !== "deleted") return;
+      contextTraffic.current++;
       void queryClient.invalidateQueries({ queryKey: key });
       void queryClient.invalidateQueries({ queryKey: ["chat-search", room.id] });
       const current = contextId.current;
       if (current) void openContext(current);
     };
-    const onDisconnect = () => setConnected(false);
+    const onDisconnect = () => {
+      contextTraffic.current++;
+      contextRequest.current++;
+      contextAbort.current?.abort();
+      contextAbort.current = null;
+      pendingScroll.current = null;
+      setContextLoading(false);
+      setConversation((current) => (current ? { ...current, hasMoreAfter: true } : current));
+      setConnected(false);
+    };
     if (socket.connected) void join();
     socket.on("connect", join);
     socket.on("disconnect", onDisconnect);
@@ -321,7 +368,6 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
   useEffect(() => {
     visibleRef.current = visible;
     pendingRef.current = pending;
-    contextId.current = conversation?.targetId ?? null;
     latest.current = {
       messages,
       state: unread.state,
@@ -479,6 +525,7 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
   useEffect(
     () => () => {
       if (readTimer.current) clearTimeout(readTimer.current);
+      contextRequest.current++;
       contextAbort.current?.abort();
     },
     [],
@@ -601,7 +648,12 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
                 >
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="min-w-0 truncate text-xs font-medium">
-                      {message.author?.name ?? (message.kind === "github" ? "GitHub" : "Someone")}
+                      {message.author?.name ??
+                        (message.kind === "github"
+                          ? "GitHub"
+                          : message.kind === "automation"
+                            ? "Automations"
+                            : "Someone")}
                     </span>
                     <time
                       dateTime={message.createdAt}
@@ -726,8 +778,12 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
                 new Date(row.createdAt).getTime() - new Date(previous.createdAt).getTime() < 5 * 60_000;
               const mine = authorId === me.user.id;
               const github = !("pending" in row) && row.kind === "github";
+              // A flow's "Post to the room's chat": no author, shown as the automations'.
+              const automation = !("pending" in row) && row.kind === "automation";
               const name =
-                "pending" in row ? me.user.name : (row.author?.name ?? (github ? "GitHub" : "Someone"));
+                "pending" in row
+                  ? me.user.name
+                  : (row.author?.name ?? (github ? "GitHub" : automation ? "Automations" : "Someone"));
               const slot = mine ? 1 : slotFor(authorId);
               return (
                 <div key={"pending" in row ? row.clientId : row.id}>
@@ -769,9 +825,11 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
                         "border-l-2 pl-2.5 text-sm leading-relaxed",
                         "pending" in row && row.status === "sending" && "opacity-60",
                       )}
-                      style={{ borderColor: github ? "var(--muted-foreground)" : presenceVar(slot) }}
+                      style={{
+                        borderColor: github || automation ? "var(--muted-foreground)" : presenceVar(slot),
+                      }}
                     >
-                      <MessageBody body={row.body} links={github} />
+                      <MessageBody body={row.body} links={github || automation} />
                       {"pending" in row && row.status === "failed" && (
                         <button
                           type="button"

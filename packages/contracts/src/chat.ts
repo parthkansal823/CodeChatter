@@ -19,8 +19,11 @@ export type ChatMessage = {
   roomId: string;
   clientId: string | null;
   author: { id: string; name: string; image: string | null } | null;
-  /** "github": activity from the room's repository (api: github/webhook.controller.ts), with no author. */
-  kind: "text" | "code" | "file" | "system" | "github";
+  /**
+   * "github": activity from the room's repository (api: github/webhook.controller.ts); "automation": a flow's "Post to the room's chat" step
+   * (api: automations/room-events.controller.ts). Neither has an author.
+   */
+  kind: "text" | "code" | "file" | "system" | "github" | "automation";
   body: string;
   createdAt: string;
 };

@@ -66,6 +66,9 @@ import { ReferencesService } from "./references/references.service.js";
 import { DependenciesService } from "./dependencies/dependencies.service.js";
 import { AutomationHooksController } from "./automations/automation-hooks.controller.js";
 import { RoomEventsController } from "./automations/room-events.controller.js";
+import { AutomationConnectionsController } from "./automations/automation-connections.controller.js";
+import { AutomationConnectionsService } from "./automations/automation-connections.service.js";
+import { ConnectionsVault } from "./automations/connections-vault.js";
 import { AutomationTriggersController } from "./automations/automation-triggers.controller.js";
 import { AutomationTriggersService } from "./automations/automation-triggers.service.js";
 
@@ -85,9 +88,11 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, ReferencesController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, AiGatewayController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController, InterviewRecordingsController, InterviewAiReviewController, AutomationTriggersController, AutomationHooksController, RoomEventsController],
+  controllers: [HealthController, MeController, GithubController, MetaController, ReferencesController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, AiGatewayController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController, InterviewRecordingsController, InterviewAiReviewController, AutomationTriggersController, AutomationHooksController, RoomEventsController, AutomationConnectionsController],
   providers: [
     AutomationTriggersService,
+    AutomationConnectionsService,
+    ConnectionsVault,
     AiService,
     AiTraces,
     InterviewsService,

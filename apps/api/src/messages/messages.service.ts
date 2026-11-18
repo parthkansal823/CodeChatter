@@ -61,7 +61,7 @@ export class MessagesService {
       (await db.query.messages.findFirst({
         where: and(eq(schema.messages.roomId, input.roomId), eq(schema.messages.clientId, input.clientId)),
       }));
-    if (!message) throw new NotFoundException("Message not found.");
+    if (!message || message.deletedAt) throw new NotFoundException("Message not found.");
     if (message.userId !== input.userId)
       throw new ConflictException("That send identifier is already in use. Try sending again.");
     // Keep the room's "last active" fresh for the dashboard.
@@ -78,7 +78,7 @@ export class MessagesService {
   }
 
   /** A message with no author, from the room's integrations (GitHub activity). */
-  async post(roomId: string, kind: "github" | "system", body: string): Promise<ChatMessage> {
+  async post(roomId: string, kind: "github" | "system" | "automation", body: string): Promise<ChatMessage> {
     const [message] = await this.handle.db.insert(schema.messages).values({ roomId, kind, body }).returning();
     await this.handle.db
       .update(schema.rooms)

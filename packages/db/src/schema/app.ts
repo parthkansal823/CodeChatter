@@ -150,7 +150,7 @@ export const messages = pgTable(
       .notNull()
       .references(() => rooms.id, { onDelete: "cascade" }),
     userId: text().references(() => user.id, { onDelete: "set null" }),
-    kind: text().$type<"text" | "code" | "file" | "system" | "github">().notNull().default("text"),
+    kind: text().$type<"text" | "code" | "file" | "system" | "github" | "automation">().notNull().default("text"),
     body: text().notNull(),
     /** Sender-chosen id: a send retried after a reconnect lands once. */
     clientId: uuid(),
@@ -164,7 +164,7 @@ export const messages = pgTable(
     index().on(t.roomId, t.id.desc()),
     uniqueIndex().on(t.roomId, t.clientId),
     index("messages_chat_unread_idx").on(t.roomId, t.id, t.userId)
-      .where(sql`${t.userId} IS NOT NULL AND ${t.deletedAt} IS NULL AND ${t.kind} NOT IN ('system', 'github')`),
+      .where(sql`${t.deletedAt} IS NULL AND ${t.kind} NOT IN ('system', 'github')`),
   ],
 );
 

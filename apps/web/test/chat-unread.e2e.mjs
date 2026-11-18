@@ -10,7 +10,6 @@ const prefix = `chat_${stamp}`;
 const oldWord = `Legacyneedle_${stamp}`;
 const batchWord = `Batch_${stamp}`;
 const percentWord = `Percent_${stamp}`;
-const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(probe, timeout = 20_000) {
   const end = Date.now() + timeout;
@@ -22,6 +21,8 @@ const { browser, errors, signIn } = await launch();
 const sockets = [];
 const profiles = [];
 const owned = new Map();
+const releaseResponses = [];
+const removeRoutes = [];
 let author, reader, otherDevice, dashboard, speaker, ownSpeaker;
 let stage = "sign in";
 let oldMessage;
@@ -77,6 +78,43 @@ async function inView(page, messageId) {
     const a = row.getBoundingClientRect(), b = log.getBoundingClientRect();
     return a.bottom > b.top && a.top < b.bottom && a.right > b.left && a.left < b.right;
   }).catch(() => false);
+}
+
+/** Fetch one real server snapshot, then hold its delivery so another live event can overtake it. */
+async function holdResponse(page, matches) {
+  let snapshot;
+  let ready = false;
+  let failed = false;
+  let release;
+  let finishResponse;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const finished = new Promise((resolve) => { finishResponse = resolve; });
+  const handler = async (route) => {
+    try {
+      const response = await route.fetch({ timeout: 20_000 });
+      if (!response.ok()) throw new Error("Held chat request was refused");
+      snapshot = await response.json();
+      ready = true;
+      await gate;
+      // A correctly aborted old request may already have gone away.
+      await route.fulfill({ response, json: snapshot }).catch(() => {});
+    } catch {
+      failed = true;
+    } finally {
+      finishResponse();
+    }
+  };
+  await page.route(matches, handler, { times: 1 });
+  releaseResponses.push(release);
+  removeRoutes.push(() => page.unroute(matches, handler));
+  return {
+    snapshot: async () => {
+      await until(() => { if (failed) throw new Error("Could not capture the chat response"); return ready; });
+      return snapshot;
+    },
+    release,
+    finished,
+  };
 }
 
 /** Discover acknowledged and unacknowledged owned sends by their unique fixture text before deleting by stable message ID. */
@@ -160,9 +198,12 @@ try {
   await pause(1000);
   check("on-screen messages are marked in one request and clear the other device/dashboard", marks.length === 1);
   const beforeOldRead = await call(reader, "/unread");
-  await call(reader, "/read", { method: "POST", data: { messageId: oldMessage.id } });
+  await Promise.all([
+    call(reader, "/read", { method: "POST", data: { messageId: oldMessage.id } }),
+    call(otherDevice, "/read", { method: "POST", data: { messageId: beforeOldRead.readThroughId } }),
+  ]);
   const afterOldRead = await call(reader, "/unread");
-  check("an older device cannot move the read cursor backwards", afterOldRead.readThroughId === beforeOldRead.readThroughId && afterOldRead.count === 0);
+  check("concurrent devices keep the later read cursor", afterOldRead.readThroughId === beforeOldRead.readThroughId && afterOldRead.count === 0);
   owned.set(self.id, reader);
 
   stage = "old search result opens in the conversation";
@@ -197,7 +238,70 @@ try {
   const gone = await call(reader, `/search?q=${encodeURIComponent(`${prefix} delete while unread`)}`);
   check("deleted messages stop counting and cannot be found", !gone.messages.some((item) => item.id === deleted.id));
 
+  stage = "live arrivals cannot create an unseen gap in a delayed context";
+  const readUrl = `${BASE}/api/rooms/${ROOM}/messages/read`;
+  const unavailableRead = (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Read fixture is temporarily offline." }) });
+  await reader.page.route(readUrl, unavailableRead);
+  removeRoutes.push(() => reader.page.unroute(readUrl, unavailableRead));
+  const raceWord = `Contextanchor_${stamp}`;
+  const anchor = await say(author, speaker, `${prefix} ${raceWord}`);
+  await countOnButton(reader.page, 1);
+  await openChat(reader.page);
+  const anchorResults = await search(reader.page, raceWord);
+  const delayedContext = await holdResponse(reader.page, (url) => url.pathname === `/api/rooms/${ROOM}/messages/context` && url.searchParams.get("around") === anchor.id);
+  await anchorResults.getByRole("button").filter({ hasText: raceWord }).click();
+  const contextSnapshot = await delayedContext.snapshot();
+  if (contextSnapshot.hasMoreAfter || !contextSnapshot.messages.some((message) => message.id === anchor.id)) throw new Error("Delayed context fixture did not end at its anchor");
+  const during = await say(author, speaker, `${prefix} arrived during context request`);
+  await countOnButton(reader.page, 2);
+  // Reveal latest history without cancelling the selected context request. C in the DOM proves its live event arrived before the old snapshot.
+  await reader.page.getByRole("button", { name: "Close chat search", exact: true }).click();
+  await reader.page.locator(`[data-message-id="${during.id}"]`).waitFor();
+  delayedContext.release();
+  await delayedContext.finished;
+  await reader.page.getByRole("button", { name: "Back to latest", exact: true }).waitFor();
+  const after = await say(author, speaker, `${prefix} arrived after context request`);
+  await countOnButton(reader.page, 3);
+  await reader.page.getByRole("button", { name: "Newer messages", exact: true }).waitFor();
+  await reader.page.unroute(readUrl, unavailableRead);
+  await dashboard.bringToFront();
+  await reader.page.bringToFront();
+  await until(async () => (await call(reader, "/unread")).readThroughId >= anchor.id);
+  const beforeGap = await call(reader, "/unread");
+  check("a delayed context preserves the live gap instead of marking unseen messages read", beforeGap.readThroughId < during.id && beforeGap.count >= 2);
+  await reader.page.getByRole("button", { name: "Newer messages", exact: true }).click();
+  await reader.page.locator(`[data-message-id="${during.id}"]`).waitFor();
+  await reader.page.locator(`[data-message-id="${after.id}"]`).waitFor();
+  await countOnButton(reader.page, 0);
+  check("fetching newer messages fills the gap in order and permits reading them", true);
+
+  stage = "a stale page cannot restore a message deleted during a same-target refresh";
+  const oldResults = await search(reader.page, oldWord);
+  await oldResults.getByRole("button").filter({ hasText: oldWord }).click();
+  await reader.page.getByRole("button", { name: "Newer messages", exact: true }).waitFor();
+  const delayedPage = await holdResponse(reader.page, (url) => url.pathname === `/api/rooms/${ROOM}/messages` && url.searchParams.has("after"));
+  await reader.page.getByRole("button", { name: "Newer messages", exact: true }).click();
+  const oldPage = await delayedPage.snapshot();
+  const removedFromPage = oldPage.find((message) => message.body.includes(batchWord) && owned.get(message.id) === author);
+  if (!removedFromPage) throw new Error("Stale page fixture contained no owned message");
+  if (await reader.page.locator(`[data-message-id="${removedFromPage.id}"]`).count()) throw new Error("Stale page fixture was already in the context");
+  const refreshed = reader.page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.ok() && url.pathname === `/api/rooms/${ROOM}/messages/context` && url.searchParams.get("around") === oldMessage.id;
+  });
+  await call(author, `/${removedFromPage.id}`, { method: "DELETE" });
+  await refreshed;
+  await until(() => reader.page.getByRole("button", { name: "Newer messages", exact: true }).isEnabled());
+  // Both versions keep the same target ID. Only request generation/abort protection distinguishes the stale page.
+  delayedPage.release();
+  await delayedPage.finished;
+  await reader.page.waitForTimeout(250);
+  const noLongerFound = await call(reader, `/search?q=${encodeURIComponent(removedFromPage.body)}`);
+  check("a delayed page cannot reinsert deleted content after a same-target refresh", await reader.page.locator(`[data-message-id="${removedFromPage.id}"]`).count() === 0 && !noLongerFound.messages.some((message) => message.id === removedFromPage.id));
+  await closeChat(reader.page);
+
   stage = "many unread messages cannot be cleared without being seen";
+  const beforeOverflowRead = await call(reader, "/unread");
   const overflow = [];
   for (let index = 0; index < 103; index++) overflow.push(await say(author, speaker, `${prefix} overflow ${index}`));
   await countOnButton(reader.page, 100);
@@ -205,7 +309,7 @@ try {
   await openChat(reader.page);
   await reader.page.getByText("New messages", { exact: true }).waitFor();
   await until(() => inView(reader.page, overflow[0].id));
-  await until(async () => (await call(reader, "/unread")).readThroughId > beforeOldRead.readThroughId);
+  await until(async () => (await call(reader, "/unread")).readThroughId > beforeOverflowRead.readThroughId);
   const partial = await call(reader, "/unread");
   check("opening far-back unread starts at the divider and preserves unseen later messages", partial.count > 0 && partial.readThroughId < overflow.at(-1).id);
   // Avoid reading more while cleanup changes the conversation.
@@ -214,6 +318,8 @@ try {
   await reader?.page.screenshot({ path: `${process.env.TEMP}/codechatter-chat-unread-failure.png` }).catch(() => {});
   check(`chat unread/search workflow completes (${stage})`, false, error?.name ?? "Error");
 } finally {
+  for (const release of releaseResponses) release();
+  for (const remove of removeRoutes) await remove().catch(() => {});
   for (const socket of sockets) socket.close();
   try {
     for (const profile of [author, reader].filter(Boolean)) await rememberOwned(profile);

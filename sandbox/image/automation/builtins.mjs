@@ -1,9 +1,56 @@
 // CodeChatter's own built-in steps for automations, as n8n has for working on data: Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates,
-// Split Out, Rename Keys, Merge, Compare Datasets, Stop and Error, Call a flow and Approval links. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
+// Split Out, Rename Keys, Merge, Compare Datasets, Stop and Error, Call a flow and Approval links, and CodeChatter's own: Run a command in the sandbox, Ask the
+// room's AI and Post to the room's chat. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
 // file: host.mjs writes it as a module that calls run() here, and Activepieces' engine has already worked out its inputs' expressions. Each works on a list of
 // items, as n8n's do; a single object counts as a list of one. The Automations tool's forms for them are in apps/web/components/room/tools/automations/builtins.ts.
 
+import { spawn } from "node:child_process";
 import { request as httpRequest } from "node:http";
+import { isAbsolute, posix } from "node:path";
+
+/** The room's files, where a command runs. */
+export const workspaceRoot = () => process.env.CC_WORKSPACE ?? "/workspace";
+const MOST_OUTPUT = 1024 * 1024;
+
+/**
+ * The sandbox's door to CodeChatter (the agent's gateway, apps/runner/src/gateway.ts): the room's model in OpenAI's format, and the room's chat. It's
+ * OPENAI_BASE_URL less its /v1, as every terminal, Run and flow has it.
+ */
+export function doorOf(env = process.env) {
+  const base = String(env.OPENAI_BASE_URL ?? "http://127.0.0.1:3129/v1").replace(/\/+$/, "");
+  return base.replace(/\/v1$/, "");
+}
+
+/** A call through the door, read as JSON, with the API's or OpenAI's way of saying what went wrong. */
+async function askDoor(path, body, seconds) {
+  const answer = await fetch(`${doorOf()}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(seconds * 1000) }).catch((error) => {
+    throw new Error(error?.name === "TimeoutError" ? `CodeChatter didn't answer within ${seconds} seconds.` : "This step needs the room's sandbox: run the flow there.");
+  });
+  const text = await answer.text();
+  let json = {};
+  try {
+    json = JSON.parse(text);
+  } catch {
+    // Said below.
+  }
+  if (!answer.ok) throw new Error(json?.error?.message ?? json?.detail ?? json?.message ?? `CodeChatter said ${answer.status}.`);
+  return json;
+}
+
+/** A folder in the room, for a command to run in: inside the workspace, or the workspace itself. */
+export function folderOf(folder) {
+  const text = String(folder ?? "").trim().replace(/\\/g, "/");
+  if (!text || text === "." || text === "/") return workspaceRoot();
+  if (isAbsolute(text) || text.split("/").includes("..")) throw new Error(`"${text}" should be a folder in the room, such as src or tests.`);
+  return posix.join(workspaceRoot(), text);
+}
+
+/** What a command is given: the flow's own environment less the engine's (its worker's port and token stay with the engine). */
+export function commandEnv(env = process.env) {
+  const out = {};
+  for (const [name, value] of Object.entries(env)) if (!name.startsWith("AP_") && name !== "SANDBOX_ID" && value !== undefined) out[name] = value;
+  return out;
+}
 
 /**
  * Asks the worker running this flow (host.mjs), on its engine's own loopback port. node:http, not fetch: fetch gives up on an answer after 300 seconds, and a
@@ -382,6 +429,87 @@ export const BUILTINS = {
     const { url } = await askWorker("/v1/codechatter/approval-links", {});
     const links = Object.fromEntries(choices.map((choice) => [choice, `${url}?action=${encodeURIComponent(choice)}`]));
     return { ...links, links, url };
+  },
+
+  /**
+   * Run a command (n8n's Execute Command), in the room's sandbox, in its files: tests, a build, a deploy script, git. It runs where the flow does (inside
+   * the sandbox's jail, with no network but the room's own services), and gives back its exit code and what it printed. A command that fails fails the
+   * step, unless told not to, so a router can look at the code instead.
+   */
+  async run_command(inputs) {
+    const command = String(inputs.command ?? "").trim();
+    if (!command) throw new Error("Say which command to run, such as npm test.");
+    const cwd = folderOf(inputs.folder);
+    const seconds = Math.min(Math.max(Number(inputs.seconds) || 60, 1), 600);
+    const failOnError = inputs.fail_on_error !== false && inputs.fail_on_error !== "false";
+    const started = Date.now();
+    const result = await new Promise((resolve) => {
+      const child = spawn("bash", ["-lc", command], { cwd, env: commandEnv(), stdio: ["ignore", "pipe", "pipe"], detached: true });
+      const out = { stdout: "", stderr: "", cut: false };
+      const keep = (name) => (chunk) => {
+        if (out[name].length < MOST_OUTPUT) out[name] += chunk.toString("utf8");
+        else out.cut = true;
+      };
+      child.stdout.on("data", keep("stdout"));
+      child.stderr.on("data", keep("stderr"));
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        // The whole group: a command's own children go too.
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
+      }, seconds * 1000);
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        resolve({ exitCode: null, stdout: "", stderr: String(error.message), timedOut: false, cut: false });
+      });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve({ exitCode: timedOut ? null : code, stdout: out.stdout.slice(0, MOST_OUTPUT), stderr: out.stderr.slice(0, MOST_OUTPUT), timedOut, cut: out.cut });
+      });
+    });
+    const answer = { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, timedOut: result.timedOut, durationMs: Date.now() - started, ...(result.cut && { cut: true }) };
+    if (failOnError && (result.timedOut || result.exitCode !== 0)) {
+      const tail = (result.stderr || result.stdout).trim().split("\n").slice(-5).join("\n");
+      throw new Error(result.timedOut ? `The command took longer than ${seconds} ${seconds === 1 ? "second" : "seconds"}, so it was stopped.` : `The command ended with ${result.exitCode}${tail ? `: ${tail}` : "."}`);
+    }
+    return answer;
+  },
+
+  /**
+   * Ask the room's AI: the model the room uses, through its gateway (no key in the room), with the room's rules on using it and its limits. Its answer as
+   * text, or read as JSON when asked, for the next steps to use.
+   */
+  async ask_ai(inputs) {
+    const prompt = String(inputs.prompt ?? "").trim();
+    if (!prompt) throw new Error("Say what to ask.");
+    const asJson = inputs.json === true || inputs.json === "true";
+    const messages = [];
+    const instructions = String(inputs.instructions ?? "").trim();
+    if (instructions || asJson) messages.push({ role: "system", content: [instructions, asJson ? "Answer with JSON only, no other words." : ""].filter(Boolean).join("\n\n") });
+    messages.push({ role: "user", content: prompt.slice(0, 100_000) });
+    const answer = await askDoor("/v1/chat/completions", { model: String(inputs.model ?? "").trim() || "default", messages, ...(inputs.temperature !== undefined && inputs.temperature !== "" && { temperature: Number(inputs.temperature) }) }, 300);
+    const text = String(answer?.choices?.[0]?.message?.content ?? "").trim();
+    const usage = answer?.usage ? { inputTokens: answer.usage.prompt_tokens ?? null, outputTokens: answer.usage.completion_tokens ?? null } : null;
+    if (!asJson) return { text, model: answer?.model ?? null, usage };
+    const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+    try {
+      return { json: JSON.parse(fenced ? fenced[1] : text), text, model: answer?.model ?? null, usage };
+    } catch {
+      throw new Error(`The AI's answer isn't JSON: ${text.slice(0, 200)}`);
+    }
+  },
+
+  /** Post to the room's chat: a message everyone in the room sees, marked as the automations', never as a person's. 20 a minute at most. */
+  async post_to_chat(inputs) {
+    const text = String(inputs.text ?? "").trim();
+    if (!text) throw new Error("Say what to post.");
+    if (text.length > 4000) throw new Error("A message is up to 4,000 characters.");
+    const posted = await askDoor("/codechatter/chat", { text }, 30);
+    return { id: posted.id, text, postedAt: posted.createdAt };
   },
 
   /** Stop and Error: stops the run, with this message, so an error flow or a person sees why. */

@@ -5,10 +5,12 @@
  */
 import type { PieceField } from "@codechatter/contracts";
 
-export type Builtin = { label: string; description: string; fields: Record<string, PieceField>; defaults: Record<string, unknown> };
+/** "room": CodeChatter's own steps, with the room (its sandbox, its AI, its chat), listed under This room; the rest work on data. */
+export type Builtin = { label: string; description: string; fields: Record<string, PieceField>; defaults: Record<string, unknown>; group?: "room" };
 
 const text = (label: string, description = "", required = false): PieceField => ({ type: "SHORT_TEXT", label, description, required });
 const json = (label: string, description = "", required = false): PieceField => ({ type: "JSON", label, description, required });
+const long = (label: string, description = "", required = false): PieceField => ({ type: "LONG_TEXT", label, description, required });
 const number = (label: string, description = "", required = false): PieceField => ({ type: "NUMBER", label, description, required });
 const check = (label: string, description = ""): PieceField => ({ type: "CHECKBOX", label, description, required: false });
 const choice = (label: string, options: Array<[string, string]>, description = ""): PieceField => ({ type: "STATIC_DROPDOWN", label, description, required: true, options: options.map(([value, words]) => ({ label: words, value })) });
@@ -158,6 +160,37 @@ export const BUILTINS: Record<string, Builtin> = {
     description: "A link for each choice, to send to whoever decides, before Respond and Wait for Next Webhook waits for one to be clicked",
     fields: { choices: text("Choices", "Comma-separated: each gets a link, as this step's output (approve, reject…). The wait after it gives the one clicked as queryParams.action.", true) },
     defaults: { choices: "approve, reject" },
+  },
+  run_command: {
+    group: "room",
+    label: "Run a command",
+    description: "In the room's sandbox, in its files: tests, a build, a script, git. Its exit code and what it printed",
+    fields: {
+      command: long("Command", "Run with bash in the room's files, such as npm test or python3 deploy.py {{trigger.output.data.args}}.", true),
+      folder: text("In the folder", "A folder in the room, such as tests. Empty is the room's top folder."),
+      seconds: number("Up to how many seconds", "It's stopped after this: 60 if empty, 600 at most."),
+      fail_on_error: check("Fail the step when the command fails", "Off: the step gives exitCode, for a router to look at."),
+    },
+    defaults: { command: "", folder: "", seconds: 60, fail_on_error: true },
+  },
+  ask_ai: {
+    group: "room",
+    label: "Ask the room's AI",
+    description: "The model the room uses, with no key in the room: its answer as text, or as JSON",
+    fields: {
+      prompt: long("Ask", "What to ask, with what steps before found: Why did this fail? {{run_tests.output.stderr}}", true),
+      instructions: long("Instructions", "How to answer, such as: Answer in two sentences, for a developer."),
+      json: check("Answer as JSON", "The answer is read as JSON, as this step's json, for the next steps."),
+      model: text("Model", "Empty is the room's own."),
+    },
+    defaults: { prompt: "", instructions: "", json: false, model: "" },
+  },
+  post_to_chat: {
+    group: "room",
+    label: "Post to the room's chat",
+    description: "A message everyone in the room sees, from Automations",
+    fields: { text: long("Message", "Up to 4,000 characters, such as: Deployed {{trigger.output.data.args}}.", true) },
+    defaults: { text: "" },
   },
   stop_and_error: {
     label: "Stop and Error",

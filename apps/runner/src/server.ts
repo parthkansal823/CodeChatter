@@ -12,7 +12,7 @@ import {
   INSTALLS_MINUTES,
   JudgeRunnerInput,
   KubeRequest,
-  AutomationInput,
+  AutomationRunnerInput,
   FlowInput,
   LakehouseInput,
   LatexInput,
@@ -100,7 +100,7 @@ import { closeTerminals, openTerminal } from "./terminal.js";
  *   POST /rooms/:id/flow                     FlowInput           a room's dbt project: its graph, builds and data
  *   POST /rooms/:id/latex                    LatexInput          a .tex file built with TeX Live, its result and its PDF
  *   POST /rooms/:id/lighthouse               LighthouseInput     Lighthouse on one of the room's servers: scores, what failed, its report
- *   POST /rooms/:id/automations              AutomationInput     a flow run by Activepieces' engine, its progress and its history
+ *   POST /rooms/:id/automations              AutomationRunnerInput  a flow run by Activepieces' engine, its progress and its history
  *   POST /rooms/:id/data-summary             DataSummaryInput    DataSummary (DuckDB's numbers for a table)
  *   POST /rooms/:id/mcp                      McpInput            McpOutput (the MCP Inspector in the sandbox)
  *   POST /rooms/:id/rag                      RagRunnerInput      CodebaseHits (a search of the room's files)
@@ -565,7 +565,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
   async function handleAutomations(req: IncomingMessage, res: ServerResponse, roomId: string): Promise<void> {
     const claims = authorize(req, roomId);
     if (!claims) return json(res, 401, { error: "Not allowed." });
-    const input = AutomationInput.safeParse(await readJson(req, 5 * 1024 * 1024));
+    const input = AutomationRunnerInput.safeParse(await readJson(req, 5 * 1024 * 1024));
     if (!input.success) return json(res, 400, { error: input.error.issues[0]?.message ?? "That isn't a request." });
     const by = claims.name ?? "";
     try {

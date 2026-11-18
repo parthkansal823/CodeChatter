@@ -46,7 +46,9 @@ export function StepPicker({ pieces, mode, title, onPick, onCancel }: { pieces: 
       : []),
   ].filter((item) => matches(`${item.label} ${item.about}`));
   const stepCount = sorted.reduce((sum, [, info]) => sum + stepsOf(info).length, 0);
-  const builtins = triggers ? [] : Object.entries(BUILTINS).filter(([, builtin]) => matches(`${builtin.label} ${builtin.description}`));
+  const builtins = triggers ? [] : Object.entries(BUILTINS).filter(([, builtin]) => !builtin.group && matches(`${builtin.label} ${builtin.description}`));
+  // CodeChatter's own steps: with the room's sandbox, AI and chat.
+  const roomSteps = triggers ? [] : Object.entries(BUILTINS).filter(([, builtin]) => builtin.group === "room" && matches(`this room ${builtin.label} ${builtin.description}`));
   // What happens in the room: CodeChatter's own, first among the triggers.
   const roomEvents = triggers ? ROOM_EVENT_NAMES.filter((name) => matches(`this room ${ROOM_EVENTS[name].label} ${ROOM_EVENTS[name].about}`)) : [];
 
@@ -88,6 +90,19 @@ export function StepPicker({ pieces, mode, title, onPick, onCancel }: { pieces: 
                   <span className="grid min-w-0">
                     <span>{ROOM_EVENTS[name].label}</span>
                     <span className="truncate text-[11px] text-muted-foreground">{ROOM_EVENTS[name].about}</span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {!open && roomSteps.length > 0 && (
+            <CommandGroup heading="This room">
+              {roomSteps.map(([name, builtin]) => (
+                <CommandItem key={name} value={`builtin-${name}`} onSelect={() => onPick({ kind: "builtin", name })} className="text-xs">
+                  <House />
+                  <span className="grid min-w-0">
+                    <span>{builtin.label}</span>
+                    <span className="truncate text-[11px] text-muted-foreground">{builtin.description}</span>
                   </span>
                 </CommandItem>
               ))}

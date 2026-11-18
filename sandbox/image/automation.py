@@ -15,6 +15,8 @@ import uuid
 
 WORKSPACE = "/workspace"
 HOST = "/usr/local/lib/codechatter/automation/host.mjs"
+# One call to the engine that isn't a run (checking a connection), answered at once rather than queued behind the room's runs.
+ENGINE_CALL = "/usr/local/lib/codechatter/automation/engine-call.mjs"
 MANIFEST = "/usr/local/lib/codechatter/automation/manifest.json"
 HOME = os.path.expanduser("~/automations")
 QUEUE = os.path.join(HOME, "queue")
@@ -348,6 +350,38 @@ def resume(request):
     return {"id": identity, "queued": queued()}
 
 
+def engine_call(call, seconds):
+    """Asks the engine one thing through engine-call.mjs, with the call (and any secrets in it) on stdin, never on disk."""
+    try:
+        done = subprocess.run(["node", ENGINE_CALL], input=json.dumps(call), capture_output=True, text=True, timeout=seconds + 15)
+    except subprocess.TimeoutExpired:
+        raise Refused(f"The engine didn't answer within {seconds} seconds.")
+    try:
+        return json.loads(done.stdout)
+    except ValueError:
+        raise Refused("The engine couldn't be asked. Restarting the sandbox brings it up to date.")
+
+
+def test_connection(request):
+    """Whether a connection's details work, by the piece's own check (Activepieces' validate), as the Connections panel's Test asks."""
+    pieces = read_json(MANIFEST) or {}
+    piece = request.get("piece")
+    if not isinstance(piece, str) or piece not in pieces:
+        raise Refused("That isn't one of the room's pieces.")
+    info = pieces[piece]
+    if not info.get("auth"):
+        raise Refused(f"{info.get('label') or piece} doesn't need a connection.")
+    value = request.get("value")
+    if not isinstance(value, dict) or not isinstance(value.get("type"), str):
+        raise Refused("Give the connection's details.")
+    answer = engine_call({"kind": "EXECUTE_VALIDATE_AUTH", "operation": {"piece": {"pieceName": piece, "pieceVersion": info.get("version"), "packageType": "REGISTRY", "pieceType": "OFFICIAL"}, "auth": value}, "seconds": 30}, 30)
+    if not answer.get("ok"):
+        return {"valid": False, "error": str(answer.get("error") or "It couldn't be checked.")[:500]}
+    response = answer.get("response") or {}
+    valid = bool(response.get("valid"))
+    return {"valid": valid, "error": None if valid else str(response.get("error") or "It didn't work with these details.")[:500]}
+
+
 def manifest():
     found = read_json(MANIFEST)
     if found is None:
@@ -376,6 +410,8 @@ def main():
         return waits()
     if op == "resume":
         return resume(request)
+    if op == "test-connection":
+        return test_connection(request)
     raise Refused("That isn't something this can do.")
 
 

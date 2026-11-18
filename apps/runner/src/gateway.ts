@@ -1,6 +1,7 @@
 /**
  * The AI gateway's runner side: HTTP requests from code in the sandbox, arriving over the agent's stdio, passed to the API as this
  * room. The room comes from which sandbox's channel it arrived on, never from anything the code sent, and only the API holds a key.
+ * Beside the model's addresses is one for the room's chat (/codechatter/chat), which a flow's "Post to the room's chat" step uses.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Duplex, Readable } from "node:stream";
@@ -11,7 +12,9 @@ import type { AgentEvent } from "@codechatter/contracts";
 
 import type { AgentChannel } from "./agent-channel.js";
 
-const ROUTES = new Set(["GET /v1/models", "POST /v1/chat/completions", "POST /v1/embeddings"]);
+const ROUTES = new Set(["GET /v1/models", "POST /v1/chat/completions", "POST /v1/embeddings", "POST /codechatter/chat"]);
+/** Where on the API each goes: the model's through the AI gateway, the chat's to the room's own services. */
+const upstreamOf = (path: string) => (path.startsWith("/codechatter/") ? `/api/internal/automations/${path.slice("/codechatter/".length)}` : `/api/internal/ai-gateway${path}`);
 const MOST_BODY_BYTES = 5 * 1024 * 1024;
 /** What an OpenAI client expects a failure to look like, so it prints the message. */
 const failure = (message: string, type: string) => JSON.stringify({ error: { message, type, param: null, code: null } });
@@ -116,7 +119,7 @@ export class GatewayHub {
         return;
       }
       const token = signServiceToken(this.settings.secret, { aud: "api", sub: this.roomId }, 120);
-      const answer = await fetch(`${this.settings.apiUrl}/api/internal/ai-gateway${path}`, {
+      const answer = await fetch(`${this.settings.apiUrl}${upstreamOf(path)}`, {
         method: req.method ?? "GET",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         ...(body && { body }),

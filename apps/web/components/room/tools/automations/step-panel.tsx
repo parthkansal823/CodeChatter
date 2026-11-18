@@ -18,6 +18,7 @@ import { DataView, SchemaOf } from "./data-view";
 import { insertAt, previewOf } from "./expressions";
 import { addBranch, canPin, expressionsFor, isPinned, kindOf, pinStep, removeBranch, removeStep, setStepNote, toggleStep, unpinStep, updateStep, type Flow, type FlowStep, type Place } from "./model";
 import { RouterFields } from "./router-fields";
+import { ConnectionField } from "./connections";
 import { CallFlowField } from "./error-flow-field";
 import { ExpressionInput } from "./expression-input";
 import { RoomEventSettings } from "./room-event-settings";
@@ -300,7 +301,7 @@ export function StepPanel({
       {isTrigger && !roomEvent && settings.pieceName === "@activepieces/piece-webhook" && <TriggerSettings flow={flow} path={path} canRun={canRun} onSave={onChange} onUseEvent={onUseEvent} />}
       {isTrigger && settings.pieceName === SCHEDULE_PIECE && <ScheduleSettings flow={flow} path={path} canRun={canRun} onSave={onChange} />}
       {isTrigger && !roomEvent && settings.pieceName && settings.pieceName !== "@activepieces/piece-webhook" && settings.pieceName !== SCHEDULE_PIECE && <p className="rounded-md border p-2 text-muted-foreground">This trigger can&apos;t start the flow by itself yet: webhooks and schedules can, and services&apos; own triggers come next. Until then it runs when you press Run it, with what you send standing in for what this trigger would give.</p>}
-      {pieceStep?.needsAuth && piece?.auth && <p className="rounded-md border p-2 text-muted-foreground">This step needs a {piece.label} connection, and rooms have no internet yet. Both are coming next, so it can&apos;t reach {piece.label} for now.</p>}
+      {pieceStep?.needsAuth && piece?.auth && settings.pieceName && <ConnectionField pieceName={settings.pieceName} piece={piece} auth={input.auth} canEdit={canEdit} onChange={(auth) => setInput("auth", auth)} />}
       {settings.pieceName && !piece && <p role="alert" className="text-destructive">This room&apos;s image doesn&apos;t have {settings.pieceName}.</p>}
 
       {builtin && (

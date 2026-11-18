@@ -17,6 +17,22 @@ const FlowFile = z
   .max(1024)
   .refine((path) => isFlowFile(path) && !path.startsWith("/") && !path.includes("\\") && !path.includes("\0") && path.split("/").every((part) => part !== "" && part !== "." && part !== ".."), "That isn't a flow in this room.");
 
+/**
+ * A connection's sign-in, as Activepieces keeps one (its AppConnectionValue): a secret (an API key, a token), a user and password, or a piece's own fields
+ * (a database's host, port, user and password). OAuth2 comes later.
+ */
+export const ConnectionValue = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("SECRET_TEXT"), secret_text: z.string().min(1, "Give the secret.").max(8192) }),
+  z.object({ type: z.literal("BASIC_AUTH"), username: z.string().max(512), password: z.string().max(8192) }),
+  z.object({
+    type: z.literal("CUSTOM_AUTH"),
+    props: z.record(z.string().max(100), z.union([z.string().max(16_384), z.number(), z.boolean(), z.null()])).refine((props) => Object.keys(props).length <= 30, "Up to 30 fields."),
+  }),
+]);
+export type ConnectionValue = z.infer<typeof ConnectionValue>;
+/** What a run is given of the room's connections, by name: set by the API (apps/api/src/automations/connections.ts), never taken from a browser. */
+const RunConnections = z.record(z.string().max(60), z.object({ piece: z.string().max(100), value: ConnectionValue })).optional();
+
 export const AutomationInput = z.discriminatedUnion("op", [
   z.object({
     op: z.literal("run"),
@@ -40,12 +56,13 @@ export const AutomationInput = z.discriminatedUnion("op", [
     trigger: z.enum(["manual", "webhook", "schedule", "event"]).optional(),
     /** Where a run waiting for a call is resumed from outside: set by the API, never taken from a browser (RunnerClient). */
     resumeBase: z.string().url().max(300).optional(),
+    connections: RunConnections,
   }),
   /**
    * A run waiting (a Delay, or "Respond and wait for the next webhook"), carried on from where it stopped. One waiting for a call needs the token in its
    * address; one waiting for a time doesn't, so the API (or a person, early) can carry it on.
    */
-  z.object({ op: z.literal("resume"), id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."), token: z.string().max(100).optional(), payload: z.unknown().optional() }),
+  z.object({ op: z.literal("resume"), id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."), token: z.string().max(100).optional(), payload: z.unknown().optional(), connections: RunConnections }),
   /** The runs waiting in the room, for the API's timer. Looking doesn't wake a room. */
   z.object({ op: z.literal("waits") }),
   z.object({ op: z.literal("status") }),
@@ -55,6 +72,55 @@ export const AutomationInput = z.discriminatedUnion("op", [
   z.object({ op: z.literal("manifest") }),
 ]);
 export type AutomationInput = z.infer<typeof AutomationInput>;
+
+const PIECE_NAME = z.string().regex(/^@activepieces\/piece-[a-z0-9-]{1,60}$/, "That isn't a piece.");
+/** What the API asks the runner beyond a browser's ops: whether a connection's details work (the piece's own check, in the sandbox). */
+export const AutomationRunnerInput = z.union([AutomationInput, z.object({ op: z.literal("test-connection"), piece: PIECE_NAME, value: ConnectionValue })]);
+export type AutomationRunnerInput = z.infer<typeof AutomationRunnerInput>;
+
+/** A connection's name, as flows use it: {{connections['room-db']}}. */
+export const CONNECTION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,59}$/;
+export const MOST_CONNECTIONS = 50;
+export const AutomationConnectionInput = z.object({
+  name: z.string().regex(CONNECTION_NAME, "A name is letters, digits, dashes and underscores, such as room-db."),
+  piece: PIECE_NAME,
+  value: ConnectionValue,
+  /** Its fields that aren't secret (a host, a user), to show again: the piece's own description says which. Passwords and keys are never shown, whatever this says. */
+  shown: z.array(z.string().max(100)).max(30).optional(),
+});
+export type AutomationConnectionInput = z.infer<typeof AutomationConnectionInput>;
+/** A connection as anyone in the room sees it: never its secrets. */
+export type AutomationConnection = {
+  name: string;
+  piece: string;
+  type: ConnectionValue["type"];
+  shown: Record<string, string | number | boolean | null>;
+  createdBy: { id: string; name: string } | null;
+  createdAt: number;
+  updatedAt: number;
+  lastTest: { valid: boolean; error: string | null; at: number } | null;
+};
+/** How a step names a connection, in Activepieces' own words. */
+export const connectionExpression = (name: string) => `{{connections['${name}']}}`;
+/** The connection a step's auth names, if it names one. */
+export function connectionNameOf(auth: unknown): string | null {
+  const match = typeof auth === "string" ? /^\{\{\s*connections\[['"]([^'"\]]+)['"]\]\s*\}\}$/.exec(auth.trim()) : null;
+  return match ? match[1]! : null;
+}
+/** Fields never shown again, whatever a browser says: passwords, keys, tokens, certificates. */
+export const SECRET_FIELD = /pass|secret|token|key|auth|cred|cert|private|pwd/i;
+/** What's shown of a connection: a user name, and its fields named as not secret that don't look secret either. */
+export function shownOf(value: ConnectionValue, fields: readonly string[] = []): AutomationConnection["shown"] {
+  if (value.type === "BASIC_AUTH") return { username: value.username.slice(0, 200) };
+  if (value.type === "SECRET_TEXT") return {};
+  const out: AutomationConnection["shown"] = {};
+  for (const name of fields) {
+    if (SECRET_FIELD.test(name) || !Object.hasOwn(value.props, name)) continue;
+    const field = value.props[name]!;
+    out[name] = typeof field === "string" ? field.slice(0, 200) : field;
+  }
+  return out;
+}
 
 export type AutomationStepResult = { type: string; status: string; input?: unknown; output?: unknown; errorMessage?: string; duration?: number };
 /** What a waiting run waits for: a time, or a call to its address (its token is never shown). */

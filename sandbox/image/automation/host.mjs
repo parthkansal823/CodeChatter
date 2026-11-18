@@ -237,7 +237,9 @@ async function runJob(job) {
     }
     if (path.startsWith("/v1/worker/app-connections/")) {
       const name = decodeURIComponent(path.slice("/v1/worker/app-connections/".length));
-      return Object.hasOwn(connections, name) ? send(200, connections[name]) : send(404, { message: `This room has no connection called ${name}.` });
+      // The room's connections, given with this run by the API (sealed there, never on disk here), in the shape the engine reads: { piece, value }.
+      const connection = Object.hasOwn(connections, name) ? connections[name] : null;
+      return connection ? send(200, { id: name, externalId: name, displayName: name, pieceName: connection.piece, status: "ACTIVE", value: connection.value }) : send(404, { message: `This room has no connection called ${name}.` });
     }
     if (path === "/v1/worker/project") return send(200, { id: "room", displayName: "This room", externalId: null });
     if (path.startsWith("/v1/worker/variables/")) return send(404);

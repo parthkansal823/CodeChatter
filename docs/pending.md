@@ -30,7 +30,8 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 
 ## Up next, in order
 
-1. **ChatGPT**, each checked before it counts: **21** (code tours), **22** (unread messages and searching a room's chat) and **23** (a reminder before an assessment closes). They touch different files, so they can go to ChatGPT side by side; 22 is the only one with a migration.
+
+1. **ChatGPT**, each checked before it counts: **22** (unread messages and searching a room's chat), **23** (a reminder before an assessment closes), **24** (groups on the design canvas), **25** (Mermaid diagrams inside Markdown), **26** (cookies in API Studio: commit API Studio's scripts first, as it builds on them) and **27** (the task board, next). They touch different files, so they can go to ChatGPT side by side; 22 is the only one with a migration.
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -90,11 +91,11 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 - ⬜ **API studio:**
   - scripts, later: `pm.sendRequest` (scripts have no network now), `require` of Postman's libraries (lodash, moment, CryptoJS), and a folder's or the collection's own scripts (imported ones are copied into each request);
   - multipart and OAuth 2.0;
-  - a cookies tab;
+  - a cookies tab, and a cookie jar (**ChatGPT 26**);
   - a mock server;
   - a WebSocket and SSE tester.
 - ⬜ **Design canvas:**
-  - groups;
+  - groups (**ChatGPT 24**);
   - variants and shared colour and text styles;
   - prototype mode;
   - "turn this frame into code" with the AI;
@@ -156,13 +157,13 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
     4. Triggers: by hand, a webhook URL, a schedule, room events (a push, a failed test), and pieces' polling triggers. Retries and error handling come from the engine.
     5. Secrets for a room, encrypted in the database, given to a run in memory only. A room's connections never leave its own sandbox.
     6. The internet: rooms have none (ADR 0007), so an owner's switch and an allowlist per service, through the room's egress proxy, with limits and a security review first. Automations that stay inside the room work without it.
-    7. CodeChatter's own piece: run a command or tests in the sandbox, ask the room's AI through the gateway, post to the room's chat.
+    7. ✅ CodeChatter's own steps (roadmap-details, "Automations, part thirteen"): Run a command in the sandbox, Ask the room's AI, Post to the room's chat. **Left:** ask the room's AI with tools (the agent step, under 7 of the n8n list), and an @mention in a post notifying whoever it names.
     8. ✅ **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the tool. **Each is checked to load in the engine; each is run for real only where the service is available to try it on, and the gallery says which.**
   - **Every n8n feature, or better** (the owner's request, 2026-11-07: "n8n ke saare features", our own UI). This list comes from n8n's own source, read for what it does. Its code isn't copied: its licence allows only internal, personal or non-commercial use, its `.ee` files need a paid licence, and either limit would land on CodeChatter. Only its permissively licensed packages may be used directly: `@n8n/tournament` (expressions, Apache-2.0), `@n8n/codemirror-lang`, `-html`, `-sql` (MIT), `@n8n/json-schema-to-zod` (ISC), `@n8n/rules-engine` (MIT). In order:
     1. 🟡 **The editor.** Done (roadmap-details, "Automations, part two"): a + on arrows and wherever nothing comes next, branch names on the chart, the right-click menu and keys (copy, cut, paste, duplicate, turn off, rename, add, remove, the arrows between boxes, Ctrl+Enter), undo and redo, a note on any step, replacing a step and changing the trigger, searching every action, Table, JSON and Schema views with Use to put data in a field and what an expression comes to, and routers with and, or, every test the engine has, more branches, and running each that matches. Expressions offered as they're typed (2026-11-18). **Left:** choosing several boxes at once, sticky notes and groups placed freely on the chart, and the command bar.
     2. 🟡 **Trying things.** Done (roadmap-details, "Automations, part three"): one step on its own, pinning a step's output, carrying a failed run on from where it stopped, and sending what an earlier run was sent. **Left:** running from a chosen step onward (n8n's partial runs), and pinning the trigger's data.
     3. 🟡 **Built-in steps.** Done (roadmap-details, "Automations, part four"): Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates, Split Out, Rename Keys, Merge (one after the other, matched, side by side, every pairing), Compare Datasets, and Stop and Error. **Left:** Execute Command, Read and Write Files, Convert to File, Extract from File, Compression, iCal, Edit Image, Execution Data and Data Tables. Crypto, Date, HTML, Markdown, XML, HTTP and RSS come from Activepieces' pieces.
-    4. 🟡 **Starting by itself.** Done (roadmap-details, "Automations, part five"): turning a flow on and off, and webhooks: a live address and a test one, any method, JSON, forms and text, answering at once or when the flow finishes, a new address, and a moved flow still found; schedules (part six); room events (part seven); an error flow (part eight); sub-flows (part nine); webhooks checking who calls (part ten); and waiting, for a time or a call, with approvals (part eleven). **Left:** pieces' polling triggers; room events from the sandbox (a run failing, tests failing, git in the terminal) and from chat; Wait for a form (with forms); forms and a chat trigger with public pages.
+    4. 🟡 **Starting by itself.** Done (roadmap-details, "Automations, part five"): turning a flow on and off, and webhooks: a live address and a test one, any method, JSON, forms and text, answering at once or when the flow finishes, a new address, and a moved flow still found; schedules (part six); room events (part seven); an error flow (part eight); sub-flows (part nine); webhooks checking who calls (part ten); and waiting, for a time or a call, with approvals (part eleven). Room events from what people do (part twelve): a Run or tests failing or finishing, commits in the sandbox's git, and chat messages and commands. **Left:** pieces' polling triggers; Wait for a form (with forms); forms and a chat trigger with public pages.
     5. **Connections.** Room secrets, encrypted, with each piece's kinds of sign-in, tested on save; OAuth2; allowed domains per secret; variables; the internet switch and allowlist.
     6. **Runs and settings.** Every flow's runs in one list, filters, notes and tags on a run, custom data, redaction, how long runs are kept; each flow's timezone, timeout, what to save, error flow and time saved; tags and favourites; a visual diff between versions, restoring one; the Insights page (runs, failures, failure rate, time saved, average time).
     7. **AI.** An agent step with a model, memory, tools and an output parser; chains (Basic LLM, Q&A, Summarize, Information Extractor, Sentiment, Text Classifier, AI Transform); tools (calculator, code, HTTP, a flow as a tool, a vector store, MCP client, think); memory (window, Postgres, Redis); vector stores, embeddings, document loaders, splitters and retrievers; a flow as an MCP server; guardrails; evaluations with test cases. All able to use the room's AI through the gateway, with no key.
@@ -243,7 +244,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ Public profile and portfolio
 - ⬜ Code and algorithm visualizer, with AI narration
 - ⬜ Code tours, later: a way to put a stop whose lines are gone back on other lines, import and export of tours, and undo for a deleted stop
-- ⬜ Task board, next: rescan only the files that changed (now every keystroke anywhere, and every move, rescans every file, in 5 ms slices); two identical TODOs in one file show as one card; a hand-written card's delete has no undo
-- ⬜ Math (KaTeX) and Mermaid inside the Markdown preview
+- ⬜ Task board, next (**ChatGPT 27**): rescan only the files that changed (now every keystroke anywhere, and every move, rescans every file, in 5 ms slices); two identical TODOs in one file show as one card; a hand-written card's delete has no undo
+- ⬜ Mermaid inside the Markdown preview (**ChatGPT 25**); math (KaTeX) after it, as it needs a package
 - ⬜ VS Code extension: join a room from VS Code
 - ⬜ More interface languages: Hindi first

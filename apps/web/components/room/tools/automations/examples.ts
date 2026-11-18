@@ -34,6 +34,11 @@ function chain(trigger: FlowStep, steps: FlowStep[]): { trigger: FlowStep } {
   return { trigger };
 }
 const webhook = (name = "When called"): FlowStep => ({ name: "trigger", type: "PIECE_TRIGGER", displayName: name, valid: true, settings: { pieceName: `${piecePrefix}webhook`, pieceVersion: "", triggerName: "catch_webhook", input: { authType: "none", authFields: {} }, propertySettings: {} }, nextAction: null });
+/** Something happening in the room (packages/contracts/src/room-events.ts): the webhook trigger with a `room` setting, as the trigger's panel makes it. */
+const inTheRoom = (room: { event: string; paths?: string; startsWith?: string }, name: string): FlowStep => {
+  const step = webhook(name);
+  return { ...step, settings: { ...step.settings, room } };
+};
 const pieceTrigger = (piece: string, triggerName: string, name: string, input: Record<string, unknown> = {}, connected = true): FlowStep => ({ name: "trigger", type: "PIECE_TRIGGER", displayName: name, valid: false, settings: { pieceName: `${piecePrefix}${piece}`, pieceVersion: "", triggerName, input: { ...(connected ? { auth: `{{connections['${piece}']}}` } : {}), ...input }, propertySettings: {} }, nextAction: null });
 const code = (name: string, displayName: string, source: string, input: Record<string, unknown> = { data: "{{trigger.output.body}}" }): FlowStep => ({ name, type: "CODE", displayName, valid: true, skip: false, settings: { sourceCode: { code: `export const code = async (inputs) => {\n  const data = inputs.data ?? {};\n${source}\n};\n`, packageJson: "{}" }, input, errorHandlingOptions: NO_FAILURE }, nextAction: null });
 const action = (name: string, piece: string, actionName: string, displayName: string, input: Record<string, unknown>, connected = true): FlowStep => ({ name, type: "PIECE", displayName, valid: !connected, skip: false, settings: { pieceName: `${piecePrefix}${piece}`, pieceVersion: "", actionName, input: { ...(connected ? { auth: `{{connections['${piece}']}}` } : {}), ...input }, propertySettings: {}, errorHandlingOptions: NO_FAILURE }, nextAction: null });
@@ -603,6 +608,55 @@ const WAITING: Example[] = [
   },
 ];
 
+/** CodeChatter's own steps (Run a command, Ask the room's AI, Post to the room's chat) on what people do in the room. */
+const IN_THE_ROOM: Example[] = [
+  {
+    id: "status-from-chat",
+    title: "Answer /status in the chat with what's changed",
+    about: "Someone types /status in the room's chat; the room's git says what's changed, and the answer goes back to the chat.",
+    category: OPS,
+    runsHere: true,
+    sample: { event: "chat.message", at: "2026-11-18T10:00:00.000Z", by: [{ id: null, name: "Asha" }], data: { id: "message", text: "/status", args: "" } },
+    flow: () =>
+      chain(inTheRoom({ event: "chat.message", startsWith: "/status" }, "A chat message"), [
+        data("status", "run_command", "What's changed", { command: 'git status --short --branch 2>/dev/null || echo "This room has no git repository yet."', fail_on_error: false }),
+        data("answer", "post_to_chat", "Answer in the chat", { text: "What's changed, as {{trigger.output.by[0].name}} asked:\n{{status.output.stdout}}" }),
+      ]),
+  },
+  {
+    id: "failed-run-to-chat",
+    title: "Tell the chat when a Run fails",
+    about: "Whoever's Run of a Python file fails, the room hears which file, how it ended and the end of what it printed.",
+    category: TESTS,
+    runsHere: true,
+    sample: {
+      event: "run.failed",
+      at: "2026-11-18T10:00:00.000Z",
+      by: [{ id: null, name: "Asha" }],
+      data: { path: "src/app.py", command: "python3 src/app.py", runId: "run", code: 1, reason: "exit", durationMs: 840, failed: true, output: "ZeroDivisionError: division by zero\n" },
+    },
+    flow: () =>
+      chain(inTheRoom({ event: "run.failed", paths: "**/*.py" }, "A run fails"), [
+        data("tell", "post_to_chat", "Tell the room", { text: "{{trigger.output.by[0].name}}'s run of {{trigger.output.data.path}} failed (code {{trigger.output.data.code}}):\n{{trigger.output.data.output}}" }),
+      ]),
+  },
+  {
+    id: "explain-failing-tests",
+    title: "Explain failing tests with the room's AI",
+    about: "When the Tests tab's tests fail, the room's AI says what's most likely wrong, in the chat. It needs the room's AI set up.",
+    category: AI,
+    runsHere: false,
+    flow: () =>
+      chain(inTheRoom({ event: "tests.failed" }, "Tests fail"), [
+        data("explain", "ask_ai", "Ask what's wrong", {
+          prompt: "These tests of {{trigger.output.data.path}} failed: {{trigger.output.data.cases}} {{trigger.output.data.compileError}}",
+          instructions: "Say in two sentences what's most likely wrong in the code, for the person who wrote it.",
+        }),
+        data("tell", "post_to_chat", "Tell the room", { text: "Tests of {{trigger.output.data.path}}: {{trigger.output.data.passed}} of {{trigger.output.data.total}} passed. {{explain.output.text}}" }),
+      ]),
+  },
+];
+
 const ONE_OFFS: Example[] = [
   { id: "page-on-outage", title: "Page someone when production is down", about: "Your monitoring calls this, and PagerDuty does the rest.", category: OPS, runsHere: false, flow: () => chain(webhook("An outage"), [action("page", "pagerduty", "create_incident", "Open an incident", { fromEmail: "", serviceId: "", title: "{{trigger.output.body.title}}", urgency: "high" })]) },
   { id: "deploy-on-release", title: "Deploy to Netlify on a release", about: "A release on GitHub starts a deploy.", category: OPS, runsHere: false, flow: () => chain(pieceTrigger("github", "new_release", "A release", { repository: "" }), [action("deploy", "netlify", "start_deploy", "Start a deploy", { siteId: "", clearCache: false })]) },
@@ -614,7 +668,7 @@ const ONE_OFFS: Example[] = [
   { id: "mail-release-notes", title: "Mail release notes as HTML", about: "Markdown to HTML with one piece, and mailed with another.", category: RELEASES, runsHere: false, flow: () => chain(webhook("A new release"), [action("html", "text-helper", "markdown_to_html", "To HTML", { markdown: "{{trigger.output.body.notes}}", flavor: "github", headerLevelStart: 1, tables: true, noHeaderId: true, simpleLineBreaks: false, openLinksInNewWindow: false }, false), action("mail", "smtp", "send-email", "Mail it", { from: "", to: [], subject: "Release notes", body_type: "html", body: "{{html.output}}" })]) },
 ];
 
-export const EXAMPLES: Example[] = [...RUNS_HERE, ...WITH_PIECES, ...WITH_BUILTINS, ...NOTIFICATIONS, ...TICKET_EXAMPLES, ...SYNCS, ...AI_EXAMPLES, ...DIGEST_EXAMPLES, ...WAITING, ...ONE_OFFS];
+export const EXAMPLES: Example[] = [...RUNS_HERE, ...WITH_PIECES, ...WITH_BUILTINS, ...NOTIFICATIONS, ...TICKET_EXAMPLES, ...SYNCS, ...AI_EXAMPLES, ...DIGEST_EXAMPLES, ...WAITING, ...IN_THE_ROOM, ...ONE_OFFS];
 export const EXAMPLE_CATEGORIES = [...new Set(EXAMPLES.map((example) => example.category))].sort();
 
 /** A flow ready for a room: each piece at the version this room's image has. */

@@ -1,10 +1,11 @@
 import { signServiceToken } from "@codechatter/auth/service-token";
-import type { LighthouseInput } from "@codechatter/contracts";
+import type { AutomationRunnerInput, LighthouseInput } from "@codechatter/contracts";
 import type { DatabaseKind, DatabaseStatus, CodebaseHits, DataSummary, DataSummaryInput, DevServerStatus, EvalInput, FlowInput, LatexInput, AutomationInput, GitResponse, GitRunnerRequest, JudgeRunnerInput, KubeRequest, KubeResponse, LakehouseInput, McpInput, McpOutput, RoomAnalysis,
   RagRunnerInput, RoomCheck, RunnerEvent, RunSnapshot, SandboxStatus } from "@codechatter/contracts";
 import { BadRequestException, ConflictException, HttpException, Inject, Injectable, Optional, ServiceUnavailableException } from "@nestjs/common";
 import type { Redis } from "ioredis";
 
+import { ConnectionsVault } from "../automations/connections-vault.js";
 import type { Env } from "../config/env.js";
 import { ENV, VALKEY } from "../infra/tokens.js";
 
@@ -32,6 +33,7 @@ export class RunnerClient {
   constructor(
     @Inject(ENV) private readonly env: Env,
     @Optional() @Inject(VALKEY) private readonly redis?: Redis,
+    @Optional() private readonly vault?: ConnectionsVault,
   ) {}
 
   noteImage(roomId: string, image: "base" | "full" | "default"): void {
@@ -256,9 +258,16 @@ export class RunnerClient {
   }
 
   /** A flow run by Activepieces' engine in the sandbox (apps/runner/src/automations.ts). */
-  async automations(roomId: string, input: AutomationInput, user: RunnerUser): Promise<unknown> {
-    // Where a run that waits for a call is carried on from: the API's own address, whatever a browser sent.
-    const body = input.op === "run" ? { ...input, resumeBase: `${this.env.APP_URL.replace(/\/$/, "")}/api/hooks/automations/resume/${roomId}` } : input;
+  async automations(roomId: string, input: AutomationInput | AutomationRunnerInput, user: RunnerUser): Promise<unknown> {
+    // Where a run that waits for a call is carried on from: the API's own address, whatever a browser sent. And the room's connections, opened here for
+    // this run only (automations/connections.ts): what a browser sent as connections is never used.
+    const connections = input.op === "run" || input.op === "resume" ? ((await this.vault?.forRun(roomId)) ?? {}) : undefined;
+    const body =
+      input.op === "run"
+        ? { ...input, resumeBase: `${this.env.APP_URL.replace(/\/$/, "")}/api/hooks/automations/resume/${roomId}`, connections }
+        : input.op === "resume"
+          ? { ...input, connections }
+          : input;
     if (input.op === "run" || input.op === "resume") void this.redis?.zadd(RECENT_AUTOMATION_ROOMS, Date.now(), roomId).catch(() => {});
     const response = await this.call(`/rooms/${roomId}/automations`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
     if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't reach the automation.");

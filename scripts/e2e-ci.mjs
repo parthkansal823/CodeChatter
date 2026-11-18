@@ -41,6 +41,8 @@ const SUITES = [
     ["automation-error-flow", "automation-error-flow"],
     ["automation-subflows", "automation-subflows"],
     ["automation-wait", "automation-wait"],
+    ["automation-activity", "automation-activity"],
+    ["automation-codechatter", "automation-codechatter"],
     ["lighthouse-runner", "lighthouse"],
   ]),
   ...service("apps/collab", [

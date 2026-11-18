@@ -15,6 +15,11 @@ export function chatUnreadLabel(count: number): string {
   return capped > 99 ? "99+" : String(capped);
 }
 
+/** A removed author's normal messages survive the user FK and still belong to someone other than the reader. */
+export function isCountedChatMessage(message: Pick<ChatMessage, "author" | "kind">, readerId: string): boolean {
+  return message.author?.id !== readerId && message.kind !== "system" && message.kind !== "github";
+}
+
 /** Spaces separate literal AND terms; punctuation, percent and underscore stay literal. */
 export function chatSearchTerms(query: string): string[] {
   return [...new Set(query.trim().split(/\s+/u).filter(Boolean).map((term) => term.toLowerCase()))];

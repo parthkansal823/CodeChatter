@@ -97,7 +97,9 @@ for (const example of EXAMPLES) {
     // What a step refers to has to run before it.
     for (const match of JSON.stringify(step.settings).matchAll(/\{\{\s*([A-Za-z0-9_]+)\./g)) if (!names.includes(match[1]!)) problems.push(`${example.id}: ${step.name} refers to ${match[1]}, which isn't a step`);
   }
-  if (!example.runsHere && !servicesOf(example, pieces).length && !allSteps(flow.trigger).some((step) => (step.settings as { pieceName?: string }).pieceName?.includes("http"))) problems.push(`${example.id}: needs nothing, so it should be marked as running here`);
+  // The room's AI is the one thing an example may need without a service: it's what .env has, so it isn't run here.
+  const usesTheAi = allSteps(flow.trigger).some((step) => (step as { builtin?: string }).builtin === "ask_ai");
+  if (!example.runsHere && !usesTheAi && !servicesOf(example, pieces).length && !allSteps(flow.trigger).some((step) => (step.settings as { pieceName?: string }).pieceName?.includes("http"))) problems.push(`${example.id}: needs nothing, so it should be marked as running here`);
   const chart = chartOfFlow(flow, undefined, pieces);
   if (chart.items.length !== steps.length) onChart.push(`${example.id}: ${chart.items.length} boxes for ${steps.length} steps`);
 }

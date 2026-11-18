@@ -4,6 +4,7 @@ import {
   chatSearchTerms,
   chatUnreadLabel,
   highlightChatSearch,
+  isCountedChatMessage,
 } from "@codechatter/contracts";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
@@ -13,6 +14,19 @@ import { chatUnreadQuery, escapeChatLike, markChatReadQuery } from "./messages.h
 const dialect = new PgDialect({ casing: "snake_case" });
 
 describe("chat display and literal search helpers", () => {
+  it("counts retained normal messages after author removal, while excluding own and system posts", () => {
+    const other = { id: "other", name: "Other", image: null };
+    const me = { id: "reader", name: "Reader", image: null };
+    for (const kind of ["text", "code", "file"] as const) {
+      expect(isCountedChatMessage({ kind, author: null }, "reader")).toBe(true);
+      expect(isCountedChatMessage({ kind, author: other }, "reader")).toBe(true);
+      expect(isCountedChatMessage({ kind, author: me }, "reader")).toBe(false);
+    }
+    for (const kind of ["system", "github"] as const) {
+      expect(isCountedChatMessage({ kind, author: null }, "reader")).toBe(false);
+      expect(isCountedChatMessage({ kind, author: other }, "reader")).toBe(false);
+    }
+  });
   it("caps the count at 99+ without negative or invalid badge values", () => {
     expect([0, 1, 99, 100, 10_000].map(chatUnreadLabel)).toEqual(["0", "1", "99", "99+", "99+"]);
     expect([-1, NaN, -Infinity, 1.9, Infinity].map(capChatUnreadCount)).toEqual([0, 0, 0, 1, 100]);
@@ -49,8 +63,7 @@ describe("unread SQL invariants", () => {
     expect(query.sql).toContain("membership.status = 'active'");
     expect(query.sql).toContain("room.archived_at is null");
     expect(query.sql).toContain("message.room_id = selected.room_id");
-    expect(query.sql).toContain("message.user_id is not null");
-    expect(query.sql).toContain("message.user_id <>");
+    expect(query.sql).toContain("message.user_id is distinct from");
     expect(query.sql).toContain("message.deleted_at is null");
     expect(query.sql).toContain("message.kind not in ('system', 'github')");
     expect(query.sql).toContain(

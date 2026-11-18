@@ -62,7 +62,7 @@ function setup() {
 
 describe("retried chat sends", () => {
   function sender() {
-    const original = { ...row(1).message, clientId: id(99) };
+    const original = { ...row(1).message, clientId: id(99), deletedAt: null as Date | null };
     const returning = vi.fn().mockResolvedValue([]);
     const values = vi.fn(() => ({ onConflictDoNothing: vi.fn(() => ({ returning })) }));
     const update = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })) }));
@@ -103,6 +103,17 @@ describe("retried chat sends", () => {
     expect(f.author).not.toHaveBeenCalled();
     expect(f.execute).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("does not revive a deleted message when an old send is retried", async () => {
+    const f = sender();
+    f.original.deletedAt = new Date();
+    await expect(
+      f.service.create({ roomId: "E2ETST", userId: "sender", clientId: id(99), body: "Message 1" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(f.update).not.toHaveBeenCalled();
+    expect(f.author).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
   });
 });
 

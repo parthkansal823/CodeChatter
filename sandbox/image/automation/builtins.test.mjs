@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BUILTINS, listOf, read, run, TESTS } from "./builtins.mjs";
+import { BUILTINS, commandEnv, doorOf, folderOf, listOf, read, run, TESTS, workspaceRoot } from "./builtins.mjs";
 
 const tests = [
   { name: "login", status: "failed", ms: 120, suite: { name: "auth" }, tags: ["slow", "ui"] },
@@ -188,4 +188,92 @@ test("Approval links: one for each choice, at the address the wait after them wi
     else process.env.AP_SANDBOX_WS_PORT = before;
     server.close();
   }
+});
+
+test("CodeChatter's own steps: where they reach, and what a command gets", () => {
+  assert.equal(doorOf({ OPENAI_BASE_URL: "http://127.0.0.1:3129/v1" }), "http://127.0.0.1:3129");
+  assert.equal(doorOf({ OPENAI_BASE_URL: "http://127.0.0.1:3129/v1/" }), "http://127.0.0.1:3129");
+  assert.equal(doorOf({}), "http://127.0.0.1:3129");
+  assert.equal(folderOf(""), workspaceRoot());
+  assert.equal(folderOf("tests/unit"), `${workspaceRoot()}/tests/unit`);
+  assert.throws(() => folderOf("../etc"), /folder in the room/);
+  assert.throws(() => folderOf("/etc"), /folder in the room/);
+  assert.throws(() => folderOf("src/../../x"), /folder in the room/);
+  // The engine's worker port and token stay with the engine.
+  assert.deepEqual(commandEnv({ PATH: "/usr/bin", OPENAI_BASE_URL: "x", AP_SANDBOX_WS_TOKEN: "secret", AP_SANDBOX_WS_PORT: "1", SANDBOX_ID: "room" }), { PATH: "/usr/bin", OPENAI_BASE_URL: "x" });
+});
+
+test("Ask the room's AI and Post to the room's chat, through a stand-in door", async () => {
+  const { createServer } = await import("node:http");
+  const seen = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      const asked = JSON.parse(body || "{}");
+      seen.push({ path: req.url, asked });
+      res.setHeader("content-type", "application/json");
+      if (req.url === "/v1/chat/completions") {
+        const wantsJson = asked.messages.some((message) => message.role === "system" && /JSON only/.test(message.content));
+        if (asked.messages.at(-1).content === "refuse") {
+          res.statusCode = 403;
+          return res.end(JSON.stringify({ error: { message: "AI help is off during this interview." } }));
+        }
+        return res.end(JSON.stringify({ model: "gemma", choices: [{ message: { content: wantsJson ? '```json\n{"verdict":"flaky"}\n```' : "It divided by zero." } }], usage: { prompt_tokens: 12, completion_tokens: 5 } }));
+      }
+      if (req.url === "/codechatter/chat") {
+        if (asked.text === "too many") {
+          res.statusCode = 429;
+          return res.end(JSON.stringify({ title: "too many requests", detail: "This room's automations have posted 20 messages in a minute." }));
+        }
+        return res.end(JSON.stringify({ id: "msg-1", createdAt: "2026-11-18T10:00:00.000Z" }));
+      }
+      res.statusCode = 404;
+      res.end("{}");
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const before = process.env.OPENAI_BASE_URL;
+  process.env.OPENAI_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+  try {
+    const plain = await run("ask_ai", { prompt: "Why did it fail?", instructions: "Two sentences." });
+    assert.deepEqual(plain, { text: "It divided by zero.", model: "gemma", usage: { inputTokens: 12, outputTokens: 5 } });
+    assert.deepEqual(seen[0].asked.messages, [{ role: "system", content: "Two sentences." }, { role: "user", content: "Why did it fail?" }]);
+    assert.equal(seen[0].asked.model, "default");
+    const parsed = await run("ask_ai", { prompt: "Is it flaky?", json: true });
+    assert.deepEqual(parsed.json, { verdict: "flaky" });
+    await assert.rejects(run("ask_ai", { prompt: "refuse" }), /AI help is off during this interview/);
+    await assert.rejects(run("ask_ai", { prompt: " " }), /Say what to ask/);
+
+    assert.deepEqual(await run("post_to_chat", { text: "  Deployed staging.  " }), { id: "msg-1", text: "Deployed staging.", postedAt: "2026-11-18T10:00:00.000Z" });
+    assert.deepEqual(seen.at(-1), { path: "/codechatter/chat", asked: { text: "Deployed staging." } });
+    await assert.rejects(run("post_to_chat", { text: "too many" }), /posted 20 messages in a minute/);
+    await assert.rejects(run("post_to_chat", { text: "x".repeat(4001) }), /up to 4,000 characters/);
+  } finally {
+    if (before === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = before;
+    server.close();
+  }
+});
+
+test("Run a command: its output, its exit code, failing, and a time limit", { skip: process.platform === "win32" ? "needs bash and a Unix folder: it runs for real in apps/runner/test/automation-codechatter.e2e.mjs" : false }, async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const here = mkdtempSync(`${tmpdir()}/cc-command-`);
+  const previous = process.env.CC_WORKSPACE;
+  process.env.CC_WORKSPACE = here;
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(`${here}/sub`);
+  const ran = await run("run_command", { command: "pwd && echo out && echo err >&2", folder: "sub", fail_on_error: true });
+  assert.equal(ran.exitCode, 0);
+  assert.equal(ran.stdout.trim().split("\n")[0], `${here}/sub`);
+  assert.equal(ran.stdout.trim().split("\n")[1], "out");
+  assert.equal(ran.stderr.trim(), "err");
+  await assert.rejects(run("run_command", { command: "echo broken >&2 && exit 3" }), /ended with 3: broken/);
+  const kept = await run("run_command", { command: "exit 4", fail_on_error: false });
+  assert.equal(kept.exitCode, 4);
+  await assert.rejects(run("run_command", { command: "sleep 5", seconds: 1 }), /longer than 1 second,/);
+  await assert.rejects(run("run_command", { command: " " }), /Say which command/);
+  if (previous === undefined) delete process.env.CC_WORKSPACE;
+  else process.env.CC_WORKSPACE = previous;
 });
