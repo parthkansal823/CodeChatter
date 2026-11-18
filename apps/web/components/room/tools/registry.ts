@@ -47,6 +47,7 @@ export const ROOM_TOOLS: RoomTool[] = [
   // AI help is off for a candidate unless their interviewer allows it (the API refuses it, too).
   { id: "ai", label: "AI", icon: Sparkles, description: "Ask about the code, or have it write some", placement: "side", visible: (_can, _room, { candidateAiOff }) => !candidateAiOff, load: () => import("./ai/ai-panel") },
   { id: "notes", label: "Notes", icon: NotebookPen, description: "Notes everyone in the room shares", placement: "side", load: () => import("./notes/notes-tool") },
+  { id: "tours", label: "Tours", icon: BookMarked, description: "Walk through the room's code, one stop at a time", placement: "side", load: () => import("./tours/tours-tool") },
   { id: "activity", label: "Activity", icon: Activity, description: "What's happened in the room this week", placement: "side", load: () => import("./activity/activity-tool") },
   { id: "dependencies", label: "Dependencies", icon: ShieldAlert, description: "Known problems in the packages the code uses", placement: "side", load: () => import("./dependencies/dependencies-tool") },
   // Only shown in the Research layout, or in a room with a .bib file (room-workspace.tsx).

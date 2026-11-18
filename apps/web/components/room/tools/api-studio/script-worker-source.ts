@@ -1,7 +1,9 @@
 /**
- * Source of the Web Worker that runs pre-request and test scripts. It is a
- * string (not bundled code) because it runs inside the sandboxed iframe
- * built by script-sandbox.ts, from a blob: URL.
+ * Source of the Web Worker that runs pre-request and test scripts, with
+ * Postman's `pm` (environment, request, response, test, expect). It is a
+ * string (not bundled code) because it runs inside the sandboxed page
+ * /frames/script (app/frames/script/route.ts), from a blob: URL, started by
+ * script-sandbox.ts.
  *
  * The first part removes every way out (network, storage, nested workers);
  * the iframe's Content-Security-Policy blocks them as well, so a script
@@ -41,13 +43,15 @@ function __deepEqual(a, b) {
 function __headers(list) {
   var rows = list.map(function (h) { return { key: h.key, value: h.value }; });
   var find = function (name) { name = String(name).toLowerCase(); return rows.filter(function (h) { return h.key.toLowerCase() === name; }); };
+  // Postman's own form is an object, { key, value }; a name and a value work too.
+  var pair = function (name, value) { return name && typeof name === "object" ? { key: String(name.key), value: String(name.value) } : { key: String(name), value: String(value) }; };
   return {
     get: function (name) { var found = find(name); return found.length ? found.map(function (h) { return h.value; }).join(", ") : undefined; },
     has: function (name) { return find(name).length > 0; },
-    set: function (name, value) { this.remove(name); rows.push({ key: String(name), value: String(value) }); },
+    set: function (name, value) { var row = pair(name, value); this.remove(row.key); rows.push(row); },
     upsert: function (name, value) { this.set(name, value); },
-    add: function (name, value) { rows.push({ key: String(name), value: String(value) }); },
-    remove: function (name) { name = String(name).toLowerCase(); rows = rows.filter(function (h) { return h.key.toLowerCase() !== name; }); },
+    add: function (name, value) { rows.push(pair(name, value)); },
+    remove: function (name) { name = String(name && typeof name === "object" ? name.key : name).toLowerCase(); rows = rows.filter(function (h) { return h.key.toLowerCase() !== name; }); },
     toObject: function () { var out = {}; rows.forEach(function (h) { out[h.key] = h.value; }); return out; },
     all: function () { return rows.slice(); }
   };
@@ -107,7 +111,8 @@ function __expect(actual) {
     if (arguments.length < 2) return this._check(got !== undefined, "to have header " + name);
     return this._check(got === value, "to have header " + name + ": " + value);
   };
-  [["ok", function (v) { return !!v; }, "to be truthy"], ["true", function (v) { return v === true; }, "to be true"],
+  // pm.response.to.be.ok: a status from 200 to 299, as Postman has it.
+  [["ok", function (v) { return v && typeof v === "object" && v.__isResponse ? v.code >= 200 && v.code < 300 : !!v; }, "to be ok"], ["true", function (v) { return v === true; }, "to be true"],
    ["false", function (v) { return v === false; }, "to be false"], ["null", function (v) { return v === null; }, "to be null"],
    ["undefined", function (v) { return v === undefined; }, "to be undefined"],
    ["exist", function (v) { return v !== null && v !== undefined; }, "to exist"],
@@ -143,6 +148,11 @@ self.onmessage = async function (event) {
     text: function () { return input.response.body; },
     json: function () { return JSON.parse(input.response.body); }
   } : undefined;
+  if (response) {
+    Object.defineProperty(response, "__isResponse", { value: true });
+    // pm.response.to.have.status(200), pm.response.to.be.ok, pm.response.to.have.header("x").
+    Object.defineProperty(response, "to", { get: function () { return __expect(response); } });
+  }
   var test = function (name, fn) {
     var record = function (error) { tests.push(error ? { name: String(name), passed: false, error: __show(error) } : { name: String(name), passed: true }); };
     try {
@@ -151,17 +161,21 @@ self.onmessage = async function (event) {
       else record();
     } catch (error) { record(error || new Error("failed")); }
   };
-  var pm = { environment: env, variables: env, env: env, request: request, response: response, test: test, expect: __expect,
-    info: { requestName: input.name, eventName: input.kind === "pre" ? "prerequest" : "test" } };
-  var error;
+  var pm = { environment: env, variables: env, env: env, globals: env, collectionVariables: env, request: request, response: response, test: test, expect: __expect,
+    info: { requestName: input.name, eventName: input.kind === "pre" ? "prerequest" : "test" },
+    sendRequest: function () { throw new Error("pm.sendRequest isn't available: scripts here have no network. Send that request from its own tab, and save what you need with a test script."); } };
+  var error, errorLine;
   try {
     await __run(pm, env, request, response, test, __expect, console);
     await Promise.all(pending);
   } catch (e) {
     error = __show(e);
+    // Where in the script: the first place in this worker's own code that the stack names.
+    var at = e && typeof e.stack === "string" ? /blob:[^\s)]*:(\d+):\d+/.exec(e.stack) : null;
+    if (at) errorLine = Number(at[1]);
   }
   postMessage({
-    tests: tests, logs: logs, variables: changes, error: error,
+    tests: tests, logs: logs, variables: changes, error: error, errorLine: errorLine,
     request: input.kind === "pre" ? { method: String(request.method), url: String(request.url), headers: request.headers.all(), body: request.body == null ? null : String(request.body) } : undefined
   });
 };

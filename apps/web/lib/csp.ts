@@ -75,6 +75,20 @@ export const PREVIEW_FRAME_CSP = [
   "frame-ancestors 'self'",
 ].join("; ");
 
+/**
+ * The policy of /frames/script, where API Studio's pre-request and test scripts run, in a worker (components/room/tools/api-studio/script-sandbox.ts).
+ * Nothing but the page's own script and the worker it makes from a blob: no network at all (the worker inherits this), no eval, no frames, no forms.
+ * `sandbox` gives it an opaque origin however it's reached, so it can't read this site or its cookies.
+ */
+export const SCRIPT_FRAME_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline' blob:",
+  "worker-src blob:",
+  "connect-src 'none'",
+  "sandbox allow-scripts",
+  "frame-ancestors 'self'",
+].join("; ");
+
 /** A nonce for one response: 128 random bits, in base64. */
 export function newNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));

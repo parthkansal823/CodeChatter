@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { SandboxCommit } from "./room-events.js";
+
 /**
  * The sandbox agent protocol: newline-delimited JSON over the room container's
  * attached stdin/stdout (sandbox/agent ↔ apps/runner). It works with the
@@ -46,7 +48,9 @@ export type AgentEvent =
   | { ev: "tcp_closed"; conn: number; error?: string }
   | { ev: "gw_open"; conn: number }
   | { ev: "gw_data"; conn: number; b64: string }
-  | { ev: "gw_closed"; conn: number };
+  | { ev: "gw_closed"; conn: number }
+  /** Commits made in the sandbox's git (/workspace/.git), read from its reflog as they're made: a room event for automations. */
+  | { ev: "git"; branch: string | null; commits: SandboxCommit[] };
 
 /** Live facts about a room's sandbox, for the Ports and resources panel. */
 export type SandboxStatus = {

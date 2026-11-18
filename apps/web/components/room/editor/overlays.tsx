@@ -1,6 +1,7 @@
 "use client";
 
 import type { TreeNode } from "@codechatter/workspace-model";
+import { ToursBridge } from "@/components/room/tools/tours/tours-bridge";
 
 import { CommandPalette, useEditorCommands, type PaletteCommand } from "./command-palette";
 import { FilePicker } from "./file-picker";
@@ -8,6 +9,7 @@ import { KeyboardShortcuts } from "./keyboard-shortcuts";
 import { SettingsDialog } from "./settings-dialog";
 import { useKeyCommands } from "./shortcuts";
 import { useEditorUi } from "./ui-store";
+import { useRoomFiles } from "./room-files";
 
 type Props = {
   openFile: (node: TreeNode) => void;
@@ -21,6 +23,7 @@ type Props = {
  * Open, or a file picker for another command. The palette's commands are keys' commands too.
  */
 export function EditorOverlays({ openFile, activeFile, commands }: Props) {
+  const files = useRoomFiles();
   const overlay = useEditorUi((state) => state.overlay);
   const close = useEditorUi((state) => state.close);
   const onOpenChange = (open: boolean) => !open && close();
@@ -42,6 +45,7 @@ export function EditorOverlays({ openFile, activeFile, commands }: Props) {
 
   return (
     <>
+      <ToursBridge openFile={(id) => { const file = files.find((file) => file.id === id); if (file) openFile(file); }} />
       <SettingsDialog open={overlay?.kind === "settings"} onOpenChange={onOpenChange} />
       <KeyboardShortcuts open={overlay?.kind === "shortcuts"} onOpenChange={onOpenChange} />
       {overlay?.kind === "palette" && (

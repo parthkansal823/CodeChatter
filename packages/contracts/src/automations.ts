@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 
-import { CALLED_FLOW_EVENT, ERROR_FLOW_EVENT, isRoomEvent, pathsProblem, type RoomEventSettings } from "./room-events.js";
+import { CALLED_FLOW_EVENT, ERROR_FLOW_EVENT, isRoomEvent, keptRoomEvent, pathsProblem, startsWithProblem, type RoomEventSettings } from "./room-events.js";
 import { scheduleProblem } from "./schedule.js";
 
 /** Flows live in the room's files, so they're edited together, versioned, and can leave. */
@@ -85,12 +85,15 @@ export const RoomEventInput = z
       .refine((event) => event !== ERROR_FLOW_EVENT, "An error flow isn't turned on: choose it under \"If it fails, run\" on the flow it's for.")
       .refine((event) => event !== CALLED_FLOW_EVENT, "A flow called by others isn't turned on: choose it in another flow's \"Call a flow\" step."),
     paths: z.string().max(4000).optional(),
+    startsWith: z.string().max(400).optional(),
   })
   .superRefine((input, context) => {
     const problem = pathsProblem(input.paths);
     if (problem) context.addIssue({ code: "custom", message: problem, path: ["paths"] });
+    const start = startsWithProblem(input.startsWith);
+    if (start) context.addIssue({ code: "custom", message: start, path: ["startsWith"] });
   })
-  .transform((input): RoomEventSettings => (input.event === "files.changed" && input.paths?.trim() ? { event: input.event, paths: input.paths.trim() } : { event: input.event as RoomEventSettings["event"] }));
+  .transform((input): RoomEventSettings => keptRoomEvent(input as RoomEventSettings));
 export const AutomationTriggerInput = z
   .object({
     path: FlowFile,

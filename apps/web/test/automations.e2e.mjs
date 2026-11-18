@@ -501,6 +501,22 @@ try {
   await listening.getByRole("group", { name: "Are you sure?" }).getByRole("button", { name: "Forget it" }).click();
   check("aRoomEventCanBeForgotten", await ok(listening.getByRole("button", { name: "Turn on" }).waitFor({ timeout: 10_000 })));
 
+  // ---- What people do: a Run failing keeps the files asked for, and the chat asks what a message starts with ----
+  await onFiles.getByRole("combobox", { name: "When" }).selectOption({ label: "A run fails" });
+  const onRun = details.getByRole("region", { name: "Step A run fails" });
+  check("aRunFailingIsOneToo", await ok(onRun.waitFor({ timeout: 10_000 })));
+  check("itKeepsTheFilesAskedFor", (await onRun.getByRole("textbox", { name: "Runs of which files" }).inputValue()) === "src/**/*.py");
+  await onRun.getByRole("combobox", { name: "When" }).selectOption({ label: "A chat message" });
+  const onChat = details.getByRole("region", { name: "Step A chat message" });
+  const startsWith = onChat.getByRole("textbox", { name: "Only messages that start with" });
+  check("theChatAsksWhatAMessageStartsWith", (await ok(startsWith.waitFor({ timeout: 10_000 }))) && (await onChat.getByRole("textbox", { name: /files/ }).count()) === 0);
+  await startsWith.fill("/deploy");
+  await onChat.getByRole("button", { name: "Use it as what to send" }).click();
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  const sentExample = JSON.parse(await details.getByLabel("What to send, as JSON").inputValue());
+  check("itsExampleIsACommand", sentExample.event === "chat.message" && sentExample.data?.args === "staging", sentExample);
+  await chart.getByRole("button", { name: /^Step A chat message/ }).click();
+
   // ---- An error flow: nothing to turn on, and each flow names its own under "If it fails, run" ----
   await details.getByRole("button", { name: "Change the trigger" }).click();
   await details.getByPlaceholder(/^Search \d+ triggers$/).fill("another flow fails");

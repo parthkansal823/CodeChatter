@@ -41,6 +41,7 @@ const SUITES = [
     ["automation-error-flow", "automation-error-flow"],
     ["automation-subflows", "automation-subflows"],
     ["automation-wait", "automation-wait"],
+    ["lighthouse-runner", "lighthouse"],
   ]),
   ...service("apps/collab", [
     ["collab", "collab"],
@@ -110,6 +111,7 @@ const SUITES = [
     "mermaid",
     "diagrams",
     "preview",
+    "room-browser",
   ].map((name) => ({ name, cwd: "apps/web", file: `test/${name}.e2e.mjs`, browser: true })),
 ];
 

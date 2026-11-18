@@ -7,8 +7,13 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import {
+  CHAT_EVENT,
+  chatCommandOf,
   dueRun,
+  eventNamesOf,
+  hasPaths,
   isRoomEvent,
+  keptRoomEvent,
   matchesPaths,
   MOST_TRIGGERS,
   nextRun,
@@ -17,6 +22,7 @@ import {
   roomEventOf,
   scheduleOf,
   scheduleProblem,
+  startsWithProblem,
   type AutomationRun,
   type AutomationTestEvent,
   type AutomationTrigger,
@@ -454,7 +460,9 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     if (!event || typeof event.room !== "string" || !/^[A-Z0-9]{6}$/.test(event.room) || !isRoomEvent(event.event)) return 0;
     const room = await this.repository.findById(event.room);
     if (!room || room.kind === "interview") return 0;
-    const listening = Object.values(this.entries<Stored>(room.settings, TRIGGERS)).filter((trigger) => trigger.kind === "event" && trigger.enabled && trigger.event?.event === event.event);
+    // A Run or tests that failed are listened for as finished, and as failed.
+    const heard = eventNamesOf(event);
+    const listening = Object.values(this.entries<Stored>(room.settings, TRIGGERS)).filter((trigger) => trigger.kind === "event" && trigger.enabled && trigger.event && heard.includes(trigger.event.event));
     if (listening.length === 0) return 0;
     const last = this.entries<LastRun>(room.settings, LAST_RUNS);
     // The audit log knows who by their id; collab already says their name.
@@ -464,11 +472,21 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     const by: RoomEventPerson[] = people.map((each) => (typeof each === "string" ? { id: each, name: names.get(each) ?? "Someone" } : { id: each.id ?? null, name: String(each.name ?? "Someone") }));
     let started = 0;
     for (const trigger of listening) {
+      const listens = trigger.event!;
       let files = event.files;
+      let data = event.data;
       if (event.event === "files.changed") {
         // A folder renamed, moved or deleted takes its files with it; one just made doesn't change any.
-        files = (event.files ?? []).filter((file) => matchesPaths(file.path, trigger.event!.paths, file.kind === "folder" && (file.change === "renamed" || file.change === "moved" || file.change === "deleted") ? "folder" : "file"));
+        files = (event.files ?? []).filter((file) => matchesPaths(file.path, listens.paths, file.kind === "folder" && (file.change === "renamed" || file.change === "moved" || file.change === "deleted") ? "folder" : "file"));
         if (files.length === 0) continue;
+      } else if (hasPaths(listens.event)) {
+        // A Run or tests: of the file asked for.
+        if (!matchesPaths(String(event.data?.path ?? ""), listens.paths)) continue;
+      } else if (listens.event === CHAT_EVENT) {
+        // A message that starts as asked, with what follows it: a command's arguments.
+        const command = chatCommandOf(String(event.data?.text ?? ""), listens.startsWith);
+        if (!command) continue;
+        data = { ...event.data, args: command.args };
       }
       const decision = await this.eventLimiter.hit(trigger.id);
       if (!decision.allowed) {
@@ -476,12 +494,12 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
         continue;
       }
       const payload: RoomEventPayload = {
-        event: event.event,
+        event: listens.event,
         at: new Date(event.at || Date.now()).toISOString(),
         by,
         ...(files && { files }),
         ...(event.event === "files.changed" && event.more ? { more: event.more } : {}),
-        ...(event.data && { data: event.data }),
+        ...(data && { data }),
       };
       if (await this.runTriggered(room.id, trigger, payload, last[trigger.id])) started += 1;
     }
@@ -501,8 +519,8 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       } else {
         const found = roomEventOf({ room: answer.trigger?.room });
         // Kept trimmed, as the API keeps what it's sent.
-        const now = found?.paths ? { ...found, paths: found.paths.trim() } : found;
-        if (now && JSON.stringify(now) !== JSON.stringify(trigger.event) && !pathsProblem(now.paths)) await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, event: now } satisfies Stored);
+        const now = found ? keptRoomEvent(found) : null;
+        if (now && JSON.stringify(now) !== JSON.stringify(trigger.event) && !pathsProblem(now.paths) && !startsWithProblem(now.startsWith)) await this.repository.setSettingEntry(roomId, TRIGGERS, trigger.id, { ...trigger, event: now } satisfies Stored);
       }
       return true;
     } catch (error) {

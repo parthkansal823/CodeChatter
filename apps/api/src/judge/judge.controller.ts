@@ -1,12 +1,15 @@
 import type { AuthSession } from "@codechatter/auth";
 import { JudgeInput, RoomCode } from "@codechatter/contracts";
-import { BadRequestException, Body, Controller, HttpCode, Logger, Param, Post, Res, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, HttpCode, Inject, Logger, Optional, Param, Post, Res, UnprocessableEntityException } from "@nestjs/common";
 import type { Response } from "express";
+import type { Redis } from "ioredis";
 import { z } from "zod";
 
 import { CurrentSession } from "../auth/current-session.decorator.js";
+import { queueRoomEvent, TestsWatcher } from "../automations/room-activity.js";
 import { ZodPipe } from "../common/zod.pipe.js";
 import { RoomsService } from "../rooms/rooms.service.js";
+import { VALKEY } from "../infra/tokens.js";
 import { RunnerClient } from "../runner/runner.client.js";
 import { isImportableUrl, parseProblem, type ImportedProblem } from "./samples.js";
 
@@ -20,6 +23,7 @@ export class JudgeController {
   constructor(
     private readonly rooms: RoomsService,
     private readonly runner: RunnerClient,
+    @Optional() @Inject(VALKEY) private readonly redis?: Redis,
   ) {}
 
   /** Streams one JSON line per event (compiling, each case's verdict, done) straight from the runner. */
@@ -36,16 +40,22 @@ export class JudgeController {
     const upstream = await this.runner.judge(room.data, session.user, input);
     res.status(200).setHeader("content-type", "application/x-ndjson").setHeader("cache-control", "no-store");
     res.flushHeaders();
+    // For automations listening for tests: what they came to, read as it goes past.
+    const watcher = new TestsWatcher(input.path, input.cases.length);
     try {
       for await (const chunk of upstream) {
         if (res.destroyed) break;
         res.write(chunk);
+        watcher.feed(chunk as Buffer | string);
       }
     } catch (error) {
       this.logger.warn(`judge ${room.data}: ${String(error)}`);
       res.write(`${JSON.stringify({ type: "error", message: "The sandbox stopped answering." })}\n`);
     }
     res.end();
+    const tests = watcher.result();
+    if (tests && this.redis)
+      void queueRoomEvent(this.redis, { room: room.data, event: "tests.finished", at: Date.now(), by: [session.user.id], data: tests }).catch((error) => this.logger.warn(`tests event: ${String(error)}`));
   }
 
   /** Sample tests from a Codeforces, AtCoder or CSES problem page. */

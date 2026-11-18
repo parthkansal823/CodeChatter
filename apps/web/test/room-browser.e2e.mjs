@@ -124,7 +124,7 @@ try {
   await tools.getByRole("button", { name: "Run Lighthouse" }).click();
   check("lighthouseSaysItsRunning", await ok(tools.getByRole("status").getByText(/Running Lighthouse on \//).waitFor({ timeout: 5000 })));
   const scores = tools.getByRole("list", { name: "Scores" });
-  check("lighthouseGivesAScore", await ok(scores.getByText("SEO").waitFor({ timeout: 180_000 })) && /^\d+$/.test((await scores.getByRole("listitem").first().innerText()).split("\n")[0]!.trim()), await tools.innerText().catch(() => ""));
+  check("lighthouseGivesAScore", await ok(scores.getByText("SEO").waitFor({ timeout: 180_000 })) && /^\d+$/.test((await scores.getByRole("listitem").first().innerText()).split("\n")[0].trim()), await tools.innerText().catch(() => ""));
   check("andWhatToFix", await ok(tools.getByRole("region", { name: /SEO: what to fix/ }).getByText(/meta description/i).first().waitFor({ timeout: 5000 })));
   await tools.getByRole("button", { name: "The full report" }).click();
   const report = a.getByRole("dialog", { name: "Lighthouse's report" });

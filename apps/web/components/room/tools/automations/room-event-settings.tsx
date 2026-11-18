@@ -1,17 +1,33 @@
 /**
- * A flow started by what happens in its room (packages/contracts/src/room-events.ts), on its trigger's panel: which event, and for files, which ones (globs);
- * an example of what the flow is given, to try it with; and turning it on, as the schedule's and webhook's panels do. Changing what it listens for while it's
+ * A flow started by what happens in its room (packages/contracts/src/room-events.ts), on its trigger's panel: which event; for files, a Run or tests, which
+ * files (globs), and for the chat, what a message starts with; an example of what the flow is given, to try it with; and turning it on, as the schedule's and webhook's panels do. Changing what it listens for while it's
  * on changes it at once. Kept with the room by the API, so it runs with nobody in the room; what the room's own runs change doesn't count.
  */
 "use client";
 
-import { CALLED_FLOW_EVENT, ERROR_FLOW_EVENT, FLOW_TO_FLOW_EVENTS, pathsProblem, ROOM_EVENT_NAMES, ROOM_EVENTS, type AutomationTrigger, type RoomEventName, type RoomEventPayload, type RoomEventSettings } from "@codechatter/contracts";
+import {
+  CALLED_FLOW_EVENT,
+  CHAT_EVENT,
+  ERROR_FLOW_EVENT,
+  FLOW_TO_FLOW_EVENTS,
+  hasPaths,
+  keptRoomEvent,
+  pathsProblem,
+  ROOM_EVENT_NAMES,
+  ROOM_EVENTS,
+  startsWithProblem,
+  type AutomationTrigger,
+  type RoomEventName,
+  type RoomEventPayload,
+  type RoomEventSettings,
+} from "@codechatter/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Power, Trash2 } from "lucide-react";
 import { useEffect, useEffectEvent, useId, useState } from "react";
 
 import { useRoom } from "@/components/room/room-context";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 
@@ -20,8 +36,8 @@ import type { Flow } from "./model";
 
 const failure = (error: unknown) => (error instanceof ApiError ? error.message : "Couldn't reach the server. Try again.");
 const field = "h-7 min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring";
-/** As the API keeps it: the patterns trimmed, and none at all when there are none. The file keeps what was typed, a newline being typed included. */
-const kept = (settings: RoomEventSettings | null): RoomEventSettings | null => (settings ? (settings.event === "files.changed" && settings.paths?.trim() ? { event: settings.event, paths: settings.paths.trim() } : { event: settings.event }) : null);
+/** As the API keeps it: what the event takes, trimmed, and nothing when it's empty. The file keeps what was typed, a newline being typed included. */
+const kept = (settings: RoomEventSettings | null): RoomEventSettings | null => (settings ? keptRoomEvent(settings) : null);
 const same = (a: RoomEventSettings | null, b: RoomEventSettings | null) => JSON.stringify(kept(a)) === JSON.stringify(kept(b));
 
 /** What a flow on this event is given, to try it with before anything happens. */
@@ -36,6 +52,32 @@ export function exampleOf(event: RoomEventName, me: { id: string; name: string }
       workflow: { id: "flow_…", name: "Sync the orders", path: "automations/sync-orders.flow.json" },
     };
   if (event === "files.changed") return { ...base, files: [{ path: "src/app.py", kind: "file", change: "changed" }, { path: "src/new_module.py", kind: "file", change: "added" }] };
+  if (event === "run.failed" || event === "run.finished")
+    return {
+      ...base,
+      data: { path: "src/app.py", command: "python3 src/app.py", runId: "run_…", code: 1, reason: "exit", durationMs: 840, failed: true, output: "Traceback (most recent call last):\n  File \"src/app.py\", line 3, in <module>\nZeroDivisionError: division by zero\n" },
+    };
+  if (event === "tests.failed" || event === "tests.finished")
+    return {
+      ...base,
+      data: {
+        path: "solution.cpp",
+        passed: 1,
+        total: 2,
+        failed: true,
+        cases: [
+          { index: 0, verdict: "passed", timeMs: 12, stdout: "3\n", stderr: "" },
+          { index: 1, verdict: "failed", timeMs: 9, stdout: "4\n", stderr: "" },
+        ],
+      },
+    };
+  if (event === "git.commit")
+    return {
+      ...base,
+      by: [{ id: null, name: me.name }],
+      data: { branch: "main", commits: [{ commit: "4f2a9c1…", parent: "9b1e0d7…", kind: "commit", message: "Fix the parser", author: { name: me.name, email: "you@example.com" }, at: base.at }] },
+    };
+  if (event === CHAT_EVENT) return { ...base, data: { id: "msg_…", text: "/deploy staging", args: "staging" } };
   if (event === "repo.commit") return { ...base, data: { branch: "main", sha: "4f2a9c1", files: 3 } };
   if (event === "repo.pull-request") return { ...base, data: { number: 42, url: "https://github.com/you/repo/pull/42" } };
   if (event === "repo.publish") return { ...base, data: { repo: "you/repo" } };
@@ -52,9 +94,10 @@ export function RoomEventSettings({ flow, path, room: settings, canRun, canEdit,
   const [problem, setProblem] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const pathsHelp = useId();
+  const startHelp = useId();
   const triggers = useQuery({ queryKey: key, queryFn: () => api<AutomationTrigger[]>(`/api/rooms/${room.id}/automations/triggers`), enabled: canRun, retry: false });
   const trigger = triggers.data?.find((each) => each.kind === "event" && each.flowId === flow.id) ?? null;
-  const wrongPaths = settings.event === "files.changed" ? pathsProblem(settings.paths) : null;
+  const wrongPaths = hasPaths(settings.event) ? pathsProblem(settings.paths) : settings.event === CHAT_EVENT ? startsWithProblem(settings.startsWith) : null;
   const changed = Boolean(trigger && !wrongPaths && !same(settings, trigger.event));
 
   /** What it listens for, in the flow's file; its name follows the event while it's still the event's own. */
@@ -106,7 +149,16 @@ export function RoomEventSettings({ flow, path, room: settings, canRun, canEdit,
       <section aria-label="What starts it" className="grid gap-2">
         <label className="grid gap-1">
           When
-          <select className={field} disabled={!canEdit} value={settings.event} onChange={(event) => setRoom({ event: event.target.value as RoomEventName, ...(event.target.value === "files.changed" && settings.paths && { paths: settings.paths }) })}>
+          <select
+            className={field}
+            disabled={!canEdit}
+            value={settings.event}
+            onChange={(event) => {
+              const next = event.target.value as RoomEventName;
+              // The files asked for carry over between files, a Run and tests; the chat's start, only to itself.
+              setRoom({ event: next, ...(hasPaths(next) && hasPaths(settings.event) && settings.paths && { paths: settings.paths }) });
+            }}
+          >
             {ROOM_EVENT_NAMES.map((name) => (
               <option key={name} value={name}>
                 {ROOM_EVENTS[name].label}
@@ -115,20 +167,40 @@ export function RoomEventSettings({ flow, path, room: settings, canRun, canEdit,
           </select>
         </label>
         <p className="text-muted-foreground">{ROOM_EVENTS[settings.event].about}</p>
-        {settings.event === "files.changed" && (
+        {hasPaths(settings.event) && (
           <label className="grid gap-1">
-            Which files
+            {settings.event === "files.changed" ? "Which files" : settings.event.startsWith("run.") ? "Runs of which files" : "Tests of which files"}
             <Textarea
               aria-describedby={pathsHelp}
               className="min-h-14 font-mono text-[11px] md:text-[11px]"
               spellCheck={false}
               readOnly={!canEdit}
-              placeholder="src/**/*.py"
+              placeholder={settings.event === "files.changed" ? "src/**/*.py" : "**/*.py"}
               value={settings.paths ?? ""}
-              onChange={(event) => setRoom({ event: "files.changed", ...(event.target.value && { paths: event.target.value }) })}
+              onChange={(event) => setRoom({ event: settings.event, ...(event.target.value && { paths: event.target.value }) })}
             />
             <span id={pathsHelp} className={wrongPaths ? "text-destructive" : "text-muted-foreground"}>
-              {wrongPaths ?? "Patterns, one a line or comma-separated: ** is any folders, * any name. Empty is every file. It runs a few seconds after people stop typing, once for all they changed."}
+              {wrongPaths ??
+                (settings.event === "files.changed"
+                  ? "Patterns, one a line or comma-separated: ** is any folders, * any name. Empty is every file. It runs a few seconds after people stop typing, once for all they changed."
+                  : "Patterns, one a line or comma-separated: ** is any folders, * any name. Empty is any file.")}
+            </span>
+          </label>
+        )}
+        {settings.event === CHAT_EVENT && (
+          <label className="grid gap-1">
+            Only messages that start with
+            <Input
+              aria-describedby={startHelp}
+              className="h-7 font-mono text-xs md:text-xs"
+              spellCheck={false}
+              readOnly={!canEdit}
+              placeholder="/deploy"
+              value={settings.startsWith ?? ""}
+              onChange={(event) => setRoom({ event: CHAT_EVENT, ...(event.target.value && { startsWith: event.target.value }) })}
+            />
+            <span id={startHelp} className={wrongPaths ? "text-destructive" : "text-muted-foreground"}>
+              {wrongPaths ?? "Such as /deploy, to make a command: the flow gets what follows it as data.args. Case doesn't matter. Empty is every message."}
             </span>
           </label>
         )}

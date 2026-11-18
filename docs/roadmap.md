@@ -90,6 +90,7 @@ flowchart TD
 - 🟡 **Kubernetes** (§14 F): the playground, the panel, a Kubernetes-aware editor, the Helm chart, a Kubernetes runner driver and a free demo
 - ✅ **GitHub** (§14 E): sign in, import, source control, pull requests, webhooks, export
 - ✅ **A tidier room** (§1): the apps under one Apps list, pinned ones in the bar, and a shorter title bar
+- ✅ **The room's browser** (§2): a dev server's page beside the code, with DevTools (Console, Network, Elements, Performance, SEO, storage), click to code for React, Vue, Svelte and plain HTML, and Google's Lighthouse
 
 ## Step 4 · AI copilot and agent 🟡
 

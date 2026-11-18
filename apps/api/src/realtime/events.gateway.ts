@@ -34,6 +34,7 @@ import { MessagesService } from "../messages/messages.service.js";
 import { bindSocketMetrics, chatMessages } from "../metrics/metrics.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { RoomsService } from "../rooms/rooms.service.js";
+import { queueRoomEvent, runEventOf } from "../automations/room-activity.js";
 import { RunnerClient, RunnerUnavailableError } from "../runner/runner.client.js";
 import { LiveSockets } from "./live-sockets.js";
 
@@ -183,6 +184,7 @@ export class EventsGateway implements OnGatewayInit, OnModuleDestroy {
     void this.notifications.notifyMentions(input.data.roomId, session.user.id, message.body).catch((error) => this.logger.warn(`mentions: ${String(error)}`));
     // Everyone else gets it from the broadcast; the sender from the ack.
     socket.to(channel(input.data.roomId)).emit("chat:message", message);
+    void this.chatEvent(input.data.roomId, session.user.id, message).catch((error) => this.logger.warn(`chat event: ${String(error)}`));
     this.logger.debug(`chat ${input.data.roomId} ${message.id}`);
     return { ok: true, data: message };
   }
@@ -209,18 +211,24 @@ export class EventsGateway implements OnGatewayInit, OnModuleDestroy {
       };
       // Notices that arrive before the run has an id are sent right after it starts.
       const early: string[] = [];
+      // For automations listening for a Run ending: what ran, and the end of what it printed.
+      let started: RunInfo | null = null;
+      let printed = "";
       void (async () => {
         try {
           for await (const event of this.runner.start(roomId, user, { path, stateVector })) {
             if (event.type === "started") {
+              started = event.run;
               room.emit("run:started", event.run);
               for (const data of early.splice(0)) room.emit("run:output", { runId: event.run.id, data });
               answer({ ok: true, data: event.run });
             } else if (event.type === "output") {
               if (event.runId) room.emit("run:output", { runId: event.runId, data: event.data });
               else early.push(event.data);
+              printed = (printed + event.data).slice(-16_000);
             } else if (event.type === "exit") {
               room.emit("run:exit", event.exit);
+              if (started) void queueRoomEvent(this.valkey, runEventOf(roomId, started, event.exit, printed)).catch((error) => this.logger.warn(`run event: ${String(error)}`));
             } else if (event.type === "error") {
               answer({ ok: false, error: event.message });
             }
@@ -232,6 +240,12 @@ export class EventsGateway implements OnGatewayInit, OnModuleDestroy {
         }
       })();
     });
+  }
+
+  /** A chat message, for automations listening for one: once, though a retried send returns the same message. */
+  private async chatEvent(roomId: string, userId: string, message: ChatMessage): Promise<void> {
+    if (!(await this.valkey.set(`automations:chat:${message.id}`, "1", "EX", 3600, "NX"))) return;
+    await queueRoomEvent(this.valkey, { room: roomId, event: "chat.message", at: Date.parse(message.createdAt) || Date.now(), by: [userId], data: { id: message.id, text: message.body } });
   }
 
   @SubscribeMessage("run:stop")

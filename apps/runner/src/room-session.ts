@@ -18,6 +18,7 @@ import { RunManager } from "./runs.js";
 import { KubeSandbox, roomNamespace, type Kube } from "./kube-sandbox.js";
 import { DebugHub } from "./debug.js";
 import { NotebookKernels } from "./notebooks.js";
+import { sendCommits } from "./room-events.js";
 import { LABEL_MANAGED, LABEL_NAMESPACE, LABEL_ROLE, LABEL_ROOM, listWarm, Sandbox, type RoomSandbox } from "./sandbox.js";
 import { TunnelHub } from "./tunnel.js";
 import { WarmIndex } from "./warm-cache.js";
@@ -71,6 +72,7 @@ export class RoomSession {
       if (event.ev === "ports") this.ports = event.ports;
       else if (event.ev === "tcp_connected" || event.ev === "tcp_data" || event.ev === "tcp_closed") this.tunnels.handle(event);
       else if (event.ev === "gw_open" || event.ev === "gw_data" || event.ev === "gw_closed") this.gateway.handle(event);
+      else if (event.ev === "git") sendCommits({ apiUrl: env.API_INTERNAL_URL, secret: env.SERVICE_SECRET }, roomId, event);
       else this.sync.applyFromSandbox(event);
     };
     this.sandbox.onAgentClosed = () => {

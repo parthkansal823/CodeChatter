@@ -137,7 +137,7 @@ try {
       await step(page, `${theme} room, ${tab} tab`, () => panelTabs.getByRole("tab", { name: new RegExp(`^${tab}`) }).click());
     }
     await step(page, `${theme} room, a terminal`, () => page.getByRole("button", { name: "New terminal" }).click());
-    for (const app of ["Docs", "API", "Tasks", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Automations", "Design", "Whiteboard", "Diagrams"]) {
+    for (const app of ["Docs", "API", "Tasks", "Tours", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Automations", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => openApp(page, app));
     }
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.

@@ -1,6 +1,7 @@
 "use client";
 
 import type { HocuspocusProvider } from "@hocuspocus/provider";
+import { parseDocName } from "@codechatter/workspace-model";
 import * as Y from "yjs";
 
 import { attachBreakpoints } from "@/components/room/debug/breakpoint-gutter";
@@ -20,6 +21,7 @@ import { liveEditors, modelOwner } from "./file-models";
 import { attachRemoteCursors } from "./remote-cursors";
 import { applyPendingReveal } from "./reveal";
 import { bindEditorChords } from "./shortcuts";
+import { attachTourMarks } from "./tour-marks";
 
 type Editor = monaco.editor.IStandaloneCodeEditor;
 
@@ -37,6 +39,8 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
   const unregister = registerPane(role, editor);
   const cursors = attachRemoteCursors(editor, doc, awareness);
   const breakpoints = attachBreakpoints(editor, doc);
+  const roomId = parseDocName(provider.configuration.name)?.roomId;
+  const tours = roomId ? attachTourMarks(editor, roomId, doc) : null;
 
   const announceFile = (source: Editor | null) =>
     provider.setAwarenessField("activeFileId", modelOwner(source?.getModel() ?? null)?.fileId ?? null);
@@ -108,6 +112,7 @@ export function wireEditor(editor: Editor, role: PaneRole, provider: HocuspocusP
       listeners.forEach((l) => l.dispose());
       cursors.dispose();
       breakpoints.dispose();
+      tours?.dispose();
       liveEditors.delete(editor);
       unregister();
       // Closing the pane you were in puts you back in the main editor, and so does your presence.

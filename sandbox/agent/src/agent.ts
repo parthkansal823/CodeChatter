@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import type { AgentEvent, AgentOp, TunnelOp } from "@codechatter/contracts";
 
 import { Gateway } from "./gateway.js";
+import { ReflogWatcher } from "./git-log.js";
 import { startRelay } from "./relay.js";
 import { Tunnels, watchPorts } from "./tunnel.js";
 import { TreeWatcher } from "./watcher.js";
@@ -15,7 +16,8 @@ import { Workspace } from "./workspace.js";
  *
  * Down: the runner sends the room's files; the agent writes them.
  * Up:   the agent watches /workspace and reports what programs and the
- *       terminal change, so it shows up in everyone's editor.
+ *       terminal change, so it shows up in everyone's editor; and commits
+ *       made in its git, for automations (git-log.ts).
  */
 process.umask(0o002); // files stay group-writable for ccuser (group 10000)
 
@@ -65,6 +67,7 @@ const gateway = new Gateway(emit);
 await watcher.watchTree();
 emit({ ev: "ready", pid: process.pid, uid: process.getuid?.() ?? -1 });
 watchPorts(emit);
+new ReflogWatcher(workspace.root, emit).start();
 startRelay();
 gateway.start();
 

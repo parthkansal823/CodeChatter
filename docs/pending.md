@@ -62,6 +62,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - an Ingress with cert-manager and the wildcard preview host;
   - CloudNativePG;
   - NetworkPolicies for the app's namespace.
+- ⬜ The room's browser, later: click to code for Angular and Solid (they leave nothing on an element saying where its code is), slowing the network to a phone's, and breakpoints in the page's own JavaScript (the shared debugger does the server's)
 - ⬜ Scale and run: autoscaling (HPA, KEDA), images built to GHCR, Argo CD
 
 ## Step 4 · AI copilot and agent
@@ -180,7 +181,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - only sign-in and the AI have rate limits: there's none on the API as a whole;
   - a Cloudflare Tunnel carries no UDP, so calls would need LiveKit Cloud, and Caddy would have to pass on `CF-Connecting-IP`, or everyone shares one sign-in limit;
   - docker: `internal` networks publish no ports, and Caddy's image won't start with every capability dropped;
-  - a dev server's preview isn't routed in production (`PREVIEW_ORIGIN`, a wildcard host).
+  - a dev server's preview isn't routed in production (`PREVIEW_ORIGIN`, a wildcard host). The web needs `PREVIEW_ORIGIN` too: the room's browser is a frame on that host, and the app's security policy only lets it in when the web knows it.
 - ⬜ Backups, later: `restore --into-live` drops the live database before restoring it. The file has been checked by then, but restoring beside it and renaming would leave nothing at risk. And a backup that fails isn't tried again until the next day.
 - ⬜ OpenTelemetry traces
 - ⬜ End-to-end tests in CI: `new-room`, the first browser suite, has needed its retry in both runs we've read (it crashes on its first try, then passes). Worth finding out why.

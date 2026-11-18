@@ -65,6 +65,7 @@ import { ReferencesController } from "./references/references.controller.js";
 import { ReferencesService } from "./references/references.service.js";
 import { DependenciesService } from "./dependencies/dependencies.service.js";
 import { AutomationHooksController } from "./automations/automation-hooks.controller.js";
+import { RoomEventsController } from "./automations/room-events.controller.js";
 import { AutomationTriggersController } from "./automations/automation-triggers.controller.js";
 import { AutomationTriggersService } from "./automations/automation-triggers.service.js";
 
@@ -84,7 +85,7 @@ const dev = process.env.NODE_ENV !== "production";
     }),
     InfraModule,
   ],
-  controllers: [HealthController, MeController, GithubController, MetaController, ReferencesController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, AiGatewayController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController, InterviewRecordingsController, InterviewAiReviewController, AutomationTriggersController, AutomationHooksController],
+  controllers: [HealthController, MeController, GithubController, MetaController, ReferencesController, RoomsController, RoomPeopleController, MessagesController, SandboxController, DatabasesController, SqliteController, DuckdbController, NotebooksController, KubernetesController, SourceControlController, WebhookController, CheckpointsController, NotificationsController, CallsController, AiController, AiGatewayController, JudgeController, HttpStudioController, DemoController, AuditController, WebhooksController, DependenciesController, BlobsController, GitController, InterviewsController, InterviewInvitesController, InterviewTestsController, InterviewRecordingsController, InterviewAiReviewController, AutomationTriggersController, AutomationHooksController, RoomEventsController],
   providers: [
     AutomationTriggersService,
     AiService,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { globsOf, globToRegExp, matchesPaths, pathsProblem, roomEventOf } from "./room-events.js";
+import { AutomationTriggerInput } from "./automations.js";
+import { chatCommandOf, eventNamesOf, globsOf, globToRegExp, keptRoomEvent, matchesPaths, pathsProblem, roomEventOf, startsWithProblem } from "./room-events.js";
 
 describe("which files", () => {
   it("matches globs the usual way", () => {
@@ -60,5 +61,47 @@ describe("a flow's room event", () => {
     expect(roomEventOf({ room: { event: "made.up" } })).toBeNull();
     expect(roomEventOf({ pieceName: "@activepieces/piece-webhook" })).toBeNull();
     expect(roomEventOf(null)).toBeNull();
+  });
+});
+
+describe("Runs, tests, commits and the chat", () => {
+  it("keeps files for a Run or tests, and a start for the chat, and only for them", () => {
+    expect(roomEventOf({ room: { event: "run.failed", paths: "src/*.py" } })).toEqual({ event: "run.failed", paths: "src/*.py" });
+    expect(roomEventOf({ room: { event: "tests.finished", paths: "a.cpp" } })).toEqual({ event: "tests.finished", paths: "a.cpp" });
+    expect(roomEventOf({ room: { event: "chat.message", startsWith: "/deploy ", paths: "x" } })).toEqual({ event: "chat.message", startsWith: "/deploy " });
+    expect(roomEventOf({ room: { event: "git.commit", startsWith: "/x", paths: "x" } })).toEqual({ event: "git.commit" });
+    expect(keptRoomEvent({ event: "chat.message", startsWith: "  /deploy  " })).toEqual({ event: "chat.message", startsWith: "/deploy" });
+    expect(keptRoomEvent({ event: "run.finished", paths: " src/** \n", startsWith: "/x" })).toEqual({ event: "run.finished", paths: "src/**" });
+    expect(keptRoomEvent({ event: "chat.message", startsWith: "   " })).toEqual({ event: "chat.message" });
+  });
+
+  it("listens for a failed Run or failed tests as finished too", () => {
+    expect(eventNamesOf({ event: "run.finished", data: { failed: true } })).toEqual(["run.finished", "run.failed"]);
+    expect(eventNamesOf({ event: "run.finished", data: { failed: false } })).toEqual(["run.finished"]);
+    expect(eventNamesOf({ event: "tests.finished", data: { failed: true } })).toEqual(["tests.finished", "tests.failed"]);
+    expect(eventNamesOf({ event: "chat.message", data: { failed: true } })).toEqual(["chat.message"]);
+  });
+
+  it("takes a chat message that starts as asked, with what follows", () => {
+    expect(chatCommandOf("  /deploy staging now", "/deploy")).toEqual({ args: "staging now" });
+    expect(chatCommandOf("/DEPLOY", "/deploy")).toEqual({ args: "" });
+    expect(chatCommandOf("/deployment is done", "/deploy")).toBeNull();
+    expect(chatCommandOf("please /deploy", "/deploy")).toBeNull();
+    expect(chatCommandOf("bot: run the tests", "bot:")).toEqual({ args: "run the tests" });
+    expect(chatCommandOf("bot:run", "bot:")).toEqual({ args: "run" });
+    expect(chatCommandOf("  hello there ", undefined)).toEqual({ args: "hello there" });
+    expect(chatCommandOf("hello", "  ")).toEqual({ args: "hello" });
+  });
+
+  it("says when a start can't be used, and the API refuses it", () => {
+    expect(startsWithProblem("/deploy")).toBeNull();
+    expect(startsWithProblem(undefined)).toBeNull();
+    expect(startsWithProblem("x".repeat(101))).toBe("Up to 100 characters.");
+    expect(startsWithProblem("/a\n/b")).toMatch(/One line/);
+    const input = { path: "automations/a.flow.json", flowId: "flow_1", kind: "event" };
+    expect(AutomationTriggerInput.parse({ ...input, event: { event: "chat.message", startsWith: " /deploy " } }).event).toEqual({ event: "chat.message", startsWith: "/deploy" });
+    expect(AutomationTriggerInput.safeParse({ ...input, event: { event: "chat.message", startsWith: "/a\n/b" } }).success).toBe(false);
+    expect(AutomationTriggerInput.parse({ ...input, event: { event: "run.failed", paths: "src/**/*.py" } }).event).toEqual({ event: "run.failed", paths: "src/**/*.py" });
+    expect(AutomationTriggerInput.safeParse({ ...input, event: { event: "tests.failed", paths: "/etc/passwd" } }).success).toBe(false);
   });
 });
