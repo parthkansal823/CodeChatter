@@ -49,6 +49,16 @@ export function findCommand(id: string): KeyCommand | undefined {
   return id.includes(".") ? editorAction(id) : undefined;
 }
 
+/**
+ * What the room's tools add to the command palette while they're open (the Automations tool's Run it, Every run, Go to step…): registered with
+ * useKeyCommands under a source starting with "tool:", each with its tool's name as its group.
+ */
+export function toolCommands(): KeyCommand[] {
+  const seen = new Map<string, KeyCommand>();
+  for (const [source, commands] of sources) if (source.startsWith("tool:")) for (const command of commands) if (!seen.has(command.id)) seen.set(command.id, command);
+  return [...seen.values()];
+}
+
 /** Every registered command once, for the shortcuts sheet. */
 export function allKeyCommands(): KeyCommand[] {
   const seen = new Map<string, KeyCommand>();

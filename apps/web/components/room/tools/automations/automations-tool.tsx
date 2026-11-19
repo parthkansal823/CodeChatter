@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type * as Y from "yjs";
 
 import { useFileTree } from "@/components/room/hooks";
+import { useKeyCommands } from "@/components/room/editor/shortcuts";
 import { useRoom } from "@/components/room/room-context";
 import type { RoomToolProps } from "@/components/room/tools/registry";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,33 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
   }
 
   const pieces = manifest.data?.pieces;
+  // In the command palette (Ctrl+Shift+P) while the tool is open, as n8n's command bar: what's in its header, and each automation by name.
+  const group = "Automations";
+  useKeyCommands("tool:automations", [
+    ...(canEdit && pieces ? [{
+        id: "automations.new",
+        label: "New automation",
+        group,
+        run: () => {
+          setView("flow");
+          setNaming(true);
+        },
+      }] : []),
+    ...(flows.length ? [{ id: "automations.every-run", label: "Show every run", group, run: () => setView("runs") }] : []),
+    { id: "automations.examples", label: "Show the examples", group, run: () => setView("examples") },
+    ...(pieces && can("code.run")
+      ? [
+          { id: "automations.connections", label: "Connections…", group, run: () => openConnections() },
+          { id: "automations.internet", label: "The internet for automations…", group, run: () => openInternet() },
+          { id: "automations.variables", label: "Variables…", group, run: () => openVariables() },
+        ]
+      : []),
+    ...flows.map((node) => ({ id: `automations.open:${node.path}`, label: `Open automation: ${node.name.replace(/\.flow\.json$/, "")}`, group, run: () => {
+        setChosen(node.path);
+        setView("flow");
+      },
+    })),
+  ]);
   const taken = (path: string) => Boolean(findByPath(doc, path));
   const addFlow = (flow: Flow) => {
     setWanted(newFlowFile(doc, me.user.id, flow, taken));

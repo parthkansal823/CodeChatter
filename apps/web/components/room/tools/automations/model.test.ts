@@ -4,7 +4,8 @@ import { test } from "node:test";
 import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
 
 import { BUILTINS } from "./builtins";
-import { addSticky, changeSticky, removeSticky, stickiesOf } from "./model";
+import { stepsFromClipboard } from "./clipboard";
+import { addSticky, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, toggleSteps } from "./model";
 import { addBranch, addStep, allSteps, asCopiedStep, canPin, newBuiltinStep, chartOfFlow, CONDITIONS, copyOfStep, isPinned, pinStep, unpinStep, duplicateStep, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeBranch, removeStep, replaceStep, resultsOf, setStepNote, statusOfResult, toggleStep, updateStep, type Branch, type Flow, type FlowStep } from "./model";
 
 const code = (name: string, next: FlowStep | null = null): FlowStep => ({ ...newCodeStep(name), nextAction: next });
@@ -361,4 +362,33 @@ test("notes placed freely on the chart: added, moved, sized, typed in, removed, 
   let many = flow;
   for (let i = 0; i < 50; i++) many = addSticky(many, { x: i, y: 0 })!.flow;
   assert.equal(addSticky(many, { x: 0, y: 0 }), null, "50 at most");
+});
+
+test("several steps chosen together: in the flow's order, done to all at once, copied and pasted one after another", () => {
+  const route = { ...newRouterStep("route"), children: [code("left"), code("right")] };
+  const flow = flowOf(code("a", code("b", { ...route, nextAction: code("c") })));
+  assert.deepEqual(chosenSteps(flow, ["c", "a", "trigger", "gone"]), ["a", "c"], "the flow's order; never the trigger or a step that isn't there");
+  assert.deepEqual(chosenSteps(flow, ["route", "left", "b"]), ["b", "route"], "a router carries what's inside it");
+  const removed = removeSteps(flow, ["a", "route"]);
+  assert.deepEqual(allSteps(removed.trigger).map((step) => step.name), ["trigger", "b", "c"]);
+  const off = toggleSteps(flow, ["a", "b"]);
+  assert.equal(off.off, true);
+  assert.deepEqual(["a", "b"].map((name) => findStep(off.flow, name)!.skip), [true, true]);
+  const mixed = toggleSteps(toggleStep(flow, "a"), ["a", "b"]);
+  assert.equal(mixed.off, true, "off when any of them is on");
+  assert.equal(toggleSteps(off.flow, ["a", "b"]).off, false, "on again when all are off");
+  const copied = copyOfSteps(flow, ["c", "a"]);
+  assert.deepEqual(copied.map((step) => step.name), ["a", "c"]);
+  assert.ok(copied.every((step) => step.nextAction === null), "each without what came after it");
+  const pasted = pasteSteps(flow, { after: "c" }, copied);
+  assert.deepEqual(pasted.names, ["a_1", "c_1"]);
+  assert.deepEqual(allSteps(pasted.flow.trigger).map((step) => step.name).slice(-2), ["a_1", "c_1"], "one after another, where they went");
+});
+
+test("what the system clipboard has: one step, a list of them, or nothing", () => {
+  assert.equal(stepsFromClipboard(code("x")).length, 1);
+  assert.deepEqual(stepsFromClipboard([code("x"), code("y")]).map((step) => step.name), ["x", "y"]);
+  assert.deepEqual(stepsFromClipboard([code("x"), { not: "a step" }]), [], "one that isn't a step spoils the lot");
+  assert.deepEqual(stepsFromClipboard("text"), []);
+  assert.deepEqual(stepsFromClipboard([]), []);
 });

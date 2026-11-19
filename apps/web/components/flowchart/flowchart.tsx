@@ -10,7 +10,7 @@ import "@xyflow/react/dist/base.css";
 import dagre from "@dagrejs/dagre";
 import { Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, getBezierPath, Handle, MarkerType, NodeResizer, Panel, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type EdgeProps, type Node, type NodeChange, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, Check, Loader2, Maximize, Minus, Plus, SkipForward, StickyNote, Trash2, X, type LucideIcon } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -55,7 +55,7 @@ const STATUS: Record<Exclude<FlowchartStatus, "idle">, { icon: LucideIcon; class
   skipped: { icon: SkipForward, className: "text-muted-foreground", border: "border-border" },
 };
 
-type ChartData = FlowchartNode & { selected: boolean; onSelect: (id: string) => void; onFocused: (id: string) => void; menu?: FlowchartMenuItem[]; onKey?: (id: string, event: KeyboardEvent<HTMLButtonElement>) => void };
+type ChartData = FlowchartNode & { selected: boolean; onSelect: (id: string, adding?: boolean) => void; onFocused: (id: string) => void; menu?: FlowchartMenuItem[]; onKey?: (id: string, event: KeyboardEvent<HTMLButtonElement>) => void };
 type ArrowData = { label?: string; onAdd?: () => void; addLabel?: string };
 
 const CONNECTOR = "pointer-events-none !size-px !min-h-0 !min-w-0 !border-0 !bg-transparent";
@@ -87,7 +87,7 @@ const ChartNode = memo(function ChartNode({ data }: NodeProps<Node<ChartData>>) 
   const StatusIcon = status?.icon;
   // React Flow turns clicks off for a node that can't be selected or dragged, and this button is how it's selected.
   const look = cn("pointer-events-auto relative bg-background outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring", status?.border, data.selected && "ring-2 ring-ring", data.muted && "border-dashed");
-  const common = { type: "button" as const, "data-chart-id": data.id, "aria-label": data.description, title: data.description, onClick: () => data.onSelect(data.id), onFocus: () => data.onFocused(data.id), onKeyDown: data.onKey ? (event: KeyboardEvent<HTMLButtonElement>) => data.onKey!(data.id, event) : undefined };
+  const common = { type: "button" as const, "data-chart-id": data.id, "aria-label": data.description, title: data.description, onClick: (event: MouseEvent<HTMLButtonElement>) => data.onSelect(data.id, event.shiftKey || event.ctrlKey || event.metaKey), onFocus: () => data.onFocused(data.id), onKeyDown: data.onKey ? (event: KeyboardEvent<HTMLButtonElement>) => data.onKey!(data.id, event) : undefined };
   return (
     <>
       <Handle type="target" position={Position.Left} isConnectable={false} className={CONNECTOR} />
@@ -163,7 +163,6 @@ function ChartArrow({ id, sourceX, sourceY, targetX, targetY, sourcePosition, ta
 }
 
 type StickyData = FlowchartSticky & { editable: boolean; selected: boolean; onText?: (text: string) => void; onRemove?: () => void };
-export const STICKY_SIZE = { width: 220, height: 120 };
 const without = <T,>(record: Record<string, T>, id: string) => {
   const next = { ...record };
   delete next[id];
@@ -199,20 +198,22 @@ const StickyNode = memo(function StickyNode({ data, selected }: NodeProps<Node<S
   );
 });
 
-/** "Add a note", where the middle of the chart is in view. */
+/** "Add a note": under the boxes, clear of them (each new one a little further along), and the chart fits to show it. */
 function AddSticky({ onAdd }: { onAdd: (at: { x: number; y: number }) => void }) {
   const flow = useReactFlow();
-  const chart = useStore((state) => state.domNode);
   return (
     <Button
       size="xs"
       variant="outline"
       title="A note placed freely on the chart, for whoever reads this flow next"
       onClick={() => {
-        // The middle of the chart on the screen, in the chart's own coordinates.
-        const box = chart?.getBoundingClientRect();
-        const at = box ? flow.screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 }) : { x: 0, y: 0 };
-        onAdd({ x: Math.round(at.x - STICKY_SIZE.width / 2), y: Math.round(at.y - STICKY_SIZE.height / 2) });
+        const nodes = flow.getNodes();
+        const boxes = nodes.filter((node) => node.type !== "sticky");
+        const notes = nodes.length - boxes.length;
+        const left = boxes.length ? Math.min(...boxes.map((node) => node.position.x)) : 0;
+        const bottom = boxes.length ? Math.max(...boxes.map((node) => node.position.y + (node.height ?? BOX.height))) : 0;
+        onAdd({ x: Math.round(left + notes * 24), y: Math.round(bottom + 32 + notes * 24) });
+        setTimeout(() => void flow.fitView(FIT), 100);
       }}
     >
       <StickyNote /> Add a note
@@ -221,6 +222,7 @@ function AddSticky({ onAdd }: { onAdd: (at: { x: number; y: number }) => void })
 }
 
 const NODE_TYPES = { chart: ChartNode, sticky: StickyNode };
+const NONE: readonly string[] = [];
 const EDGE_TYPES = { chart: ChartArrow };
 
 /** Where everything goes. Only what's connected to what changes this, not a thing's status. Labels and + on arrows need room between the columns. */
@@ -298,6 +300,7 @@ export function Flowchart({
   edges,
   selected,
   onSelect,
+  chosen = NONE,
   menuFor,
   onNodeKey,
   toolbar,
@@ -308,7 +311,10 @@ export function Flowchart({
   nodes: readonly FlowchartNode[];
   edges: readonly FlowchartEdge[];
   selected: string | null;
-  onSelect: (id: string) => void;
+  /** A click on a box; `adding` when Shift, Ctrl or Cmd was held, to choose it with others. */
+  onSelect: (id: string, adding?: boolean) => void;
+  /** Boxes chosen together, drawn as the one selected is. */
+  chosen?: readonly string[];
   /** A box's right-click menu (the keyboard's menu key opens it too). */
   menuFor?: (id: string) => FlowchartMenuItem[];
   /** Keys pressed on a focused box. */
@@ -329,9 +335,9 @@ export function Flowchart({
     () =>
       nodes.map((node) => {
         const size = sizeOf(node.shape);
-        return { id: node.id, type: "chart", position: places.get(node.id) ?? { x: 0, y: 0 }, width: size.width, height: size.height, data: { ...node, selected: node.id === selected, onSelect, onFocused: setFocused, ...(menuFor && node.shape !== "add" ? { menu: menuFor(node.id) } : {}), ...(onNodeKey && node.shape !== "add" ? { onKey: onNodeKey } : {}) } };
+        return { id: node.id, type: "chart", position: places.get(node.id) ?? { x: 0, y: 0 }, width: size.width, height: size.height, data: { ...node, selected: node.id === selected || chosen.includes(node.id), onSelect, onFocused: setFocused, ...(menuFor && node.shape !== "add" ? { menu: menuFor(node.id) } : {}), ...(onNodeKey && node.shape !== "add" ? { onKey: onNodeKey } : {}) } };
       }),
-    [nodes, places, selected, onSelect, menuFor, onNodeKey],
+    [nodes, places, selected, chosen, onSelect, menuFor, onNodeKey],
   );
   // A note being moved or sized goes where the pointer is until it's let go, when its place is kept (stickyActions.change).
   const [moving, setMoving] = useState<Record<string, Partial<Omit<FlowchartSticky, "id" | "text">>>>({});
@@ -356,6 +362,7 @@ export function Flowchart({
       }),
     [stickies, moving, chosenSticky, stickyActions],
   );
+  const allNodes = useMemo(() => (stickyNodes.length ? ([...stickyNodes, ...chartNodes] as Node[]) : chartNodes), [stickyNodes, chartNodes]);
   const onNodesChange = (changes: NodeChange[]) => {
     if (!stickyActions) return;
     for (const change of changes) {
@@ -397,7 +404,7 @@ export function Flowchart({
   return (
     <div role="group" aria-label={label} className="cc-flowchart size-full">
       <ReactFlowProvider>
-        <ReactFlow nodes={[...stickyNodes, ...chartNodes] as Node[]} edges={chartEdges} nodeTypes={NODE_TYPES} edgeTypes={EDGE_TYPES} onNodesChange={onNodesChange} onPaneClick={() => setChosenSticky(null)} fitView fitViewOptions={FIT} minZoom={0.2} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} nodesFocusable={false} edgesFocusable={false} disableKeyboardA11y deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null}>
+        <ReactFlow nodes={allNodes} edges={chartEdges} nodeTypes={NODE_TYPES} edgeTypes={EDGE_TYPES} onNodesChange={stickyActions ? onNodesChange : undefined} onPaneClick={stickyActions ? () => setChosenSticky(null) : undefined} fitView fitViewOptions={FIT} minZoom={0.2} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} nodesFocusable={false} edgesFocusable={false} disableKeyboardA11y deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null}>
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--border)" />
           <Zoom shape={shape} />
           <Follow id={selected} />

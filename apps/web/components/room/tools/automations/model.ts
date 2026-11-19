@@ -486,6 +486,53 @@ export function pasteStep(flow: Flow, place: Place, copied: FlowStep): { flow: F
   return { flow: result, name: fresh.name };
 }
 
+/**
+ * Several steps chosen together (n8n's selection), as they come in the flow's order, leaving out the trigger, steps gone, and steps inside another one
+ * chosen (a router or a loop carries what's inside it).
+ */
+export function chosenSteps(flow: Flow, names: readonly string[]): string[] {
+  const wanted = new Set(names);
+  const order = allSteps(flow.trigger).map((step) => step.name);
+  const inside = new Set<string>();
+  for (const name of wanted) {
+    const step = findStep(flow, name);
+    if (!step || name === flow.trigger.name) continue;
+    // What's inside it: a router's branches and a loop's own steps, not what comes after it.
+    for (const start of [...(step.children ?? []), step.firstLoopAction]) for (const child of allSteps(start)) inside.add(child.name);
+  }
+  return order.filter((name) => wanted.has(name) && name !== flow.trigger.name && !inside.has(name));
+}
+
+export function removeSteps(flow: Flow, names: readonly string[]): Flow {
+  return chosenSteps(flow, names).reduce((current, name) => removeStep(current, name), flow);
+}
+
+/** All turned off, or all on again: off if any of them is on. */
+export function toggleSteps(flow: Flow, names: readonly string[]): { flow: Flow; off: boolean } {
+  const chosen = chosenSteps(flow, names);
+  const off = chosen.some((name) => !findStep(flow, name)?.skip);
+  return { flow: chosen.reduce((current, name) => updateStep(current, name, (step) => void (step.skip = off)), flow), off };
+}
+
+/** What copying several takes: each with what's inside it, in the flow's order. */
+export function copyOfSteps(flow: Flow, names: readonly string[]): FlowStep[] {
+  return chosenSteps(flow, names).flatMap((name) => copyOfStep(flow, name) ?? []);
+}
+
+/** Puts copied steps in one after another, the first at `place`: each gets names no step has, as pasting one does. */
+export function pasteSteps(flow: Flow, place: Place, copied: readonly FlowStep[]): { flow: Flow; names: string[] } {
+  let current = flow;
+  let at = place;
+  const names: string[] = [];
+  for (const step of copied) {
+    const pasted = pasteStep(current, at, step);
+    current = pasted.flow;
+    names.push(pasted.name);
+    at = { after: pasted.name };
+  }
+  return { flow: current, names };
+}
+
 export function duplicateStep(flow: Flow, name: string): { flow: Flow; name: string } | null {
   const copy = copyOfStep(flow, name);
   return copy ? pasteStep(flow, { after: name }, copy) : null;

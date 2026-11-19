@@ -8,12 +8,13 @@
 import { ROOM_EVENT_CARRIER, roomEventOf, SCHEDULE_PIECE, type AutomationInput, type AutomationLive, type AutomationManifest, type AutomationRun, type AutomationRunSummary } from "@codechatter/contracts";
 import { setFileText, textOf, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Code2, GitBranch, Loader2, Play, Puzzle, Redo2, Repeat, RotateCcw, Rows3, Square, Undo2, X, Zap } from "lucide-react";
+import { Code2, Copy, GitBranch, Loader2, Play, Puzzle, Redo2, Repeat, RotateCcw, Rows3, Scissors, Square, Trash2, Undo2, X, Zap } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 import * as Y from "yjs";
 
 import { Flowchart, type FlowchartEdge, type FlowchartMenuItem, type FlowchartNode } from "@/components/flowchart/flowchart";
+import { useKeyCommands, type KeyCommand } from "@/components/room/editor/shortcuts";
 import { useRoom } from "@/components/room/room-context";
 import { useYVersion } from "@/components/room/tools/api-studio/connection";
 import { Button } from "@/components/ui/button";
@@ -21,8 +22,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import { copyStep, stepToPaste } from "./clipboard";
-import { addStep, addSticky, changeSticky, removeSticky, stickiesOf, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newRoomEventTrigger, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
+import { copyStep, stepsToPaste } from "./clipboard";
+import { addStep, addSticky, allSteps, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, toggleSteps, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newRoomEventTrigger, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
 import { ErrorFlowField } from "./error-flow-field";
 import { StepPanel } from "./step-panel";
 import { StepPicker, type Picked } from "./step-picker";
@@ -84,6 +85,12 @@ function addLabelOf(edge: ChartEdge, flow: Flow): string {
   return `Add a step after ${name(place.after)}`;
 }
 
+/** Registers what an open flow adds to the command palette, while it's shown (a flow that won't parse adds nothing). */
+function PaletteCommands({ source, commands }: { source: string; commands: KeyCommand[] }) {
+  useKeyCommands(source, commands);
+  return null;
+}
+
 export function FlowFileView({ node, pieces, live, ask, version, initialRun = null }: { node: TreeNode; pieces: AutomationManifest["pieces"]; live: AutomationLive | undefined; ask: <T>(input: AutomationInput) => Promise<T>; version: string; /** A run to show first, chosen in Every run. */ initialRun?: string | null }) {
   const { room, doc, can } = useRoom();
   const queryClient = useQueryClient();
@@ -93,6 +100,8 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
   const canEdit = can("files.edit");
   const canRun = can("code.run");
   const [selected, setSelected] = useState<string | null>(null);
+  // Steps chosen together (Shift-click, Ctrl+A): two or more, with the trigger and steps inside another chosen one left out.
+  const [chosen, setChosen] = useState<string[]>([]);
   const [picking, setPicking] = useState<Picking | null>(null);
   const [shownRun, setShownRun] = useState<string | null>(initialRun);
   const [payload, setPayload] = useState("{\n  \n}");
@@ -158,10 +167,13 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
     }),
   );
   const step = selected ? findStep(flow, selected) : null;
+  const many = chosenSteps(flow, chosen);
+  const choosing = many.length >= 2;
   const shown = runDetails.data;
   // What "Run from here" starts from: the run shown, if it's a finished run of the whole flow with its trigger's data.
   const startsFrom = shown && shown.finishedAt && shown.mode !== "step" && shown.status !== "PAUSED" && Object.hasOwn(shown.steps ?? {}, flow.trigger.name) ? shown : null;
   const triggerPinned = Object.hasOwn(flow.pinned ?? {}, flow.trigger.name);
+  const stickies = stickiesOf(flow);
   const titleOf = (name: string) => findStep(flow, name)?.displayName || name;
   const isTrigger = (name: string) => name === flow.trigger.name;
 
@@ -242,16 +254,69 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
     if (copy(name)) remove(name);
   };
   const paste = async (place: Place) => {
-    const step = await stepToPaste();
-    if (!step) {
+    const steps = await stepsToPaste();
+    if (!steps.length) {
       toast("Nothing to paste: copy a step first.");
       return;
     }
-    const pasted = pasteStep(flow, place, step);
+    // Several go in one after another, in the order they were in.
+    const pasted = pasteSteps(flow, place, steps);
     save(pasted.flow);
-    setSelected(pasted.name);
-    setAnnouncement(`Pasted ${step.displayName || pasted.name}.`);
-    focusBox(pasted.name);
+    const last = pasted.names.at(-1)!;
+    if (pasted.names.length > 1) {
+      setSelected(null);
+      setChosen(pasted.names);
+      setAnnouncement(`Pasted ${pasted.names.length} steps.`);
+    } else {
+      setChosen([]);
+      setSelected(last);
+      setAnnouncement(`Pasted ${steps[0]!.displayName || last}.`);
+    }
+    focusBox(last);
+  };
+  // ---- Several steps chosen together ----
+  const choose = (name: string) => {
+    if (isTrigger(name)) return;
+    const base = chosen.length ? chosen : selected && !isTrigger(selected) ? [selected] : [];
+    const next = base.includes(name) ? base.filter((each) => each !== name) : [...base, name];
+    setPicking(null);
+    if (next.length >= 2) {
+      setChosen(next);
+      setSelected(null);
+      setAnnouncement(`${next.length} steps chosen.`);
+    } else {
+      setChosen([]);
+      setSelected(next[0] ?? null);
+    }
+  };
+  const chooseAll = () => {
+    const every = allSteps(flow.trigger).map((each) => each.name).filter((name) => !isTrigger(name));
+    if (every.length < 2) return;
+    setPicking(null);
+    setSelected(null);
+    setChosen(every);
+    setAnnouncement(`All ${chosenSteps(flow, every).length} steps chosen.`);
+  };
+  const removeChosen = () => {
+    save(removeSteps(flow, many));
+    setChosen([]);
+    setAnnouncement(`Removed ${many.length} steps.`);
+    focusBox(flow.trigger.name);
+  };
+  const toggleChosen = () => {
+    const done = toggleSteps(flow, many);
+    save(done.flow);
+    setAnnouncement(`${many.length} steps turned ${done.off ? "off" : "on"}.`);
+  };
+  const copyChosen = () => {
+    const steps = copyOfSteps(flow, many);
+    if (!steps.length) return false;
+    copyStep(steps);
+    setAnnouncement(`Copied ${steps.length} steps.`);
+    return true;
+  };
+  const cutChosen = () => {
+    if (copyChosen()) removeChosen();
   };
   const duplicate = (name: string) => {
     const made = duplicateStep(flow, name);
@@ -299,7 +364,15 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     let handled = true;
-    if (["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown"].includes(key) && !mod) {
+    // On a box that's chosen with others, the keys are for all of them.
+    const together = choosing && many.includes(name);
+    if (key === "Escape" && chosen.length) setChosen([]);
+    else if (together && mod && key === "c") copyChosen();
+    else if (together && canEdit && (key === "Delete" || key === "Backspace") && !mod) removeChosen();
+    else if (together && canEdit && mod && key === "x") cutChosen();
+    else if (together && canEdit && !mod && key === "d") toggleChosen();
+    else if (!mod && key === " " && event.shiftKey && !isTrigger(name)) choose(name);
+    else if (["ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown"].includes(key) && !mod) {
       const to = neighbour(name, key);
       if (to) focusBox(to);
     } else if (mod && key === "Enter") void run();
@@ -322,10 +395,24 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
     const current = findStep(flow, name);
     if (!current) return [];
     const trigger = isTrigger(name);
+    // A box chosen with others: what's done to all of them.
+    if (choosing && many.includes(name)) {
+      const anyOn = many.some((each) => !findStep(flow, each)?.skip);
+      return [
+        ...(canEdit ? [{ label: anyOn ? `Turn ${many.length} off` : `Turn ${many.length} on`, shortcut: "D", onSelect: toggleChosen }] : []),
+        { label: `Copy ${many.length}`, shortcut: `${MOD}C`, onSelect: () => void copyChosen() },
+        ...(canEdit ? [{ label: `Cut ${many.length}`, shortcut: `${MOD}X`, onSelect: cutChosen }] : []),
+        { label: "Leave out of the choice", onSelect: () => choose(name) },
+        { label: "Clear the choice", shortcut: "Esc", onSelect: () => setChosen([]) },
+        ...(canEdit ? (["separator", { label: `Remove ${many.length}`, shortcut: "Delete", destructive: true, onSelect: removeChosen }] as FlowchartMenuItem[]) : []),
+      ];
+    }
     const open: FlowchartMenuItem = { label: "Open", shortcut: "Enter", onSelect: () => setSelected(name) };
-    if (!canEdit) return [open, { label: "Copy", shortcut: `${MOD}C`, disabled: trigger, onSelect: () => copy(name) }];
+    const withOthers: FlowchartMenuItem[] = trigger ? [] : [{ label: "Choose with others", shortcut: "⇧Click", onSelect: () => choose(name) }];
+    if (!canEdit) return [open, ...withOthers, { label: "Copy", shortcut: `${MOD}C`, disabled: trigger, onSelect: () => copy(name) }];
     return [
       open,
+      ...withOthers,
       { label: "Rename", shortcut: "F2", onSelect: () => rename(name) },
       ...(trigger ? [{ label: "Change the trigger", onSelect: () => setPicking({ mode: "trigger" }) }] : []),
       ...(current.type === "CODE" || current.type === "PIECE" ? [{ label: "Replace", onSelect: () => setPicking({ mode: "replace", name }) }] : []),
@@ -369,11 +456,35 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
     if (!mod) return;
     const key = event.key.toLowerCase();
     if (key === "enter") void run();
+    else if (key === "a") chooseAll();
     else if (canEdit && key === "z" && !event.shiftKey) undo();
     else if (canEdit && (key === "y" || (key === "z" && event.shiftKey))) redo();
     else return;
     event.preventDefault();
   };
+
+  // In the command palette while this flow is open: running it, adding a step, choosing every step, and going to any step by its name.
+  const lastOnMainLine = (() => {
+    let current = flow.trigger;
+    while (current.nextAction) current = current.nextAction;
+    return current.name;
+  })();
+  const paletteCommands: KeyCommand[] = [
+    ...(canRun ? [{ id: "automations.run", label: "Run this automation", group: "Automations", run: () => void run() }] : []),
+    ...(canEdit ? [{ id: "automations.add-step", label: "Add a step", group: "Automations", run: () => setPicking({ mode: "add", place: { after: selected && findStep(flow, selected) ? selected : lastOnMainLine } }) }] : []),
+    { id: "automations.choose-all", label: "Choose every step", group: "Automations", run: chooseAll },
+    ...allSteps(flow.trigger).map((each) => ({
+      id: `automations.step:${each.name}`,
+      label: `Go to step: ${each.displayName || each.name}`,
+      group: "Automations",
+      run: () => {
+        setChosen([]);
+        setPicking(null);
+        setSelected(each.name);
+        focusBox(each.name);
+      },
+    })),
+  ];
 
   const toolbar = canEdit ? (
     <>
@@ -388,6 +499,7 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row" onKeyDown={onToolKey}>
+      <PaletteCommands source="tool:automations-flow" commands={paletteCommands} />
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
@@ -397,18 +509,21 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
           nodes={nodes}
           edges={edges}
           selected={selected}
-          onSelect={(id) => {
+          chosen={choosing ? many : undefined}
+          onSelect={(id, adding) => {
             const add = chart.items.find((item) => item.id === id && item.shape === "add");
             if (add?.place) setPicking({ mode: "add", place: add.place });
+            else if (adding) choose(id);
             else {
               setPicking(null);
+              setChosen([]);
               setSelected((current) => (current === id ? null : id));
             }
           }}
           menuFor={menuFor}
           onNodeKey={onNodeKey}
           toolbar={toolbar}
-          stickies={stickiesOf(flow)}
+          stickies={stickies}
           stickyActions={
             canEdit
               ? {
@@ -427,6 +542,43 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
       <aside aria-label="Details" className="min-h-0 w-full shrink-0 overflow-auto border-t p-3 md:w-96 md:border-t-0 md:border-l max-md:h-1/2">
         {picking ? (
           <StepPicker pieces={pieces} mode={picking.mode === "trigger" ? "trigger" : picking.mode === "replace" ? "replace" : "add"} title={picking.mode === "trigger" ? "Change the trigger" : picking.mode === "replace" ? `Replace ${titleOf(picking.name)}` : "Add a step"} onPick={pick} onCancel={() => setPicking(null)} />
+        ) : choosing ? (
+          <section aria-label="Steps chosen" className="grid content-start gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <h3 className="flex-1 text-[13px] font-medium">{many.length} steps chosen</h3>
+              <Button size="icon-xs" variant="ghost" aria-label="Clear the choice" title="Clear the choice (Esc)" onClick={() => setChosen([])}>
+                <X />
+              </Button>
+            </div>
+            <ul aria-label="The steps chosen" className="grid gap-0.5">
+              {many.map((name) => (
+                <li key={name} className="truncate">
+                  {titleOf(name)} <span className="font-mono text-muted-foreground">{name}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-1">
+              {canEdit && (
+                <Button size="xs" variant="outline" onClick={toggleChosen}>
+                  {many.some((each) => !findStep(flow, each)?.skip) ? "Turn them off" : "Turn them on"}
+                </Button>
+              )}
+              <Button size="xs" variant="outline" onClick={() => void copyChosen()}>
+                <Copy /> Copy
+              </Button>
+              {canEdit && (
+                <Button size="xs" variant="outline" onClick={cutChosen}>
+                  <Scissors /> Cut
+                </Button>
+              )}
+              {canEdit && (
+                <Button size="xs" variant="outline" onClick={removeChosen}>
+                  <Trash2 /> Remove them
+                </Button>
+              )}
+            </div>
+            <p className="text-muted-foreground">Shift-click a box (or Shift+Space on it) to add it or leave it out; {MOD}A chooses every step, and Esc clears the choice. Pasted, copied steps go in one after another.</p>
+          </section>
         ) : step ? (
           <>
             <div className="mb-2 flex justify-end">

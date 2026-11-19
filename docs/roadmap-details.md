@@ -960,6 +960,54 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
 - `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
 
+### Automations, part twenty-three: the command bar ✅ (2026-11-19)
+
+**What:** n8n's command bar, as the room's own: the command palette (Ctrl+Shift+P, F1, or ">" in Quick Open) has the Automations tool's commands while it's open, in a group of their own at the top, rather than a second bar.
+
+- **The tool's:** New automation, Show every run, Show the examples, Connections…, The internet for automations…, Variables…, and Open automation: each of the room's flows by its file.
+- **The open flow's:** Run this automation, Add a step (after the step selected, or at the end), Choose every step, and Go to step: each step by its name, which selects it and brings it into view.
+- **How:** any tool can add its own: commands registered with `useKeyCommands` under a source starting with `tool:` are listed by their group (`toolCommands` in `editor/shortcuts.ts`), and can have keys like any other. The open flow registers its through a small component, so a flow file that doesn't parse adds none.
+
+**Where:** `components/room/editor/shortcuts.ts` (`toolCommands`), `command-palette.tsx` (the tools' groups first); `tools/automations/automations-tool.tsx`, `flow-view.tsx` (`PaletteCommands`).
+
+**Tests:** `apps/web/test/automations.e2e.mjs` (141/141: the tool's commands in the palette, going to a step opening it, and Every run from there). Looked at in a browser, light and dark.
+
+### Automations, part twenty-two: several steps at once ✅ (2026-11-19)
+
+**What:** n8n's selection: several steps chosen together and changed at once.
+
+- **Choosing:** Shift-click (or Ctrl- or Cmd-click) a box to add it to the choice or leave it out; Shift+Space on a focused box does the same; Ctrl+A chooses every step; Esc clears it, and a plain click goes back to one. The right-click menu has "Choose with others". The trigger is never chosen, and a step inside a chosen router or loop goes with it.
+- **What's done to them:** the details say how many are chosen and which, with Turn them off (or on: off if any is on), Copy, Cut and Remove them. A chosen box's menu and keys act on all of them (D, Ctrl+C, Ctrl+X, Delete). Each is one change, so one undo takes it back.
+- **Copying several:** they go on the clipboard in the flow's order (the system clipboard too, as a list); pasting puts them in one after another where it's pasted, each with names no step has and its expressions following them, and chooses what was pasted.
+
+**Where:** `tools/automations/model.ts` (`chosenSteps`, `removeSteps`, `toggleSteps`, `copyOfSteps`, `pasteSteps`), `clipboard.ts` (one step or a list, `stepsFromClipboard`), `flow-view.tsx` (the choice, its panel, menu and keys); `components/flowchart/flowchart.tsx` (a click says whether Shift, Ctrl or Cmd was held; chosen boxes drawn as selected).
+
+**Tests:** `model.test.ts` (35/35: the flow's order, the trigger and steps inside a chosen one left out, all off or on, copied without what comes after, pasted one after another with new names, the clipboard's one step or list), and `apps/web/test/automations.e2e.mjs` (138/138: Shift-click choosing two, turned off and on together, copied and pasted one after another, one undo taking the paste back). Looked at in a browser, light and dark: the panel and a chosen box's menu.
+
+### Automations, part twenty-one: notes on the chart ✅ (2026-11-19)
+
+**What:** n8n's sticky notes: notes placed freely on a flow's chart, beside the boxes laid out by themselves, for whoever reads the flow next.
+
+- **Add a note** (the chart's top right) puts one under the boxes, clear of them, and the chart fits to show it. Its text is typed in place; it's moved by its top bar and sized from its corners once chosen (140 by 72 at least), and Remove takes it away. Up to 50 a flow.
+- **Kept in the flow's file** (`stickies`: each note's text, place and size, in the chart's own coordinates), so it goes with the file, its history and git, and others see it as it's typed. The engine never sees them. Notes stay where they're put when the boxes move; a broken one in a hand-edited file is passed over.
+- **In the shared chart** (`components/flowchart`): a node of their own, behind the boxes; the Flow tool can use them the same way. Someone who can't edit sees them and can't change them.
+- **Found on the way:** handing React Flow a new list of nodes on every render, with a change handler, made the chart lose clicks while a run was going (a box's menu, choosing a box). The list is now kept while nothing changes, and the change handler is given only when notes can be edited.
+
+**Where:** `apps/web/components/flowchart/flowchart.tsx` (`FlowchartSticky`, `StickyNode`, `AddSticky`, moving and sizing through `onNodesChange`); `tools/automations/model.ts` (`addSticky`, `changeSticky`, `removeSticky`, `stickiesOf`), `flow-view.tsx`.
+
+**Tests:** `model.test.ts` (33/33: added, moved, sized, typed in, the smallest size, the longest text, removed, a broken one passed over, 50 at most), and `apps/web/test/automations.e2e.mjs` (134/134: a note added, typed in, moved by its top, kept in the flow's file, removed). Looked at in a browser, light and dark; fixed on the way: a new note went in the middle of the chart, behind the boxes.
+
+### Automations, part twenty: every run, and what a run keeps ✅ (2026-11-19)
+
+**What:** the start of n8n's runs and settings: every flow's runs in one list with filters (its executions list), and its Execution Data step, which keeps a few things with a run to find it by later.
+
+- **Every run** (the tool's header): the room's last 50 runs, of every flow, newest first. Each shows how it ended, its flow, what started it (by hand, a call, its schedule, the room, new items, another flow, a failed flow), when, how long, who, and what it kept. Narrowed by how it ended, which flow, what started it, and words found in what it kept or its flow's name (`order:A-17` finds a run that kept that order). Choosing one opens its flow with that run shown. A flow's own list of runs shows what each kept too.
+- **Save run data** (a built-in step, n8n's Execution Data): names and values from the run, such as `{"order": "{{trigger.output.body.id}}"}`, kept with the run and listed with it. Up to 10 a run, each name up to 50 characters and value up to 512; a later step adds to them or changes one. They stay with a run that waits and carries on, is tried again or is run from a step.
+
+**Where:** `sandbox/image/automation/builtins.mjs` (`run_data`), `host.mjs` (`/v1/codechatter/run-data`, a run's `data` kept and carried on), `automation.py` (listed with each run; carried into a resume, a retry and a run from a step); `packages/contracts/src/automations.ts` (`data` on a run); web `tools/automations/all-runs.tsx` (new: `AllRuns`, `runMatches`), `automations-tool.tsx` (Every run, opening a run's flow), `flow-view.tsx` (a run to show first; what each run kept), `builtins.ts`.
+
+**Tests:** `sandbox/image/automation/builtins.test.mjs` (Save run data through a stand-in worker: values kept as text, added to, the limits), `apps/runner/test/automation-run-data.e2e.mjs` (5/5 on the real engine: kept from what it was sent, a later step adding to it, listed among every flow's runs, the limits failing the step), and `apps/web/test/automations.e2e.mjs` (134/134: Every run listing every flow's runs, narrowed to the failed ones, and one opened in its flow).
+
 ### Automations, part nineteen: the room's variables ✅ (2026-11-19)
 
 **What:** n8n's variables ($vars) for a room's flows: names and text a flow reads, such as a base address, an environment's name or a channel, kept with the room so each flow doesn't hard-code them.

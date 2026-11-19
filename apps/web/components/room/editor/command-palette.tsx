@@ -19,6 +19,7 @@ import { formatDocument } from "./format";
 import { PaletteDialog } from "./palette-dialog";
 import { useEditorSettings } from "./settings-store";
 import { previewKindOf, PREVIEW_LABEL } from "./preview-kind";
+import { toolCommands } from "./shortcuts";
 import { insertSnippet } from "./snippet-provider";
 import { snippetsFor, type Snippet } from "./snippets";
 import { getSymbols, type SymbolItem } from "./symbols";
@@ -156,12 +157,25 @@ function Commands({ editor, extra, onClose }: { editor: PaletteCommand[]; extra:
     onClose();
     command.run();
   };
+  // What the open tools add (the Automations tool's own), by tool: first, as it's what's in front of you.
+  const fromTools = useMemo(() => {
+    const groups = new Map<string, PaletteCommand[]>();
+    for (const command of toolCommands()) groups.set(command.group, [...(groups.get(command.group) ?? []), command]);
+    return [...groups];
+  }, []);
 
   return (
     <PaletteDialog {...dialogProps(onClose)} title="Command palette" description="Run a command by name">
       <CommandInput placeholder="Type a command" className="h-9 py-0" />
       <CommandList className="max-h-[min(60vh,420px)]">
         <CommandEmpty>No command matches.</CommandEmpty>
+        {fromTools.map(([group, commands]) => (
+          <CommandGroup key={group} heading={group}>
+            {commands.map((command) => (
+              <Row key={command.id} command={command} onChoose={choose} />
+            ))}
+          </CommandGroup>
+        ))}
         {extra.length > 0 && (
           <CommandGroup heading="Room">
             {extra.map((command) => (

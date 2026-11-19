@@ -322,6 +322,30 @@ try {
   await sleep(500);
   check("andOnAgain", !/turned off/.test(await stepName("Code")));
 
+  // ---- Several steps chosen together: Shift-click, turned off and on together, copied and pasted one after another, the paste undone ----
+  await select("Code");
+  await box("Slugify").click({ modifiers: ["Shift"] });
+  const chosenPanel = details.getByRole("region", { name: "Steps chosen" });
+  check("shiftClickChoosesSeveral", (await ok(chosenPanel.waitFor({ timeout: 5000 }))) && /2 steps chosen/.test(await chosenPanel.innerText()));
+  await chosenPanel.getByRole("button", { name: "Turn them off" }).click();
+  await sleep(500);
+  check("theyreTurnedOffTogether", /turned off/.test(await stepName("Code")) && /turned off/.test(await stepName("Slugify")), `${await stepName("Code")} | ${await stepName("Slugify")}`);
+  await chosenPanel.getByRole("button", { name: "Turn them on" }).click();
+  await sleep(500);
+  const stepsBefore = await chart.getByRole("button", { name: /^Step / }).count();
+  await chosenPanel.getByRole("button", { name: "Copy", exact: true }).click();
+  await box("Slugify").click();
+  await box("Slugify").focus();
+  await a.keyboard.press("Control+v");
+  await sleep(800);
+  check("severalPasteOneAfterAnother", (await chart.getByRole("button", { name: /^Step / }).count()) === stepsBefore + 2 && /2 steps chosen/.test(await details.innerText()), await chart.getByRole("button", { name: /^Step / }).count());
+  // The copy is called Slugify too: the first is the one that was there.
+  await box("Slugify").first().focus();
+  await a.keyboard.press("Control+z");
+  await sleep(700);
+  check("andOneUndoTakesThemBack", (await chart.getByRole("button", { name: /^Step / }).count()) === stepsBefore, await chart.getByRole("button", { name: /^Step / }).count());
+  await a.keyboard.press("Escape");
+
   // ---- A note, and a router's branches ----
   await select("Measure it");
   await details.getByRole("region", { name: "Step Measure it" }).getByLabel("Note").fill("Counts the lines");
@@ -609,14 +633,21 @@ try {
   await sleep(800);
   const noteAfter = await note.boundingBox();
   check("aNoteMovesByItsTop", noteAfter.x - noteBefore.x > 60 && noteAfter.y - noteBefore.y > 40, { noteBefore, noteAfter });
+  const withFiles = await tool.getByLabel("Automation to show").inputValue();
   await tool.getByRole("button", { name: "Its file" }).click();
   await sleep(1500);
-  const fileText = await a.locator(".monaco-editor .view-lines").first().textContent();
-  check("itsKeptInTheFlowsFile", /"stickies"/.test(fileText) && /Check the rate limit first\./.test(fileText), fileText.slice(0, 200));
+  // The notes are at the end of the file, and the editor only draws what's in view.
+  await a.locator(".monaco-editor .view-lines").first().click();
+  await a.keyboard.press("Control+End");
+  await sleep(600);
+  // The editor draws spaces as non-breaking ones.
+  const fileText = (await a.locator(".monaco-editor .view-lines").first().textContent()).replace(/ /g, " ");
+  check("itsKeptInTheFlowsFile", /"stickies"/.test(fileText) && /Check the rate limit first\./.test(fileText), fileText.slice(-300));
   await openTool();
+  await tool.getByLabel("Automation to show").selectOption(withFiles);
   await note.waitFor({ timeout: 10_000 });
   await note.getByRole("button", { name: "Remove this note" }).click();
-  check("andRemoved", await ok(note.waitFor({ state: "detached", timeout: 5000 })));
+  check("aNoteIsRemoved", await ok(note.waitFor({ state: "detached", timeout: 5000 })));
 
   // ---- Every run: all the flows' runs in one list, narrowed, and one opened in its flow ----
   await tool.getByRole("button", { name: "Every run" }).click();
@@ -629,6 +660,21 @@ try {
   check("theyCanBeNarrowedByHowTheyEnded", failedOnes > 0 && failedOnes < howMany && (await everyRun.getByRole("listitem").filter({ hasText: /^Finished/ }).count()) === 0, { howMany, failedOnes });
   await everyRun.getByRole("listitem").first().getByRole("button").click();
   check("choosingOneOpensItsFlowWithItShown", await ok(details.getByRole("region", { name: "The run shown" }).getByRole("status").filter({ hasText: /^Failed/ }).waitFor({ timeout: 15_000 })));
+
+  // ---- The command palette has the tool's own commands while it's open: going to a step, and Every run ----
+  const palette = a.getByRole("dialog", { name: "Command palette" });
+  await a.keyboard.press("Control+Shift+P");
+  await palette.getByPlaceholder("Type a command").fill("Go to step:");
+  check("theToolsCommandsAreInThePalette", await ok(palette.getByRole("option", { name: /^Go to step: / }).first().waitFor({ timeout: 5000 })));
+  const goingTo = (await palette.getByRole("option", { name: /^Go to step: / }).first().innerText()).replace(/^Go to step: /, "").split("\n")[0].trim();
+  await a.keyboard.press("Enter");
+  check("goingToAStepOpensIt", await ok(details.getByRole("region", { name: `Step ${goingTo}` }).waitFor({ timeout: 5000 })), goingTo);
+  await a.keyboard.press("Control+Shift+P");
+  await palette.getByPlaceholder("Type a command").fill("Show every run");
+  await palette.getByRole("option", { name: /Show every run/ }).waitFor({ timeout: 5000 });
+  await a.keyboard.press("Enter");
+  check("andEveryRunFromThere", await ok(tool.getByRole("region", { name: "Every run" }).waitFor({ timeout: 5000 })));
+  await tool.getByRole("button", { name: "Every run" }).click();
 
   // ---- On a phone ----
   await a.setViewportSize({ width: 390, height: 800 });
