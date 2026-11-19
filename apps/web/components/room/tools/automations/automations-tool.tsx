@@ -4,8 +4,9 @@
 import { isFlowFile, type AutomationInput, type AutomationLive, type AutomationManifest } from "@codechatter/contracts";
 import { createFileAtPath, findByPath, flatten } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileCode, Globe, KeyRound, Plus, Workflow } from "lucide-react";
+import { Braces, FileCode, Globe, History, KeyRound, Plus, Workflow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type * as Y from "yjs";
 
 import { useFileTree } from "@/components/room/hooks";
@@ -19,6 +20,8 @@ import { api, ApiError } from "@/lib/api";
 import { ConnectionsDialog, openConnections } from "./connections";
 import { ExamplesView } from "./examples-view";
 import { InternetDialog, openInternet } from "./internet-settings";
+import { openVariables, VariablesDialog } from "./variables-settings";
+import { AllRuns } from "./all-runs";
 import { FlowFileView } from "./flow-view";
 import { newTrigger, SCHEMA_VERSION, type Flow } from "./model";
 
@@ -63,7 +66,9 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
 
   const flows = flatten(tree).filter((node) => node.kind === "file" && !node.blob && isFlowFile(node.name));
   const [chosen, setChosen] = useState<string | null>(null);
-  const [view, setView] = useState<"flow" | "examples">("flow");
+  const [view, setView] = useState<"flow" | "examples" | "runs">("flow");
+  // A run chosen in Every run: its flow opens with it shown.
+  const [opening, setOpening] = useState<string | null>(null);
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   const [wanted, setWanted] = useState<string | null>(null);
@@ -108,6 +113,11 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
               <FileCode /> Its file
             </Button>
           )}
+          {flows.length > 0 && (
+            <Button size="xs" variant={view === "runs" ? "secondary" : "ghost"} aria-pressed={view === "runs"} onClick={() => setView(view === "runs" ? "flow" : "runs")}>
+              <History /> Every run
+            </Button>
+          )}
           <Button size="xs" variant={view === "examples" ? "secondary" : "ghost"} aria-pressed={view === "examples"} onClick={() => setView(view === "examples" ? "flow" : "examples")}>
             Examples
           </Button>
@@ -119,6 +129,11 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
           {pieces && can("code.run") && (
             <Button size="xs" variant="ghost" onClick={() => openInternet()}>
               <Globe /> Internet
+            </Button>
+          )}
+          {pieces && can("code.run") && (
+            <Button size="xs" variant="ghost" onClick={() => openVariables()}>
+              <Braces /> Variables
             </Button>
           )}
           {canEdit && pieces &&
@@ -157,6 +172,20 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
         </p>
       ) : view === "examples" ? (
         <ExamplesView pieces={pieces ?? {}} canEdit={canEdit} onUse={addFlow} />
+      ) : view === "runs" ? (
+        <AllRuns
+          ask={ask}
+          onOpen={(run) => {
+            const found = flows.find((each) => each.path === run.path);
+            if (!found) {
+              toast(`${run.name} isn't at ${run.path} any more.`);
+              return;
+            }
+            setChosen(found.path);
+            setOpening(run.id);
+            setView("flow");
+          }}
+        />
       ) : !current ? (
         <div className="grid max-w-prose gap-2 p-3">
           <h3 className="font-medium">Make things happen by themselves</h3>
@@ -169,10 +198,11 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
           </div>
         </div>
       ) : pieces ? (
-        <FlowFileView key={current.id} node={current} pieces={pieces} live={live} ask={ask} version={version} />
+        <FlowFileView key={`${current.id}:${opening ?? ""}`} node={current} pieces={pieces} live={live} ask={ask} version={version} initialRun={opening} />
       ) : null}
       {pieces && can("code.run") && <ConnectionsDialog pieces={pieces} />}
       {pieces && can("code.run") && <InternetDialog pieces={pieces} />}
+      {pieces && can("code.run") && <VariablesDialog />}
     </section>
   );
 }

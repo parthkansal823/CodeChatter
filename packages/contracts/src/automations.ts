@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { CALLED_FLOW_EVENT, ERROR_FLOW_EVENT, isRoomEvent, keptRoomEvent, pathsProblem, startsWithProblem, type RoomEventSettings } from "./room-events.js";
 import { scheduleProblem } from "./schedule.js";
+import { RunVariables } from "./variables.js";
 
 /** Flows live in the room's files, so they're edited together, versioned, and can leave. */
 export const AUTOMATION_SUFFIX = ".flow.json";
@@ -63,12 +64,13 @@ export const AutomationInput = z.discriminatedUnion("op", [
     resumeBase: z.string().url().max(300).optional(),
     connections: RunConnections,
     internet: RunInternet,
+    variables: RunVariables,
   }),
   /**
    * A run waiting (a Delay, or "Respond and wait for the next webhook"), carried on from where it stopped. One waiting for a call needs the token in its
    * address; one waiting for a time doesn't, so the API (or a person, early) can carry it on.
    */
-  z.object({ op: z.literal("resume"), id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."), token: z.string().max(100).optional(), payload: z.unknown().optional(), connections: RunConnections, internet: RunInternet }),
+  z.object({ op: z.literal("resume"), id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."), token: z.string().max(100).optional(), payload: z.unknown().optional(), connections: RunConnections, internet: RunInternet, variables: RunVariables }),
   /** The runs waiting in the room, for the API's timer. Looking doesn't wake a room. */
   z.object({ op: z.literal("waits") }),
   z.object({ op: z.literal("status") }),
@@ -94,6 +96,7 @@ export const AutomationRunnerInput = z.union([
     hook: z.enum(["ON_ENABLE", "RUN", "ON_DISABLE", "TEST"]),
     connections: RunConnections,
     internet: RunInternet,
+    variables: RunVariables,
     resumeBase: z.string().url().max(300).optional(),
   }),
 ]);
@@ -209,7 +212,7 @@ export function shownOf(value: ConnectionValue, fields: readonly string[] = []):
 export type AutomationStepResult = { type: string; status: string; input?: unknown; output?: unknown; errorMessage?: string; duration?: number };
 /** What a waiting run waits for: a time, or a call to its address (its token is never shown). */
 export type AutomationWaitpoint = { type: "DELAY" | "WEBHOOK"; step: string; resumeAt: number | null };
-export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry" | "resume" | "from"; waitpoint?: AutomationWaitpoint | null; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
+export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry" | "resume" | "from"; waitpoint?: AutomationWaitpoint | null; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; /** What it kept to be found by (Save run data): up to 10 names and text. */ data?: Record<string, string> | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
 export type AutomationRun = AutomationRunSummary & { steps: Record<string, AutomationStepResult>; failedStep?: { name: string; displayName?: string; message?: string }; payload?: unknown; /** Steps that gave back what was pinned on them rather than running. */ pinned?: string[] };
 export type AutomationLive = (Partial<AutomationRun> & { state: "idle" | "running" | "finished"; id: string | null; steps: Record<string, AutomationStepResult>; queued: number });
 

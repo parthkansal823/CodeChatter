@@ -1,14 +1,19 @@
 /** Verify a shared task board, code-derived cards and server-enforced viewer permissions, removing every owned fixture. */
 // From apps/web with the shared dev stack running: node test/task-board.e2e.mjs
+import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 import { deleteTask, findByPath, readTasks, taskMaps, textOf, trash } from "@codechatter/workspace-model";
 import * as Y from "yjs";
 
-import { BASE, ROOM, check, finish, launch, openApp } from "./browser.mjs";
+import { BASE, ROOM, check, finish, fromMore, launch, openApp } from "./browser.mjs";
 
 const WebSocket = createRequire(new URL("../../collab/package.json", import.meta.url))("ws");
+// Reuse the same installed axe asset as a11y.e2e.mjs; this suite adds no dependency.
+const STORE = new URL("../../../node_modules/.pnpm/", import.meta.url);
+const AXE = readFileSync(new URL(`${readdirSync(STORE).find((name) => name.startsWith("axe-core@"))}/node_modules/axe-core/axe.min.js`, STORE), "utf8");
+const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const stamp = Date.now().toString(36);
 const title = `Board task ${stamp}`;
 const codeTitle = `code task ${stamp}`;
@@ -61,12 +66,31 @@ let secondId = "";
 let fixtureFileId = null;
 let stage = "sign in";
 let cleanupStage = "not started";
+let initialTheme = null;
 const open = [];
 const ownedIds = new Set();
 
 const board = (page) => page.getByRole("region", { name: "Task board", exact: true });
 const column = (page, name) => board(page).getByRole("region", { name, exact: true });
 const card = (page, name) => board(page).getByRole("group", { name: `Task: ${name}`, exact: true });
+
+/** Scope axe to this feature so unrelated tools cannot conceal its accessibility result. */
+async function auditTasks(page, name, toastOnly = false) {
+  if (!await page.evaluate(() => Boolean(window.axe))) await page.evaluate(AXE);
+  const found = await page.evaluate(async ({ tags, selector }) => {
+    const result = await window.axe.run({ include: [[selector]] }, { runOnly: { type: "tag", values: tags }, resultTypes: ["violations"] });
+    return result.violations.map((rule) => ({ id: rule.id, count: rule.nodes.length }));
+  }, { tags: A11Y_TAGS, selector: toastOnly ? "[data-sonner-toast]" : '[aria-label="Task board"]' });
+  check(name, found.length === 0, found.map((rule) => `${rule.id}×${rule.count}`).join(", "));
+}
+
+async function setTheme(dark) {
+  const page = first.page;
+  const current = await page.locator("html").evaluate((html) => html.classList.contains("dark"));
+  if (current !== dark) await fromMore(page, dark ? "Dark theme" : "Light theme");
+  await page.waitForFunction((expected) => document.documentElement.classList.contains("dark") === expected, dark);
+  await pause(250);
+}
 
 async function openBoard(page) {
   if (!await board(page).count()) await openApp(page, "Tasks");
@@ -102,6 +126,7 @@ async function role(roleName) {
 
 try {
   first = await signIn("test1@codechatter.local");
+  initialTheme = await first.page.locator("html").evaluate((html) => html.classList.contains("dark"));
   second = await signIn("test2@codechatter.local");
   for (const profile of [first, second]) profile.page.setDefaultTimeout(15_000);
   const me = await second.context.request.get(`${BASE}/api/me`).then((response) => response.json());
@@ -157,6 +182,13 @@ try {
   check("the code filter excludes manual cards", true);
   await board(second.page).getByRole("combobox", { name: "Task filter", exact: true }).selectOption("all");
 
+  stage = "task board accessibility in both themes";
+  for (const dark of [false, true]) {
+    await setTheme(dark);
+    await auditTasks(first.page, `${dark ? "dark" : "light"} task board has no accessibility violations`);
+  }
+  await setTheme(initialTheme);
+
   stage = "manual delete and shared Undo";
   await card(first.page, title).getByRole("button", { name: `Move ${title}`, exact: true }).click();
   await first.page.getByRole("menuitem", { name: "Doing", exact: true }).click();
@@ -167,6 +199,8 @@ try {
   await until(() => !taskMaps(tasks.doc).cards.has(beforeDelete.id));
   const undo = first.page.getByRole("button", { name: "Undo", exact: true });
   await undo.waitFor();
+  await pause(250);
+  await auditTasks(first.page, "the Undo toast has no accessibility violations", true);
   await undo.click();
   await card(second.page, title).waitFor();
   await until(() => sameManualCard(readTasks(tasks.doc).find((task) => task.id === beforeDelete.id), beforeDelete));
@@ -294,6 +328,10 @@ try {
   attacker?.close();
   if (viewer) await viewer.context.close().catch(() => {});
   if (second) await second.context.close().catch(() => {});
+  // Theme restoration must never prevent restoring the seeded role or deleting fixtures.
+  try {
+    if (first && initialTheme !== null && !first.page.isClosed()) await setTheme(initialTheme);
+  } catch { check("the original theme is restored", false); }
   if (roleChanged && first && originalRole) {
     try {
       await role(originalRole);

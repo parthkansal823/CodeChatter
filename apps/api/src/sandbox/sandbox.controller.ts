@@ -206,10 +206,11 @@ export class SandboxController {
     const code = this.room(roomId);
     const { room } = await this.rooms.require(code, session.user.id, "code.run");
     if (room.kind === "interview") throw new ForbiddenException("This isn't available in an interview.");
-    // A browser can't give a run connections or hosts to reach: the API gives it the room's (RunnerClient).
+    // A browser can't give a run connections, hosts to reach or variables: the API gives it the room's (RunnerClient).
     if (input.op === "run" || input.op === "resume") {
       delete input.connections;
       delete input.internet;
+      delete input.variables;
     }
     try {
       return await this.runner.automations(code, input, session.user);

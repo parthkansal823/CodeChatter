@@ -293,7 +293,7 @@ Tests:
     - **One renderer:** the `.mmd` preview and Markdown share it (`mermaid-renderer.ts`, `use-mermaid-drawing.ts`, `mermaid-problem.ts`). Drawings are made one at a time, as Mermaid's settings are shared: a very slow diagram still holds up the next.
     - **Where:** `editor/markdown-preview.tsx` (`MarkdownPre`), `markdown-mermaid.tsx`, `markdown-mermaid-utils.ts` (the remark plugin marking the blocks), and the shared files above; `mermaid-preview.tsx` now uses them.
     - **Tests:** unit `markdown-mermaid-utils.test.ts`, `mermaid-problem.test.ts` and `preview-kind.test.ts` (26/26), browser `markdown-mermaid.e2e.mjs` (29/29: diagrams, mistakes, the theme, drawing near the screen, the script attempts, a block too big) and `mermaid.e2e.mjs` (13/13).
-    - **Checked by Claude:** the diff read against the brief, its tests run again, the web typecheck (clean for its files), and a README with two diagrams, a broken one and JavaScript looked at in a browser, light and dark: nothing to fix.
+    - **Checked by Claude:** the diff read against the brief, its tests run again, the web typecheck (clean for its files), accessibility (166/166), and a README with two diagrams, a broken one and JavaScript looked at in a browser, light and dark: nothing to fix.
 - ✅ **Notes:** shared notes, private notes, and a shared focus timer, in a Notes side panel (`tools/notes`) beside Chat and AI. The Docs tool keeps the pages that last; this is the scratchpad.
   - Room notes are rich text edited together, with carets. They live in `room:ID:notes`, which anyone who can chat may write, viewers included.
   - My notes are in `room:ID:mine:<your id>`, which collab opens for no one else. The AI's room activity leaves them out.
@@ -959,6 +959,36 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automations.e2e.mjs` (79 checks on the real engine, adding: Filter, Sort and Summarize chained, Stop and Error stopping the run with its message worked out, a pinned built-in step, and a name that isn't one or tries to be a path)
 - `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
 - `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
+
+### Automations, part nineteen: the room's variables ✅ (2026-11-19)
+
+**What:** n8n's variables ($vars) for a room's flows: names and text a flow reads, such as a base address, an environment's name or a channel, kept with the room so each flow doesn't hard-code them.
+
+- **In a flow:** `{{variables.NAME}}` or `{{variables['NAME']}}`, Activepieces' own expressions, anywhere a field takes one, inside text too. They're offered as `{{` is typed, with the steps' data. A name the room hasn't fails its step, saying "variable (NAME) not found".
+- **The Variables dialog** (the tool's header): each one with its value, who set it and when, Copy (its expression), and, for owners, its value changed or removed. Names are letters, numbers and `_`, not starting with a number; values up to 4,000 characters; up to 100 a room.
+- **Who:** they aren't secrets (those are connections), so anyone who can run the room's code sees them, values too. Only its owners (`room.manage`) add, change and remove them, one at a time, so two owners editing different ones don't undo each other. Each change is in the audit log by name, without its value.
+- **Given to each run by the API**, as connections are (`ConnectionsVault`): runs by hand, by a webhook, a schedule, a room event, a service's new items, carried on after a wait, and a look for new items. A browser can't hand a run variables of its own. Kept plain in the room's settings (`automationVariables`).
+- **Flows started by a flow:** a flow called (waiting or not) and an error flow get the room's connections and variables. Found on the way: before this, an error flow and a flow called without waiting got none of the room's connections, as the worker queued them without.
+
+**Where:** `packages/contracts/src/variables.ts` (`VariableName`, `AutomationVariableInput`, `RunVariables`), `automations.ts` (on run, resume and poll); `apps/api/src/automations/automation-variables.service.ts` and `.controller.ts`, `connections-vault.ts` (`variablesOf`, `forRun`), `runner/runner.client.ts`, `sandbox/sandbox.controller.ts`; `apps/runner/src/automations.ts`; `sandbox/image/automation.py` (`variables_of`), `automation/host.mjs` and `engine-call.mjs` (`/v1/worker/variables/:name`); web `tools/automations/variables-settings.tsx`, `automations-tool.tsx`, `step-panel.tsx`.
+
+**Tests:** `packages/contracts/src/variables.test.ts` (4: names, values, a run's, the expression), and `apps/runner/test/automation-variables.e2e.mjs` (14/14 on the real engine: an owner sets them and an editor can't, both ways of reading them and inside text, a changed value reaching the next run, a browser's own refused, one the room hasn't failing its step, an error flow getting them, removing one). Looked at in a browser, light and dark: the Variables dialog with two variables and a name typed wrong, and {{var in a step's field offering them; the accessibility test checks the dialog too.
+
+### Automations, part eighteen: running from a step, and pins by hand ✅ (2026-11-19)
+
+**What:** the rest of n8n's ways of trying a flow: running from a chosen step on (its partial runs), and pinning the trigger's data. On the way, pins now work as n8n's do: only on a run by hand.
+
+- **Run from here:** a step's panel has it beside "Run this step", once a run of the whole flow is shown. That step and every step after it run with the flow as it is now. The steps before it aren't run again: they give what they gave on the run shown, which was sent the same data. It's the engine's own resume, given that run's steps up to the chosen one, so it works from a step inside a router's branch or from the router itself (which chooses again). A step inside a loop starts from its loop, as a loop keeps each time round apart. The run says "from <step>", and which run it started from.
+  - **Refused, saying why:** the trigger, a step the flow hasn't, a run of one step tried on its own, a run still waiting, and a run of another flow.
+  - Found by trying the engine first, in the sandbox, with steps that stamp the time they ran: kept up to a branch's step, only what's after it ran again; kept up to the router, the router chose again and its branch ran.
+- **Pins, by hand only:** part three's pins stood in for their steps on every run. A pin left in a flow that's on would have quietly skipped real work on each webhook, schedule or room event. Now, as in n8n, only a run by hand (and one step tried, and a run from a step) uses them. Started by its trigger, every step runs for real, and the run lists no pins. The panel says so.
+- **The trigger's pin:** "Pin this output" on the trigger keeps what it gave. A run by hand then starts with that rather than what's sent, and What to send says so.
+- **A step replaced loses its pin:** what was pinned was the old step's output; changing the trigger drops the trigger's.
+- **Looked at in a browser**, light and dark: a branch's step with Run this step and Run from here, the trigger pinned (its panel and its box), and What to send's note. Fixed on the way: the webhook trigger showed Activepieces' own notes with their server's blanks unfilled ("Live URL: {{webhookUrl}}"); a piece's note with such blanks is now left out, as the trigger's panel shows the room's own addresses.
+
+**Where:** `sandbox/image/automation.py` (`steps_in_order`, the `from` mode); `sandbox/image/automation/host.mjs` (`byHand`, the trigger's pin, `from` resumed like `retry`); `packages/contracts/src/automations.ts` (the `from` mode); web `tools/automations/step-panel.tsx` (Run from here, what a pin does), `flow-view.tsx` (the run it starts from, the runs' words, What to send's note), `model.ts` (`canPin` takes the trigger, `replaceStep` drops the pin).
+
+**Tests:** `apps/runner/test/automation-run-from.e2e.mjs` (17/17 on the real engine: from the last step, a branch's step, the router, a run itself run from a step, and inside a loop, each telling a step run again from one kept by the time it ran; the four refusals; pins by hand, the trigger's pin choosing the other branch, and every step running for real when started by its trigger), `model.test.ts` (32/32, with the trigger's pin and a replaced step's), and `apps/web/test/automations.e2e.mjs` (127/127: Run from here on a branch's step, the run saying so).
 
 ### Automations, part seventeen: files ✅ (2026-11-19)
 

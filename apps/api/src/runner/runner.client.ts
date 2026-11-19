@@ -261,14 +261,14 @@ export class RunnerClient {
   async automations(roomId: string, input: AutomationInput | AutomationRunnerInput, user: RunnerUser): Promise<unknown> {
     // Where a run that waits for a call is carried on from: the API's own address, whatever a browser sent. And the room's connections, opened here for
     // this run only (automations/connections.ts): what a browser sent as connections is never used.
-    // And the hosts its owner turned on for them, which the room's proxy lets through (the runner sees to it).
-    const given = input.op === "run" || input.op === "resume" || input.op === "poll" || input.op === "test-connection" ? ((await this.vault?.forRun(roomId)) ?? { connections: {}, internet: [] }) : null;
+    // And the hosts its owner turned on for them, which the room's proxy lets through (the runner sees to it), and the room's variables.
+    const given = input.op === "run" || input.op === "resume" || input.op === "poll" || input.op === "test-connection" ? ((await this.vault?.forRun(roomId)) ?? { connections: {}, internet: [], variables: {} }) : null;
     const resumeBase = `${this.env.APP_URL.replace(/\/$/, "")}/api/hooks/automations/resume/${roomId}`;
     const body =
       input.op === "run" || input.op === "poll"
-        ? { ...input, resumeBase, connections: given!.connections, internet: given!.internet }
+        ? { ...input, resumeBase, connections: given!.connections, internet: given!.internet, variables: given!.variables }
         : input.op === "resume"
-          ? { ...input, connections: given!.connections, internet: given!.internet }
+          ? { ...input, connections: given!.connections, internet: given!.internet, variables: given!.variables }
           : input.op === "test-connection"
             ? { ...input, internet: given!.internet }
             : input;

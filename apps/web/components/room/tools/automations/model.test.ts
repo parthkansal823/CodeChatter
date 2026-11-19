@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
 
 import { BUILTINS } from "./builtins";
+import { addSticky, changeSticky, removeSticky, stickiesOf } from "./model";
 import { addBranch, addStep, allSteps, asCopiedStep, canPin, newBuiltinStep, chartOfFlow, CONDITIONS, copyOfStep, isPinned, pinStep, unpinStep, duplicateStep, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeBranch, removeStep, replaceStep, resultsOf, setStepNote, statusOfResult, toggleStep, updateStep, type Branch, type Flow, type FlowStep } from "./model";
 
 const code = (name: string, next: FlowStep | null = null): FlowStep => ({ ...newCodeStep(name), nextAction: next });
@@ -343,4 +344,21 @@ test("inside a loop, its item too", () => {
 test("in a branch, what's before the router", () => {
   assert.deepEqual(expressionsFor(branching(), "yes_more"), ["{{trigger.output.body}}", "{{first.output}}", "{{each.output}}", "{{yes.output}}"]);
   assert.deepEqual(expressionsFor(branching(), "no"), ["{{trigger.output.body}}", "{{first.output}}", "{{each.output}}"]);
+});
+
+test("notes placed freely on the chart: added, moved, sized, typed in, removed, and a broken one passed over", () => {
+  const flow = flowOf(code("a"));
+  const added = addSticky(flow, { x: 10.4, y: -20.6 })!;
+  const [note] = added.flow.stickies!;
+  assert.deepEqual({ ...note, id: "" }, { id: "", text: "", x: 10, y: -21, width: 220, height: 120 });
+  const moved = changeSticky(added.flow, added.id, { x: 300.7, y: 40, text: "Check the rate limit first." });
+  assert.deepEqual(moved.stickies![0], { id: added.id, text: "Check the rate limit first.", x: 301, y: 40, width: 220, height: 120 });
+  assert.equal(changeSticky(moved, added.id, { width: 20, height: 10 }).stickies![0]!.width, 140, "never smaller than a note can be");
+  assert.equal(changeSticky(moved, added.id, { text: "x".repeat(5000) }).stickies![0]!.text.length, 4000);
+  assert.equal(changeSticky(moved, "not_there", { x: 1 }), moved, "a note that isn't there changes nothing");
+  assert.equal(removeSticky(moved, added.id).stickies, undefined, "the last one leaves no list behind");
+  assert.deepEqual(stickiesOf({ ...flow, stickies: [{ id: "ok", text: "fine", x: 0, y: 0, width: 50, height: 400 }, { id: 3 } as never, null as never] }), [{ id: "ok", text: "fine", x: 0, y: 0, width: 140, height: 400 }]);
+  let many = flow;
+  for (let i = 0; i < 50; i++) many = addSticky(many, { x: i, y: 0 })!.flow;
+  assert.equal(addSticky(many, { x: 0, y: 0 }), null, "50 at most");
 });

@@ -37,6 +37,8 @@ const BUILTIN_NAME = /^[a-z_]{1,40}$/;
 const MOST_RUNS = 50;
 const STEP_NAME = /^[A-Za-z0-9_]+$/;
 const ENGINE_HEAP_MB = 256;
+/** How many things a run keeps to be found by (Save run data), as n8n's Execution Data. */
+const MOST_RUN_DATA = 10;
 const STOP_POLL_MS = 500;
 const BEAT_MS = 1000;
 const NOW = () => Date.now();
@@ -185,6 +187,8 @@ async function runJob(job) {
   if (pinnedTrigger) pinned = [triggerName, ...pinned];
   running.add(job.id);
   const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, mode, step: mode === "step" || mode === "from" ? job.step : null, retryOf: mode === "retry" || mode === "from" ? job.retryOf : null, pinned, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
+  // What an earlier run kept to be found by (Save run data) stays with it when it's carried on, tried again or run from a step.
+  if (job.data && typeof job.data === "object" && !Array.isArray(job.data)) live.data = job.data;
   // A flow called by another runs inside its run: the live view stays the caller's.
   const secrets = secretsOf(job.connections);
   const writeLive = () => {
@@ -263,6 +267,21 @@ async function runJob(job) {
       if (!found) return send(404, { message: "That file isn't kept any more: its run has gone." });
       res.writeHead(200, { "content-type": typeOf(found.name), "content-length": found.data.length, "content-disposition": dispositionOf(found.name) });
       return res.end(found.data);
+    }
+    // What a run keeps to be found by (Save run data, builtins.mjs): kept with the run, and listed with it.
+    if (path === "/v1/codechatter/run-data" && req.method === "POST") {
+      let asked = {};
+      try {
+        asked = JSON.parse(raw.toString());
+      } catch {
+        return send(400, { error: "That isn't data to keep." });
+      }
+      const given = asked.data && typeof asked.data === "object" && !Array.isArray(asked.data) ? asked.data : {};
+      const next = { ...(live.data ?? {}), ...given };
+      if (Object.keys(next).length > MOST_RUN_DATA) return send(400, { error: `A run keeps up to ${MOST_RUN_DATA} things to be found by.` });
+      live.data = next;
+      writeLive();
+      return send(200, { data: next });
     }
     // A file made by a built-in step (Read files), kept as a piece's would be.
     if (path === "/v1/codechatter/files" && req.method === "POST") {

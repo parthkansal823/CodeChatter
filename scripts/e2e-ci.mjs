@@ -47,6 +47,8 @@ const SUITES = [
     ["automation-polling", "automation-polling"],
     ["automation-internet", "automation-internet"],
     ["automation-files", "automation-files"],
+    ["automation-run-from", "automation-run-from"],
+    ["automation-variables", "automation-variables"],
     ["lighthouse-runner", "lighthouse"],
   ]),
   ...service("apps/collab", [

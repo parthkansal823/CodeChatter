@@ -152,6 +152,10 @@ self.onmessage = async function (event) {
   var safe = function (value) { var text = String(value); return secretRegex ? text.replace(secretRegex, "[redacted]") : text; };
   var log = function (level) { return function () { logs.push({ level: level, text: safe(Array.prototype.map.call(arguments, __show).join(" ")) }); }; };
   var console = { log: log("log"), info: log("info"), debug: log("log"), warn: log("warn"), error: log("error") };
+  // Cover native aliases too: a shared script must not print credentials through self.console.
+  [self, Object.getPrototypeOf(self), self.WorkerGlobalScope && self.WorkerGlobalScope.prototype].forEach(function (scope) {
+    if (scope) try { Object.defineProperty(scope, "console", { value: console, configurable: false, writable: false }); } catch (e) {}
+  });
   var env = {
     get: function (k) { return vars[k]; },
     set: function (k, v) { var s = typeof v === "string" ? v : __show(v); vars[k] = s; changes[k] = s; },
@@ -191,8 +195,8 @@ self.onmessage = async function (event) {
   var cookiesForRequest = function () {
     var out = Object.create(null), pairs = [];
     var resolve = input.kind === "pre" ? env.replaceIn : String;
-    var manual = request.headers.all().filter(function (h) { return resolve(h.key).toLowerCase() === "cookie"; });
-    if (input.kind === "pre" && input.cookieAuth && resolve(input.cookieAuth.key).toLowerCase() === "cookie") manual = [input.cookieAuth];
+    var manual = request.headers.all().filter(function (h) { return resolve(h.key).trim().toLowerCase() === "cookie"; });
+    if (input.kind === "pre" && input.cookieAuth && resolve(input.cookieAuth.key).trim().toLowerCase() === "cookie") manual = [input.cookieAuth];
     if (manual.length) {
       manual.forEach(function (h) { resolve(h.value).split(";").forEach(function (part) {
         var at = part.indexOf("="); if (at <= 0) return;

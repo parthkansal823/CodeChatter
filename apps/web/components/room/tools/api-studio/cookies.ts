@@ -132,6 +132,7 @@ export function parseSetCookie(raw: string, urlText: string, now = Date.now()): 
       if (!attribute) { warnings.push("Ignored an empty Domain attribute."); continue; }
       domainAttribute = attribute;
     } else if (key === "path") {
+      if (/[\x00-\x1F\x7F]/.test(attribute)) return skip("its Path contains an invalid control character.");
       path = attribute.startsWith("/") ? attribute : defaultPath(url.pathname);
       explicitRootPath = attribute === "/";
     } else if (key === "expires") {
@@ -176,8 +177,13 @@ function validStoredCookie(input: unknown): input is StudioCookie {
   if (c.sameSite !== null && !["Strict", "Lax", "None"].includes(c.sameSite)) return false;
   if (!c.hostOnly && isPublicSuffix(c.domain)) return false;
   if (c.sameSite === "None" && !c.secure) return false;
-  if (![c.expires, c.maxAge, c.expiresAt].every((n) => n === null || (typeof n === "number" && Number.isFinite(n)))) return false;
-  if (typeof c.createdAt !== "number" || !Number.isFinite(c.createdAt) || typeof c.size !== "number" || !Number.isFinite(c.size) || c.size > COOKIE_LIMITS.bytes || c.size < bytes(`${c.name}=${c.value}`)) return false;
+  if (![c.expires, c.expiresAt].every((n) => n === null || (typeof n === "number" && Number.isInteger(n) && Math.abs(n) <= MAX_DATE))) return false;
+  if (c.maxAge !== null && !Number.isSafeInteger(c.maxAge)) return false;
+  if ((c.maxAge === null && c.expiresAt !== c.expires) || (c.maxAge !== null && c.expiresAt === null) || (c.maxAge !== null && c.maxAge <= 0 && c.expiresAt !== 0)) return false;
+  if (/^__(?:Secure-|Host-|Http-)/.test(c.name) && !c.secure) return false;
+  if (c.name.startsWith("__Host-") && (!c.hostOnly || c.path !== "/")) return false;
+  if ((c.name.startsWith("__Http-") || c.name.startsWith("__Host-Http-")) && !c.httpOnly) return false;
+  if (typeof c.createdAt !== "number" || !Number.isFinite(c.createdAt) || c.createdAt < 0 || c.createdAt > MAX_DATE || typeof c.size !== "number" || !Number.isSafeInteger(c.size) || c.size > COOKIE_LIMITS.bytes || c.size < bytes(`${c.name}=${c.value}`)) return false;
   return bytes(`${c.name}=${c.value}`) <= COOKIE_LIMITS.bytes;
 }
 
@@ -267,9 +273,15 @@ export function requestCookies(jar: readonly StudioCookie[], url: string, header
 
 /** Remove private cookie values before putting script text into logs, history or a shared document. */
 export function redactCookieValues(text: string, values: readonly string[]): string {
-  let redacted = text;
-  for (const value of [...new Set(values.filter(Boolean))].sort((a, b) => b.length - a.length)) redacted = redacted.split(value).join("[cookie]");
-  return redacted;
+  const variants = new Set<string>();
+  for (const value of values) {
+    if (!value) continue;
+    for (const variant of [value, value.replace(/^"|"$/g, ""), JSON.stringify(value).slice(1, -1)]) if (variant) variants.add(variant);
+    try { variants.add(encodeURIComponent(value)); } catch { /* A malformed manual UTF-16 value still gets exact redaction. */ }
+  }
+  if (!variants.size) return text;
+  const pattern = [...variants].sort((a, b) => b.length - a.length).map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return text.replace(new RegExp(pattern, "g"), "[cookie]");
 }
 
 /**

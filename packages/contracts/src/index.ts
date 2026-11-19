@@ -9,6 +9,7 @@ export * from "./data-summary.js";
 export * from "./lakehouse.js";
 export * from "./flow.js";
 export * from "./automations.js";
+export * from "./variables.js";
 export * from "./schedule.js";
 export * from "./room-events.js";
 export * from "./lighthouse.js";

@@ -5,7 +5,7 @@ import * as Y from "yjs";
 import { parseDocName, roomDocName } from "./index.js";
 import { createBinaryFile, createFile, maps, textOf } from "./model.js";
 import { CodeTaskIndex } from "./task-scan.js";
-import { addTask, assignTask, codeTaskCard, codeTaskKey, deleteTask, editTask, findCodeTasks, MAX_TASK_DESCRIPTION, MAX_TASK_TITLE, moveTask, readTasks, restoreTask, scanCodeTasks, taskMaps, type TaskCard } from "./tasks.js";
+import { addTask, assignTask, codeTaskCard, codeTaskKey, deleteTask, editTask, findCodeTasks, MAX_CODE_TASKS, MAX_TASK_DESCRIPTION, MAX_TASK_TITLE, moveTask, readTasks, restoreTask, scanCodeTasks, taskMaps, type TaskCard } from "./tasks.js";
 
 const { test } = process.env.VITEST ? await import("vitest") : await import("node:test");
 const code = (fileId = "file-1", text = "handle retries", line = 2) => codeTaskCard(fileId, { marker: "TODO", text, line });
@@ -148,6 +148,9 @@ test("identical comments have separate stable ordinal IDs through unrelated edit
   const moved = readTasks(doc, shifted).find((card) => card.id === initial[1]!.id)!;
   assert.equal(moved.column, "doing");
   assert.equal(moved.assigneeId, "ben");
+  const normalized = cards("// TODO: check\0 this\n// TODO: check this");
+  assert.equal(normalized[0]!.title, normalized[1]!.title);
+  assert.notEqual(normalized[0]!.id, normalized[1]!.id);
 });
 
 test("deleting a later duplicate retains the first ID; deleting the middle of three renumbers later ordinals", () => {
@@ -387,4 +390,23 @@ test("a file removed during a scan cannot publish stale cards, and cancellation 
   while (!next.done) next = removed.next();
   assert.deepEqual(next.value.cards, []);
   assert.deepEqual(scanIndex(index).cards, []);
+});
+
+test("a checked Doing orphan in a capped file does not trigger repeated unchanged scans", () => {
+  const doc = new Y.Doc();
+  const file = createFile(doc, { name: "many.ts", content: Array.from({ length: MAX_CODE_TASKS + 1 }, (_, i) => `// TODO: task ${i}`).join("\n") });
+  let scanned = 0;
+  const index = new CodeTaskIndex(doc, 1_000_000, function* (path, text) { scanned++; yield* scanCodeTasks(path, text); });
+  index.setFiles([{ id: file, path: "many.ts" }]);
+  assert.equal(scanIndex(index).capped, true);
+  const orphan = { ...codeTaskCard(file, { marker: "TODO", text: "removed task", line: 1 }), column: "doing" as const };
+  scanIndex(index, [orphan]);
+  assert.equal(scanned, 2);
+  scanIndex(index, [orphan]);
+  scanIndex(index, [{ ...orphan, assigneeId: "ben" }]);
+  assert.equal(scanned, 2);
+  maps(doc).contents.observeDeep((events) => { index.invalidateContents(events); });
+  textOf(doc, file)!.insert(0, "\n");
+  scanIndex(index, [orphan]);
+  assert.equal(scanned, 3);
 });

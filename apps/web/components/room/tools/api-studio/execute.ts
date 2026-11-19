@@ -117,6 +117,7 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
   const env = readEnvironments(doc).find((e) => e.id === selected) ?? null;
   const envKey = env?.id ?? "";
   const initialJar = getCookieJar(roomId, userId, envKey);
+  let cookieSensitive = useCookieJar && initialJar.length > 0;
   cookieSecrets.push(...initialJar.map((cookie) => cookie.value));
   const logs: RunLog[] = [];
   const scriptChecks: CheckResult[] = [];
@@ -125,7 +126,8 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
   let request = written;
   if (written.preScript.trim()) {
     const initial = resolveRequest(written, variableLookup(env, getValues(roomId, userId, envKey)));
-    if (!initial.problems.length) cookieSecrets.push(...privateCookieValues(initial.input.headers.map((header) => [header.name, header.value])));
+    cookieSecrets.push(...privateCookieValues(initial.input.headers.map((header) => [header.name, header.value])));
+    cookieSensitive ||= initial.input.headers.some((header) => header.name.toLowerCase() === "cookie");
     const input: CookieScriptInput = { kind: "pre", name: written.name, variables: variableSnapshot(env, getValues(roomId, userId, envKey)), request: scriptRequestOf(written),
       cookieJar: initialJar, useCookieJar, cookieSecrets,
       ...(written.auth.type === "apiKey" && written.auth.in === "header" && { cookieAuth: { key: written.auth.key, value: written.auth.value } }) };
@@ -153,8 +155,9 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
   if (selectedCookies.warning) warnings.push(selectedCookies.warning);
   const wire = { ...resolved.input, headers: selectedCookies.headers };
   cookieSecrets.push(...privateCookieValues(wire.headers.map((header) => [header.name, header.value])));
-  if (!HttpSendInput.safeParse(wire).success) return done({ problem: "The request headers are too large after adding cookies. Delete some cookies, disable the jar, or shorten the headers.", warnings, logs });
-  const cookieSensitive = (useCookieJar && sendingJar.length > 0) || wire.headers.some((header) => header.name.toLowerCase() === "cookie");
+  const validWire = HttpSendInput.safeParse(wire);
+  if (!validWire.success) return done({ problem: `${validWire.error.issues.map((issue) => issue.message).join(" ")} Check the request and headers, or reduce the cookie jar.`, warnings, logs });
+  cookieSensitive ||= (useCookieJar && sendingJar.length > 0) || wire.headers.some((header) => header.name.toLowerCase() === "cookie");
 
   let result: HttpSendResult;
   try {

@@ -30,7 +30,50 @@ export type Flow = {
   stepNotes?: Record<string, string>;
   /** Output pinned on a step, by its name: when the flow runs, the step gives this back instead of running (image/automation/host.mjs). */
   pinned?: Record<string, unknown>;
+  /** Notes placed freely on the chart (n8n's sticky notes), in its own coordinates. Ours: the engine never sees them. */
+  stickies?: FlowSticky[];
 };
+
+export type FlowSticky = { id: string; text: string; x: number; y: number; width: number; height: number };
+const MOST_STICKIES = 50;
+
+/** A new, empty note at a place on the chart. */
+export function addSticky(flow: Flow, at: { x: number; y: number }, size = { width: 220, height: 120 }): { flow: Flow; id: string } | null {
+  const stickies = flow.stickies ?? [];
+  if (stickies.length >= MOST_STICKIES) return null;
+  const id = `note_${Math.random().toString(36).slice(2, 10)}`;
+  return { flow: { ...flow, stickies: [...stickies, { id, text: "", x: Math.round(at.x), y: Math.round(at.y), ...size }] }, id };
+}
+
+/** A note's text, place or size changed. Text is kept as typed, up to 4,000 characters; a place or size, in whole points, at least a note's smallest. */
+export function changeSticky(flow: Flow, id: string, patch: Partial<Omit<FlowSticky, "id">>): Flow {
+  const stickies = flow.stickies ?? [];
+  if (!stickies.some((sticky) => sticky.id === id)) return flow;
+  const tidy: Partial<Omit<FlowSticky, "id">> = {};
+  if (typeof patch.text === "string") tidy.text = patch.text.slice(0, 4000);
+  for (const key of ["x", "y"] as const) if (typeof patch[key] === "number" && Number.isFinite(patch[key])) tidy[key] = Math.round(patch[key]);
+  if (typeof patch.width === "number" && Number.isFinite(patch.width)) tidy.width = Math.max(140, Math.round(patch.width));
+  if (typeof patch.height === "number" && Number.isFinite(patch.height)) tidy.height = Math.max(72, Math.round(patch.height));
+  return { ...flow, stickies: stickies.map((sticky) => (sticky.id === id ? { ...sticky, ...tidy } : sticky)) };
+}
+
+export function removeSticky(flow: Flow, id: string): Flow {
+  const stickies = (flow.stickies ?? []).filter((sticky) => sticky.id !== id);
+  if (stickies.length === (flow.stickies ?? []).length) return flow;
+  const next: Flow = { ...flow, stickies };
+  if (!stickies.length) delete next.stickies;
+  return next;
+}
+
+/** The notes as a file has them, each checked: a hand-edited file with a broken one shows the rest. */
+export function stickiesOf(flow: Flow): FlowSticky[] {
+  const given: unknown[] = Array.isArray(flow.stickies) ? flow.stickies : [];
+  return given.flatMap((each) => {
+    const sticky = each as Partial<FlowSticky> | null;
+    if (!sticky || typeof sticky.id !== "string" || typeof sticky.x !== "number" || typeof sticky.y !== "number") return [];
+    return [{ id: sticky.id, text: typeof sticky.text === "string" ? sticky.text : "", x: sticky.x, y: sticky.y, width: Math.max(140, Number(sticky.width) || 220), height: Math.max(72, Number(sticky.height) || 120) }];
+  });
+}
 
 export const SCHEMA_VERSION = "27";
 

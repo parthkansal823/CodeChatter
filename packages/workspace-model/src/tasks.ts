@@ -273,7 +273,7 @@ export function* scanCodeTasks(path: string, text: string): Generator<CodeTask |
           if (end === -1) end = text.length;
           if (comment === "block") { const close = text.indexOf(blockEnd, i); if (close !== -1) end = Math.min(end, close); }
           const body = text.slice(i + match[0].length, Math.min(end, i + match[0].length + MAX_TASK_DESCRIPTION)).replace(/^\s*:\s*/, "").trim();
-          const key = JSON.stringify([match[0], body]);
+          const key = JSON.stringify([match[0], clipped(body, MAX_TASK_DESCRIPTION).trim()]);
           const occurrence = (occurrences.get(key) ?? 0) + 1;
           occurrences.set(key, occurrence);
           yield { line, marker: match[0] as TaskMarker, text: body, ...(occurrence > 1 ? { occurrence } : {}) };

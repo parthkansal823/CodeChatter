@@ -185,6 +185,14 @@ export const BUILTINS: Record<string, Builtin> = {
     },
     defaults: { prompt: "", instructions: "", json: false, model: "" },
   },
+  run_data: {
+    label: "Save run data",
+    description: "A few things this run is kept with, to find it by among every run: the order or customer it was for",
+    fields: {
+      data: json("What to keep", 'Names and values, such as {"order": "{{trigger.output.body.id}}"}. Up to 10 a run, each value up to 512 characters.', true),
+    },
+    defaults: { data: { order: "{{trigger.output.body.id}}" } },
+  },
   post_to_chat: {
     group: "room",
     label: "Post to the room's chat",

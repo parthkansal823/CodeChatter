@@ -22,7 +22,7 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { copyStep, stepToPaste } from "./clipboard";
-import { addStep, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newRoomEventTrigger, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
+import { addStep, addSticky, changeSticky, removeSticky, stickiesOf, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newRoomEventTrigger, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
 import { ErrorFlowField } from "./error-flow-field";
 import { StepPanel } from "./step-panel";
 import { StepPicker, type Picked } from "./step-picker";
@@ -66,6 +66,7 @@ function RunsList({ runs, shownId, onShow, titleOf }: { runs: AutomationRunSumma
               {run.durationMs !== undefined ? ` · ${(run.durationMs / 1000).toFixed(1)} s` : ""}
               {run.by ? ` · ${run.by}` : ""}
               {run.errorRun ? " · its error flow ran" : run.errorProblem ? ` · its error flow didn't: ${run.errorProblem}` : ""}
+              {run.data && Object.keys(run.data).length > 0 ? ` · ${Object.entries(run.data).map(([key, value]) => `${key}: ${value}`).join(", ")}` : ""}
             </span>
           </button>
         </li>
@@ -83,7 +84,7 @@ function addLabelOf(edge: ChartEdge, flow: Flow): string {
   return `Add a step after ${name(place.after)}`;
 }
 
-export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeNode; pieces: AutomationManifest["pieces"]; live: AutomationLive | undefined; ask: <T>(input: AutomationInput) => Promise<T>; version: string }) {
+export function FlowFileView({ node, pieces, live, ask, version, initialRun = null }: { node: TreeNode; pieces: AutomationManifest["pieces"]; live: AutomationLive | undefined; ask: <T>(input: AutomationInput) => Promise<T>; version: string; /** A run to show first, chosen in Every run. */ initialRun?: string | null }) {
   const { room, doc, can } = useRoom();
   const queryClient = useQueryClient();
   const text = textOf(doc, node.id);
@@ -93,7 +94,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
   const canRun = can("code.run");
   const [selected, setSelected] = useState<string | null>(null);
   const [picking, setPicking] = useState<Picking | null>(null);
-  const [shownRun, setShownRun] = useState<string | null>(null);
+  const [shownRun, setShownRun] = useState<string | null>(initialRun);
   const [payload, setPayload] = useState("{\n  \n}");
   const [problem, setProblem] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -407,6 +408,20 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
           menuFor={menuFor}
           onNodeKey={onNodeKey}
           toolbar={toolbar}
+          stickies={stickiesOf(flow)}
+          stickyActions={
+            canEdit
+              ? {
+                  add: (at) => {
+                    const added = addSticky(flow, at);
+                    if (added) save(added.flow);
+                    else toast("A flow has up to 50 notes.");
+                  },
+                  change: (id, patch) => save(changeSticky(flow, id, patch)),
+                  remove: (id) => save(removeSticky(flow, id)),
+                }
+              : null
+          }
         />
       </div>
       <aside aria-label="Details" className="min-h-0 w-full shrink-0 overflow-auto border-t p-3 md:w-96 md:border-t-0 md:border-l max-md:h-1/2">

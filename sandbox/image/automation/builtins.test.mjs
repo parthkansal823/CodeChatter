@@ -358,3 +358,33 @@ test("Read files and Write a file: the room's files, through a stand-in worker t
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("Save run data: what a run keeps to be found by, through a stand-in worker", async () => {
+  const { createServer } = await import("node:http");
+  let kept = {};
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      kept = { ...kept, ...JSON.parse(body).data };
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ data: kept }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const before = process.env.AP_SANDBOX_WS_PORT;
+  process.env.AP_SANDBOX_WS_PORT = String(server.address().port);
+  try {
+    assert.deepEqual(await run("run_data", { data: { order: "A-17", total: 42, customer: { id: 3 } } }), { saved: { order: "A-17", total: "42", customer: '{"id":3}' } }, "values are kept as text");
+    assert.deepEqual((await run("run_data", { data: '{"status": "paid"}' })).saved, { order: "A-17", total: "42", customer: '{"id":3}', status: "paid" }, "a later step adds to it; JSON text is read");
+    await assert.rejects(run("run_data", { data: { ["x".repeat(51)]: "y" } }), /over 50 characters/);
+    await assert.rejects(run("run_data", { data: { long: "y".repeat(513) } }), /over 512 characters/);
+    await assert.rejects(run("run_data", { data: {} }), /Say what to keep/);
+    delete process.env.AP_SANDBOX_WS_PORT;
+    await assert.rejects(run("run_data", { data: { a: "b" } }), /only works in a run/);
+  } finally {
+    if (before === undefined) delete process.env.AP_SANDBOX_WS_PORT;
+    else process.env.AP_SANDBOX_WS_PORT = before;
+    server.close();
+  }
+});

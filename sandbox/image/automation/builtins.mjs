@@ -418,6 +418,27 @@ export const BUILTINS = {
   },
 
   /**
+   * Save run data (n8n's Execution Data): a few things this run is kept with, to be found by in the list of runs, such as the order or customer it was for.
+   * Up to 10 a run, each a name of up to 50 characters and text of up to 512; a later step can add more or change one. It gives back all the run keeps.
+   */
+  async run_data(inputs) {
+    const given = objectOf(inputs.data);
+    const data = {};
+    for (const [key, value] of Object.entries(given)) {
+      const name = String(key).trim();
+      if (!name) continue;
+      if (name.length > 50) throw new Error(`"${name.slice(0, 20)}…" is a name over 50 characters.`);
+      const text = value === undefined || value === null ? "" : typeof value === "string" ? value : JSON.stringify(value);
+      if (text.length > 512) throw new Error(`What's kept as ${name} is over 512 characters.`);
+      data[name] = text;
+    }
+    if (!Object.keys(data).length) throw new Error("Say what to keep, such as {\"order\": \"{{trigger.output.body.id}}\"}.");
+    if (!process.env.AP_SANDBOX_WS_PORT) throw new Error("Save run data only works in a run.");
+    const answer = await askWorker("/v1/codechatter/run-data", { data });
+    return { saved: answer.data ?? data };
+  },
+
+  /**
    * Approval links: a link for each choice ("approve, reject"), to send to whoever decides, before the run waits for one to be clicked with Respond and Wait
    * for Next Webhook (the webhook piece), which then gives the choice as its queryParams.action. Made before the wait, as the wait's own address only exists
    * once the run has paused.

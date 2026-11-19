@@ -6,7 +6,7 @@ import { codeTaskCard, MAX_CODE_TASKS, scanCodeTasks, type TaskCard } from "./ta
 
 export type CodeTaskScanResult = { cards: TaskCard[]; capped: boolean; skipped: number; unread: string[] };
 type File = { id: string; path: string };
-type Cached = { cards: TaskCard[]; capped: boolean; unread: boolean; skipped: boolean };
+type Cached = { cards: TaskCard[]; capped: boolean; unread: boolean; skipped: boolean; checked: ReadonlySet<string> };
 
 export class CodeTaskIndex {
   private files = new Map<string, File>();
@@ -48,17 +48,24 @@ export class CodeTaskIndex {
   /** Cancellation leaves unfinished files dirty; only a complete, still-current replacement becomes cached data. */
   *scan(tracked: readonly TaskCard[] = []): Generator<null, CodeTaskScanResult> {
     const trackedIds = new Set(tracked.map((card) => card.id));
+    const trackedByFile = new Map<string, Set<string>>();
     for (const card of tracked) {
       const id = card.source?.fileId;
+      if (id) {
+        const ids = trackedByFile.get(id) ?? new Set<string>();
+        ids.add(card.id);
+        trackedByFile.set(id, ids);
+      }
       const previous = id ? this.cached.get(id) : undefined;
-      if (id && this.files.has(id) && previous?.capped && !previous.unread && !previous.cards.some((item) => item.id === card.id) && !this.dirty.has(id)) this.dirty.set(id, ++this.revision);
+      if (id && this.files.has(id) && previous?.capped && !previous.unread && !previous.checked.has(card.id) && !previous.cards.some((item) => item.id === card.id) && !this.dirty.has(id)) this.dirty.set(id, ++this.revision);
     }
     while (this.dirty.size) {
       const [id, revision] = this.dirty.entries().next().value!;
       const file = this.files.get(id);
       if (!file) { this.dirty.delete(id); continue; }
       const source = textOf(this.doc, id);
-      const next: Cached = { cards: [], capped: false, unread: !source, skipped: false };
+      // Remember absent tracked IDs too: an already checked Doing orphan must not force another text scan.
+      const next: Cached = { cards: [], capped: false, unread: !source, skipped: false, checked: trackedByFile.get(id) ?? new Set<string>() };
       if (source && source.length > this.maxFileChars) { next.unread = true; next.skipped = true; }
       if (source && !next.unread) {
         for (const task of this.scanner(file.path, source.toString())) {

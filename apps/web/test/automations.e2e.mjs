@@ -594,6 +594,42 @@ try {
   const saved = await Promise.all([a.waitForEvent("download", { timeout: 20_000 }), download.click()]).then(([event]) => event).catch(() => null);
   check("andDownloadsWithItsName", saved?.suggestedFilename() === "with-files.flow.json", saved?.suggestedFilename());
 
+  // ---- Notes placed freely on the chart: added, typed in, moved by their top, kept in the file, removed ----
+  await chart.getByRole("button", { name: "Add a note" }).click();
+  const note = chart.getByRole("note").first();
+  check("aNoteGoesOnTheChart", await ok(note.waitFor({ timeout: 5000 })));
+  await note.getByRole("textbox", { name: "The note's text" }).fill("Check the rate limit first.");
+  await sleep(600);
+  const noteBefore = await note.boundingBox();
+  const noteTop = await note.locator(".cc-sticky-handle").boundingBox();
+  await a.mouse.move(noteTop.x + 30, noteTop.y + noteTop.height / 2);
+  await a.mouse.down();
+  await a.mouse.move(noteTop.x + 150, noteTop.y + 90, { steps: 10 });
+  await a.mouse.up();
+  await sleep(800);
+  const noteAfter = await note.boundingBox();
+  check("aNoteMovesByItsTop", noteAfter.x - noteBefore.x > 60 && noteAfter.y - noteBefore.y > 40, { noteBefore, noteAfter });
+  await tool.getByRole("button", { name: "Its file" }).click();
+  await sleep(1500);
+  const fileText = await a.locator(".monaco-editor .view-lines").first().textContent();
+  check("itsKeptInTheFlowsFile", /"stickies"/.test(fileText) && /Check the rate limit first\./.test(fileText), fileText.slice(0, 200));
+  await openTool();
+  await note.waitFor({ timeout: 10_000 });
+  await note.getByRole("button", { name: "Remove this note" }).click();
+  check("andRemoved", await ok(note.waitFor({ state: "detached", timeout: 5000 })));
+
+  // ---- Every run: all the flows' runs in one list, narrowed, and one opened in its flow ----
+  await tool.getByRole("button", { name: "Every run" }).click();
+  const everyRun = tool.getByRole("region", { name: "Every run" }).getByRole("list", { name: "Runs" });
+  check("everyFlowsRunsAreListed", await ok(everyRun.getByRole("listitem").first().waitFor({ timeout: 15_000 })));
+  const howMany = await everyRun.getByRole("listitem").count();
+  await tool.getByLabel("How it ended").selectOption("FAILED");
+  await sleep(300);
+  const failedOnes = await everyRun.getByRole("listitem").count();
+  check("theyCanBeNarrowedByHowTheyEnded", failedOnes > 0 && failedOnes < howMany && (await everyRun.getByRole("listitem").filter({ hasText: /^Finished/ }).count()) === 0, { howMany, failedOnes });
+  await everyRun.getByRole("listitem").first().getByRole("button").click();
+  check("choosingOneOpensItsFlowWithItShown", await ok(details.getByRole("region", { name: "The run shown" }).getByRole("status").filter({ hasText: /^Failed/ }).waitFor({ timeout: 15_000 })));
+
   // ---- On a phone ----
   await a.setViewportSize({ width: 390, height: 800 });
   await sleep(800);

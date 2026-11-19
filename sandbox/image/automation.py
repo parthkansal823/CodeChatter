@@ -262,7 +262,7 @@ def run(request):
             raise Refused("Only a run that failed, stopped or took too long can carry on from where it stopped.")
         if (earlier.get("flowId") or None) != flow_id(flow) or (not flow_id(flow) and earlier.get("path") != path):
             raise Refused("That run was of another flow.")
-        extra.update(retryOf=before, resumeSteps=earlier.get("steps") or {})
+        extra.update(retryOf=before, resumeSteps=earlier.get("steps") or {}, data=earlier.get("data"))
         payload = earlier.get("payload")
     elif mode == "from":
         # From a chosen step on (n8n's partial run): what an earlier run's steps before it gave is kept, and the engine runs it and everything after it,
@@ -288,7 +288,7 @@ def run(request):
             raise Refused("That run has nothing from its trigger to start from.")
         start = dict(order)[step] or step
         kept = names[: names.index(start)]
-        extra.update(step=step, retryOf=before, resumeSteps={name: earlier_steps[name] for name in kept if name in earlier_steps})
+        extra.update(step=step, retryOf=before, resumeSteps={name: earlier_steps[name] for name in kept if name in earlier_steps}, data=earlier.get("data"))
         payload = earlier.get("payload")
     elif mode != "run":
         raise Refused("That isn't a way to run a flow.")
@@ -339,7 +339,7 @@ def stop():
     return {"id": live.get("id")}
 
 
-SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem", "waitpoint")
+SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem", "waitpoint", "data")
 
 
 def runs(path):
@@ -440,7 +440,7 @@ def resume(request):
     except FileExistsError:
         raise Refused("That run isn't waiting.")
     now = time.time()
-    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": {}, "query": {}, "trigger": earlier.get("trigger") or "manual", "by": earlier.get("by"), "seconds": DEFAULT_SECONDS, "connections": request.get("connections") or {}, "variables": variables_of(request), "resumeBase": earlier.get("resumeBase"), "mode": "resume", "resumeSteps": earlier.get("steps") or {}, "triggerPayload": earlier.get("payload"), "waitedFrom": earlier.get("startedAt")}
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": {}, "query": {}, "trigger": earlier.get("trigger") or "manual", "by": earlier.get("by"), "seconds": DEFAULT_SECONDS, "connections": request.get("connections") or {}, "variables": variables_of(request), "resumeBase": earlier.get("resumeBase"), "mode": "resume", "resumeSteps": earlier.get("steps") or {}, "data": earlier.get("data"), "triggerPayload": earlier.get("payload"), "waitedFrom": earlier.get("startedAt")}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}-resume.json"), job)
     start_worker()
     return {"id": identity, "queued": queued()}

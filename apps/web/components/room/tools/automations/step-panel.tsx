@@ -4,7 +4,7 @@
  */
 "use client";
 
-import { roomEventOf, SCHEDULE_PIECE, type AutomationStepResult, type PieceField, type PieceInfo } from "@codechatter/contracts";
+import { roomEventOf, SCHEDULE_PIECE, variableExpression, type AutomationStepResult, type PieceField, type PieceInfo } from "@codechatter/contracts";
 import { FastForward, Loader2, Pin, PinOff, Play, Plus, Replace, Trash2, Zap } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
@@ -21,6 +21,7 @@ import { addBranch, canPin, expressionsFor, isPinned, kindOf, pinStep, removeBra
 import { RouterFields } from "./router-fields";
 import { ConnectionField } from "./connections";
 import { PollSettings } from "./poll-settings";
+import { useVariables } from "./variables-settings";
 import { CallFlowField } from "./error-flow-field";
 import { ExpressionInput } from "./expression-input";
 import { RoomEventSettings } from "./room-event-settings";
@@ -62,6 +63,9 @@ const noteParts: Components = {
   img: () => null,
 };
 
+/** A blank Activepieces' own server fills in a piece's note: a bare name, unlike an expression, which reads a step's data. */
+const SERVER_BLANK = /\{\{\s*[A-Za-z]+\s*\}\}/;
+
 function PieceNote({ text }: { text: string }) {
   return (
     <div className="text-muted-foreground">
@@ -74,7 +78,8 @@ function PieceNote({ text }: { text: string }) {
 function PieceFieldEditor({ name, spec, value, onChange, readOnly, onFocusField, data, bases }: { name: string; spec: PieceField; value: unknown; onChange: (next: unknown) => void; readOnly: boolean; onFocusField: FocusField; data: Record<string, unknown> | null; bases: string[] }) {
   const helpId = useId();
   const label = `${spec.label || name}${spec.required ? " (required)" : ""}`;
-  if (spec.type === "MARKDOWN") return spec.description ? <PieceNote text={spec.description} /> : null;
+  // A note with Activepieces' server's own blanks ({{webhookUrl}}, {{formUrl}}) is about its addresses, not ours: the trigger's panel shows the room's.
+  if (spec.type === "MARKDOWN") return spec.description && !SERVER_BLANK.test(spec.description) ? <PieceNote text={spec.description} /> : null;
   // Beside the field and tied to it, rather than in its label, so a field's name stays short for anyone listening.
   const help = spec.description ? <span id={helpId} className="text-muted-foreground">{spec.description}</span> : null;
   const describedBy = spec.description ? helpId : undefined;
@@ -217,9 +222,11 @@ export function StepPanel({
   const last = result?.results.at(-1);
   const handling = settings.errorHandlingOptions;
   const data = runSteps ? Object.fromEntries(Object.entries(runSteps).map(([name, each]) => [name, { output: each.output }])) : null;
-  // What the steps before this one give: offered as a field's {{ is typed.
-  const bases = expressionsFor(flow, step.name);
-  const earlier = bases
+  // What the steps before this one give, and the room's variables: offered as a field's {{ is typed.
+  const steps = expressionsFor(flow, step.name);
+  const variables = useVariables(canRun);
+  const bases = [...steps, ...(variables.data ?? []).map((each) => variableExpression(each.name))];
+  const earlier = steps
     .map((expression) => /^\{\{([A-Za-z0-9_]+)\./.exec(expression)?.[1])
     .filter((name, index, all): name is string => Boolean(name) && all.indexOf(name) === index);
   const focusField: FocusField = (element, write) => {

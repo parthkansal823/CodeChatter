@@ -151,6 +151,12 @@ try {
     await page.getByRole("dialog", { name: "Connections" }).getByRole("button", { name: "Add a connection" }).click();
     await step(page, `${theme} room, the automations' connections`, () => page.getByRole("dialog", { name: "Connections" }).getByRole("form", { name: "Add a connection" }).waitFor({ timeout: 15_000 }));
     await page.keyboard.press("Escape");
+    // The room's variables, stood in for, with a name typed wrong.
+    await page.route("**/api/rooms/*/automations/variables", (route) => (route.request().method() === "GET" ? route.fulfill({ json: [{ name: "BASE_URL", value: "https://staging.example.com", by: "Test", at: 1794037625000 }] }) : route.continue()));
+    await page.getByRole("region", { name: "Automations", exact: true }).getByRole("button", { name: "Variables", exact: true }).click();
+    await page.getByRole("dialog", { name: "Variables" }).getByRole("textbox", { name: "Name" }).fill("bad name");
+    await step(page, `${theme} room, the automations' variables`, () => page.getByRole("dialog", { name: "Variables" }).getByRole("listitem", { name: "Variable BASE_URL" }).waitFor({ timeout: 15_000 }));
+    await page.keyboard.press("Escape");
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
     await page.route("**/api/rooms/*/ai/prompt", (route) => {
       const events = [{ type: "delta", text: "An answer." }, { type: "done", stop: "end", usage: { inputTokens: 5, outputTokens: 5, estimated: true }, timing: { firstMs: 200, totalMs: 900 } }];
