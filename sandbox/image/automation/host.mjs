@@ -14,6 +14,10 @@ import { Server } from "socket.io";
 
 import { dispositionOf, FILE_ID, fileNameOf, filesHere, MOST_FILE_BYTES, RUN_ID, stepFileUrl, typeOf, wholeSteps } from "./files.mjs";
 
+// What flows write in the room's files (Write a file, a command, a code step) stays group-writable, as the agent's own (sandbox/agent/src/agent.ts): the agent
+// runs as another user of the same group, and couldn't otherwise remove a file someone deletes, from a folder a flow made.
+process.umask(0o002);
+
 const HOME = join(process.env.HOME, "automations");
 const QUEUE = join(HOME, "queue");
 const RUNS = join(HOME, "runs");
@@ -169,11 +173,18 @@ function withPins(flow, except = null) {
 /** One job, to its end. Never throws: whatever goes wrong is the run's result. */
 async function runJob(job) {
   const startedAt = NOW();
-  const mode = job.mode === "step" || job.mode === "retry" || job.mode === "resume" ? job.mode : "run";
+  const mode = job.mode === "step" || job.mode === "retry" || job.mode === "resume" || job.mode === "from" ? job.mode : "run";
+  // Pins are for trying a flow: only a run by hand uses them, as n8n's pinned data. Started by a webhook, a schedule, the room, a service's new items or
+  // another flow, every step runs for real, so a pin left behind can't quietly stand in for a step of a flow that's on.
+  const byHand = (job.trigger ?? "manual") === "manual";
   // The flow's steps' files are read from this worker once it has a port (below).
-  let { flow, pinned } = withPins(job.flow ?? { trigger: null }, mode === "step" ? job.step : null);
+  let { flow, pinned } = byHand ? withPins(job.flow ?? { trigger: null }, mode === "step" ? job.step : null) : { flow: job.flow ?? { trigger: null }, pinned: [] };
+  // The trigger's pinned data stands in for what's sent, on a run by hand.
+  const triggerName = flow.trigger?.name;
+  const pinnedTrigger = byHand && triggerName && flow.pinned && typeof flow.pinned === "object" && Object.hasOwn(flow.pinned, triggerName) ? { value: flow.pinned[triggerName] } : null;
+  if (pinnedTrigger) pinned = [triggerName, ...pinned];
   running.add(job.id);
-  const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, mode, step: mode === "step" ? job.step : null, retryOf: mode === "retry" ? job.retryOf : null, pinned, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
+  const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, mode, step: mode === "step" || mode === "from" ? job.step : null, retryOf: mode === "retry" || mode === "from" ? job.retryOf : null, pinned, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
   // A flow called by another runs inside its run: the live view stays the caller's.
   const secrets = secretsOf(job.connections);
   const writeLive = () => {
@@ -183,6 +194,8 @@ async function runJob(job) {
   let reservedToken = null;
   writeLive();
   const connections = job.connections ?? {};
+  // The room's variables ({{variables.NAME}}), given with this run by the API: not secret, but never written down here either.
+  const variables = job.variables && typeof job.variables === "object" ? job.variables : {};
   let steps = {};
   let engine = null;
   let stopTimer = null;
@@ -202,7 +215,7 @@ async function runJob(job) {
       const fileId = path.slice("/v1/files/".length);
       if (req.method === "GET") {
         // Running again from where a run failed: the engine reads that run's steps, keeps what succeeded, and carries on from what didn't.
-        if ((mode === "retry" || mode === "resume") && fileId === `resume-${job.id}`) return send(200, { executionState: { steps: filesHere(job.resumeSteps ?? {}, port), tags: [] } });
+        if ((mode === "retry" || mode === "resume" || mode === "from") && fileId === `resume-${job.id}`) return send(200, { executionState: { steps: filesHere(job.resumeSteps ?? {}, port), tags: [] } });
         // A step's output the engine kept apart, read back when a later step uses it.
         const slice = sliceOf(fileId);
         if (!slice) return send(404);
@@ -356,7 +369,11 @@ async function runJob(job) {
       return connection ? send(200, { id: name, externalId: name, displayName: name, pieceName: connection.piece, status: "ACTIVE", value: connection.value }) : send(404, { message: `This room has no connection called ${name}.` });
     }
     if (path === "/v1/worker/project") return send(200, { id: "room", displayName: "This room", externalId: null });
-    if (path.startsWith("/v1/worker/variables/")) return send(404);
+    if (path.startsWith("/v1/worker/variables/")) {
+      const name = decodeURIComponent(path.slice("/v1/worker/variables/".length));
+      // A variable the room hasn't: the engine says so in the step, as "variable (NAME) not found".
+      return Object.hasOwn(variables, name) && typeof variables[name] === "string" ? send(200, { name, value: variables[name] }) : send(404, { message: `This room has no variable called ${name}.` });
+    }
     return send(404, { message: `An automation can't use ${path} here yet.` });
   });
 
@@ -467,15 +484,15 @@ async function runJob(job) {
         ...(mode === "resume"
           ? // Carrying on from a waitpoint: the step that waited gets what the call to its address sent (or nothing, after a time).
             { executionType: "RESUME", resumeReason: "WAITPOINT", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: job.payload && typeof job.payload === "object" ? filesHere(job.payload, port) : { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
-          : mode === "retry"
+          : mode === "retry" || mode === "from"
           ? { executionType: "RESUME", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
           : {
               executionType: "BEGIN",
               logsFileId: `logs-${job.id}`,
-              triggerPayload: { type: "inline", value: filesHere(triggerOutputOf(flow, job), port) },
+              triggerPayload: { type: "inline", value: filesHere(pinnedTrigger ? pinnedTrigger.value : triggerOutputOf(flow, job), port) },
               // One step on its own: the engine stands every other step in with this data, and runs only that one.
               stepNameToTest: mode === "step" ? job.step : null,
-              ...(mode === "step" ? { sampleData: filesHere({ ...(job.sampleData ?? {}), ...Object.fromEntries(pinned.map((name) => [name, job.flow.pinned[name]])) }, port) } : {}),
+              ...(mode === "step" ? { sampleData: filesHere({ ...(job.sampleData ?? {}), ...Object.fromEntries(pinned.filter((name) => name !== job.step).map((name) => [name, job.flow.pinned[name]])) }, port) } : {}),
             }),
       };
       try {
@@ -544,13 +561,14 @@ async function callFlow(caller, call, callerStartedAt) {
   const by = `Called by ${String(caller.flow?.displayName ?? caller.path).slice(0, 60)}`;
   const data = call.data === undefined ? {} : call.data;
   if (call.wait === false) {
-    const queued = askScript({ op: "run", path: found.path, flowId, payload: data, trigger: "flow", by, noWorker: true });
+    // The room's connections and variables go with it, as they came with this run.
+    const queued = askScript({ op: "run", path: found.path, flowId, payload: data, trigger: "flow", by, noWorker: true, connections: caller.connections ?? {}, variables: caller.variables ?? {} });
     return typeof queued.id === "string" ? { status: 200, body: { runId: queued.id, queued: true } } : { status: 409, body: { error: queued.error ?? `${name} couldn't be queued.` } };
   }
   const left = caller.seconds - Math.ceil((NOW() - callerStartedAt) / 1000) - 2;
   if (left < 3) return { status: 409, body: { error: `There wasn't time left to run ${name}.` } };
   const id = newRunId();
-  await runJob({ id, path: found.path, flowId, flow: found.flow, payload: data, headers: {}, query: {}, trigger: "flow", by, seconds: left, connections: caller.connections ?? {}, mode: "run", depth, nested: true });
+  await runJob({ id, path: found.path, flowId, flow: found.flow, payload: data, headers: {}, query: {}, trigger: "flow", by, seconds: left, connections: caller.connections ?? {}, variables: caller.variables ?? {}, mode: "run", depth, nested: true });
   const run = readJson(join(RUNS, `${id}.json`));
   if (run?.status !== "SUCCEEDED") {
     const why = run?.failedStep?.message ?? run?.message ?? "it didn't say why";
@@ -580,7 +598,7 @@ function queueErrorFlow(job, live) {
     },
     workflow: { id: job.flowId ?? null, name: job.flow.displayName ?? job.path, path: job.path },
   };
-  const answer = askScript({ op: "run", path: job.path, flowId: errorFlow, payload, trigger: "error", by: `${String(job.flow.displayName ?? job.path).slice(0, 60)} failed`, noWorker: true });
+  const answer = askScript({ op: "run", path: job.path, flowId: errorFlow, payload, trigger: "error", by: `${String(job.flow.displayName ?? job.path).slice(0, 60)} failed`, noWorker: true, connections: job.connections ?? {}, variables: job.variables ?? {} });
   if (typeof answer.id === "string") return { errorRun: answer.id, errorProblem: null };
   return { errorRun: null, errorProblem: String(answer.error ?? "Its error flow couldn't be started.").slice(0, 300) };
 }

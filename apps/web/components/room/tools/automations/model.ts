@@ -365,8 +365,8 @@ function withoutLostNotes(flow: Flow): Flow {
   return { ...flow, ...(flow.stepNotes ? { stepNotes: keep(flow.stepNotes) } : {}), ...(flow.pinned ? { pinned: keep(flow.pinned) } : {}) };
 }
 
-/** Only code and pieces' actions can be pinned: a trigger gets what's sent, and a router or a loop has steps of its own. */
-export const canPin = (step: FlowStep) => step.type === "CODE" || step.type === "PIECE";
+/** Code, pieces' actions and the trigger can be pinned: a router or a loop has steps of its own. The trigger's pin stands in for what's sent. */
+export const canPin = (step: FlowStep) => step.type === "CODE" || step.type === "PIECE" || step.type === "PIECE_TRIGGER";
 export const isPinned = (flow: Flow, step: FlowStep) => canPin(step) && Object.hasOwn(flow.pinned ?? {}, step.name);
 
 /** Pins what a step gave out, so the flow uses it rather than running the step: for trying what comes after without calling a service again, as n8n's pinned data. */
@@ -459,11 +459,15 @@ export function replaceStep(flow: Flow, name: string, replacement: FlowStep): Fl
   if (isTrigger !== (replacement.type === "PIECE_TRIGGER")) return flow;
   if (!isTrigger && current.type !== "CODE" && current.type !== "PIECE") return flow;
   if (replacement.type === "ROUTER" || replacement.type === "LOOP_ON_ITEMS") return flow;
-  return updateStep(flow, name, (step) => {
-    const nextAction = step.nextAction ?? null;
-    for (const key of Object.keys(step)) delete (step as Record<string, unknown>)[key];
-    Object.assign(step, JSON.parse(JSON.stringify(replacement)), { name, nextAction });
-  });
+  // What was pinned was the old step's: the new one gives something else.
+  return unpinStep(
+    updateStep(flow, name, (step) => {
+      const nextAction = step.nextAction ?? null;
+      for (const key of Object.keys(step)) delete (step as Record<string, unknown>)[key];
+      Object.assign(step, JSON.parse(JSON.stringify(replacement)), { name, nextAction });
+    }),
+    name,
+  );
 }
 
 const branchesOf = (step: FlowStep) => (step.settings.branches ?? []) as Branch[];

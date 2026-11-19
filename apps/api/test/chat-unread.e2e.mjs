@@ -43,6 +43,9 @@ try {
         ...seed, id: roomId, name: "Chat unread transaction fixture",
         inviteTokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
       });
+      // The reader joined before these messages: they're what they haven't read.
+      const joined = new Date(Date.now() - 60_000);
+      await tx.insert(schema.roomMembers).values({ roomId, userId: reader.id, role: "editor", createdAt: joined, updatedAt: joined });
       await tx.insert(schema.messages).values([
         { id: id(1), roomId, userId: author.id, body: `${body} normal`, kind: "text" },
         { id: id(2), roomId, userId: null, body: `${body} retained author`, kind: "text" },
@@ -69,6 +72,25 @@ try {
       const stale = await messages.markRead(roomId, reader.id, id(1));
       check("reading a later message clears its unread prefix", later.count === 0 && later.readThroughId === id(2));
       check("a stale second device cannot move the cursor backwards", stale.count === 0 && stale.readThroughId === id(2));
+
+      stage = "where counting starts";
+      // A member who joined after a room's messages doesn't open to them as unread; what's said after they joined counts.
+      const lateRoom = `${roomId.slice(0, 5)}L`;
+      await tx.insert(schema.rooms).values({ ...seed, id: lateRoom, name: "Joined late fixture", inviteTokenHash: createHash("sha256").update(randomUUID()).digest("hex") });
+      await tx.insert(schema.messages).values({ id: id(10), roomId: lateRoom, userId: author.id, body: `${body} before joining`, kind: "text", createdAt: new Date(Date.now() - 120_000) });
+      await tx.insert(schema.roomMembers).values({ roomId: lateRoom, userId: reader.id, role: "editor", createdAt: joined, updatedAt: joined });
+      const late = await messages.unreadInRoom(lateRoom, reader.id);
+      await tx.insert(schema.messages).values({ id: id(11), roomId: lateRoom, userId: author.id, body: `${body} after joining`, kind: "text" });
+      const lateAfter = await messages.unreadInRoom(lateRoom, reader.id);
+      check("a member who joined after messages doesn't count them, and counts what came after", late.count === 0 && lateAfter.count === 1 && lateAfter.firstUnreadId === id(11));
+      // A public room's visitor counts from their first look.
+      const visited = `${roomId.slice(0, 5)}V`;
+      await tx.insert(schema.rooms).values({ ...seed, id: visited, name: "Visited fixture", visibility: "public", inviteTokenHash: createHash("sha256").update(randomUUID()).digest("hex") });
+      await tx.insert(schema.messages).values({ id: id(20), roomId: visited, userId: author.id, body: `${body} before visiting`, kind: "text" });
+      const first = await messages.unreadInRoom(visited, reader.id);
+      await tx.insert(schema.messages).values({ id: id(21), roomId: visited, userId: author.id, body: `${body} after visiting`, kind: "text" });
+      const second = await messages.unreadInRoom(visited, reader.id);
+      check("a visitor counts from their first look", first.count === 0 && second.count === 1 && second.firstUnreadId === id(21));
       throw rollback;
     });
   } catch (error) {

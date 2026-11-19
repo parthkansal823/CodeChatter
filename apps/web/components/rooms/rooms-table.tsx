@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 import { PresenceAvatar, slotFor } from "@/components/presence/presence";
 import { useMe } from "@/components/app/app-shell";
-import { useChatUnread } from "@/components/room/chat-panel";
+import { useChatUnread } from "@/components/room/chat-unread";
 import { templateName } from "@/components/rooms/templates";
 import { useDeleteRoom } from "@/components/rooms/use-rooms";
 import {

@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
+import { randomId } from "@codechatter/workspace-model";
 import * as Y from "yjs";
 import { BASE, ROOM, check, finish, launch, openApp } from "./browser.mjs";
 
@@ -62,6 +63,7 @@ async function exportAs(page, format) {
   await page.getByRole("button", { name: "Export", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("radio", { name: format, exact: true }).or(dialog.getByRole("button", { name: format, exact: true })).first().click();
+  await dialog.getByRole("radio", { name: "Everything", exact: true }).click();
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), dialog.getByRole("button", { name: "Export", exact: true }).click()]);
   return readFileSync(await download.path());
 }
@@ -71,14 +73,11 @@ try {
   list = await connect(first.context, "designs"); peers.push(list);
   for (const user of [first, second]) await openApp(user.page, "Design");
   stage = "create disposable design";
-  const existing = new Set(list.doc.getMap("items").keys());
-  await first.page.getByRole("button", { name: "New design" }).first().click();
-  await until(() => { const added = [...list.doc.getMap("items").keys()].filter((id) => !existing.has(id)); if (added.length !== 1) return false; designId = added[0]; return true; }, "new design identity");
+  // Know ownership before the first write, so creation/rename failures cannot leave an anonymous fixture.
+  designId = randomId();
+  list.doc.getMap("items").set(designId, new Y.Map(Object.entries({ name: title, createdAt: Date.now(), createdBy: null, trashedAt: null })));
+  await first.page.getByText(title, { exact: true }).first().click();
   await surface(first.page).waitFor({ timeout: 30_000 });
-  await first.page.getByRole("button", { name: "Rename design" }).click();
-  const name = first.page.getByRole("textbox", { name: "design name" });
-  await name.fill(title); await name.press("Enter");
-  await until(() => Object.entries(list.doc.getMap("items").toJSON()).some(([id, item]) => { if (item.name === title) designId = id; return item.name === title; }), "owned design identity");
   canvas = await connect(first.context, `design:${designId}`); peers.push(canvas);
   await second.page.getByText(title, { exact: true }).first().click();
   await surface(second.page).waitFor({ timeout: 30_000 });
@@ -162,11 +161,16 @@ try {
   if (first) await first.page.screenshot({ path: `${process.env.TEMP ?? "/tmp"}/codechatter-canvas-groups-failure.png` }).catch(() => {});
 } finally {
   try {
-    // Discover the owned item even when creation/rename failed halfway through.
-    if (list && !designId) designId = Object.entries(list.doc.getMap("items").toJSON()).find(([, item]) => item.name === title)?.[0];
-    if (designId && !canvas) { canvas = await connect(first.context, `design:${designId}`); peers.push(canvas); }
-    if (canvas) canvas.doc.getMap("shapes").clear();
-    if (list && designId) list.doc.getMap("items").delete(designId);
+    try {
+      if (designId && !canvas) { canvas = await connect(first.context, `design:${designId}`); peers.push(canvas); }
+      if (canvas) canvas.doc.getMap("shapes").clear();
+    } finally {
+      // A failed canvas connection must not prevent deletion of its known list entry.
+      if (list && designId) {
+        list.doc.getMap("items").delete(designId);
+        await until(() => !list.provider.hasUnsyncedChanges, "owned design deletion acknowledged");
+      }
+    }
     await until(() => peers.every((peer) => !peer.provider.hasUnsyncedChanges), "fixture cleanup acknowledged");
     check("owned shapes and design removed even after failure", (!canvas || canvas.doc.getMap("shapes").size === 0) && (!list || !designId || !list.doc.getMap("items").has(designId)));
   } catch (error) { check("owned canvas cleanup", false, error.message); }

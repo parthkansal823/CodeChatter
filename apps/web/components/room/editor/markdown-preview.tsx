@@ -1,13 +1,29 @@
 "use client";
 
 import { textOf } from "@codechatter/workspace-model";
-import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore, type ComponentProps } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { useRoom } from "@/components/room/room-context";
 
-const remarkPlugins = [remarkGfm];
+import { MarkdownMermaid } from "./markdown-mermaid";
+import { mermaidBlockOf, remarkMermaidBlocks } from "./markdown-mermaid-utils";
+
+const remarkPlugins = [remarkGfm, remarkMermaidBlocks];
+
+type PreProps = ComponentProps<"pre"> & { node?: unknown; compact?: boolean };
+
+function MarkdownPre({ node, children, compact = false }: PreProps) {
+  const block = mermaidBlockOf(node);
+  return block ? <MarkdownMermaid text={block.text} index={block.index} compact={compact} /> : (
+    <pre className="my-3 overflow-x-auto rounded-md border bg-chrome px-3 py-2 text-xs leading-relaxed">{children}</pre>
+  );
+}
+
+function CompactMarkdownPre(props: PreProps) {
+  return <MarkdownPre {...props} compact />;
+}
 
 // Document-sized type for a README, not chat-sized.
 const components: Components = {
@@ -40,11 +56,7 @@ const components: Components = {
     ) : (
       <code className="rounded-sm bg-muted px-1 py-px font-mono text-[0.85em]">{children}</code>
     ),
-  pre: ({ children }) => (
-    <pre className="my-3 overflow-x-auto rounded-md border bg-chrome px-3 py-2 text-xs leading-relaxed">
-      {children}
-    </pre>
-  ),
+  pre: MarkdownPre,
   table: ({ children }) => (
     <div className="my-3 overflow-x-auto">
       <table className="w-full border-collapse text-sm">{children}</table>
@@ -59,6 +71,8 @@ const components: Components = {
       <img src={src} alt={alt ?? ""} className="my-3 max-w-full rounded-md" />
     ) : null,
 };
+
+const compactComponents: Components = { ...components, pre: CompactMarkdownPre };
 
 /** The file's live text: re-renders as anyone types. */
 export function useFileText(fileId: string): string {
@@ -89,9 +103,9 @@ export function useFileText(fileId: string): string {
 /** A Markdown file, rendered with document-sized type (a README, not a chat message). `compact` is for a narrow panel. */
 export function MarkdownBody({ text, compact = false }: { text: string; compact?: boolean }) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <article className={compact ? "p-3 text-sm" : "mx-auto max-w-3xl px-8 py-6 text-sm"}>
-        <Markdown remarkPlugins={remarkPlugins} components={components}>
+    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <article className={compact ? "min-w-0 p-3 text-sm" : "mx-auto min-w-0 max-w-3xl px-8 py-6 text-sm"}>
+        <Markdown remarkPlugins={remarkPlugins} components={compact ? compactComponents : components}>
           {text}
         </Markdown>
       </article>

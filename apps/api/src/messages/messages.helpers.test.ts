@@ -9,7 +9,7 @@ import {
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
-import { chatUnreadQuery, escapeChatLike, markChatReadQuery } from "./messages.helpers.js";
+import { chatUnreadQuery, escapeChatLike, markChatReadQuery, registerChatReaderQuery } from "./messages.helpers.js";
 
 const dialect = new PgDialect({ casing: "snake_case" });
 
@@ -74,10 +74,24 @@ describe("unread SQL invariants", () => {
     expect(query.params).toEqual(["reader", "reader", "reader"]);
   });
 
+  it("counts from when someone joined until they've read something, never the whole history", () => {
+    const query = dialect.sqlToQuery(chatUnreadQuery("reader"));
+    expect(query.sql).toContain("membership.created_at as since");
+    expect(query.sql).toContain("reads.last_read_message_id is not null or message.created_at >= coalesce(selected.since, 'infinity'::timestamptz)");
+  });
+
+  it("starts a visitor at the room's latest message, and leaves a member to count from joining", () => {
+    const query = dialect.sqlToQuery(registerChatReaderQuery("E2ETST", "visitor"));
+    expect(query.sql).toContain("when exists (select 1 from room_members membership");
+    expect(query.sql).toContain("order by message.id desc limit 1");
+    expect(query.sql).toContain("on conflict (room_id, user_id) do nothing");
+    expect(query.params).toEqual(["E2ETST", "visitor", "E2ETST", "visitor", "E2ETST"]);
+  });
+
   it("keeps a public visitor's single-room count scoped to that room and that reader", () => {
     const query = dialect.sqlToQuery(chatUnreadQuery("visitor", "E2ETST"));
     expect(query.sql).not.toContain("membership.status");
-    expect(query.params).toEqual(["E2ETST", "visitor", "visitor"]);
+    expect(query.params).toEqual(["visitor", "E2ETST", "visitor", "visitor"]);
     expect(query.sql).toContain("reads.user_id =");
   });
 

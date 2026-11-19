@@ -9,6 +9,7 @@ import { PresenceAvatar } from "@/components/presence/presence";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
+import { Switch } from "@/components/ui/switch";
 
 import { AuthEditor } from "./auth-editor";
 import { BodyEditor } from "./body-editor";
@@ -119,6 +120,12 @@ export function RequestPane({ request }: { request: RequestData }) {
           No value for {missing.map((name) => `{{${name}}}`).join(", ")}. Pick an environment, or add {missing.length > 1 ? "them" : "it"} under Environments.
         </p>
       )}
+
+      <label className="flex shrink-0 items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground">
+        <Switch size="sm" aria-label="Use cookie jar" checked={request.useCookieJar !== false} disabled={!canEdit} onCheckedChange={(checked) => setField(doc, request.id, "useCookieJar", checked)} />
+        Use cookie jar
+        <span className="ml-auto">{request.useCookieJar !== false ? "Your cookies, for this environment" : "Jar off; a typed Cookie header still applies"}</span>
+      </label>
 
       <StudioTabs
         label="Request"

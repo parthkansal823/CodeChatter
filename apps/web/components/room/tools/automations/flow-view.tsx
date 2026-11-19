@@ -59,7 +59,7 @@ function RunsList({ runs, shownId, onShow, titleOf }: { runs: AutomationRunSumma
               {STATUS_WORDS[run.status] ?? run.status}
               {run.status === "PAUSED" && waitingFor(run) ? ` ${waitingFor(run)}` : ""}
               {run.mode === "resume" ? " · waited" : ""}
-              {run.mode === "step" && run.step ? ` · one step: ${titleOf(run.step)}` : run.mode === "retry" ? " · carried on" : ""}
+              {run.mode === "step" && run.step ? ` · one step: ${titleOf(run.step)}` : run.mode === "from" && run.step ? ` · from ${titleOf(run.step)}` : run.mode === "retry" ? " · carried on" : ""}
             </span>
             <span className={cn(run.status === "SUCCEEDED" && "text-muted-foreground")}>
               {when(run.startedAt)}
@@ -158,6 +158,9 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
   );
   const step = selected ? findStep(flow, selected) : null;
   const shown = runDetails.data;
+  // What "Run from here" starts from: the run shown, if it's a finished run of the whole flow with its trigger's data.
+  const startsFrom = shown && shown.finishedAt && shown.mode !== "step" && shown.status !== "PAUSED" && Object.hasOwn(shown.steps ?? {}, flow.trigger.name) ? shown : null;
+  const triggerPinned = Object.hasOwn(flow.pinned ?? {}, flow.trigger.name);
   const titleOf = (name: string) => findStep(flow, name)?.displayName || name;
   const isTrigger = (name: string) => name === flow.trigger.name;
 
@@ -424,6 +427,8 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
               result={results.get(step.name)}
               runSteps={steps && Object.keys(steps).length ? steps : undefined}
               onRunStep={canRun ? () => runStep(step.name) : null}
+              onRunFrom={canRun && !isTrigger(step.name) && startsFrom ? () => void run({ mode: "from", step: step.name, retryOf: startsFrom.id }) : null}
+              runFromHint={!canRun || isTrigger(step.name) ? null : startsFrom ? null : "Run the whole flow once, and this step and the ones after it can run again from here, with what the steps before gave."}
               path={node.path}
               canRun={canRun}
               onUseEvent={(body) => {
@@ -460,7 +465,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
                   <Textarea aria-describedby={payloadHelp} className="min-h-16 font-mono text-[11px] md:text-[11px]" spellCheck={false} value={payload} onChange={(event) => setPayload(event.target.value)} />
                 </label>
                 <span id={payloadHelp} className="text-muted-foreground">
-                  {onSchedule ? "The first step gets this as the trigger's output, as a run on the schedule gets its cron_expression, timezone and scheduled_at." : onRoomEvent ? "The first step gets this as the trigger's output, as a run started by the room gets what happened: its event, who, and the files." : <>The first step gets this as {"{{trigger.output.body}}"}.</>}
+                  {triggerPinned ? "The trigger's pinned data is sent instead, on a run by hand: unpin it to send this." : onSchedule ? "The first step gets this as the trigger's output, as a run on the schedule gets its cron_expression, timezone and scheduled_at." : onRoomEvent ? "The first step gets this as the trigger's output, as a run started by the room gets what happened: its event, who, and the files." : <>The first step gets this as {"{{trigger.output.body}}"}.</>}
                 </span>
                 <div className="flex gap-1">
                   {runningHere ? (
@@ -521,6 +526,7 @@ export function FlowFileView({ node, pieces, live, ask, version }: { node: TreeN
                   </p>
                 )}
                 {shown.mode === "retry" && <p className="text-muted-foreground">Carried on from an earlier run: what had succeeded wasn&apos;t run again.</p>}
+                {shown.mode === "from" && shown.step && <p className="text-muted-foreground">Run from {titleOf(shown.step)}: the steps before it weren&apos;t run again, and gave what they gave on an earlier run.</p>}
                 {shown.pinned && shown.pinned.length > 0 && <p className="text-muted-foreground">Pinned, so not run: {shown.pinned.map(titleOf).join(", ")}.</p>}
                 {canRun && shown.mode !== "step" && (
                   <div className="flex flex-wrap gap-1">

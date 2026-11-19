@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import * as Y from "yjs";
 
 import { parseDocName, roomDocName } from "./index.js";
-import { addTask, assignTask, codeTaskCard, codeTaskKey, deleteTask, editTask, findCodeTasks, MAX_TASK_DESCRIPTION, MAX_TASK_TITLE, moveTask, readTasks, scanCodeTasks, taskMaps, type TaskCard } from "./tasks.js";
+import { createBinaryFile, createFile, maps, textOf } from "./model.js";
+import { CodeTaskIndex } from "./task-scan.js";
+import { addTask, assignTask, codeTaskCard, codeTaskKey, deleteTask, editTask, findCodeTasks, MAX_TASK_DESCRIPTION, MAX_TASK_TITLE, moveTask, readTasks, restoreTask, scanCodeTasks, taskMaps, type TaskCard } from "./tasks.js";
 
 const { test } = process.env.VITEST ? await import("vitest") : await import("node:test");
 const code = (fileId = "file-1", text = "handle retries", line = 2) => codeTaskCard(fileId, { marker: "TODO", text, line });
@@ -129,6 +131,86 @@ test("code cards are computed without writes, and identity survives preceding li
   assert.ok(Object.values(taskMaps(doc)).every((map) => map.size === 0));
 });
 
+test("identical comments have separate stable ordinal IDs through unrelated edits and added lines", () => {
+  const doc = new Y.Doc();
+  const source = "// TODO: check this\nconst value = 1;\n// TODO: check this\n";
+  const cards = (text: string) => findCodeTasks("app.ts", text).map((task) => codeTaskCard("file-1", task));
+  const initial = cards(source);
+  assert.equal(initial.length, 2);
+  assert.notEqual(initial[0]!.id, initial[1]!.id);
+  assert.equal(initial[0]!.id, codeTaskKey("file-1", "TODO", "check this"));
+  assert.equal(initial[1]!.source!.occurrence, 2);
+  moveTask(doc, initial[1]!, "doing");
+  assignTask(doc, initial[1]!, "ben");
+  const shifted = cards(`\nconst header = 0;\n${source.replace("value = 1", "value = 99")}`);
+  assert.deepEqual(shifted.map((card) => card.id), initial.map((card) => card.id));
+  assert.deepEqual(shifted.map((card) => card.source!.line), [3, 5]);
+  const moved = readTasks(doc, shifted).find((card) => card.id === initial[1]!.id)!;
+  assert.equal(moved.column, "doing");
+  assert.equal(moved.assigneeId, "ben");
+});
+
+test("deleting a later duplicate retains the first ID; deleting the middle of three renumbers later ordinals", () => {
+  const cards = (count: number) => findCodeTasks("app.ts", "// TODO: check this\n".repeat(count)).map((task) => codeTaskCard("file-1", task));
+  const two = cards(2), one = cards(1), three = cards(3);
+  assert.equal(one[0]!.id, two[0]!.id);
+  // Identical text carries no authored identity: remaining comments are numbered from the top on every peer.
+  const afterMiddleRemoved = findCodeTasks("app.ts", "// TODO: check this\nconst removed = true;\n// TODO: check this\n").map((task) => codeTaskCard("file-1", task));
+  assert.equal(afterMiddleRemoved[0]!.id, three[0]!.id);
+  assert.equal(afterMiddleRemoved[1]!.id, three[1]!.id);
+  assert.notEqual(afterMiddleRemoved[1]!.id, three[2]!.id);
+});
+
+test("a board written with legacy three-part code IDs keeps its placement and assignee", () => {
+  const doc = new Y.Doc();
+  const id = `code:${JSON.stringify(["file-1", "TODO", "check this"])}`;
+  const old: TaskCard = { id, title: "check this", description: "", column: "todo", order: 0, assigneeId: null, createdBy: "", createdAt: 0, source: { fileId: "file-1", marker: "TODO", text: "check this", line: 1 } };
+  taskMaps(doc).cards.set(id, old);
+  taskMaps(doc).placements.set(id, { column: "doing", order: 17.5 });
+  taskMaps(doc).assignees.set(id, "ben");
+  const live = findCodeTasks("app.ts", "\n// TODO: check this\n// TODO: check this").map((task) => codeTaskCard("file-1", task));
+  const merged = readTasks(doc, live);
+  assert.equal(merged.length, 2);
+  assert.deepEqual(merged.find((card) => card.id === id), { ...old, column: "doing", order: 17.5, assigneeId: "ben", source: { ...old.source!, line: 2 }, noLongerInCode: false });
+  assert.equal(merged.find((card) => card.id !== id)!.column, "todo");
+  assert.equal(merged.find((card) => card.id !== id)!.assigneeId, null);
+});
+
+test("Undo restores the same effective manual card and refuses code cards or an already restored card", () => {
+  const doc = new Y.Doc();
+  const first = fixture(doc);
+  editTask(doc, first.id, { title: "Edited title", description: "Edited description" });
+  moveTask(doc, first, "doing");
+  assignTask(doc, first, "ben");
+  const snapshot = readTasks(doc)[0]!;
+  deleteTask(doc, first.id);
+  assert.equal(restoreTask(doc, snapshot), true);
+  assert.deepEqual(readTasks(doc), [snapshot]);
+  moveTask(doc, readTasks(doc)[0]!, "done");
+  assert.equal(restoreTask(doc, snapshot), false);
+  assert.equal(readTasks(doc)[0]!.column, "done");
+  assert.equal(restoreTask(doc, code()), false);
+  assert.equal(taskMaps(doc).cards.size, 1);
+});
+
+test("two people deleting and undoing the same manual card converge to one original ID", () => {
+  const ana = new Y.Doc(), ben = new Y.Doc();
+  const first = fixture(ana);
+  moveTask(ana, first, "doing");
+  assignTask(ana, first, "ben");
+  sync(ana, ben);
+  const a = readTasks(ana)[0]!, b = readTasks(ben)[0]!;
+  deleteTask(ana, a.id);
+  deleteTask(ben, b.id);
+  sync(ana, ben);
+  assert.equal(restoreTask(ana, a), true);
+  assert.equal(restoreTask(ben, b), true);
+  sync(ana, ben);
+  assert.deepEqual(readTasks(ana), [a]);
+  assert.deepEqual(readTasks(ana), readTasks(ben));
+  assert.equal(taskMaps(ana).cards.size, 1);
+});
+
 test("missing Doing code cards remain as orphans, while missing To do and Done cards disappear", () => {
   const doc = new Y.Doc(), first = code();
   assert.equal(readTasks(doc, [first]).length, 1);
@@ -211,4 +293,98 @@ test("prototype-shaped content remains data and malformed shared records are ign
   taskMaps(doc).cards.set("malformed", JSON.parse('{"__proto__":{"polluted":true}}') as TaskCard);
   assert.equal(readTasks(doc).length, 1);
   assert.equal(({} as { polluted?: boolean }).polluted, undefined);
+});
+
+function scanIndex(index: CodeTaskIndex, tracked: readonly TaskCard[] = []) {
+  const iterator = index.scan(tracked);
+  let next = iterator.next();
+  while (!next.done) next = iterator.next();
+  return next.value;
+}
+
+test("the incremental index rescans only the Y.Text whose real deep event changed", () => {
+  const doc = new Y.Doc();
+  const one = createFile(doc, { name: "one.ts", content: "// TODO: first" });
+  const two = createFile(doc, { name: "two.ts", content: "// TODO: second" });
+  const scanned: string[] = [];
+  const index = new CodeTaskIndex(doc, 1_000_000, function* (path, text) { scanned.push(path); yield* scanCodeTasks(path, text); });
+  const files = [{ id: one, path: "one.ts" }, { id: two, path: "two.ts" }];
+  index.setFiles(files);
+  const initial = scanIndex(index);
+  assert.deepEqual(scanned, ["one.ts", "two.ts"]);
+  scanned.length = 0;
+  maps(doc).contents.observeDeep((events) => { index.invalidateContents(events); });
+  textOf(doc, one)!.insert(0, "\n");
+  const updated = scanIndex(index);
+  assert.deepEqual(scanned, ["one.ts"]);
+  assert.equal(updated.cards.find((card) => card.source?.fileId === one)!.source!.line, 2);
+  assert.equal(updated.cards.find((card) => card.source?.fileId === two)!.id, initial.cards.find((card) => card.source?.fileId === two)!.id);
+  scanned.length = 0;
+  index.setFiles(files.map((file) => ({ ...file })));
+  scanIndex(index, updated.cards);
+  assert.deepEqual(scanned, []);
+  maps(doc).contents.set(two, new Y.Text("// FIXME: replaced source"));
+  assert.equal(scanIndex(index).cards.find((card) => card.source?.fileId === two)!.source!.marker, "FIXME");
+  assert.deepEqual(scanned, ["two.ts"]);
+});
+
+test("metadata changes rescan only added or renamed/moved files and remove deleted results", () => {
+  const doc = new Y.Doc();
+  const one = createFile(doc, { name: "one.ts", content: "// TODO: first" });
+  const two = createFile(doc, { name: "two.ts", content: "// TODO: second" });
+  const scanned: string[] = [];
+  const index = new CodeTaskIndex(doc, 1_000_000, function* (path, text) { scanned.push(path); yield* scanCodeTasks(path, text); });
+  index.setFiles([{ id: one, path: "one.ts" }, { id: two, path: "two.ts" }]);
+  scanIndex(index);
+  scanned.length = 0;
+  index.setFiles([{ id: one, path: "one.ts" }, { id: two, path: "folder/renamed.ts" }]);
+  scanIndex(index);
+  assert.deepEqual(scanned, ["folder/renamed.ts"]);
+  scanned.length = 0;
+  const three = createFile(doc, { name: "three.ts", content: "// TODO: added" });
+  index.setFiles([{ id: one, path: "one.ts" }, { id: three, path: "three.ts" }]);
+  const result = scanIndex(index);
+  assert.deepEqual(scanned, ["three.ts"]);
+  assert.ok(!result.cards.some((card) => card.source?.fileId === two));
+});
+
+test("binary and oversized sources skip copying while a tracked skipped card remains available", () => {
+  const doc = new Y.Doc();
+  const one = createFile(doc, { name: "one.ts", content: "// TODO: first" });
+  const binary = createBinaryFile(doc, { name: "asset.png", blob: { sha256: "a".repeat(64), size: 1, type: "image/png" } });
+  const index = new CodeTaskIndex(doc, 50);
+  index.setFiles([{ id: one, path: "one.ts" }, { id: binary, path: "asset.png" }]);
+  const tracked = scanIndex(index).cards[0]!;
+  maps(doc).contents.observeDeep((events) => { index.invalidateContents(events); });
+  textOf(doc, one)!.insert(0, "x".repeat(51));
+  const source = textOf(doc, one)!;
+  const copy = source.toString;
+  source.toString = () => { throw new Error("Oversized source must not be copied"); };
+  try {
+    const result = scanIndex(index, [tracked]);
+    assert.equal(result.skipped, 1);
+    assert.ok(result.unread.includes(one) && result.unread.includes(binary));
+    assert.ok(result.cards.some((card) => card.id === tracked.id));
+  } finally { source.toString = copy; }
+});
+
+test("a file removed during a scan cannot publish stale cards, and cancellation keeps work dirty", () => {
+  const doc = new Y.Doc();
+  const file = createFile(doc, { name: "large.ts", content: `const text = "${"x".repeat(12_000)}";\n// TODO: final` });
+  let scanned = 0;
+  const index = new CodeTaskIndex(doc, 100_000, function* (path, text) { scanned++; yield* scanCodeTasks(path, text); });
+  index.setFiles([{ id: file, path: "large.ts" }]);
+  const cancelled = index.scan();
+  assert.equal(cancelled.next().done, false);
+  cancelled.return({ cards: [], capped: false, skipped: 0, unread: [] });
+  assert.equal(scanIndex(index).cards.length, 1);
+  assert.equal(scanned, 2);
+  index.setFiles([{ id: file, path: "renamed.ts" }]);
+  const removed = index.scan();
+  assert.equal(removed.next().done, false);
+  index.setFiles([]);
+  let next = removed.next();
+  while (!next.done) next = removed.next();
+  assert.deepEqual(next.value.cards, []);
+  assert.deepEqual(scanIndex(index).cards, []);
 });

@@ -321,6 +321,8 @@ export class Editor {
 
   updateMany(patches: Array<[string, ShapePatch]>) {
     this.change(() => patches.forEach(([id, patch]) => {
+      // A locked container protects its contents; its own lock switch must still be usable.
+      if (ancestors(this.store.all(), id).some((shape) => shape.locked)) return;
       if (this.store.get(id)?.type === "group" && patch.rotation) this.rotateGroup(id, patch.rotation);
       this.apply(id, patch);
     }));
@@ -361,7 +363,7 @@ export class Editor {
    */
   setBox(id: string, box: Partial<Rect>) {
     const s = this.store.get(id);
-    if (!s) return;
+    if (!s || effectiveLocked(this.store.all(), id)) return;
     const next = { x: box.x ?? s.x, y: box.y ?? s.y, w: Math.max(1, box.w ?? s.w), h: Math.max(1, box.h ?? s.h) };
     const patch: ShapePatch = { ...next };
     if (s.type === "group") {
@@ -490,7 +492,7 @@ export class Editor {
   reparent(ids: readonly string[]) {
     if (this.kind !== "design") return;
     const all = this.store.all();
-    const top = topLevelIds(all, ids);
+    const top = topLevelIds(all, ids).filter((id) => !effectiveLocked(all, id));
     const exclude = new Set(this.carried(top).map((s) => s.id));
     for (const id of top) {
       const shape = all.get(id);
@@ -698,7 +700,7 @@ export class Editor {
   /** Bring forward / send backward one step, or all the way. */
   reorder(ids: readonly string[], where: "forward" | "backward" | "front" | "back") {
     if (this.readOnly.get()) return;
-    const top = new Set(this.topSelection(ids));
+    const top = new Set(this.topSelection(ids).filter((id) => !effectiveLocked(this.store.all(), id)));
     const parents = new Set([...top].map((id) => effectiveParent(this.store.all(), id)));
     this.change(() => {
       for (const parent of parents) {

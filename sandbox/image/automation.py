@@ -152,6 +152,27 @@ def steps_named(step):
     return found
 
 
+def variables_of(request):
+    """The room's variables given with a request (by the API, never a browser): names to text, nothing else."""
+    given = request.get("variables")
+    if not isinstance(given, dict):
+        return {}
+    return {name: value for name, value in given.items() if isinstance(name, str) and isinstance(value, str)}
+
+
+def steps_in_order(step, loop=None):
+    """Every step's name in the order a run reaches them (a loop's and a router's own steps before what comes after them), each with the outermost loop
+    it's in, or None."""
+    found = []
+    while isinstance(step, dict):
+        found.append((step.get("name"), loop))
+        found += steps_in_order(step.get("firstLoopAction"), loop or step.get("name"))
+        for child in step.get("children") or []:
+            found += steps_in_order(child, loop)
+        step = step.get("nextAction")
+    return found
+
+
 def flow_by_id(wanted):
     """A flow's file found by its own id, wherever it's moved to in the room's files."""
     for folder, dirs, files in os.walk(WORKSPACE):
@@ -243,6 +264,32 @@ def run(request):
             raise Refused("That run was of another flow.")
         extra.update(retryOf=before, resumeSteps=earlier.get("steps") or {})
         payload = earlier.get("payload")
+    elif mode == "from":
+        # From a chosen step on (n8n's partial run): what an earlier run's steps before it gave is kept, and the engine runs it and everything after it,
+        # with the flow as it is now and what that run was sent. A step inside a loop starts from its loop, which keeps each time round apart.
+        step = request.get("step")
+        order = steps_in_order(flow.get("trigger"))
+        names = [name for name, _ in order]
+        trigger_name = flow["trigger"].get("name")
+        if not isinstance(step, str) or not STEP_NAME.match(step) or step not in names or step == trigger_name:
+            raise Refused("That isn't a step of this flow to run from.")
+        before = request.get("retryOf")
+        if not isinstance(before, str) or not RUN_ID.match(before):
+            raise Refused("That isn't a run.")
+        earlier = read_json(os.path.join(RUNS, f"{before}.json"))
+        if not earlier:
+            raise Refused("That run isn't kept any more.")
+        if earlier.get("mode") == "step" or earlier.get("status") == "PAUSED" or not earlier.get("finishedAt"):
+            raise Refused("Run from a finished run of the whole flow: not one step tried on its own, nor a run that's waiting.")
+        if (earlier.get("flowId") or None) != flow_id(flow) or (not flow_id(flow) and earlier.get("path") != path):
+            raise Refused("That run was of another flow.")
+        earlier_steps = earlier.get("steps") or {}
+        if trigger_name not in earlier_steps:
+            raise Refused("That run has nothing from its trigger to start from.")
+        start = dict(order)[step] or step
+        kept = names[: names.index(start)]
+        extra.update(step=step, retryOf=before, resumeSteps={name: earlier_steps[name] for name in kept if name in earlier_steps})
+        payload = earlier.get("payload")
     elif mode != "run":
         raise Refused("That isn't a way to run a flow.")
     os.makedirs(QUEUE, exist_ok=True)
@@ -257,7 +304,7 @@ def run(request):
     resume_base = request.get("resumeBase")
     if not isinstance(resume_base, str) or not resume_base.startswith(("http://", "https://")) or len(resume_base) > 300:
         resume_base = None
-    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": started_by, "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, "resumeBase": resume_base, **extra}
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": headers, "query": query, "trigger": started_by, "by": str(request.get("by") or "")[:80] or None, "seconds": seconds, "connections": request.get("connections") or {}, "variables": variables_of(request), "resumeBase": resume_base, **extra}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}.json"), job)
     # A flow's error flow is queued by the worker that's running it (host.mjs), which goes on to it: a second worker would run the queue twice.
     if not request.get("noWorker"):
@@ -393,7 +440,7 @@ def resume(request):
     except FileExistsError:
         raise Refused("That run isn't waiting.")
     now = time.time()
-    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": {}, "query": {}, "trigger": earlier.get("trigger") or "manual", "by": earlier.get("by"), "seconds": DEFAULT_SECONDS, "connections": request.get("connections") or {}, "resumeBase": earlier.get("resumeBase"), "mode": "resume", "resumeSteps": earlier.get("steps") or {}, "triggerPayload": earlier.get("payload"), "waitedFrom": earlier.get("startedAt")}
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": {}, "query": {}, "trigger": earlier.get("trigger") or "manual", "by": earlier.get("by"), "seconds": DEFAULT_SECONDS, "connections": request.get("connections") or {}, "variables": variables_of(request), "resumeBase": earlier.get("resumeBase"), "mode": "resume", "resumeSteps": earlier.get("steps") or {}, "triggerPayload": earlier.get("payload"), "waitedFrom": earlier.get("startedAt")}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}-resume.json"), job)
     start_worker()
     return {"id": identity, "queued": queued()}
@@ -434,7 +481,7 @@ def poll(request):
     version = {"id": f"poll-{uuid.uuid4().hex[:12]}", "flowId": identity, "displayName": flow.get("displayName") or path, "valid": True, "state": "LOCKED", "schemaVersion": str(flow.get("schemaVersion") or "27"), "trigger": trigger, "agentIds": [], "connectionIds": [], "notes": [], "updatedBy": None, "backupFiles": None, "created": now, "updated": now}
     operation = {"hookType": hook, "test": hook == "TEST", "flowVersion": version, "webhookUrl": ""}
     os.makedirs(TRIGGER_STORES, exist_ok=True)
-    answer = engine_call({"kind": "EXECUTE_TRIGGER_HOOK", "operation": operation, "connections": request.get("connections") or {}, "store": store, "seconds": 120}, 120)
+    answer = engine_call({"kind": "EXECUTE_TRIGGER_HOOK", "operation": operation, "connections": request.get("connections") or {}, "variables": variables_of(request), "store": store, "seconds": 120}, 120)
     if not answer.get("ok"):
         raise Refused(str(answer.get("error") or "The service couldn't be asked.")[:500])
     response = answer.get("response") or {}
@@ -453,7 +500,7 @@ def poll(request):
     for item in items[:MOST_NEW_ITEMS]:
         if queued() >= MOST_QUEUED:
             break
-        started.append(run({"path": path, "flowId": flow_id(flow), "payload": item, "trigger": "poll", "by": request.get("by"), "connections": request.get("connections") or {}, "resumeBase": request.get("resumeBase")})["id"])
+        started.append(run({"path": path, "flowId": flow_id(flow), "payload": item, "trigger": "poll", "by": request.get("by"), "connections": request.get("connections") or {}, "variables": variables_of(request), "resumeBase": request.get("resumeBase")})["id"])
     return {"items": len(items), "runs": started, "passedOver": len(items) - len(started)}
 
 

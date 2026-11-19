@@ -149,7 +149,7 @@ function Inspector({ shapes, readOnly }: { shapes: Shape[]; readOnly: boolean })
               max={100}
               suffix="%"
               onCommit={(v) => apply({ opacity: v / 100 })}
-              className="w-16 shrink-0"
+              className="w-20 shrink-0"
             />
           </div>
         </Field>

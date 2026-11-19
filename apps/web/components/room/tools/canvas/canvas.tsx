@@ -165,7 +165,12 @@ export function Canvas({ empty, label }: { empty?: ReactNode; label: string }) {
   };
 
   const onDoubleClick = (e: ReactMouseEvent<SVGSVGElement>) => {
-    const hit = hitOf(e.target);
+    let hit = hitOf(e.target);
+    // Pointer capture can retarget dblclick to the SVG after the two pointer-up events.
+    if (!hit.shapeId) {
+      const target = document.elementsFromPoint(e.clientX, e.clientY).find((el) => svgRef.current?.contains(el) && el.closest("[data-shape-id]"));
+      if (target) hit = hitOf(target);
+    }
     const id = editor.resolveHit(hit.shapeId);
     const shape = id ? editor.get(id) : undefined;
     if (shape?.type === "group" && editor.enterGroup(shape.id)) {

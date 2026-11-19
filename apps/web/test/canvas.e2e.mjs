@@ -3,7 +3,7 @@
 //   node test/canvas.e2e.mjs        (from apps/web, with the dev stack running)
 import { readFileSync } from "node:fs";
 
-import { check, finish, launch } from "./browser.mjs";
+import { check, finish, launch, openApp } from "./browser.mjs";
 
 const stamp = Date.now().toString(36);
 const ok = (promise) => promise.then(() => true, () => false);
@@ -30,7 +30,7 @@ async function createNamed(page, noun, name) {
 }
 
 // Design: test1 draws a rectangle; test2 opens the same design and finds it in the layers.
-for (const page of [a, b]) await page.getByRole("button", { name: "Design", exact: true }).click();
+for (const page of [a, b]) await openApp(page, "Design");
 await createNamed(a, "design", `Logo ${stamp}`);
 await a.getByRole("button", { name: /^Rectangle/ }).first().click();
 await drag(a, [220, 160], [380, 270]);
@@ -41,7 +41,7 @@ await listed.click().catch(() => {});
 check("shapeReachesOthers", await ok(b.getByLabel("Layers").getByText(/Rectangle/).first().waitFor({ timeout: 15_000 })));
 
 // Whiteboard: a sticky note's text reaches the other person.
-for (const page of [a, b]) await page.getByRole("button", { name: "Whiteboard", exact: true }).click();
+for (const page of [a, b]) await openApp(page, "Whiteboard");
 await createNamed(a, "whiteboard", `Plan ${stamp}`);
 await a.getByRole("button", { name: /^Sticky note/ }).first().click();
 const box = await canvasBox(a);
@@ -96,7 +96,7 @@ const png = await exportAs(a, async () => {});
 check("exportsPng", png.bytes.subarray(1, 4).toString() === "PNG" && png.name.endsWith(".png"), `${png.name} ${png.bytes.length} bytes`);
 
 // A design's PDF gives each top-level frame its own page.
-await a.getByRole("button", { name: "Design", exact: true }).click();
+await openApp(a, "Design");
 // The tool reopens the last design itself, once its document syncs: wait for that, and only if it
 // doesn't come, open it from the list (clicking the name in the header would start renaming it).
 if (!(await ok(a.locator("[data-canvas]:visible").first().waitFor({ timeout: 10_000 })))) await a.getByText(`Logo ${stamp}`, { exact: true }).first().click();

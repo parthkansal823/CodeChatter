@@ -14,7 +14,7 @@ import { ConflictException, Inject, Injectable, Logger, NotFoundException } from
 import { and, asc, desc, eq, gt, ilike, isNull, lt, sql } from "drizzle-orm";
 
 import { DB } from "../infra/tokens.js";
-import { chatUnreadQuery, escapeChatLike, markChatReadQuery } from "./messages.helpers.js";
+import { chatUnreadQuery, escapeChatLike, markChatReadQuery, registerChatReaderQuery } from "./messages.helpers.js";
 
 type Row = {
   message: typeof schema.messages.$inferSelect;
@@ -103,9 +103,9 @@ export class MessagesService {
     return { rooms: rows.map((row) => ({ ...row, count: capChatUnreadCount(Number(row.count)) })) };
   }
 
-  /** Register an authorized reader without advancing their cursor, including public nonmembers. */
+  /** Register an authorized reader, a public room's visitor too: a visitor counts from their first look, a member from when they joined. */
   async unreadInRoom(roomId: string, userId: string): Promise<ChatUnreadState> {
-    await this.handle.db.insert(schema.roomChatReads).values({ roomId, userId }).onConflictDoNothing();
+    await this.handle.db.execute(registerChatReaderQuery(roomId, userId));
     return this.roomUnreadState(roomId, userId);
   }
 

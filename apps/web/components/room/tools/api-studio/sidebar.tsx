@@ -1,11 +1,12 @@
 "use client";
 
-import { Settings2 } from "lucide-react";
+import { Cookie, Settings2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
 import { CollectionsTree } from "./collections-tree";
+import { CookiesDialog } from "./cookies-dialog";
 import { CompactSelect } from "./compact-select";
 import { HistoryPanel } from "./history-panel";
 import { StudioTabs } from "./studio-tabs";
@@ -16,6 +17,7 @@ const NONE = "__none";
 export function Sidebar() {
   const { environments, envId, setEnvId, openDialog } = useStudio();
   const [tab, setTab] = useState<"requests" | "history">("requests");
+  const [cookiesOpen, setCookiesOpen] = useState(false);
 
   return (
     <aside aria-label="Collections" className="flex h-full min-h-0 flex-col bg-panel">
@@ -29,6 +31,7 @@ export function Sidebar() {
         <Button size="icon-sm" variant="ghost" aria-label="Manage environments" title="Manage environments" onClick={() => openDialog({ kind: "environments" })}>
           <Settings2 />
         </Button>
+        <Button size="icon-sm" variant="ghost" aria-label="Manage cookies" title="Cookies" onClick={() => setCookiesOpen(true)}><Cookie /></Button>
       </div>
       <StudioTabs
         label="Sidebar"
@@ -40,6 +43,7 @@ export function Sidebar() {
         ]}
       />
       <div className="min-h-0 flex-1">{tab === "requests" ? <CollectionsTree /> : <HistoryPanel />}</div>
+      <CookiesDialog open={cookiesOpen} onOpenChange={setCookiesOpen} />
     </aside>
   );
 }

@@ -174,11 +174,11 @@ describe("transparent groups", () => {
   it("retains child flags when inherited hiding or locking is toggled", () => {
     const e = setup(); const a = shape(e, 0), b = shape(e, 40);
     const id = group(e, [a, b]);
+    e.update(b, { hidden: true, locked: true });
     e.update(id, { hidden: true, locked: true });
     assert.equal(e.get(a)!.hidden, false); assert.equal(e.get(a)!.locked, false);
     assert.equal(effectiveHidden(e.store.all(), a), true); assert.equal(effectiveLocked(e.store.all(), a), true);
     assert.equal(e.resolveHit(a), null); e.nudge([a, id], 30, 0); assert.equal(e.get(a)!.x, 0);
-    e.update(b, { hidden: true, locked: true });
     e.update(id, { hidden: false, locked: false });
     assert.equal(effectiveHidden(e.store.all(), a), false); assert.equal(effectiveLocked(e.store.all(), a), false);
     assert.equal(effectiveHidden(e.store.all(), b), true); assert.equal(effectiveLocked(e.store.all(), b), true);
@@ -244,6 +244,32 @@ describe("transparent groups", () => {
     e.destroy();
   });
 
+  it("moves a group outside its frame and undoes the whole reparenting gesture", () => {
+    const e = setup(); const frame = e.create("frame", { x: 0, y: 0, w: 200, h: 200 });
+    const a = shape(e, 10, { parentId: frame }), b = shape(e, 50, { parentId: frame }), id = group(e, [a, b]);
+    const before = [box(e.get(a)), box(e.get(b)), box(e.get(id))];
+    assert.equal(e.get(id)!.parentId, frame);
+    // Pointer drags write carried leaf deltas and the drop reparent in the same gesture.
+    // nudge() is a separate keyboard command and intentionally ends its undo step.
+    e.beginGesture();
+    e.write(() => {
+      for (const child of e.carried([id])) if (child.type !== "group") {
+        e.apply(child.id, { x: child.x + 300, y: child.y + 20 });
+      }
+    });
+    e.write(() => e.reparent([id]));
+    e.endGesture();
+    assert.equal(e.get(id)!.parentId, null);
+    assert.equal(e.get(a)!.parentId, id); assert.equal(e.get(b)!.parentId, id);
+    assert.deepEqual([e.get(a)!.x, e.get(a)!.y, e.get(b)!.x, e.get(b)!.y], [310, 30, 350, 30]);
+    assert.deepEqual(e.store.childIds(id), [a, b]);
+    e.undo();
+    assert.equal(e.get(id)!.parentId, frame);
+    assert.equal(e.get(a)!.parentId, id); assert.equal(e.get(b)!.parentId, id);
+    assert.deepEqual([box(e.get(a)), box(e.get(b)), box(e.get(id))], before);
+    e.destroy();
+  });
+
   it("does not drag inherited locked members or accept a locked destination", () => {
     const e = setup(); const a = shape(e, 0), b = shape(e, 40), id = group(e, [a, b]);
     const other = shape(e, 90), target = e.create("frame");
@@ -252,6 +278,19 @@ describe("transparent groups", () => {
     assert.equal(e.get(a)!.parentId, id); assert.equal(e.get(other)!.parentId, target);
     e.moveInLayers([other], id, "inside"); assert.equal(e.get(other)!.parentId, target);
     e.moveInLayers([other], a, "above"); assert.equal(e.get(other)!.parentId, target);
+    e.destroy();
+  });
+
+  it("blocks inherited locked inspector edits and reorder while allowing the group's unlock", () => {
+    const e = setup(); const a = shape(e, 0), b = shape(e, 40), id = group(e, [a, b]);
+    const order = [...e.store.childIds(id)];
+    e.update(id, { locked: true });
+    e.updateMany([[a, { fill: "var(--brand)", x: 100 }]]);
+    e.setBox(a, { w: 200 }); e.reorder([a], "front");
+    assert.equal(e.get(a)!.x, 0); assert.equal(e.get(a)!.w, 20);
+    assert.notEqual(e.get(a)!.fill, "var(--brand)"); assert.deepEqual(e.store.childIds(id), order);
+    e.update(id, { locked: false }); assert.equal(e.get(id)!.locked, false);
+    e.update(a, { x: 100 }); assert.equal(e.get(a)!.x, 100);
     e.destroy();
   });
 

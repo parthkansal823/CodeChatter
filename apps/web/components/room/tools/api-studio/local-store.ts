@@ -4,6 +4,7 @@ import type { HttpMethod, VariableLookup } from "@codechatter/contracts";
 import { useCallback, useSyncExternalStore } from "react";
 
 import type { Environment } from "./model";
+import { normalizeCookieJar, type StudioCookie } from "./cookies";
 
 /**
  * What each person keeps on their own device, never in the shared document:
@@ -15,24 +16,27 @@ import type { Environment } from "./model";
 
 const listeners = new Set<() => void>();
 const memory = new Map<string, string | null>();
+const sessionMemory = new Map<string, string | null>();
 
-function read(key: string): string | null {
-  if (memory.has(key)) return memory.get(key)!;
+function read(key: string, session = false): string | null {
+  const cache = session ? sessionMemory : memory;
+  if (cache.has(key)) return cache.get(key)!;
   let value: string | null = null;
   try {
-    value = window.localStorage.getItem(key);
+    value = (session ? window.sessionStorage : window.localStorage).getItem(key);
   } catch {
     value = null;
   }
-  memory.set(key, value);
+  cache.set(key, value);
   return value;
 }
 
-function write(key: string, value: string | null): void {
-  memory.set(key, value);
+function write(key: string, value: string | null, session = false): void {
+  (session ? sessionMemory : memory).set(key, value);
   try {
-    if (value === null) window.localStorage.removeItem(key);
-    else window.localStorage.setItem(key, value);
+    const storage = session ? window.sessionStorage : window.localStorage;
+    if (value === null) storage.removeItem(key);
+    else storage.setItem(key, value);
   } catch {
     // Quota or blocked storage: the in-memory copy still serves this session.
   }
@@ -42,7 +46,8 @@ function write(key: string, value: string | null): void {
 function subscribe(listener: () => void) {
   listeners.add(listener);
   const onStorage = (event: StorageEvent) => {
-    if (event.key) memory.delete(event.key);
+    if (event.key) { memory.delete(event.key); sessionMemory.delete(event.key); }
+    else { memory.clear(); sessionMemory.clear(); }
     listener();
   };
   window.addEventListener("storage", onStorage);
@@ -70,23 +75,23 @@ function parse<T>(key: string, raw: string | null, fallback: T): T {
   return value;
 }
 
-function useStored<T>(key: string, fallback: T): [T, (next: T | ((current: T) => T)) => void] {
-  const raw = useSyncExternalStore(subscribe, () => read(key), () => null);
+function useStored<T>(key: string, fallback: T, session = false): [T, (next: T | ((current: T) => T)) => void] {
+  const raw = useSyncExternalStore(subscribe, () => read(key, session), () => null);
   const value = parse(key, raw, fallback);
   const set = useCallback(
     (next: T | ((current: T) => T)) => {
-      const current = parse(key, read(key), fallback);
+      const current = parse(key, read(key, session), fallback);
       const resolved = typeof next === "function" ? (next as (c: T) => T)(current) : next;
-      write(key, JSON.stringify(resolved));
+      write(key, JSON.stringify(resolved), session);
     },
-    [key, fallback],
+    [key, fallback, session],
   );
   return [value, set];
 }
 
 /** Read or write a stored value outside React (the send pipeline runs in event handlers). */
-const getStored = <T>(key: string, fallback: T): T => parse(key, read(key), fallback);
-const setStored = <T>(key: string, value: T): void => write(key, JSON.stringify(value));
+const getStored = <T>(key: string, fallback: T, session = false): T => parse(key, read(key, session), fallback);
+const setStored = <T>(key: string, value: T, session = false): void => write(key, JSON.stringify(value), session);
 
 const prefix = (roomId: string, userId: string) => `cc:api-studio:${userId}:${roomId}`;
 
@@ -180,4 +185,33 @@ export function recordHistory(roomId: string, userId: string, entry: HistoryEntr
 
 export function clearHistory(roomId: string, userId: string): void {
   setStored(historyKeyOf(roomId, userId), []);
+}
+
+const NO_COOKIES: StudioCookie[] = [];
+const cookiesKey = (roomId: string, userId: string, envKey: string) => `${prefix(roomId, userId)}:cookies:${envKey}`;
+
+/** Session cookies stay in session storage; persistent cookies survive reloads only until their expiry. */
+export function getCookieJar(roomId: string, userId: string, envKey: string): StudioCookie[] {
+  const key = cookiesKey(roomId, userId, envKey);
+  const persistent = normalizeCookieJar(getStored<unknown>(key, NO_COOKIES));
+  const session = normalizeCookieJar(getStored<unknown>(`${key}:session`, NO_COOKIES, true));
+  return normalizeCookieJar([...persistent.filter((cookie) => cookie.expiresAt !== null), ...session.filter((cookie) => cookie.expiresAt === null)]);
+}
+
+/** No shared Yjs writes: a response always updates the person/environment captured when its send began. */
+export function setCookieJar(roomId: string, userId: string, envKey: string, cookies: StudioCookie[]): void {
+  const key = cookiesKey(roomId, userId, envKey);
+  const jar = normalizeCookieJar(cookies);
+  setStored(key, jar.filter((cookie) => cookie.expiresAt !== null));
+  setStored(`${key}:session`, jar.filter((cookie) => cookie.expiresAt === null), true);
+}
+
+export function useCookieJar(roomId: string, userId: string, envKey: string): StudioCookie[] {
+  const key = cookiesKey(roomId, userId, envKey);
+  const [persistent] = useStored<unknown>(key, NO_COOKIES);
+  const [session] = useStored<unknown>(`${key}:session`, NO_COOKIES, true);
+  return normalizeCookieJar([
+    ...normalizeCookieJar(persistent).filter((cookie) => cookie.expiresAt !== null),
+    ...normalizeCookieJar(session).filter((cookie) => cookie.expiresAt === null),
+  ]);
 }

@@ -27,7 +27,7 @@ export function RunDialog() {
       <DialogContent className="grid max-h-[85vh] grid-rows-[auto_minmax(0,1fr)] sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Run {folder ? folder.name : "all requests"}</DialogTitle>
-          <DialogDescription>Sends each request in order, one after another. Variables set by one request are there for the next.</DialogDescription>
+          <DialogDescription>Sends each request in order, one after another. Your variables and cookies set by one request are there for the next.</DialogDescription>
         </DialogHeader>
         {open && <RunBody key={folderId ?? "all"} items={requestsIn(folder ? folder.children : tree)} />}
       </DialogContent>

@@ -133,12 +133,13 @@ describe("chat unread service", () => {
     expect(f.execute).toHaveBeenCalledTimes(1);
   });
 
-  it("registers a reader without marking anything read", async () => {
+  it("registers a reader where counting starts for them, never moving a read position that's there", async () => {
     const f = setup();
     f.execute.mockResolvedValue([state]);
     expect(await f.service.unreadInRoom("E2ETST", "reader")).toEqual(state);
-    expect(f.values).toHaveBeenCalledWith({ roomId: "E2ETST", userId: "reader" });
-    expect(f.onConflictDoNothing).toHaveBeenCalledOnce();
+    const registered = dialect.sqlToQuery(f.execute.mock.calls[0]![0]).sql;
+    expect(registered).toContain("insert into room_chat_reads");
+    expect(registered).toContain("on conflict (room_id, user_id) do nothing");
   });
 
   it("pushes a successful atomic read to the same person's devices and returns authoritative state", async () => {

@@ -174,13 +174,6 @@ export function DataView({ label, value, base, onUse }: { label: string; value: 
   const files = filesIn(value);
   return (
     <section aria-label={label} className="grid gap-1">
-      {files.length > 0 && (
-        <ul aria-label={`Files in ${label.toLowerCase()}`} className="grid gap-0.5 rounded-md border px-1.5 py-1">
-          {files.map((file) => (
-            <FileRow key={`${file.run}/${file.file}`} file={file} />
-          ))}
-        </ul>
-      )}
       <Tabs value={view} onValueChange={setView} className="gap-1">
         <div className="flex items-center gap-2">
           <h4 className="flex-1 font-medium">{label}</h4>
@@ -198,6 +191,13 @@ export function DataView({ label, value, base, onUse }: { label: string; value: 
             )}
           </TabsList>
         </div>
+        {files.length > 0 && (
+          <ul aria-label={`Files in ${label.toLowerCase()}`} className="grid gap-0.5 rounded-md border px-1.5 py-1">
+            {files.map((file) => (
+              <FileRow key={`${file.run}/${file.file}`} file={file} />
+            ))}
+          </ul>
+        )}
         <TabsContent value="table">
           <TableOf value={value} />
         </TabsContent>

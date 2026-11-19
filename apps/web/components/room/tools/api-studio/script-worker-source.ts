@@ -9,6 +9,12 @@
  * the iframe's Content-Security-Policy blocks them as well, so a script
  * that finds a way around this list still has no network.
  */
+import type { StudioCookie } from "./cookies";
+import type { ScriptInput } from "./scripts";
+
+/** Private worker input extends the existing script protocol without changing saved requests. */
+export type CookieScriptInput = ScriptInput & { cookieJar: StudioCookie[]; useCookieJar: boolean; cookieSecrets: string[]; cookieAuth?: { key: string; value: string } };
+
 const BOOTSTRAP = String.raw`"use strict";
 (function lockDown() {
   var names = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "importScripts", "indexedDB", "caches",
@@ -130,7 +136,21 @@ self.onmessage = async function (event) {
   var input = event.data;
   var logs = [], tests = [], changes = {}, pending = [];
   var vars = Object.assign({}, input.variables);
-  var log = function (level) { return function () { logs.push({ level: level, text: Array.prototype.map.call(arguments, __show).join(" ") }); }; };
+  var secretValues = (input.cookieSecrets || []).concat((input.cookieJar || []).map(function (cookie) { return cookie.value; }));
+  var secretPatterns = [];
+  secretValues.forEach(function (value) {
+    if (typeof value !== "string" || !value) return;
+    var variants = [value, value.replace(/^"|"$/g, ""), JSON.stringify(value).slice(1, -1)];
+    try { variants.push(encodeURIComponent(value)); } catch (e) {}
+    variants.forEach(function (variant) {
+      if (variant && secretPatterns.indexOf(variant) === -1) secretPatterns.push(variant);
+    });
+  });
+  var secretRegex = secretPatterns.length ? new RegExp(secretPatterns.sort(function (a, b) { return b.length - a.length; }).map(function (value) {
+    return value.split("").map(function (ch) { return "\\^$.*+?()[]{}|".indexOf(ch) >= 0 ? "\\" + ch : ch; }).join("");
+  }).join("|"), "g") : null;
+  var safe = function (value) { var text = String(value); return secretRegex ? text.replace(secretRegex, "[redacted]") : text; };
+  var log = function (level) { return function () { logs.push({ level: level, text: safe(Array.prototype.map.call(arguments, __show).join(" ")) }); }; };
   var console = { log: log("log"), info: log("info"), debug: log("log"), warn: log("warn"), error: log("error") };
   var env = {
     get: function (k) { return vars[k]; },
@@ -167,6 +187,37 @@ self.onmessage = async function (event) {
   var pm = { environment: env, variables: env, env: env, globals: env, collectionVariables: env, request: request, response: response, test: test, expect: __expect,
     info: { requestName: input.name, eventName: input.kind === "pre" ? "prerequest" : "test" },
     sendRequest: function () { throw new Error("pm.sendRequest isn't available: scripts here have no network. Send that request from its own tab, and save what you need with a test script."); } };
+  // Resolve on every read: URL, variables and a manual Cookie header may change in a pre-request script.
+  var cookiesForRequest = function () {
+    var out = Object.create(null), pairs = [];
+    var resolve = input.kind === "pre" ? env.replaceIn : String;
+    var manual = request.headers.all().filter(function (h) { return resolve(h.key).toLowerCase() === "cookie"; });
+    if (input.kind === "pre" && input.cookieAuth && resolve(input.cookieAuth.key).toLowerCase() === "cookie") manual = [input.cookieAuth];
+    if (manual.length) {
+      manual.forEach(function (h) { resolve(h.value).split(";").forEach(function (part) {
+        var at = part.indexOf("="); if (at <= 0) return;
+        var name = part.slice(0, at).replace(/^[\t ]+|[\t ]+$/g, "");
+        if (/^[!#$%&'*+.^_\x60|~0-9A-Za-z-]+$/.test(name)) pairs.push({ name: name, value: part.slice(at + 1).replace(/^[\t ]+|[\t ]+$/g, "") });
+      }); });
+    } else if (input.useCookieJar) {
+      var url;
+      try { url = new URL(resolve(request.url)); } catch (e) { return out; }
+      var host = url.hostname.toLowerCase().replace(/\.$/, ""), path = url.pathname || "/";
+      if (url.protocol !== "http:" && url.protocol !== "https:") return out;
+      pairs = (input.cookieJar || []).filter(function (cookie) {
+        var domain = cookie.domain, ip = domain.indexOf(":") >= 0 || /^[0-9.]+$/.test(domain);
+        var domainMatch = host === domain || (!cookie.hostOnly && !ip && host.endsWith("." + domain));
+        var pathMatch = path === cookie.path || (path.startsWith(cookie.path) && (cookie.path.endsWith("/") || path.charAt(cookie.path.length) === "/"));
+        return domainMatch && pathMatch && (!cookie.secure || url.protocol === "https:" || host === "localhost") && (cookie.expiresAt === null || cookie.expiresAt > Date.now());
+      }).sort(function (a, b) { return b.path.length - a.path.length || a.createdAt - b.createdAt; });
+    }
+    pairs.forEach(function (cookie) { if (cookie.name && !Object.prototype.hasOwnProperty.call(out, cookie.name)) out[cookie.name] = cookie.value; });
+    return out;
+  };
+  Object.defineProperty(pm, "cookies", { enumerable: true, value: Object.freeze({
+    get: function (name) { return cookiesForRequest()[String(name)]; },
+    has: function (name) { return Object.prototype.hasOwnProperty.call(cookiesForRequest(), String(name)); }
+  }) });
   var error, errorLine;
   try {
     await __run(pm, env, request, response, test, __expect, console);
@@ -178,7 +229,7 @@ self.onmessage = async function (event) {
     if (at) errorLine = Number(at[1]);
   }
   postMessage({
-    tests: tests, logs: logs, variables: changes, error: error, errorLine: errorLine,
+    tests: tests.map(function (test) { return Object.assign({}, test, { name: safe(test.name) }, test.error ? { error: safe(test.error) } : {}); }), logs: logs, variables: changes, error: error === undefined ? undefined : safe(error), errorLine: errorLine,
     request: input.kind === "pre" ? { method: String(request.method), url: String(request.url), headers: request.headers.all(), body: request.body == null ? null : String(request.body) } : undefined
   });
 };

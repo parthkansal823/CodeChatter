@@ -69,6 +69,8 @@ export type RequestData = RequestSpec & {
   extracts: Extraction[];
   preScript: string;
   testScript: string;
+  /** Shared preference only; cookie values are always kept on each person's device. */
+  useCookieJar?: boolean;
   /** WebSocket messages saved with the request. */
   messages: Row[];
   example: SavedExample | null;
@@ -170,6 +172,7 @@ export function readRequest(doc: Y.Doc, id: string): RequestData | null {
     extracts: rowsOf(node, "extracts") as Extraction[],
     preScript: text(node, "preScript"),
     testScript: text(node, "testScript"),
+    useCookieJar: node.get("useCookieJar") !== false,
     messages: readRows(node, "messages"),
     example: example && typeof example === "object" ? (example as SavedExample) : null,
   };
@@ -239,6 +242,7 @@ export type NewRequest = {
   extracts?: Array<Omit<Extraction, "id">>;
   preScript?: string;
   testScript?: string;
+  useCookieJar?: boolean;
   messages?: KeyValue[];
   example?: SavedExample | null;
 };
@@ -271,6 +275,7 @@ function requestNode(doc: Y.Doc, input: NewRequest): { id: string; node: YNode }
   node.set("extracts", rowArray(input.extracts ?? []));
   node.set("preScript", textOf(input.preScript ?? ""));
   node.set("testScript", textOf(input.testScript ?? ""));
+  node.set("useCookieJar", input.useCookieJar !== false);
   node.set("messages", rowArray(input.messages ?? []));
   node.set("example", input.example ?? null);
   return { id, node };
@@ -354,7 +359,7 @@ export function nodeMap(doc: Y.Doc, id: string): YNode | undefined {
   return apiMaps(doc).nodes.get(id);
 }
 
-export function setField(doc: Y.Doc, id: string, key: "method" | "protocol", value: string): void {
+export function setField(doc: Y.Doc, id: string, key: "method" | "protocol" | "useCookieJar", value: string | boolean): void {
   nodeMap(doc, id)?.set(key, value);
 }
 
@@ -371,7 +376,8 @@ export function setAuth(doc: Y.Doc, id: string, patch: Partial<RequestAuth> & { 
 }
 
 export function setExample(doc: Y.Doc, id: string, example: SavedExample | null): void {
-  nodeMap(doc, id)?.set("example", example);
+  // Set-Cookie is a session credential, never a shared example header.
+  nodeMap(doc, id)?.set("example", example ? { ...example, headers: example.headers.filter(([name]) => !/^(?:set-cookie|cookie)$/i.test(name)) } : null);
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   evaluateExtraction,
   resolveRequest,
   substituteVariables,
+  HttpSendInput,
   type CheckedResponse,
   type CheckResult,
   type HttpSendResult,
@@ -13,9 +14,11 @@ import type * as Y from "yjs";
 
 import { api, ApiError } from "@/lib/api";
 
-import { getSelectedEnvironment, getValues, patchValues, recordHistory, variableLookup, variableSnapshot } from "./local-store";
+import { getCookieJar, getSelectedEnvironment, getValues, patchValues, recordHistory, setCookieJar, variableLookup, variableSnapshot } from "./local-store";
+import { applySetCookies, redactCookieValues, requestCookies, type CookieChange } from "./cookies";
 import { readEnvironments, readRequest } from "./model";
 import { runScript } from "./script-sandbox";
+import type { CookieScriptInput } from "./script-worker-source";
 import { checksOf, logsOf, scriptRequestOf, scriptResponseOf, sentRequestOf, stoppedBecause, withScriptRequest, type RunLog } from "./scripts";
 
 export type ExtractedValue = { variable: string; value?: string; error?: string };
@@ -37,6 +40,9 @@ export type RunState = {
   extracted: ExtractedValue[];
   /** What the request's scripts logged (console.log and the rest). */
   logs: RunLog[];
+  /** Local response metadata only: never persisted in history or the shared collection. */
+  cookieChanges: CookieChange[];
+  cookieSensitive: boolean;
 };
 
 export const SENDING: RunState = {
@@ -50,6 +56,8 @@ export const SENDING: RunState = {
   checks: [],
   extracted: [],
   logs: [],
+  cookieChanges: [],
+  cookieSensitive: false,
 };
 
 export type ExecuteOptions = {
@@ -75,6 +83,16 @@ export function checkedResponse(result: Extract<HttpSendResult, { ok: true }>): 
   return { status: result.status, headers: result.headers, body: result.bodyEncoding === "text" ? result.body : "", timeMs: result.timing.totalMs };
 }
 
+/** Also protect manual duplicate names and malformed Set-Cookie fields that the jar correctly refuses. */
+function privateCookieValues(headers: ReadonlyArray<readonly [string, string]>): string[] {
+  return headers.flatMap(([name, value]) => {
+    const key = name.toLowerCase();
+    if (key !== "cookie" && key !== "set-cookie") return [];
+    const pairs = key === "set-cookie" ? [value.split(";")[0] ?? ""] : value.split(";");
+    return pairs.flatMap((pair) => { const at = pair.indexOf("="); return at < 0 ? [] : [pair.slice(at + 1).trim()]; });
+  }).filter(Boolean);
+}
+
 /**
  * One send, start to finish. Everything is read fresh from the shared
  * document and local storage, so a collection run sees the variables the
@@ -82,21 +100,36 @@ export function checkedResponse(result: Extract<HttpSendResult, { ok: true }>): 
  */
 export async function execute({ doc, roomId, userId, requestId, signal }: ExecuteOptions): Promise<RunState> {
   const startedAt = Date.now();
-  const done = (patch: Partial<RunState>): RunState => ({ ...SENDING, phase: "done", startedAt, finishedAt: Date.now(), ...patch });
+  const cookieSecrets: string[] = [];
+  const safe = (text: string) => redactCookieValues(text, cookieSecrets);
+  const done = (patch: Partial<RunState>): RunState => {
+    const state: RunState = { ...SENDING, phase: "done", startedAt, finishedAt: Date.now(), ...patch };
+    return { ...state, problem: state.problem === null ? null : safe(state.problem), warnings: state.warnings.map(safe),
+      logs: state.logs.map((log) => ({ ...log, text: safe(log.text) })),
+      checks: state.checks.map((check) => ({ ...check, name: safe(check.name), message: safe(check.message) })), sentUrl: safe(state.sentUrl) };
+  };
 
   const written = readRequest(doc, requestId);
   if (!written) return done({ problem: "This request was deleted." });
+  const useCookieJar = written.useCookieJar !== false;
 
   const selected = getSelectedEnvironment(roomId, userId);
   const env = readEnvironments(doc).find((e) => e.id === selected) ?? null;
   const envKey = env?.id ?? "";
+  const initialJar = getCookieJar(roomId, userId, envKey);
+  cookieSecrets.push(...initialJar.map((cookie) => cookie.value));
   const logs: RunLog[] = [];
   const scriptChecks: CheckResult[] = [];
 
   // The script before sending: it can set variables, and change this send's request (as Postman's pre-request script does).
   let request = written;
   if (written.preScript.trim()) {
-    const ran = await runScript(written.preScript, { kind: "pre", name: written.name, variables: variableSnapshot(env, getValues(roomId, userId, envKey)), request: scriptRequestOf(written) });
+    const initial = resolveRequest(written, variableLookup(env, getValues(roomId, userId, envKey)));
+    if (!initial.problems.length) cookieSecrets.push(...privateCookieValues(initial.input.headers.map((header) => [header.name, header.value])));
+    const input: CookieScriptInput = { kind: "pre", name: written.name, variables: variableSnapshot(env, getValues(roomId, userId, envKey)), request: scriptRequestOf(written),
+      cookieJar: initialJar, useCookieJar, cookieSecrets,
+      ...(written.auth.type === "apiKey" && written.auth.in === "header" && { cookieAuth: { key: written.auth.key, value: written.auth.value } }) };
+    const ran = await runScript(written.preScript, input);
     logs.push(...logsOf(ran, "before"));
     if (Object.keys(ran.variables).length) patchValues(roomId, userId, envKey, ran.variables);
     if (ran.error) return done({ problem: `The script before sending ${stoppedBecause(ran).replace(/^It /, "")}`, logs });
@@ -114,21 +147,29 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
   const resolved = resolveRequest(request, lookup);
   if (resolved.problems.length) return done({ problem: resolved.problems.join(" "), logs });
   const warnings = resolved.missing.length ? [`No value for ${resolved.missing.map((n) => `{{${n}}}`).join(", ")}. They were sent as written.`] : [];
+  const sendingJar = getCookieJar(roomId, userId, envKey);
+  const selectedCookies = requestCookies(sendingJar, resolved.input.url, resolved.input.headers, useCookieJar);
+  cookieSecrets.push(...sendingJar.map((cookie) => cookie.value), ...Object.values(selectedCookies.cookies));
+  if (selectedCookies.warning) warnings.push(selectedCookies.warning);
+  const wire = { ...resolved.input, headers: selectedCookies.headers };
+  cookieSecrets.push(...privateCookieValues(wire.headers.map((header) => [header.name, header.value])));
+  if (!HttpSendInput.safeParse(wire).success) return done({ problem: "The request headers are too large after adding cookies. Delete some cookies, disable the jar, or shorten the headers.", warnings, logs });
+  const cookieSensitive = (useCookieJar && sendingJar.length > 0) || wire.headers.some((header) => header.name.toLowerCase() === "cookie");
 
   let result: HttpSendResult;
   try {
-    result = await api<HttpSendResult>(`/api/rooms/${roomId}/http/send`, { method: "POST", json: resolved.input, ...(signal && { signal }) });
+    result = await api<HttpSendResult>(`/api/rooms/${roomId}/http/send`, { method: "POST", json: wire, ...(signal && { signal }) });
   } catch (error) {
     const problem = problemFrom(error);
     recordHistory(roomId, userId, {
       id: randomId(),
       at: Date.now(),
       requestId,
-      name: request.name,
+      name: safe(request.name),
       method: request.method,
-      url: request.url,
+      url: safe(request.url),
       status: null,
-      error: problem,
+      error: safe(problem),
       timeMs: Date.now() - startedAt,
       size: 0,
     });
@@ -136,8 +177,15 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
   }
 
   let checks: CheckResult[];
+  let cookieChanges: CookieChange[] = [];
   let extracted: ExtractedValue[] = [];
   if (result.ok) {
+    cookieSecrets.push(...privateCookieValues(result.headers));
+    const received = applySetCookies(getCookieJar(roomId, userId, envKey), result.headers, wire.url);
+    cookieChanges = received.changes;
+    cookieSecrets.push(...received.changes.map(({ cookie }) => cookie.value));
+    warnings.push(...received.warnings);
+    if (useCookieJar) setCookieJar(roomId, userId, envKey, received.jar);
     const checked = checkedResponse(result);
     checks = request.assertions.filter((a) => a.enabled).map((a) => evaluateAssertion(a, checked));
     extracted = request.extracts.filter((e) => e.enabled).map((e) => evaluateExtraction(e, checked));
@@ -146,13 +194,15 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
     if (Object.keys(changes).length) patchValues(roomId, userId, envKey, changes);
     // The script after the response: its pm.test results join the checks, and it can set variables for the next request.
     if (request.testScript.trim()) {
-      const ran = await runScript(request.testScript, {
+      const input: CookieScriptInput = {
         kind: "test",
         name: request.name,
         variables: variableSnapshot(env, getValues(roomId, userId, envKey)),
-        request: sentRequestOf(resolved.input),
+        request: sentRequestOf(wire),
         response: scriptResponseOf(result),
-      });
+        cookieJar: sendingJar, useCookieJar, cookieSecrets,
+      };
+      const ran = await runScript(request.testScript, input);
       logs.push(...logsOf(ran, "after"));
       if (Object.keys(ran.variables).length) patchValues(roomId, userId, envKey, ran.variables);
       checks.push(...checksOf(ran, "after"));
@@ -167,14 +217,15 @@ export async function execute({ doc, roomId, userId, requestId, signal }: Execut
     id: randomId(),
     at: Date.now(),
     requestId,
-    name: request.name,
+    name: safe(request.name),
     method: request.method,
-    url: request.url,
+    url: safe(request.url),
     status: result.ok ? result.status : null,
-    error: result.ok ? null : result.message,
+    error: result.ok ? null : safe(result.message),
     timeMs: result.timing.totalMs,
     size: result.ok ? result.size : 0,
   });
 
-  return done({ result, warnings, sentUrl: resolved.input.url, checks, extracted, logs });
+  return done({ result, warnings, sentUrl: wire.url, checks, extracted, logs, cookieChanges,
+    cookieSensitive: cookieSensitive || (result.ok && result.headers.some(([name]) => name.toLowerCase() === "set-cookie")) });
 }

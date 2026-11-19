@@ -5,7 +5,7 @@
 "use client";
 
 import { roomEventOf, SCHEDULE_PIECE, type AutomationStepResult, type PieceField, type PieceInfo } from "@codechatter/contracts";
-import { Loader2, Pin, PinOff, Play, Plus, Replace, Trash2, Zap } from "lucide-react";
+import { FastForward, Loader2, Pin, PinOff, Play, Plus, Replace, Trash2, Zap } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import { toast } from "sonner";
@@ -162,6 +162,8 @@ export function StepPanel({
   onAdd,
   onReplace,
   onRunStep,
+  onRunFrom,
+  runFromHint,
   runningStep,
   path,
   canRun,
@@ -181,6 +183,10 @@ export function StepPanel({
   onReplace: () => void;
   /** Run this step on its own, with the other steps' data from the run shown; null for someone who can't run. */
   onRunStep: (() => void) | null;
+  /** Run this step and everything after it, with what the steps before it gave on the run shown; null when there's no such run, or no right. */
+  onRunFrom: (() => void) | null;
+  /** Why it can't yet, when someone could. */
+  runFromHint: string | null;
   runningStep: boolean;
   /** The flow's file, for turning it on. */
   path: string;
@@ -286,14 +292,24 @@ export function StepPanel({
           )}
         </div>
       )}
-      {onRunStep && canPin(step) && (
+      {!isTrigger && ((onRunStep && canPin(step)) || onRunFrom || runFromHint) && (
         <div className="grid gap-1">
-          <div>
-            <Button size="xs" variant="outline" disabled={runningStep} title="Runs only this step, with the other steps' data from the run shown" onClick={onRunStep}>
-              {runningStep ? <Loader2 className="animate-spin" /> : <Play />} Run this step
-            </Button>
+          <div className="flex flex-wrap gap-1">
+            {onRunStep && canPin(step) && (
+              <Button size="xs" variant="outline" disabled={runningStep} title="Runs only this step, with the other steps' data from the run shown" onClick={onRunStep}>
+                {runningStep ? <Loader2 className="animate-spin" /> : <Play />} Run this step
+              </Button>
+            )}
+            {onRunFrom && (
+              <Button size="xs" variant="outline" disabled={runningStep} title="Runs this step and every step after it, with what the steps before it gave on the run shown" onClick={onRunFrom}>
+                <FastForward /> Run from here
+              </Button>
+            )}
           </div>
-          <span className="text-muted-foreground">Only this step runs, with what the steps before it gave on the run shown{pinned ? ", and for real, though it's pinned" : ""}.</span>
+          <span className="text-muted-foreground">
+            {onRunStep && canPin(step) ? `Only this step runs, with what the steps before it gave on the run shown${pinned ? ", and for real, though it's pinned" : ""}.` : ""}
+            {onRunFrom ? `${onRunStep && canPin(step) ? " " : ""}From here, it and the steps after it run, and the ones before give what they gave.` : runFromHint ? `${onRunStep && canPin(step) ? " " : ""}${runFromHint}` : ""}
+          </span>
         </div>
       )}
       {step.skip && <p className="rounded-md border border-dashed p-2 text-muted-foreground">Turned off: the flow passes over it, and what comes after still runs.</p>}
@@ -307,7 +323,12 @@ export function StepPanel({
               </Button>
             )}
           </div>
-          <p className="text-muted-foreground">When the flow runs, this step doesn&apos;t: it gives back what&apos;s below, so the steps after it get the same data every time, and no service is called.</p>
+          <p className="text-muted-foreground">
+            {isTrigger
+              ? "Run by hand, the flow starts with what's below rather than what's sent, so the steps after it get the same data every time."
+              : "Run by hand, the flow doesn't run this step: it gives back what's below, so the steps after it get the same data every time, and no service is called."}{" "}
+            Started by its trigger, every step runs for real.
+          </p>
           <Textarea
             aria-label="The pinned output, as JSON"
             className="min-h-20 font-mono text-[11px] md:text-[11px]"
@@ -467,7 +488,7 @@ export function StepPanel({
           <DataView label="What came out" value={last.output} base={`${step.name}.output`} />
           {canEdit && canPin(step) && !pinned && last.output !== undefined && (
             <div>
-              <Button size="xs" variant="outline" title="The flow then uses this rather than running the step" onClick={() => onChange(pinStep(flow, step.name, last.output))}>
+              <Button size="xs" variant="outline" title="Run by hand, the flow then uses this rather than running the step" onClick={() => onChange(pinStep(flow, step.name, last.output))}>
                 <Pin /> Pin this output
               </Button>
             </div>

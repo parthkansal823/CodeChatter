@@ -86,6 +86,11 @@ Statuses here match the pathway. When a piece is finished, its write-up is added
   - **Search:** literal, case-insensitive AND terms, including `%` and `_`, with highlights, author/time, 50-result pages and a jump into surrounding history. Submitting the same search refreshes newly matching messages. Integration posts remain searchable.
   - **Where:** `packages/contracts/src/chat-unread.ts`, API `messages/`, web `chat-panel.tsx` and the room/dashboard unread integration. Migrations `0017` and `0018` persist read cursors and index eligible messages; both are already present locally. No new migration was needed for the final automation exclusion.
   - **Verification:** API chat unit tests 28/28; browser `apps/web/test/chat-unread.e2e.mjs` 21/21 with two devices, delayed responses and fixture cleanup; PostgreSQL `apps/api/test/chat-unread.e2e.mjs` 6/6 with all fixtures rolled back. Contracts build, API/web typechecks and scoped web lint passed. Both end-to-end suites are registered in `scripts/e2e-ci.mjs`.
+  - **Checked by Claude (2026-11-19):** the diff read against the brief; its checks run again; and the button, dashboard, the "New messages" line and search looked at in a browser, light, dark and phone width. Fixed:
+    - **Where counting starts:** someone with no read position counted the room's whole history, so a new member (and every member, when this shipped) opened every room to 99+. A member now counts from when they joined (`room_members.created_at`), and a visitor from their first look (`registerChatReaderQuery`), until they've read something.
+    - **The dashboard loaded the chat panel** to show a count: the hook is now `components/room/chat-unread.ts`.
+    - **A search's marked words** were barely visible in dark: now stronger, and bold, not colour alone.
+  - **After the fixes:** API unit tests 30/30, PostgreSQL 8/8 (adding a member who joined late, and a visitor's first look), browser 21/21, accessibility 164/164, API and web typechecks clean.
 
 **Running and deploying:**
 - ✅ Works from a phone or laptop on the same Wi-Fi.
@@ -281,6 +286,14 @@ Tests:
   - Tests:
     - unit `preview-kind.test.ts` 6/6;
     - browser `mermaid.e2e.mjs` 12/12 (two people, a live update, a mistake, the full preview).
+  - **Diagrams inside Markdown** (ChatGPT 25, checked 2026-11-19): a ` ```mermaid ` block in any Markdown the app shows (a README's preview, interview questions) is drawn in place, in quotes and lists too; other code stays code.
+    - **Mistakes:** a block that doesn't parse shows its code with the line marked and the mistake in words ("Line 2: Mermaid expected a closing bracket…"), counted in the block as it reads; while someone types, the last good drawing stays, faded.
+    - **Many at once:** each block has its own id and draws when it comes near the screen, so a long README opens quickly; the same diagram twice draws twice. Drawings follow light and dark, a wide one scrolls inside its own box, and each has Copy code and Download SVG (not in an interview question's compact view).
+    - **Safety:** a README can come from a stranger's repository. Mermaid runs at its strict level with no HTML labels, its own directives can't turn those back on (`secure`), anything that looks like HTML is refused before Mermaid sees it, and the drawing is shown as an image, where no script can run. Tried with `click A call alert(1)` and an `<img onerror>` label, raw and encoded.
+    - **One renderer:** the `.mmd` preview and Markdown share it (`mermaid-renderer.ts`, `use-mermaid-drawing.ts`, `mermaid-problem.ts`). Drawings are made one at a time, as Mermaid's settings are shared: a very slow diagram still holds up the next.
+    - **Where:** `editor/markdown-preview.tsx` (`MarkdownPre`), `markdown-mermaid.tsx`, `markdown-mermaid-utils.ts` (the remark plugin marking the blocks), and the shared files above; `mermaid-preview.tsx` now uses them.
+    - **Tests:** unit `markdown-mermaid-utils.test.ts`, `mermaid-problem.test.ts` and `preview-kind.test.ts` (26/26), browser `markdown-mermaid.e2e.mjs` (29/29: diagrams, mistakes, the theme, drawing near the screen, the script attempts, a block too big) and `mermaid.e2e.mjs` (13/13).
+    - **Checked by Claude:** the diff read against the brief, its tests run again, the web typecheck (clean for its files), and a README with two diagrams, a broken one and JavaScript looked at in a browser, light and dark: nothing to fix.
 - ✅ **Notes:** shared notes, private notes, and a shared focus timer, in a Notes side panel (`tools/notes`) beside Chat and AI. The Docs tool keeps the pages that last; this is the scratchpad.
   - Room notes are rich text edited together, with carets. They live in `room:ID:notes`, which anyone who can chat may write, viewers included.
   - My notes are in `room:ID:mine:<your id>`, which collab opens for no one else. The AI's room activity leaves them out.
@@ -946,6 +959,26 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automations.e2e.mjs` (79 checks on the real engine, adding: Filter, Sort and Summarize chained, Stop and Error stopping the run with its message worked out, a pinned built-in step, and a name that isn't one or tries to be a path)
 - `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
 - `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
+
+### Automations, part seventeen: files ✅ (2026-11-19)
+
+**What:** files in automations, as n8n's binary data: what a step makes reaches the steps after it, a flow reads and writes the room's own files, and a run's files can be downloaded. Found on the way: a step's output over 32 KB never reached the next step.
+
+- **Outputs over 32 KB:** Activepieces' engine keeps any step's output over 32 KB apart (a "slice") and reads it back when a later step uses it. The worker took every such upload for the run's details and couldn't give it back, so the next step got nothing, silently: a real run sent 50,000 characters and the next step got 0. Now each is kept with its run and given back, and the run's details have it whole (up to 8 MB in all).
+- **A step's files** (File Helper's Create File, Zip and Unzip, the CSV piece's files, an Excel file) are kept with their run in the sandbox. They're read from the worker at an address ending in the file's name, as Activepieces' pieces take a file's name from it.
+  - Each worker has a port of its own, so a run carried on after a wait, tried again, given pinned data or a called flow's output reads the same files from the worker running now (`filesHere`).
+  - Up to 10 MB each, Activepieces' own limit. They go with their run (the 50 latest are kept).
+- **Read files** (n8n's Read Files from Disk): the room's files a path or pattern names (`reports/*.csv`, `docs/**/*.md`), one item each, with its file and, when asked, its text. Never `.git` or `node_modules` unless named; up to 100 files, 50 MB together. A path that isn't there fails the step; a pattern can find none.
+- **Write a file** (n8n's Write File to Disk): text, JSON or a step's file (its address, or the item Read files, Unzip or Create File gives) into the room's files: replacing, adding to the end, or new only. Folders are made as needed, and the room's live document then has it.
+- **Convert to File, Extract from File and Compression** are Activepieces' own pieces, already in the image, now that files reach the next step: File Helper (create, read, zip, unzip, encoding, type), CSV (CSV and JSON both ways, CSV and Excel files) and XML.
+- **Download:** a step's data lists its files above it, each with Download, through the API (`run-file`, Run rights), while the run is kept.
+- **An example:** "Save a call's rows as a CSV file in the room" (the CSV piece's file, written into the room).
+- **What a flow writes can be deleted:** the worker runs as the sandbox's other user (`ccuser`), so a folder Write a file made was `drwxr-sr-x`. The agent (`ccagent`, same group) couldn't remove a file someone then deleted in the editor. It stayed in the sandbox, came back into the room, and stopped the sandbox resetting (EACCES). The worker now keeps the agent's `umask 002`, which its engine, code steps and commands inherit.
+- **Looked at in a browser**, light and dark: Read files' form, and a run's output with its files and Download. Fixed on the way: the files sat above "What came out"'s heading, so they looked like "What went in"'s.
+
+**Where:** `sandbox/image/automation/files.mjs` (new: names, addresses, `filesHere`, `wholeSteps`, paths and patterns in the room), `host.mjs` (files and slices kept with the run, `/v1/step-files`, `/v1/codechatter/files`), `builtins.mjs` (`read_files`, `write_file`), `automation.py` (`run-file`), `Dockerfile`; `packages/contracts/src/automations.ts` (`run-file`); web `tools/automations/data-view.tsx` (`filesIn`, Download), `builtins.ts`, `examples.ts`.
+
+**Tests:** `sandbox/image/automation/files.test.mjs` (5: names and addresses, files moved to this worker, slices put back in loops and within the budget, paths and patterns, never `.git` unless named), `builtins.test.mjs` (Read files and Write a file through a stand-in worker), `apps/runner/test/automation-files.e2e.mjs` (18/18 on the real engine: a big output reaching the next step and the details whole, File Helper's file read by the CSV piece, Download and its refusals, the room's files read, zipped, unzipped and written back to the live document, a run tried again reading a file made before it failed), `apps/web/test/automations.e2e.mjs` (125/125: Read files from the picker, run, and its file downloaded with its name), and `apps/runner/test/automation-examples.e2e.ts` (11/11: all 92 of the 194 examples that run here, the new one too, its file removed after).
 
 ### Automations, part sixteen: the internet, for the services the owner turns on ✅ (2026-11-19)
 
@@ -1621,8 +1654,8 @@ The **API** tool in the activity bar. Browser tests: `apps/web/test/api-studio.e
 ### Design canvas (like Figma) 🟡
 
 The **Design** tool. Tests:
-- browser: `apps/web/test/canvas.e2e.mjs` (12/12, with the whiteboard)
-- canvas engine and PDF writer: 50/50
+- browser: `apps/web/test/canvas.e2e.mjs` (13/13, with the whiteboard) and `canvas-groups.e2e.mjs` (17/17, groups with two people)
+- canvas engine and PDF writer: 86/86
 
 - ✅ **Multiplayer vector canvas:**
   - frames, rectangles, ellipses, lines, arrows, pen paths, text, sticky notes and images
@@ -1631,7 +1664,17 @@ The **Design** tool. Tests:
 - 🟡 **Layers and properties:**
   - ✅ a layers panel (rename, hide, lock, reorder)
   - ✅ a properties panel; alignment and snapping
-  - ⬜ groups
+  - ✅ **groups** (ChatGPT 24, checked 2026-11-19):
+    - **Making them:** Ctrl+G, or Group in the toolbar, groups what's selected, keeping their stacking order; Ctrl+Shift+G ungroups, leaving them selected. Shapes from different frames or groups aren't grouped, with a message saying why.
+    - **The model:** a group is a shape (`type: "group"`) whose children have it as their `parentId`, like a frame's, but it draws nothing and doesn't clip. Its box is worked out when the canvas is read (`normalizeGroups` in `groups.ts`), never written, so two people moving its children can't leave a stale box. A group emptied (its last child deleted, here or by someone else once their changes merge) goes too. A missing or looping parent puts a shape at the top level, as a lost frame's did.
+    - **Using them:** a click selects the whole group, and moving, resizing and rotating carry every child. Double-click goes in a level, shown by a dashed outline, and Escape comes back out. Hiding or locking a group hides or locks what's in it. Copy, paste, duplicate, delete and undo keep groups whole.
+    - **Everywhere:** the layers panel nests them, folding and renaming; export (PNG, SVG, PDF) draws the children; a group works inside a main component and its instances; the Whiteboard has them too.
+    - **Where:** `canvas/groups.ts`, `tree.ts` (`effectiveParent`, `ancestors`, `effectiveHidden`, `effectiveLocked`), `editor.ts` (grouping, `activeGroup`, emptied groups removed), `interaction.ts`, `layers.tsx`, `group-controls.tsx`, `store.ts`, `export.ts`, `shape-view.tsx`, and a button in the Design and Whiteboard editors.
+    - **Tests:** `canvas/groups.test.ts` and `groups-render.test.ts` (with the rest of the canvas engine, 86/86: order and positions kept, nesting, the box following its children, the last child deleted, copy and paste, undo, two documents at once), and `apps/web/test/canvas-groups.e2e.mjs` (17/17: two people, Ctrl+G, the other moving the group, double-click, ungroup and undo, exports, a grouped component's instance).
+    - **Checked by Claude:** the diff read against the brief; its tests run again, and the canvas's own (13/13: it moved that test onto the apps menu, where its buttons had gone); accessibility 164/164. Looked at in a browser, light and dark. Fixed:
+      - nothing showed which group you'd gone into, once the pointer left it: now a dashed outline (`overlay.tsx`);
+      - the opacity box cut "100" to "1(" in every shape's properties (`properties.tsx`, from before).
+    - **To watch:** each change (each step of a drag too) scans the whole canvas for groups left empty: fine at today's sizes, worth a cheaper check on very large canvases.
 - 🟡 **Components and styles:**
   - ✅ reusable components with instances and overrides
   - ⬜ variants, shared colour and text styles

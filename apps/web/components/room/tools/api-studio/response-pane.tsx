@@ -11,6 +11,7 @@ import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 import type { RunState } from "./execute";
+import { ResponseCookies } from "./cookies-dialog";
 import { formatBytes, formatMs, statusTone } from "./format";
 import { LinesView } from "./lines-view";
 import { setExample, type RequestData } from "./model";
@@ -18,7 +19,7 @@ import type { RunLog } from "./scripts";
 import { StudioTabs, TabCount } from "./studio-tabs";
 import { useStudio } from "./studio-context";
 
-type Tab = "body" | "raw" | "headers" | "preview" | "tests";
+type Tab = "body" | "raw" | "headers" | "cookies" | "preview" | "tests";
 
 const RAW_LIMIT = 1024 * 1024;
 const EXAMPLE_LIMIT = 256 * 1024;
@@ -122,6 +123,7 @@ function Answer({ request, run, response }: { request: RequestData; run: RunStat
   const pretty = binary ? null : prettyJson(response.body);
   const passed = run.checks.filter((c) => c.passed).length;
   const failed = run.checks.length - passed;
+  const cookieSensitive = run.cookieSensitive || response.headers.some(([name]) => name.toLowerCase() === "set-cookie");
 
   const copyBody = async () => toast[(await copyText(binary ? "" : response.body)) ? "success" : "error"](binary ? "Binary responses can't be copied. Download it instead." : "Copied the response body.");
 
@@ -136,6 +138,7 @@ function Answer({ request, run, response }: { request: RequestData; run: RunStat
   };
 
   const saveExample = () => {
+    if (cookieSensitive) { toast.error("Responses from a cookie session stay private and can't be saved as shared examples."); return; }
     if (response.size > EXAMPLE_LIMIT) {
       toast.error("This response is over 256 KB, too big to keep as an example.");
       return;
@@ -172,7 +175,7 @@ function Answer({ request, run, response }: { request: RequestData; run: RunStat
         <span className="hidden text-muted-foreground sm:inline">{response.target === "sandbox" ? "From this room's sandbox" : "From the internet"}</span>
         <div className="ml-auto flex items-center gap-0.5">
           {canEdit && (
-            <Button size="xs" variant="ghost" onClick={saveExample} title="Keep this response as the example for the request">
+            <Button size="xs" variant="ghost" onClick={saveExample} disabled={cookieSensitive} title={cookieSensitive ? "Responses from a cookie session stay private" : "Keep this response as the example for the request"}>
               <Save /> Save example
             </Button>
           )}
@@ -201,6 +204,7 @@ function Answer({ request, run, response }: { request: RequestData; run: RunStat
           { id: "body", label: "Body" },
           { id: "raw", label: "Raw" },
           { id: "headers", label: <>Headers <TabCount n={response.headers.length} /></> },
+          { id: "cookies", label: <>Cookies <TabCount n={run.cookieChanges?.length ?? 0} /></> },
           { id: "preview", label: "Preview", hidden: !preview },
           {
             id: "tests",
@@ -228,6 +232,7 @@ function Answer({ request, run, response }: { request: RequestData; run: RunStat
           ))}
         {tab === "raw" && <RawBody body={response.body} binary={binary} size={response.size} onDownload={download} type={type} />}
         {tab === "headers" && <HeadersTable headers={response.headers} />}
+        {tab === "cookies" && <ResponseCookies changes={run.cookieChanges ?? []} />}
         {tab === "preview" && preview && <Preview kind={preview} type={type} body={response.body} binary={binary} />}
         {tab === "tests" && (
           <div className="h-full overflow-auto p-3">

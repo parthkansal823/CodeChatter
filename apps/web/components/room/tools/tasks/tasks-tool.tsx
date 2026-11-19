@@ -1,7 +1,7 @@
 /** The room's shared task board merges manual cards with bounded live code comments and keeps all movement keyboard-accessible. */
 "use client";
 
-import { addTask, assignTask, deleteTask, editTask, MAX_CODE_TASKS, moveTask, readTasks, TASK_COLUMNS, type BoardTask, type TaskCard, type TaskColumn } from "@codechatter/workspace-model";
+import { addTask, assignTask, deleteTask, editTask, MAX_CODE_TASKS, moveTask, readTasks, restoreTask, TASK_COLUMNS, type BoardTask, type TaskCard, type TaskColumn } from "@codechatter/workspace-model";
 import { ChevronDown, Code2, GripVertical, Plus, X } from "lucide-react";
 import { useId, useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { TaskEditor, type TaskFields } from "./task-editor";
 import { useCodeTasks } from "./use-code-tasks";
 
 const DRAG_TYPE = "application/x-codechatter-task";
+const UNDO_MS = 8_000;
 type Filter = "all" | "code" | "mine";
 type Editing = { card: TaskCard | null; column: TaskColumn };
 
@@ -98,6 +99,48 @@ function TaskBoard({ connection, openFile, close }: RoomToolProps & { connection
     openFile(file.id);
     revealInFile(file, { startLine: card.source.line, startColumn: 1, endLine: card.source.line, endColumn: 1 });
   };
+  const remove = (card: BoardTask) => {
+    if (!editable) return;
+    // Source comments own code cards; removing an orphan keeps the existing behavior.
+    if (card.source) { deleteTask(connection.doc, card.id); return; }
+    const snapshot = readTasks(connection.doc).find((task) => task.id === card.id);
+    if (!snapshot || snapshot.source) return;
+    const lease = connection.retain();
+    if (!deleteTask(connection.doc, card.id)) { lease.release(); return; }
+    let finished = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let toastId: string | number;
+    const expire = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      lease.release();
+      toast.dismiss(toastId);
+    };
+    toastId = toast("Task deleted.", {
+      duration: UNDO_MS,
+      onDismiss: expire,
+      onAutoClose: expire,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          void (async () => {
+            try {
+              if (!await lease.canWrite()) { toast.error("Couldn't restore this task. Check your connection and access."); return; }
+              if (restoreTask(connection.doc, snapshot)) toast.success("Task restored.");
+              else toast.message("This task is already back.");
+            } catch {
+              toast.error("Couldn't restore this task. Check your connection and access.");
+            } finally { lease.release(); }
+          })();
+        },
+      },
+    });
+    timer = setTimeout(expire, UNDO_MS);
+  };
 
   return (
     <>
@@ -118,7 +161,7 @@ function TaskBoard({ connection, openFile, close }: RoomToolProps & { connection
           return <section key={column.id} role="region" aria-labelledby={`${id}-${column.id}`} onDragOver={(event) => { if (editable && event.dataTransfer.types.includes(DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => drop(event, column.id)} className="flex min-h-32 min-w-0 flex-col rounded-md border bg-background">
             <div className="flex min-h-9 shrink-0 items-center gap-2 border-b px-2"><h2 id={`${id}-${column.id}`} className="font-medium">{column.label}</h2><span aria-label={`${inColumn.length} tasks`} className="text-xs text-muted-foreground">{inColumn.length}</span>{editable && <Button className="ml-auto" size="xs" variant="ghost" aria-label={`Add to ${column.label}`} onClick={() => setEditing({ card: null, column: column.id })}><Plus />Add</Button>}</div>
             <ol aria-label={`${column.label} tasks`} className="grid content-start gap-2 p-2">
-              {inColumn.map((card) => <li key={card.id}><TaskCardView card={card} domId={`${id}-${card.id}`} editable={editable} keysId={`${id}-keys`} people={people} filePath={files.find((file) => file.id === card.source?.fileId)?.path ?? null} unread={Boolean(card.source && scan.unread.includes(card.source.fileId))} onKey={(event) => keyMove(event, card)} onMove={(next) => move(card, next)} onEdit={() => setEditing({ card, column: card.column })} onDelete={() => { if (editable) deleteTask(connection.doc, card.id); }} onAssign={(assignee) => { if (editable) assignTask(connection.doc, card, assignee); }} onOpen={() => openSource(card)} /></li>)}
+              {inColumn.map((card) => <li key={card.id}><TaskCardView card={card} domId={`${id}-${card.id}`} editable={editable} keysId={`${id}-keys`} people={people} filePath={files.find((file) => file.id === card.source?.fileId)?.path ?? null} unread={Boolean(card.source && scan.unread.includes(card.source.fileId))} onKey={(event) => keyMove(event, card)} onMove={(next) => move(card, next)} onEdit={() => setEditing({ card, column: card.column })} onDelete={() => remove(card)} onAssign={(assignee) => { if (editable) assignTask(connection.doc, card, assignee); }} onOpen={() => openSource(card)} /></li>)}
             </ol>
           </section>;
         })}

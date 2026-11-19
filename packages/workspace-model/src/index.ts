@@ -5,6 +5,7 @@ export * from "./notebook.js";
 export * from "./breakpoints.js";
 export * from "./comments.js";
 export * from "./tasks.js";
+export * from "./task-scan.js";
 export * from "./tours.js";
 
 /**

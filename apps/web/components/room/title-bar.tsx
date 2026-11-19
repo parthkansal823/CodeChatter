@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { LogoMark } from "@/components/brand/logo";
 import { NotificationsBell } from "@/components/notifications/notifications-bell";
 import { CallButton } from "@/components/room/call/call-dock";
-import { useChatUnread } from "@/components/room/chat-panel";
+import { useChatUnread } from "@/components/room/chat-unread";
 import { ForkDialog } from "@/components/room/fork-dialog";
 import { ShareMenu } from "@/components/room/share-menu";
 import { VisibilityMenu } from "@/components/room/visibility-menu";

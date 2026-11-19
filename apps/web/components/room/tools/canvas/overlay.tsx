@@ -25,8 +25,8 @@ const CURSORS: Record<Handle, string> = {
 
 const toScreen = (r: Rect, cam: Camera): Rect => ({ x: r.x * cam.zoom + cam.x, y: r.y * cam.zoom + cam.y, w: r.w * cam.zoom, h: r.h * cam.zoom });
 
-/** One shape's outline in screen space: its line for lines, its (rotated) box for everything else. */
-function Outline({ shape, all, cam, color, width = 1.5 }: { shape: Shape; all: ReadonlyMap<string, Shape>; cam: Camera; color: string; width?: number }) {
+/** One shape's outline in screen space: its line for lines, its (rotated) box for everything else. Dashed for the group you're inside. */
+function Outline({ shape, all, cam, color, width = 1.5, dashed = false }: { shape: Shape; all: ReadonlyMap<string, Shape>; cam: Camera; color: string; width?: number; dashed?: boolean }) {
   const lookup = (id: string) => all.get(id);
   if (isLinear(shape.type)) {
     const [a, b] = linearEnds(shape, lookup);
@@ -42,7 +42,7 @@ function Outline({ shape, all, cam, color, width = 1.5 }: { shape: Shape; all: R
   }
   const r = toScreen(shapeBounds(shape, lookup), cam);
   const transform = shape.rotation ? `rotate(${shape.rotation} ${r.x + r.w / 2} ${r.y + r.h / 2})` : undefined;
-  return <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="none" transform={transform} style={{ stroke: color, strokeWidth: width }} />;
+  return <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="none" transform={transform} style={{ stroke: color, strokeWidth: width, strokeDasharray: dashed ? "4 3" : undefined }} />;
 }
 
 /** Your selection: outlines, the bounding box with resize handles, and its size. */
@@ -56,6 +56,9 @@ export function SelectionOverlay() {
   const readOnly = useAtom(editor.readOnly);
   const hoverId = useAtom(editor.hoverId);
   const target = useAtom(editor.target);
+  // The group a double-click went into: shown while you're in it, so it's clear why a click picks one shape, and Escape comes back out.
+  const activeId = useAtom(editor.activeGroup);
+  const active = activeId ? all.get(activeId) : undefined;
   const hover = hoverId && !ids.includes(hoverId) ? all.get(hoverId) : undefined;
   const targetShape = target ? all.get(target) : undefined;
   const shapes = ids.map((id) => all.get(id)).filter((s): s is Shape => Boolean(s));
@@ -68,6 +71,7 @@ export function SelectionOverlay() {
 
   return (
     <g pointerEvents="none">
+      {active && <Outline shape={active} all={all} cam={cam} color={BRAND} width={1} dashed />}
       {hover && !hover.hidden && tool === "select" && <Outline shape={hover} all={all} cam={cam} color={BRAND} width={1} />}
       {targetShape && <Outline shape={targetShape} all={all} cam={cam} color={BRAND} width={2} />}
       {shapes.map((shape) => (

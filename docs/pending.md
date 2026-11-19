@@ -12,7 +12,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 ## In progress (2026-11-06)
 
 - ✅ Checked: ChatGPT's prompt 11 (nightly backups and the restore drill), prompt 10 (account security: profile, password, two-factor, active sessions), prompt 9 (teams: `/orgs/new`, members, `/invite/<id>`) and prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
-- ✅ ChatGPT 22 verified locally (2026-11-19): room chat unread counts across devices and room chat search. Browser checks 21/21, PostgreSQL checks 6/6, API chat unit tests 28/28; see `roadmap-details.md`.
+- ✅ ChatGPT 22, checked by Claude (2026-11-19): room chat unread counts across devices and room chat search, with three fixes (where counting starts for someone new, the dashboard no longer loading the chat panel, search marks visible in dark). Browser 21/21, PostgreSQL 8/8, API unit tests 30/30, accessibility 164/164; see `roadmap-details.md`.
 - ✅ Just finished by Claude:
   - accessibility: no axe violations on 93 screens, open files reachable by keyboard, and Lighthouse 90+ on the marketing page (`apps/web/test/a11y.e2e.mjs`);
   - signing out a device now ends what it has open, at once: the live document, chat, terminals, language servers and the debugger;
@@ -32,7 +32,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 ## Up next, in order
 
 
-1. **ChatGPT**, each checked before it counts: **24** (groups on the design canvas), **25** (Mermaid diagrams inside Markdown), **26** (cookies in API Studio: commit API Studio's scripts first, as it builds on them) and **27** (the task board, next). They touch different files, so they can go to ChatGPT side by side.
+1. **ChatGPT**, each checked before it counts: **28** (toggles and moving blocks in Docs), **29** (shared colour and text styles on the design canvas), **30** (each person's status, with Do not disturb: the only one with a migration), **26** (cookies in API Studio: commit API Studio's scripts first, as it builds on them) and **27** (the task board, next). They touch different files, so they can go to ChatGPT side by side.
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -79,7 +79,8 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 ## Step 5 · Workspace suite
 
 - ⬜ **Docs:**
-  - toggles, runnable code blocks, images, math, Mermaid, drag to reorder;
+  - toggles and drag to reorder (**ChatGPT 28**);
+  - runnable code blocks, images, math, Mermaid;
   - organisation-wide pages, covers, recent pages;
   - the database view UI;
   - embeds;
@@ -96,8 +97,8 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - a mock server;
   - a WebSocket and SSE tester.
 - ⬜ **Design canvas:**
-  - groups (**ChatGPT 24**);
-  - variants and shared colour and text styles;
+  - shared colour and text styles (**ChatGPT 29**);
+  - variants;
   - prototype mode;
   - "turn this frame into code" with the AI;
   - comments on the canvas.
@@ -111,7 +112,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - rich messages;
   - huddles;
   - slash commands and bots;
-  - presence and status;
+  - presence and status (**ChatGPT 30**);
   - search across future channels and conversations (room chat unread tracking and search are complete).
 - ⬜ **Across the suite:**
   - one command bar (Ctrl+K);
@@ -163,7 +164,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - **Every n8n feature, or better** (the owner's request, 2026-11-07: "n8n ke saare features", our own UI). This list comes from n8n's own source, read for what it does. Its code isn't copied: its licence allows only internal, personal or non-commercial use, its `.ee` files need a paid licence, and either limit would land on CodeChatter. Only its permissively licensed packages may be used directly: `@n8n/tournament` (expressions, Apache-2.0), `@n8n/codemirror-lang`, `-html`, `-sql` (MIT), `@n8n/json-schema-to-zod` (ISC), `@n8n/rules-engine` (MIT). In order:
     1. 🟡 **The editor.** Done (roadmap-details, "Automations, part two"): a + on arrows and wherever nothing comes next, branch names on the chart, the right-click menu and keys (copy, cut, paste, duplicate, turn off, rename, add, remove, the arrows between boxes, Ctrl+Enter), undo and redo, a note on any step, replacing a step and changing the trigger, searching every action, Table, JSON and Schema views with Use to put data in a field and what an expression comes to, and routers with and, or, every test the engine has, more branches, and running each that matches. Expressions offered as they're typed (2026-11-18). **Left:** choosing several boxes at once, sticky notes and groups placed freely on the chart, and the command bar.
     2. 🟡 **Trying things.** Done (roadmap-details, "Automations, part three"): one step on its own, pinning a step's output, carrying a failed run on from where it stopped, and sending what an earlier run was sent. **Left:** running from a chosen step onward (n8n's partial runs), and pinning the trigger's data.
-    3. 🟡 **Built-in steps.** Done (roadmap-details, "Automations, part four"): Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates, Split Out, Rename Keys, Merge (one after the other, matched, side by side, every pairing), Compare Datasets, and Stop and Error. **Left:** Execute Command, Read and Write Files, Convert to File, Extract from File, Compression, iCal, Edit Image, Execution Data and Data Tables. Crypto, Date, HTML, Markdown, XML, HTTP and RSS come from Activepieces' pieces.
+    3. 🟡 **Built-in steps.** Done (roadmap-details, "Automations, part four"): Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates, Split Out, Rename Keys, Merge (one after the other, matched, side by side, every pairing), Compare Datasets, and Stop and Error. Execute Command is Run a command (part thirteen). Files (part seventeen): Read files and Write a file in the room, and Activepieces' File Helper, CSV and XML for Convert to File, Extract from File and Compression, now that files reach the next step. **Left:** iCal, Edit Image, Execution Data and Data Tables. Crypto, Date, HTML, Markdown, XML, HTTP and RSS come from Activepieces' pieces.
     4. 🟡 **Starting by itself.** Done (roadmap-details, "Automations, part five"): turning a flow on and off, and webhooks: a live address and a test one, any method, JSON, forms and text, answering at once or when the flow finishes, a new address, and a moved flow still found; schedules (part six); room events (part seven); an error flow (part eight); sub-flows (part nine); webhooks checking who calls (part ten); and waiting, for a time or a call, with approvals (part eleven). Room events from what people do (part twelve): a Run or tests failing or finishing, commits in the sandbox's git, and chat messages and commands. Pieces' polling triggers (part fifteen). **Left:** Wait for a form (with forms); forms and a chat trigger with public pages; services calling in (pieces' webhook triggers), which needs the room reachable from the internet.
     5. 🟡 **Connections.** Done (part fourteen): room secrets, sealed, with each piece's kinds of sign-in (a secret, a user and password, the piece's own fields), tested on save by the piece's own check, owners only. The internet for the services the owner turns on (part sixteen). **Left:** OAuth2 (10 of the 44 pieces sign in with it); allowed domains per secret; variables.
     6. **Runs and settings.** Every flow's runs in one list, filters, notes and tags on a run, custom data, redaction, how long runs are kept; each flow's timezone, timeout, what to save, error flow and time saved; tags and favourites; a visual diff between versions, restoring one; the Insights page (runs, failures, failure rate, time saved, average time).
@@ -246,6 +247,6 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ Code and algorithm visualizer, with AI narration
 - ⬜ Code tours, later: a way to put a stop whose lines are gone back on other lines, import and export of tours, and undo for a deleted stop
 - ⬜ Task board, next (**ChatGPT 27**): rescan only the files that changed (now every keystroke anywhere, and every move, rescans every file, in 5 ms slices); two identical TODOs in one file show as one card; a hand-written card's delete has no undo
-- ⬜ Mermaid inside the Markdown preview (**ChatGPT 25**); math (KaTeX) after it, as it needs a package
+- ⬜ Math (KaTeX) in the Markdown preview: it needs a package. Mermaid there is done (ChatGPT 25); one very slow diagram still holds up the next, as Mermaid's settings are shared, until each draws in its own worker
 - ⬜ VS Code extension: join a room from VS Code
 - ⬜ More interface languages: Hindi first

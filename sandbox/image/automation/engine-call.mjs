@@ -51,6 +51,7 @@ function messageOf(text) {
 export async function engineCall(call) {
   if (!KINDS.has(call.kind)) return { ok: false, error: "The engine isn't asked that here." };
   const connections = call.connections ?? {};
+  const variables = call.variables && typeof call.variables === "object" ? call.variables : {};
   const storeFile = call.store ?? null;
   const store = storeFile ? readJson(storeFile, {}) : {};
   const seconds = Math.min(Math.max(Number(call.seconds) || 60, 5), 300);
@@ -85,7 +86,10 @@ export async function engineCall(call) {
       return connection ? send(200, { id: name, externalId: name, displayName: name, pieceName: connection.piece, status: "ACTIVE", value: connection.value }) : send(404, { message: `This room has no connection called ${name}.` });
     }
     if (path === "/v1/worker/project") return send(200, { id: "room", displayName: "This room", externalId: null });
-    if (path.startsWith("/v1/worker/variables/")) return send(404);
+    if (path.startsWith("/v1/worker/variables/")) {
+      const name = decodeURIComponent(path.slice("/v1/worker/variables/".length));
+      return Object.hasOwn(variables, name) && typeof variables[name] === "string" ? send(200, { name, value: variables[name] }) : send(404, { message: `This room has no variable called ${name}.` });
+    }
     return send(404, { message: `The engine can't use ${path} here.` });
   });
   const token = randomBytes(32).toString("hex");

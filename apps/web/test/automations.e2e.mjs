@@ -243,6 +243,14 @@ try {
   await details.getByRole("button", { name: "Back to the runs" }).click();
   await details.getByRole("button", { name: "Use what it was sent" }).click();
   check("whatARunWasSentCanBeUsedAgain", JSON.parse(await details.getByLabel("What to send, as JSON").inputValue()).additions === 1);
+  // Run from here: a step and what's after it, with what the steps before it gave on the run shown.
+  await select("Ask for two reviews");
+  const review = details.getByRole("region", { name: "Step Ask for two reviews" });
+  await review.getByRole("button", { name: "Run from here" }).click();
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  check("aRunFromAStepSaysSo", await ok(runsList.getByRole("listitem").filter({ hasText: /from Ask for two reviews/ }).first().waitFor({ timeout: 60_000 })));
+  await finished(/^Finished in/);
+  check("andTheStepsBeforeItWerentRunAgain", await ok(details.getByText(/^Run from Ask for two reviews: the steps before it weren't run again/).waitFor({ timeout: 10_000 })));
 
   // ---- A built-in step, as n8n's: Filter, from the picker, run on the engine ----
   await select("Measure it");

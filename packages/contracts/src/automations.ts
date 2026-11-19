@@ -44,8 +44,11 @@ export const AutomationInput = z.discriminatedUnion("op", [
     seconds: z.number().int().min(5).max(900).optional(),
     /** What the browser has, so the run waits until the sandbox has it too. */
     stateVector: z.string().max(4_000_000).optional(),
-    /** "step": only `step` runs, with `sampleData` (each other step's output, by name) standing in for the rest. "retry": carries on from where `retryOf` stopped. */
-    mode: z.enum(["run", "step", "retry"]).optional(),
+    /**
+     * "step": only `step` runs, with `sampleData` (each other step's output, by name) standing in for the rest. "retry": carries on from where `retryOf`
+     * stopped. "from": `step` and everything after it run, with what `retryOf`'s steps before it gave (n8n's partial run).
+     */
+    mode: z.enum(["run", "step", "retry", "from"]).optional(),
     step: z.string().regex(/^[A-Za-z0-9_]{1,64}$/, "That isn't a step.").optional(),
     sampleData: z.record(z.string(), z.unknown()).optional(),
     retryOf: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run.").optional(),
@@ -206,7 +209,7 @@ export function shownOf(value: ConnectionValue, fields: readonly string[] = []):
 export type AutomationStepResult = { type: string; status: string; input?: unknown; output?: unknown; errorMessage?: string; duration?: number };
 /** What a waiting run waits for: a time, or a call to its address (its token is never shown). */
 export type AutomationWaitpoint = { type: "DELAY" | "WEBHOOK"; step: string; resumeAt: number | null };
-export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry" | "resume"; waitpoint?: AutomationWaitpoint | null; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
+export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry" | "resume" | "from"; waitpoint?: AutomationWaitpoint | null; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
 export type AutomationRun = AutomationRunSummary & { steps: Record<string, AutomationStepResult>; failedStep?: { name: string; displayName?: string; message?: string }; payload?: unknown; /** Steps that gave back what was pinned on them rather than running. */ pinned?: string[] };
 export type AutomationLive = (Partial<AutomationRun> & { state: "idle" | "running" | "finished"; id: string | null; steps: Record<string, AutomationStepResult>; queued: number });
 

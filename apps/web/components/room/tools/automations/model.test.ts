@@ -169,8 +169,12 @@ test("a step's output can be pinned, and the pin goes with it when it's copied o
   const item = chartOfFlow(pinned, undefined).items.find((each) => each.id === "a")!;
   assert.match(item.detail, /^Pinned · Code/);
   assert.match(item.description, /pinned/);
-  assert.equal(pinStep(flow, "trigger", {}), flow, "a trigger isn't pinned");
+  assert.deepEqual(pinStep(flow, "trigger", { body: { n: 1 } }).pinned, { trigger: { body: { n: 1 } } }, "the trigger's data can be pinned too");
   assert.equal(canPin(newRouterStep("r")), false);
+  assert.equal(canPin(newLoopStep("l")), false);
+  // A step replaced is another step: its pin goes.
+  assert.deepEqual(replaceStep(pinned, "a", newPieceStep("x", "@activepieces/piece-github", PIECE, "create_issue")).pinned, {});
+  assert.deepEqual(replaceStep(pinStep(flow, "trigger", {}), "trigger", newTrigger("@activepieces/piece-github", PIECE, "new_issue")).pinned, {}, "and a trigger changed loses its pin");
   assert.deepEqual(unpinStep(pinned, "a").pinned, {});
   assert.equal(unpinStep(flow, "a"), flow, "nothing to unpin");
   assert.deepEqual(removeStep(pinned, "a").pinned, {}, "a removed step's pin goes with it");

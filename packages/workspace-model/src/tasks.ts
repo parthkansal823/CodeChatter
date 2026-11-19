@@ -6,7 +6,7 @@ import { randomId } from "./model.js";
 export const TASK_COLUMNS = [{ id: "todo", label: "To do" }, { id: "doing", label: "Doing" }, { id: "done", label: "Done" }] as const;
 export type TaskColumn = (typeof TASK_COLUMNS)[number]["id"];
 export type TaskMarker = "TODO" | "FIXME" | "HACK" | "XXX";
-export type CodeTask = { line: number; marker: TaskMarker; text: string };
+export type CodeTask = { line: number; marker: TaskMarker; text: string; occurrence?: number };
 export type TaskSource = CodeTask & { fileId: string };
 export type TaskCard = {
   id: string;
@@ -52,6 +52,7 @@ function sourceOf(value: unknown): TaskSource | null {
     line: typeof source.line === "number" && Number.isSafeInteger(source.line) ? Math.max(1, source.line) : 1,
     marker: source.marker as TaskMarker,
     text: clipped(source.text, MAX_TASK_DESCRIPTION).trim(),
+    ...(typeof source.occurrence === "number" && Number.isSafeInteger(source.occurrence) && source.occurrence > 1 ? { occurrence: source.occurrence } : {}),
   };
 }
 
@@ -89,15 +90,17 @@ function stateOf(doc: Y.Doc, base: TaskCard): TaskCard {
   };
 }
 
-/** Exact bounded text, not a hash or line number: moving lines keeps identity and cannot introduce hash collisions. */
-export function codeTaskKey(fileId: string, marker: TaskMarker, text: string): string {
-  return `code:${JSON.stringify([clipped(fileId, MAX_ID), marker, clipped(text, MAX_TASK_DESCRIPTION).trim()])}`;
+/** First occurrences keep the legacy key; later identical comments use their ordinal, never their changing line. */
+export function codeTaskKey(fileId: string, marker: TaskMarker, text: string, occurrence = 1): string {
+  const parts: (string | number)[] = [clipped(fileId, MAX_ID), marker, clipped(text, MAX_TASK_DESCRIPTION).trim()];
+  if (Number.isSafeInteger(occurrence) && occurrence > 1) parts.push(occurrence);
+  return `code:${JSON.stringify(parts)}`;
 }
 
 /** Default code cards are plain derived data. Calling this writes nothing. */
 export function codeTaskCard(fileId: string, task: CodeTask): TaskCard {
-  const source: TaskSource = { fileId: clipped(fileId, MAX_ID), line: Math.max(1, Math.trunc(task.line) || 1), marker: task.marker, text: clipped(task.text, MAX_TASK_DESCRIPTION).trim() };
-  return { id: codeTaskKey(source.fileId, source.marker, source.text), title: (source.text || source.marker).slice(0, MAX_TASK_TITLE), description: "", column: "todo", order: 0, assigneeId: null, createdBy: "", createdAt: 0, source };
+  const source: TaskSource = { fileId: clipped(fileId, MAX_ID), line: Math.max(1, Math.trunc(task.line) || 1), marker: task.marker, text: clipped(task.text, MAX_TASK_DESCRIPTION).trim(), ...(Number.isSafeInteger(task.occurrence) && task.occurrence! > 1 ? { occurrence: task.occurrence } : {}) };
+  return { id: codeTaskKey(source.fileId, source.marker, source.text, source.occurrence), title: (source.text || source.marker).slice(0, MAX_TASK_TITLE), description: "", column: "todo", order: 0, assigneeId: null, createdBy: "", createdAt: 0, source };
 }
 
 /** Merge local code results with shared user changes; only Doing snapshots survive a missing comment. */
@@ -203,6 +206,23 @@ export function deleteTask(doc: Y.Doc, id: string): boolean {
   return existed;
 }
 
+/** Restore the effective manual-card snapshot, retaining its ID and rank; an already restored card is never overwritten. */
+export function restoreTask(doc: Y.Doc, snapshot: TaskCard): boolean {
+  if (typeof snapshot.id !== "string" || !snapshot.id || snapshot.id.length > MAX_ID) return false;
+  const card = cardOf(snapshot, snapshot.id);
+  if (!card || card.source) return false;
+  const maps = taskMaps(doc);
+  let restored = false;
+  doc.transact(() => {
+    if (maps.cards.has(card.id)) return;
+    // The snapshot already includes all overlays. Remove stale overlays before restoring its complete base.
+    for (const map of Object.values(maps)) map.delete(card.id);
+    maps.cards.set(card.id, card);
+    restored = true;
+  }, ORIGIN);
+  return restored;
+}
+
 type CommentStyle = { slash: boolean; hash: boolean; dash: boolean; percent: boolean; semicolon: boolean; html: boolean; rust: boolean; numericSeparators: boolean };
 function commentStyle(path: string): CommentStyle {
   const name = path.split(/[\\/]/).at(-1)?.toLowerCase() ?? "";
@@ -228,6 +248,7 @@ const RUST_CHARACTER = /^'(?:\\(?:[nrt0\\'"]|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]{1,1
  */
 export function* scanCodeTasks(path: string, text: string): Generator<CodeTask | null, void> {
   const style = commentStyle(path);
+  const occurrences = new Map<string, number>();
   let i = 0, line = 1, sinceYield = 0;
   let quote = "", comment: "" | "line" | "block" = "", blockEnd = "", numericToken = false;
   while (i < text.length) {
@@ -252,7 +273,10 @@ export function* scanCodeTasks(path: string, text: string): Generator<CodeTask |
           if (end === -1) end = text.length;
           if (comment === "block") { const close = text.indexOf(blockEnd, i); if (close !== -1) end = Math.min(end, close); }
           const body = text.slice(i + match[0].length, Math.min(end, i + match[0].length + MAX_TASK_DESCRIPTION)).replace(/^\s*:\s*/, "").trim();
-          yield { line, marker: match[0] as TaskMarker, text: body };
+          const key = JSON.stringify([match[0], body]);
+          const occurrence = (occurrences.get(key) ?? 0) + 1;
+          occurrences.set(key, occurrence);
+          yield { line, marker: match[0] as TaskMarker, text: body, ...(occurrence > 1 ? { occurrence } : {}) };
           i += match[0].length;
           continue;
         }

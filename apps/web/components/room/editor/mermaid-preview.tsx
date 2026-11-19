@@ -2,20 +2,16 @@
 "use client";
 
 import { Copy, Download } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/clipboard";
-import { cssVar } from "@/lib/css-color";
 import { cn } from "@/lib/utils";
 
-import { mermaidErrorLine } from "./preview-kind";
+import { useMermaidDrawing } from "./use-mermaid-drawing";
 
 type Props = { text: string; name: string; onShowLine: (line: number) => void; cacheKey?: string };
-type Problem = { message: string; line: number | null };
-type Drawing = { svg: string; type: string };
 
 const DIAGRAM_NAMES: Record<string, string> = {
   flowchart: "Flowchart", "flowchart-v2": "Flowchart", "flowchart-elk": "Flowchart",
@@ -29,163 +25,9 @@ const DIAGRAM_NAMES: Record<string, string> = {
   radar: "Radar chart", treemap: "Treemap",
 };
 
-let renderId = 0;
-let renderQueue: Promise<void> = Promise.resolve();
-const lastDrawings = new Map<string, Drawing>();
-let cachedCharacters = 0;
-
-function rememberDrawing(key: string, drawing: Drawing) {
-  cachedCharacters -= lastDrawings.get(key)?.svg.length ?? 0;
-  lastDrawings.delete(key);
-  if (drawing.svg.length > 4_000_000) return;
-  lastDrawings.set(key, drawing);
-  cachedCharacters += drawing.svg.length;
-  // Full/side mode remounts the pane. Keep its last good drawing without retaining unbounded SVG data.
-  while (lastDrawings.size > 16 || cachedCharacters > 4_000_000) {
-    const oldest = lastDrawings.keys().next().value;
-    if (oldest === undefined) break;
-    cachedCharacters -= lastDrawings.get(oldest)?.svg.length ?? 0;
-    lastDrawings.delete(oldest);
-  }
-}
-
-async function renderDiagram(text: string, dark: boolean, current: () => boolean) {
-  const { default: mermaid } = await import("mermaid");
-  // Mermaid's configuration is shared. Keep initialization and rendering together across open panes.
-  const result = renderQueue.then(async () => {
-    if (!current()) return null;
-    const background = cssVar("--background");
-    const foreground = cssVar("--foreground");
-    const card = cssVar("--card");
-    const muted = cssVar("--muted");
-    const border = cssVar("--border");
-    const brand = cssVar("--brand");
-    const brandForeground = cssVar("--brand-foreground");
-    // Several diagram types have their own palettes, including inverse colours that would turn orange cyan.
-    const palette = [card, muted, brand];
-    const chartColors: Record<string, string> = {};
-    for (let index = 0; index < 12; index++) {
-      const fill = palette[index % palette.length] ?? card;
-      const ink = index % palette.length === 2 ? brandForeground : foreground;
-      Object.assign(chartColors, {
-        [`pie${index + 1}`]: fill, [`fillType${index}`]: fill,
-        [`cScale${index}`]: fill, [`cScaleInv${index}`]: fill,
-        [`cScalePeer${index}`]: fill, [`cScaleLabel${index}`]: ink,
-      });
-      if (index < 8) Object.assign(chartColors, { [`git${index}`]: fill, [`gitInv${index}`]: fill, [`gitBranchLabel${index}`]: ink });
-    }
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      suppressErrorRendering: true,
-      theme: "base",
-      htmlLabels: false,
-      flowchart: { htmlLabels: false },
-      // Source directives cannot turn HTML labels or the safety limits back on or off.
-      secure: ["secure", "securityLevel", "startOnLoad", "maxTextSize", "maxEdges", "suppressErrorRendering", "htmlLabels", "flowchart"],
-      themeVariables: {
-        darkMode: dark, background, textColor: foreground, lineColor: foreground,
-        primaryColor: card, primaryTextColor: foreground, primaryBorderColor: border,
-        secondaryColor: muted, secondaryTextColor: foreground, secondaryBorderColor: border,
-        tertiaryColor: brand, tertiaryTextColor: brandForeground, tertiaryBorderColor: brand,
-        mainBkg: card, nodeBorder: border, nodeTextColor: foreground,
-        clusterBkg: muted, clusterBorder: border, edgeLabelBackground: background,
-        actorBkg: card, actorBorder: border, actorTextColor: foreground, actorLineColor: foreground,
-        signalColor: foreground, signalTextColor: foreground,
-        labelBoxBkgColor: muted, labelBoxBorderColor: border, labelTextColor: foreground,
-        noteBkgColor: muted, noteBorderColor: border, noteTextColor: foreground,
-        activationBkgColor: brand, activationBorderColor: brand, fontSize: "13px",
-        critBkgColor: muted, critBorderColor: brand, todayLineColor: brand,
-        vertLineColor: border, taskTextClickableColor: foreground,
-        altSectionBkgColor: muted, excludeBkgColor: muted, gridColor: border,
-        doneTaskBkgColor: muted, doneTaskBorderColor: border,
-        taskBkgColor: card, taskBorderColor: border, titleColor: foreground,
-        taskTextColor: foreground, taskTextDarkColor: foreground, taskTextOutsideColor: foreground,
-        pieStrokeColor: border, pieOuterStrokeColor: border, branchLabelColor: foreground,
-        attributeBackgroundColorOdd: card, attributeBackgroundColorEven: muted,
-        archEdgeColor: foreground, archEdgeArrowColor: foreground, archGroupBorderColor: border,
-        wardleyEvolutionColor: foreground,
-        emProcessorFill: card, emProcessorStroke: border, emReadModelFill: muted, emReadModelStroke: border,
-        emCommandFill: card, emCommandStroke: border, emEventFill: brand, emEventStroke: brand,
-        cynefin: { cliffColor: border, complexBg: muted, complicatedBg: card, chaoticBg: muted, clearBg: card, confusionBg: brand },
-        xyChart: { plotColorPalette: palette.join(",") },
-        ...chartColors,
-      },
-    });
-    // Layout needs a connected, measurable element. Remove it even when Mermaid rejects the source.
-    const container = document.createElement("div");
-    Object.assign(container.style, { position: "fixed", left: "-100000px", top: "0", visibility: "hidden" });
-    container.setAttribute("aria-hidden", "true");
-    document.body.appendChild(container);
-    try {
-      return await mermaid.render(`room-mermaid-${++renderId}`, text, container);
-    } finally {
-      container.remove();
-    }
-  });
-  renderQueue = result.then(() => undefined, () => undefined);
-  return result;
-}
-
-function problemOf(error: unknown, text: string): Problem {
-  const record = error && typeof error === "object" ? error as Record<string, unknown> : {};
-  const message = typeof record.message === "string" ? record.message : typeof record.str === "string" ? record.str : String(error);
-  const hash = record.hash && typeof record.hash === "object" ? record.hash as Record<string, unknown> : {};
-  const location = hash.loc && typeof hash.loc === "object" ? hash.loc as Record<string, unknown> : {};
-  const reported = mermaidErrorLine(message) ?? (typeof location.first_line === "number" ? location.first_line : typeof hash.line === "number" ? hash.line + 1 : null);
-  const line = reported !== null && Number.isSafeInteger(reported) && reported > 0 ? Math.min(reported, text.split("\n").length) : null;
-  if (/No diagram type|UnknownDiagram/i.test(message)) return { line, message: "Start with a diagram type, for example graph TD." };
-  if (/max(?:imum)?.*(?:size|edges)|too (?:large|many)/i.test(message)) return { line, message: "This diagram is too large to draw. Try fewer nodes and arrows." };
-  const expected = /Expecting ([\s\S]+?),\s*got\b/i.exec(message)?.[1] ?? "";
-  if (/ARROW|LINK/.test(expected)) return { line, message: "Mermaid expected an arrow or a node label here." };
-  if (/SQE|PE|STOP/.test(expected)) return { line, message: "Mermaid expected a closing bracket or a node label here." };
-  return { line, message: "Mermaid couldn't draw this yet. Check the diagram type, arrows and brackets." };
-}
-
-function imageSizedSvg(svg: string): string {
-  // Mermaid often writes width="100%". Give the image intrinsic dimensions for Actual size.
-  const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
-  const dimensions = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
-  const width = dimensions?.[2];
-  const height = dimensions?.[3];
-  if (width && height && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-    root.setAttribute("width", String(width));
-    root.setAttribute("height", String(height));
-  }
-  return new XMLSerializer().serializeToString(root);
-}
-
 export function MermaidPreview({ text, name, onShowLine, cacheKey }: Props) {
-  const { resolvedTheme } = useTheme();
   const [fit, setFit] = useState(true);
-  const [drawing, setDrawing] = useState<Drawing | null>(() => cacheKey ? lastDrawings.get(cacheKey) ?? null : null);
-  const [failure, setFailure] = useState<{ text: string; theme: string | undefined; problem: Problem } | null>(null);
-  const problem = failure?.text === text && failure.theme === resolvedTheme ? failure.problem : null;
-  const empty = !text.trim();
-
-  useEffect(() => {
-    let current = true;
-    const timer = window.setTimeout(() => {
-      if (!text.trim()) return;
-      void renderDiagram(text, resolvedTheme === "dark", () => current).then(async (result) => {
-        if (!current || !result) return;
-        const next = { svg: imageSizedSvg(result.svg), type: result.diagramType };
-        const image = new Image();
-        image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(next.svg)}`;
-        await image.decode();
-        if (!current) return;
-        if (cacheKey) rememberDrawing(cacheKey, next);
-        setDrawing(next);
-        setFailure(null);
-      }).catch((error: unknown) => {
-        if (current) setFailure({ text, theme: resolvedTheme, problem: problemOf(error, text) });
-      });
-    }, 250);
-    return () => {
-      current = false;
-      window.clearTimeout(timer);
-    };
-  }, [text, resolvedTheme, cacheKey]);
+  const { drawing, problem, empty } = useMermaidDrawing(text, true, cacheKey);
 
   const download = () => {
     if (!drawing) return;

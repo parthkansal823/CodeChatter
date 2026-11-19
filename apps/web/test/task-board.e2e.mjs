@@ -12,6 +12,7 @@ const WebSocket = createRequire(new URL("../../collab/package.json", import.meta
 const stamp = Date.now().toString(36);
 const title = `Board task ${stamp}`;
 const codeTitle = `code task ${stamp}`;
+const duplicateTitle = `duplicate task ${stamp}`;
 const doingTitle = `ongoing task ${stamp}`;
 const doneTitle = `finished task ${stamp}`;
 const filename = `task_board_${stamp}.js`;
@@ -82,10 +83,16 @@ async function writeFile(text) {
   await until(() => textOf(files.doc, fixtureFileId)?.toString() === text);
 }
 
-function rememberOwned() {
-  for (const [id, snapshot] of taskMaps(tasks.doc).cards) {
+function rememberOwned(doc = tasks?.doc) {
+  if (!doc) return;
+  for (const [id, snapshot] of taskMaps(doc).cards) {
     if (snapshot?.title?.includes(stamp) || snapshot?.source?.fileId === fixtureFileId) ownedIds.add(id);
   }
+}
+
+/** Undo must keep the same card and its effective fields rather than adding a new task. */
+function sameManualCard(actual, expected) {
+  return actual?.source === null && ["id", "title", "description", "column", "order", "assigneeId", "createdBy", "createdAt"].every((field) => actual[field] === expected[field]);
 }
 
 async function role(roleName) {
@@ -150,6 +157,35 @@ try {
   check("the code filter excludes manual cards", true);
   await board(second.page).getByRole("combobox", { name: "Task filter", exact: true }).selectOption("all");
 
+  stage = "manual delete and shared Undo";
+  await card(first.page, title).getByRole("button", { name: `Move ${title}`, exact: true }).click();
+  await first.page.getByRole("menuitem", { name: "Doing", exact: true }).click();
+  await until(() => readTasks(tasks.doc).find((task) => task.title === title)?.column === "doing");
+  const beforeDelete = readTasks(tasks.doc).find((task) => task.title === title);
+  await card(first.page, title).getByRole("button", { name: `Delete ${title}`, exact: true }).click();
+  await card(second.page, title).waitFor({ state: "hidden" });
+  await until(() => !taskMaps(tasks.doc).cards.has(beforeDelete.id));
+  const undo = first.page.getByRole("button", { name: "Undo", exact: true });
+  await undo.waitFor();
+  await undo.click();
+  await card(second.page, title).waitFor();
+  await until(() => sameManualCard(readTasks(tasks.doc).find((task) => task.id === beforeDelete.id), beforeDelete));
+  check("Undo restores the same manual card and all fields for the other person", await column(second.page, "Doing").getByRole("group", { name: `Task: ${title}`, exact: true }).count() === 1);
+  await undo.waitFor({ state: "hidden" });
+
+  stage = "Undo after the board closes";
+  await card(first.page, title).getByRole("button", { name: `Delete ${title}`, exact: true }).click();
+  await card(second.page, title).waitFor({ state: "hidden" });
+  await undo.waitFor();
+  await board(first.page).getByRole("button", { name: "Close task board", exact: true }).click();
+  await board(first.page).waitFor({ state: "hidden" });
+  await undo.click();
+  await card(second.page, title).waitFor();
+  await until(() => sameManualCard(readTasks(tasks.doc).find((task) => task.id === beforeDelete.id), beforeDelete));
+  check("Undo stays live after closing the deleting person's board", true);
+  await openBoard(first.page);
+  await card(first.page, title).waitFor();
+
   stage = "code task scanning and line navigation";
   await board(first.page).getByRole("button", { name: "Close task board", exact: true }).click();
   await first.page.getByRole("button", { name: "New file", exact: true }).click();
@@ -169,6 +205,39 @@ try {
   await writeFile("\n");
   await card(second.page, codeTitle).waitFor({ state: "hidden" });
   check("removing an untouched comment removes its card", true);
+
+  stage = "identical TODO identities";
+  await writeFile(`// TODO: ${duplicateTitle}\nconst unrelated = true;\n// TODO: ${duplicateTitle}\n`);
+  await until(async () => await card(second.page, duplicateTitle).count() === 2);
+  const firstDuplicate = card(second.page, duplicateTitle).filter({ has: second.page.getByRole("button", { name: `Open ${filename}:1`, exact: true }) });
+  const secondDuplicate = card(second.page, duplicateTitle).filter({ has: second.page.getByRole("button", { name: `Open ${filename}:3`, exact: true }) });
+  await firstDuplicate.waitFor();
+  await secondDuplicate.waitFor();
+  const firstDuplicateId = await firstDuplicate.getAttribute("data-task-id");
+  const secondDuplicateId = await secondDuplicate.getAttribute("data-task-id");
+  check("identical TODOs create two separate cards", Boolean(firstDuplicateId && secondDuplicateId && firstDuplicateId !== secondDuplicateId));
+  const legacyId = `code:${JSON.stringify([fixtureFileId, "TODO", duplicateTitle])}`;
+  check("the first identical TODO keeps the original three-part ID", firstDuplicateId === legacyId);
+  await secondDuplicate.focus();
+  await secondDuplicate.press("ArrowRight");
+  const doingDuplicate = column(second.page, "Doing").getByRole("group", { name: `Task: ${duplicateTitle}`, exact: true });
+  await doingDuplicate.waitFor();
+  await doingDuplicate.getByRole("combobox", { name: `Assign ${duplicateTitle}`, exact: true }).selectOption(secondId);
+  await until(() => readTasks(tasks.doc).find((task) => task.id === secondDuplicateId)?.assigneeId === secondId);
+  rememberOwned();
+  await writeFile(`// An unrelated line above\n// TODO: ${duplicateTitle}\nconst unrelated = true;\n// TODO: ${duplicateTitle}\n`);
+  const shiftedFirst = column(second.page, "To do").getByRole("group", { name: `Task: ${duplicateTitle}`, exact: true });
+  await shiftedFirst.getByRole("button", { name: `Open ${filename}:2`, exact: true }).waitFor();
+  await doingDuplicate.getByRole("button", { name: `Open ${filename}:4`, exact: true }).waitFor();
+  check("adding a line preserves both identical TODO IDs", await shiftedFirst.getAttribute("data-task-id") === firstDuplicateId && await doingDuplicate.getAttribute("data-task-id") === secondDuplicateId);
+  check("the same duplicate stays Doing with its assignee", await doingDuplicate.getByRole("combobox", { name: `Assign ${duplicateTitle}`, exact: true }).inputValue() === secondId);
+  await writeFile(`// An unrelated line above\n// TODO: ${duplicateTitle}\n`);
+  await doingDuplicate.getByText("No longer in the code", { exact: true }).waitFor();
+  check("deleting the later identical TODO preserves the first one's ID", await shiftedFirst.getAttribute("data-task-id") === firstDuplicateId);
+  await doingDuplicate.getByRole("button", { name: `Remove ${duplicateTitle}`, exact: true }).click();
+  await doingDuplicate.waitFor({ state: "hidden" });
+  await writeFile("\n");
+  await card(second.page, duplicateTitle).waitFor({ state: "hidden" });
 
   stage = "code state and orphan lifecycle";
   await writeFile(`// TODO: ${doingTitle}\n// FIXME: ${doneTitle}\n`);
@@ -237,23 +306,31 @@ try {
   }
   try {
     cleanupStage = "remove owned task state";
-    if (tasks) { rememberOwned(); for (const id of ownedIds) deleteTask(tasks.doc, id); }
-    if (tasks) tasks.doc.getMap("task-board-access-probe").delete(`task-board-probe-${stamp}`);
+    // A fresh peer also finds a send that committed before the browser flow failed to acknowledge it.
+    const cleanupTasks = tasks && first ? await connect(first.context, "tasks") : tasks;
+    if (cleanupTasks && cleanupTasks !== tasks) open.push(cleanupTasks);
+    if (cleanupTasks) { rememberOwned(cleanupTasks.doc); for (const id of ownedIds) deleteTask(cleanupTasks.doc, id); }
+    if (cleanupTasks) cleanupTasks.doc.getMap("task-board-access-probe").delete(`task-board-probe-${stamp}`);
     cleanupStage = "remove fixture file";
-    if (files && fixtureFileId) trash(files.doc, fixtureFileId);
+    const cleanupFiles = files && first ? await connect(first.context, "files") : files;
+    if (cleanupFiles && cleanupFiles !== files) open.push(cleanupFiles);
+    if (cleanupFiles) {
+      fixtureFileId ??= findByPath(cleanupFiles.doc, filename)?.id ?? null;
+      if (fixtureFileId) trash(cleanupFiles.doc, fixtureFileId);
+    }
     if (tasks && first) {
       cleanupStage = "verify task state with a fresh peer";
       const confirm = await connect(first.context, "tasks"); open.push(confirm);
       await until(() => [...ownedIds].every((id) => Object.values(taskMaps(confirm.doc)).every((map) => !map.has(id))));
       await until(() => !confirm.doc.getMap("task-board-access-probe").has(`task-board-probe-${stamp}`));
     }
-    check("all owned card state is removed", !tasks || [...ownedIds].every((id) => Object.values(taskMaps(tasks.doc)).every((map) => !map.has(id))));
+    check("all owned card state is removed", !cleanupTasks || [...ownedIds].every((id) => Object.values(taskMaps(cleanupTasks.doc)).every((map) => !map.has(id))));
     if (files && first) {
       cleanupStage = "verify source file with a fresh peer";
       const confirm = await connect(first.context, "files"); open.push(confirm);
       await until(() => !findByPath(confirm.doc, filename));
     }
-    check("the fixture source file is removed", !files || !findByPath(files.doc, filename));
+    check("the fixture source file is removed", !cleanupFiles || !findByPath(cleanupFiles.doc, filename));
   } catch (error) { check("task-board fixture cleanup completes", false, `${cleanupStage}: ${error?.name ?? "Error"}`); }
   for (const connection of open.reverse()) connection.close();
   await browser.close();
