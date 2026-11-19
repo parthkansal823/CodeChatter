@@ -1,5 +1,5 @@
 /** What the Automations tool works out without a server: reading a flow in Activepieces' own format, its chart with what ran lit up, and changing it. A flow is a tree: each step has the one after it, a router has its branches, a loop has what's inside it. */
-import { ROOM_EVENT_CARRIER, ROOM_EVENTS, roomEventOf, type AutomationStepResult, type PieceInfo, type RoomEventName } from "@codechatter/contracts";
+import { MOST_RUN_TAGS, ROOM_EVENT_CARRIER, ROOM_EVENTS, roomEventOf, RUN_TAG, type AutomationStepResult, type PieceInfo, type RoomEventName } from "@codechatter/contracts";
 
 import { BUILTINS, builtinOf } from "./builtins";
 
@@ -32,7 +32,14 @@ export type Flow = {
   pinned?: Record<string, unknown>;
   /** Notes placed freely on the chart (n8n's sticky notes), in its own coordinates. Ours: the engine never sees them. */
   stickies?: FlowSticky[];
+  /**
+   * Its own settings (flow-settings.tsx): how long a run may take (automation.py), the time each run saves, for Insights, its timezone, and which runs its
+   * trigger started are kept (host.mjs). Only what isn't the default is written.
+   */
+  settings?: FlowSettingValues;
 };
+
+export type FlowSettingValues = { timeoutSeconds?: number; timeSavedMinutes?: number; timezone?: string; saveSucceeded?: false; saveFailed?: false };
 
 export type FlowSticky = { id: string; text: string; x: number; y: number; width: number; height: number };
 const MOST_STICKIES = 50;
@@ -614,4 +621,14 @@ export function expressionsFor(flow: Flow, name: string): string[] {
   };
   visit(flow.trigger, []);
   return found;
+}
+
+/** A tag as typed, added to the run's: what's wrong with it, or the tags with it (once, whatever its case). */
+export function withTag(tags: readonly string[], typed: string): { tags: string[] } | { problem: string } {
+  const tag = typed.trim().replace(/\s+/g, " ");
+  if (!tag) return { problem: "Type a tag first." };
+  if (!RUN_TAG.test(tag)) return { problem: "Up to 30 letters, numbers and spaces, with - . : or / between them." };
+  if (tags.some((each) => each.toLowerCase() === tag.toLowerCase())) return { tags: [...tags] };
+  if (tags.length >= MOST_RUN_TAGS) return { problem: `A run has up to ${MOST_RUN_TAGS} tags.` };
+  return { tags: [...tags, tag] };
 }

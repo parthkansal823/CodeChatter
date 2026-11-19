@@ -960,6 +960,38 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
 - `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
 
+### Automations, part twenty-five: a flow's timezone, and which runs are kept ✅ (2026-11-19)
+
+**What:** two more of n8n's workflow settings, in the flow's "Its settings".
+
+- **Its timezone:** the time its steps see, in code and in dates (`new Date().getHours()`, a date piece's "now"). Typed with every timezone the browser knows offered; empty is UTC, and a name that isn't a timezone says so and isn't saved. A schedule keeps its own timezone, as before.
+- **Which runs are kept** (n8n's "Save successful / failed production executions"): keep the runs its trigger started that succeeded, and that failed (were stopped, or took too long), both on by default. Runs by hand, and single steps, are always kept, and so is a run that's waiting, so it can carry on.
+
+**How:** the sandbox's worker starts the engine with `TZ` set to the flow's timezone, as ICU names it, so it's one the engine is sure to know; anything else leaves the run in UTC. A run not kept is written as any other, marked `kept: false` with a marker file beside it: it isn't listed (for its flow, or among every run), but it's still read by its id for a minute after it ends, which a webhook answering when the flow finishes and a flow that called it need, and it still counts in Insights. After that minute the next run to finish takes it, with its files. Runs not kept don't count towards the 50 the room keeps.
+
+**Where:** `sandbox/image/automation/host.mjs` (`keeps`, `forgetRuns`, `timezoneOf`), `sandbox/image/automation.py` (`runs` leaves them out); in `components/room/tools/automations/`: `flow-settings.tsx` (`TimezoneSetting`, `KeptRuns`, `timezoneOf`), `model.ts` (`FlowSettingValues`).
+
+**Tests:**
+- `apps/runner/test/automation-kept.e2e.mjs` (13/13 on the real engine: a step seeing Asia/Kolkata's offset, UTC without a timezone or with one that isn't; a run its trigger started not kept, read by its id but not listed, nor among every run; a failed one too; runs by hand kept; a flow calling one not kept still getting its answer; Insights counting them; a minute later, gone; and what it made removed; about two minutes)
+- `flow-settings.test.ts` (4/4, with tsx: a timezone as typed, and only what isn't the default written)
+- `apps/web/test/automations.e2e.mjs` (148/148: a timezone that isn't one, one typed in lower case kept as it's written, and Succeeded turned off). Looked at in a browser, light and dark.
+
+### Automations, part twenty-four: a flow's settings and Insights ✅ (2026-11-19)
+
+**What:** two of n8n's workflow settings, and its Insights page.
+
+- **Settings:** each flow's Details has "Its settings": **Stop a run after** (5 to 900 seconds, 300 when empty), and **Each run saves** (0 to 1,440 minutes, the time someone would have spent doing it by hand). Mistakes are shown under the field and not saved; an empty field takes the setting out of the file, so a flow that changes none has none.
+- **Insights:** a new Insights button in the tool's bar, over the last 7, 30 or 90 days: four figures (runs with how many were by hand, failed with the failure rate, time saved, the average run), then each flow (runs, failed, failure rate, average run, time saved), then each day with runs. Time saved counts runs that succeeded and were started by their trigger, not runs by hand or single steps.
+
+**How:** the timeout is the flow file's `settings.timeoutSeconds`, read by the sandbox for a run and for a run carried on after a wait (`timeout_of` in `automation.py`). The counting is a daily tally the host keeps as runs finish (`countRun` in `host.mjs`, to `insights.json`: day → flow → runs, failed, total time, minutes saved, by hand; 90 days kept), so it outlasts the runs that are kept. Testing one step, and a run that's waiting, aren't counted. The `insights` op adds it up for the days asked for, with the rates and averages worked out once.
+
+**Where:** `sandbox/image/automation/host.mjs` (`countRun`), `sandbox/image/automation.py` (`timeout_of`, `insights`); `packages/contracts/src/automations.ts` (the `insights` op, `AutomationInsights`); in `components/room/tools/automations/`: `flow-settings.tsx` (new), `insights.tsx` (new), `model.ts` (`Flow.settings`), `flow-view.tsx`, `automations-tool.tsx`.
+
+**Tests:**
+- `apps/runner/test/automation-insights.e2e.mjs` (8/8 on the real engine: a run stopped by its flow's own time limit, runs and failures by flow, runs by hand, time saved only for runs their trigger started that succeeded, the average run, today among the days, and only 7, 30 or 90 days)
+- `flow-settings.test.ts` (2/2, with tsx: limits, whole numbers, an empty field taking the setting out)
+- `apps/web/test/automations.e2e.mjs` (146/146: the settings typed and saved, a mistake shown, and the Insights page with its periods). Looked at in a browser, light and dark.
+
 ### Automations, part twenty-three: the command bar ✅ (2026-11-19)
 
 **What:** n8n's command bar, as the room's own: the command palette (Ctrl+Shift+P, F1, or ">" in Quick Open) has the Automations tool's commands while it's open, in a group of their own at the top, rather than a second bar.
@@ -1291,12 +1323,29 @@ What's left is in `docs/pending.md` under step 11.
 
 **Checked:** the code and the tests were read against the brief; typecheck and lint are clean.
 
-**Left for later** (in `docs/pending.md`): a change rescans every file, rather than just the one that changed; two identical TODOs in one file show as one card; deleting a card has no undo.
+**Left for later:** all three were done by ChatGPT 27 (below).
 
 **Tests:**
 - `packages/workspace-model/src/tasks.test.ts` (17: comment styles, words in strings and names, keys when lines move, two people moving cards at once)
 - `apps/web/test/task-board.e2e.mjs` (21 checks, two people: adding, dragging, the keyboard and the Move menu, an edit and an assignment at once, filters, a typed TODO becoming a card and opening its line, Doing and Done when the comment goes, a viewer, and collab refusing a viewer's write)
 - `a11y.e2e.mjs` includes the board
+
+### The task board, next ✅ (ChatGPT 27, checked 2026-11-19)
+
+**What:** the board's three loose ends.
+
+- **Only what changed is scanned again.** Each file's code cards are kept (`CodeTaskIndex`, `packages/workspace-model/src/task-scan.ts`); a change to the files marks only the files it touched. A deep event under the files' contents names its file as the first part of its path; a text replaced whole shows up as a changed key of the contents map itself. Files added, removed, renamed or moved are found by comparing ids and paths. The whole room is scanned once, when the board opens. A scan cut short leaves its unfinished files to do, and a file that changes while it's being read is read again.
+- **Identical TODOs are separate cards.** Two `// TODO: check this` in one file are counted from the top: the first keeps the id cards always had (file, marker, text), so boards made before keep their Doing column and assignees, and the second and later ones add which one they are (2, 3…). Lines added above, or other text edited, change nothing. When one of two identical ones is deleted, the one left is the first, so it takes the first's id (and its column and assignee): which one that was can't be told from the text.
+- **Undo for a deleted card.** Deleting a hand-written card shows "Task deleted." with **Undo** for eight seconds; Undo writes the card back as it was (title, description, column, order, assignee) for everyone (`restoreTask`), and never over a card that's already back. The board's connection is kept open for the Undo even if the board is closed, and the room's access is asked again before writing. A code card is deleted as before.
+
+**Where:** `packages/workspace-model/src/task-scan.ts` (new), `tasks.ts` (`occurrence`, `codeTaskKey`, `restoreTask`); `apps/web/components/room/tools/tasks/use-code-tasks.ts`, `connection.ts` (`retain`), `tasks-tool.tsx` (`remove`).
+
+**Checked:** the diff read against the brief; the model built and its tests, lint, the web typecheck, the board's browser test and a11y run; the board and its Undo looked at in light and dark.
+
+**Tests:**
+- `packages/workspace-model/src/tasks.test.ts` (78/78 in the package: identical TODOs as two cards and their ids through lines added and one deleted, an old board's ids, Undo writing the same card back and not twice, two people undoing at once, and the scan's bookkeeping: typing in one file scanning only it, renames and moves, binary and big files, a scan cut short)
+- `apps/web/test/task-board.e2e.mjs` (31/31, two people: two identical TODOs as two cards, one in Doing staying so with its assignee after a line above, deleting the later one, an old board's id, Undo seen by the other person, and Undo after the board was closed)
+- `a11y.e2e.mjs` (166/166), and the task board test checks the Undo toast with axe in both themes
 
 ### Explain this data ✅
 

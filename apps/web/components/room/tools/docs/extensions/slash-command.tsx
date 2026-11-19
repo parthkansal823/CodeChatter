@@ -5,6 +5,7 @@ import { PluginKey } from "@tiptap/pm/state";
 import { Extension, type Editor, type Range } from "@tiptap/react";
 import { Suggestion } from "@tiptap/suggestion";
 import {
+  ChevronRight,
   Code2,
   FilePlus2,
   Heading1,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { renderSuggestion } from "./suggestion-menu";
+import { insertToggle } from "./toggle";
 
 export type SlashItem = {
   id: string;
@@ -50,6 +52,7 @@ const BASE_ITEMS: SlashItem[] = [
   { id: "numbers", label: "Numbered list", hint: "A list with numbers", icon: ListOrdered, keywords: "ol ordered 1.", run: (e, r) => block(e, r).toggleOrderedList().run() },
   { id: "todo", label: "To-do list", hint: "Track tasks with checkboxes", icon: ListChecks, keywords: "task checkbox check todo [ ]", run: (e, r) => block(e, r).toggleTaskList().run() },
   { id: "quote", label: "Quote", hint: "Quoted text", icon: Quote, keywords: "blockquote >", run: (e, r) => block(e, r).toggleBlockquote().run() },
+  { id: "toggle", label: "Toggle", hint: "Show or hide blocks", icon: ChevronRight, keywords: "details summary collapse expand >", run: (e, r) => block(e, r).command(insertToggle).run() },
   { id: "code", label: "Code block", hint: "Code with monospace text", icon: Code2, keywords: "snippet pre ```", run: (e, r) => block(e, r).toggleCodeBlock().run() },
   { id: "callout", label: "Callout", hint: "Make a note stand out", icon: Info, keywords: "note info box", run: (e, r) => block(e, r).wrapIn("callout", { kind: "note" }).run() },
   { id: "warning", label: "Warning", hint: "A callout for risks", icon: TriangleAlert, keywords: "caution danger callout", run: (e, r) => block(e, r).wrapIn("callout", { kind: "warning" }).run() },

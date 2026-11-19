@@ -3,7 +3,7 @@
 // the engine asks a server for: where to put the run's details, and a room's stored values and connections. The room's jail is the sandbox: AP_EXECUTION_MODE says so.
 import { fork, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
@@ -26,6 +26,9 @@ const FILES = join(HOME, "files");
 const CODES = join(HOME, "codes");
 const LIVE = join(HOME, "live.json");
 const STORE = join(HOME, "store.json");
+/** A daily tally of runs by flow, for the Insights page (automation.py's insights): it outlasts the runs kept. */
+const INSIGHTS = join(HOME, "insights.json");
+const MOST_INSIGHT_DAYS = 90;
 const STOP = join(HOME, "stop");
 const LOCK = join(HOME, "worker");
 const ROOT = new URL(".", import.meta.url).pathname;
@@ -35,6 +38,8 @@ const SCRIPT = join(ROOT, "..", "automation.py");
 const BUILTINS = pathToFileURL(join(ROOT, "builtins.mjs")).href;
 const BUILTIN_NAME = /^[a-z_]{1,40}$/;
 const MOST_RUNS = 50;
+/** How long a run its flow doesn't keep can still be read by its id: a webhook answering when it finishes, or a flow that called it, reads it after. */
+const FORGET_MS = 60_000;
 const STEP_NAME = /^[A-Za-z0-9_]+$/;
 const ENGINE_HEAP_MB = 256;
 /** How many things a run keeps to be found by (Save run data), as n8n's Execution Data. */
@@ -415,11 +420,16 @@ async function runJob(job) {
     // A flow that failed, with an error flow, starts it: n8n's error workflow. Not for a step tried alone, nor an error flow's own failure, so it can't loop.
     if ((status === "FAILED" || status === "TIMEOUT") && mode !== "step" && job.trigger !== "error" && typeof job.flow?.errorFlow === "string") Object.assign(live, queueErrorFlow(job, live));
     // What started it stays its payload when it carries on; where it's carried on from goes with it, for a waitpoint after this one.
-    writeJson(join(RUNS, `${job.id}.json`), scrubbed({ ...live, payload: (mode === "resume" ? job.triggerPayload : job.payload) ?? null, resumeBase: job.resumeBase ?? null }, secrets));
+    // A run its flow's settings don't keep is still counted in Insights, and read by its id for a while, but isn't listed, and then goes with its files.
+    const kept = keeps(job, mode, status);
+    writeJson(join(RUNS, `${job.id}.json`), scrubbed({ ...live, ...(!kept && { kept: false }), payload: (mode === "resume" ? job.triggerPayload : job.payload) ?? null, resumeBase: job.resumeBase ?? null }, secrets));
+    if (!kept) writeFileSync(join(RUNS, `${job.id}.forget`), "");
+    if (mode !== "step" && status !== "PAUSED") countRun(job, live);
     writeLive();
     rmSync(join(CODES, job.id), { recursive: true, force: true });
     running.delete(job.id);
-    for (const old of readdirSync(RUNS).sort().reverse().slice(MOST_RUNS)) rmSync(join(RUNS, old), { force: true });
+    forgetRuns();
+    for (const old of readdirSync(RUNS).filter((name) => name.endsWith(".json") && !existsSync(join(RUNS, `${name.slice(0, -5)}.forget`))).sort().reverse().slice(MOST_RUNS)) rmSync(join(RUNS, old), { force: true });
     // A run's files go with it, but not while it (or a run that called it) is going on.
     if (existsSync(FILES)) for (const run of readdirSync(FILES)) if (!running.has(run) && !existsSync(join(RUNS, `${run}.json`))) rmSync(join(FILES, run), { recursive: true, force: true });
     engine?.kill("SIGKILL");
@@ -474,6 +484,8 @@ async function runJob(job) {
         NODE_USE_ENV_PROXY: "1",
         NO_PROXY: [process.env.NO_PROXY, "127.0.0.1", "localhost", "postgres", "mysql", "mariadb", "mongo", "redis"].filter(Boolean).join(","),
         SANDBOX_ID: "room",
+        // The flow's own timezone (its settings), for what its steps take the time to be; UTC otherwise.
+        TZ: timezoneOf(job.flow) ?? "UTC",
       },
     });
     engine.stdout.resume();
@@ -541,6 +553,34 @@ function triggerOutputOf(flow, job) {
   return { body: job.payload ?? {}, headers: job.headers ?? {}, queryParams: job.query ?? {} };
 }
 
+/**
+ * Counts a finished run into the day's tally for its flow: how many, how many failed, how long they took, how many by hand, and the time saved (the flow's
+ * settings.timeSavedMinutes, for each run that succeeded and was started by its trigger, as n8n's Insights count it). A run that's waiting is counted
+ * when it finishes; one step tried on its own isn't counted. Counting never fails a run.
+ */
+function countRun(job, live) {
+  try {
+    const stored = readJson(INSIGHTS, {}) ?? {};
+    const days = stored.days && typeof stored.days === "object" ? stored.days : {};
+    const day = new Date(live.startedAt).toISOString().slice(0, 10);
+    const flows = (days[day] ??= {});
+    const entry = (flows[job.flowId ?? job.path] ??= { name: "", path: "", runs: 0, failed: 0, ms: 0, savedMinutes: 0, byHand: 0 });
+    entry.name = String(job.flow?.displayName ?? job.path).slice(0, 120);
+    entry.path = job.path;
+    entry.runs += 1;
+    if (live.status !== "SUCCEEDED") entry.failed += 1;
+    entry.ms += Math.max(0, Number(live.durationMs) || 0);
+    const byHand = (job.trigger ?? "manual") === "manual";
+    if (byHand) entry.byHand += 1;
+    const saved = Number(job.flow?.settings?.timeSavedMinutes);
+    if (!byHand && live.status === "SUCCEEDED" && Number.isFinite(saved) && saved > 0) entry.savedMinutes += Math.min(saved, 24 * 60);
+    for (const old of Object.keys(days).sort().slice(0, -MOST_INSIGHT_DAYS)) delete days[old];
+    writeJson(INSIGHTS, { days });
+  } catch {
+    // The tally is for the Insights page; the run's own record is what counts.
+  }
+}
+
 /** Asks automation.py, as the runner does: to find a flow, or queue one. */
 function askScript(request) {
   const done = spawnSync("python3", [SCRIPT], { input: JSON.stringify(request), encoding: "utf8", timeout: 20_000 });
@@ -577,6 +617,8 @@ async function callFlow(caller, call, callerStartedAt) {
   if (!found.flow) return { status: 404, body: { error: found.error ?? "That flow isn't in the room any more." } };
   const name = found.flow.displayName || found.path;
   if (found.flow.trigger?.settings?.room?.event !== "flow.called") return { status: 409, body: { error: `${name} can't be called: its trigger isn't "Called by another flow".` } };
+  // Which flows may call it (n8n's caller policy): any of the room's, unless its settings name the only ones that may.
+  if (!mayCall(found.flow, caller.flowId)) return { status: 403, body: { error: `${name} can't be called by ${String(caller.flow?.displayName ?? caller.path).slice(0, 60)}: its settings let only some flows call it.` } };
   const by = `Called by ${String(caller.flow?.displayName ?? caller.path).slice(0, 60)}`;
   const data = call.data === undefined ? {} : call.data;
   if (call.wait === false) {
@@ -620,6 +662,52 @@ function queueErrorFlow(job, live) {
   const answer = askScript({ op: "run", path: job.path, flowId: errorFlow, payload, trigger: "error", by: `${String(job.flow.displayName ?? job.path).slice(0, 60)} failed`, noWorker: true, connections: job.connections ?? {}, variables: job.variables ?? {} });
   if (typeof answer.id === "string") return { errorRun: answer.id, errorProblem: null };
   return { errorRun: null, errorProblem: String(answer.error ?? "Its error flow couldn't be started.").slice(0, 300) };
+}
+
+/**
+ * Whether a run is kept, as n8n's "Save successful / failed production executions": runs by hand, and single steps, always are, and so is a run that's
+ * waiting, to carry on; a run its trigger started is kept unless its flow's settings say not to, for how it ended (stopped and too long are failing).
+ */
+function keeps(job, mode, status) {
+  if (mode === "step" || (job.trigger ?? "manual") === "manual" || status === "PAUSED") return true;
+  const settings = job.flow?.settings ?? {};
+  return status === "SUCCEEDED" ? settings.saveSucceeded !== false : settings.saveFailed !== false;
+}
+
+/** Whether the flow `callerId` may call this one: its settings' `callers` lists the only flows that may (none, if empty); without it, any may. */
+function mayCall(flow, callerId) {
+  const callers = flow?.settings?.callers;
+  if (callers === undefined) return true;
+  return Array.isArray(callers) && typeof callerId === "string" && callers.includes(callerId);
+}
+
+/** The runs not kept whose minute is up: gone, with their files (the sweep after this takes those). */
+function forgetRuns() {
+  for (const name of readdirSync(RUNS)) {
+    if (!name.endsWith(".forget")) continue;
+    const marker = join(RUNS, name);
+    let at;
+    try {
+      at = statSync(marker).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (Date.now() - at < FORGET_MS) continue;
+    rmSync(join(RUNS, `${name.slice(0, -7)}.json`), { force: true });
+    rmSync(marker, { force: true });
+  }
+}
+
+/** A flow's own timezone, if it's one this Node knows; anything else is left out, so the run is in UTC. */
+function timezoneOf(flow) {
+  const zone = flow?.settings?.timezone;
+  if (typeof zone !== "string" || !/^[A-Za-z0-9_+/-]{1,64}$/.test(zone)) return null;
+  try {
+    // ICU's own name for it (Asia/Calcutta for Asia/Kolkata, in its case), which the engine's ICU is sure to know.
+    return new Intl.DateTimeFormat("en", { timeZone: zone }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
 }
 
 /** The engine's errors come wrapped; the person wants the message. */

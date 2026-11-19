@@ -14,6 +14,29 @@ export const resolverFor = (docs: { byId: Map<string, { title: string }>; files:
 });
 
 const escapeText = (text: string) => text.replace(/([\\`*[\]])/g, "\\$1");
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+
+/** A details summary is HTML, so escape text and use HTML for its inline formatting. */
+function summaryHtml(nodes: JSONContent[] | undefined, resolve: Resolve): string {
+  return (nodes ?? []).map((node) => {
+    if (node.type === "hardBreak") return "<br>";
+    if (node.type === "wikiLink") {
+      const attrs = node.attrs as WikiAttrs;
+      const label = attrs.kind === "page" ? (resolve.pageTitle(attrs.target) ?? attrs.label) : (resolve.filePath(attrs.target) ?? attrs.path ?? attrs.label);
+      return escapeHtml(`[[${label}]]`);
+    }
+    if (node.type !== "text" || !node.text) return "";
+    let text = escapeHtml(node.text);
+    for (const mark of node.marks ?? []) {
+      if (mark.type === "bold") text = `<strong>${text}</strong>`;
+      if (mark.type === "italic") text = `<em>${text}</em>`;
+      if (mark.type === "strike") text = `<s>${text}</s>`;
+      if (mark.type === "code") text = `<code>${text}</code>`;
+      if (mark.type === "link" && typeof mark.attrs?.href === "string" && /^(https?:\/\/|mailto:|\/|#)/i.test(mark.attrs.href) && !mark.attrs.href.startsWith("//")) text = `<a href="${escapeHtml(mark.attrs.href)}">${text}</a>`;
+    }
+    return text;
+  }).join("");
+}
 
 /** Wrap text in a Markdown delimiter, keeping edge spaces outside it (`** bold**` isn't bold). */
 function wrap(text: string, open: string, close = open): string {
@@ -86,6 +109,11 @@ function block(node: JSONContent, resolve: Resolve): string {
     case "callout": {
       const kind = node.attrs?.kind === "warning" ? "WARNING" : "NOTE";
       return indent(`[!${kind}]\n${blocks(node.content, resolve)}`, "> ");
+    }
+    case "toggle": {
+      const summary = node.content?.find((child) => child.type === "toggleSummary");
+      const body = node.content?.find((child) => child.type === "toggleBody");
+      return `<details>\n<summary>${summaryHtml(summary?.content, resolve)}</summary>\n\n${blocks(body?.content, resolve)}\n\n</details>`;
     }
     case "bulletList":
       return listItems(node, () => "- ", resolve);

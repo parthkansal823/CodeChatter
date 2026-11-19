@@ -4,7 +4,7 @@
 import { isFlowFile, type AutomationInput, type AutomationLive, type AutomationManifest } from "@codechatter/contracts";
 import { createFileAtPath, findByPath, flatten } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Braces, FileCode, Globe, History, KeyRound, Plus, Workflow } from "lucide-react";
+import { BarChart3, Braces, FileCode, Globe, History, KeyRound, Plus, Workflow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type * as Y from "yjs";
@@ -23,6 +23,7 @@ import { ExamplesView } from "./examples-view";
 import { InternetDialog, openInternet } from "./internet-settings";
 import { openVariables, VariablesDialog } from "./variables-settings";
 import { AllRuns } from "./all-runs";
+import { InsightsView } from "./insights";
 import { FlowFileView } from "./flow-view";
 import { newTrigger, SCHEMA_VERSION, type Flow } from "./model";
 
@@ -67,7 +68,7 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
 
   const flows = flatten(tree).filter((node) => node.kind === "file" && !node.blob && isFlowFile(node.name));
   const [chosen, setChosen] = useState<string | null>(null);
-  const [view, setView] = useState<"flow" | "examples" | "runs">("flow");
+  const [view, setView] = useState<"flow" | "examples" | "runs" | "insights">("flow");
   // A run chosen in Every run: its flow opens with it shown.
   const [opening, setOpening] = useState<string | null>(null);
   const [naming, setNaming] = useState(false);
@@ -94,6 +95,7 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
         },
       }] : []),
     ...(flows.length ? [{ id: "automations.every-run", label: "Show every run", group, run: () => setView("runs") }] : []),
+    ...(flows.length ? [{ id: "automations.insights", label: "Show Insights", group, run: () => setView("insights") }] : []),
     { id: "automations.examples", label: "Show the examples", group, run: () => setView("examples") },
     ...(pieces && can("code.run")
       ? [
@@ -144,6 +146,11 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
           {flows.length > 0 && (
             <Button size="xs" variant={view === "runs" ? "secondary" : "ghost"} aria-pressed={view === "runs"} onClick={() => setView(view === "runs" ? "flow" : "runs")}>
               <History /> Every run
+            </Button>
+          )}
+          {flows.length > 0 && (
+            <Button size="xs" variant={view === "insights" ? "secondary" : "ghost"} aria-pressed={view === "insights"} onClick={() => setView(view === "insights" ? "flow" : "insights")}>
+              <BarChart3 /> Insights
             </Button>
           )}
           <Button size="xs" variant={view === "examples" ? "secondary" : "ghost"} aria-pressed={view === "examples"} onClick={() => setView(view === "examples" ? "flow" : "examples")}>
@@ -200,6 +207,8 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
         </p>
       ) : view === "examples" ? (
         <ExamplesView pieces={pieces ?? {}} canEdit={canEdit} onUse={addFlow} />
+      ) : view === "insights" ? (
+        <InsightsView ask={ask} />
       ) : view === "runs" ? (
         <AllRuns
           ask={ask}

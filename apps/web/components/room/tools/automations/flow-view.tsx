@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import { copyStep, stepsToPaste } from "./clipboard";
 import { addStep, addSticky, allSteps, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, toggleSteps, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newRoomEventTrigger, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
 import { ErrorFlowField } from "./error-flow-field";
+import { FlowSettings } from "./flow-settings";
+import { RunNotes } from "./run-notes";
 import { StepPanel } from "./step-panel";
 import { StepPicker, type Picked } from "./step-picker";
 
@@ -68,6 +70,8 @@ function RunsList({ runs, shownId, onShow, titleOf }: { runs: AutomationRunSumma
               {run.by ? ` · ${run.by}` : ""}
               {run.errorRun ? " · its error flow ran" : run.errorProblem ? ` · its error flow didn't: ${run.errorProblem}` : ""}
               {run.data && Object.keys(run.data).length > 0 ? ` · ${Object.entries(run.data).map(([key, value]) => `${key}: ${value}`).join(", ")}` : ""}
+              {run.annotation?.vote ? ` · ${run.annotation.vote === "good" ? "good" : "bad"} run` : ""}
+              {run.annotation?.tags?.length ? ` · ${run.annotation.tags.join(", ")}` : ""}
             </span>
           </button>
         </li>
@@ -624,6 +628,7 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
                 flow.description && <p className="whitespace-pre-wrap">{flow.description}</p>
               )}
               <ErrorFlowField flow={flow} fileId={node.id} canEdit={canEdit} onSave={save} />
+              <FlowSettings flow={flow} canEdit={canEdit} onSave={save} />
             </div>
             {canRun && (
               <section aria-label="Run it" className="grid gap-1">
@@ -708,6 +713,19 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
                       </Button>
                     )}
                   </div>
+                )}
+                {shown.finishedAt && shown.status !== "PAUSED" && shown.kept !== false && (
+                  <RunNotes
+                    key={shown.id}
+                    runId={shown.id}
+                    annotation={shown.annotation}
+                    canEdit={canRun}
+                    ask={ask}
+                    onSaved={(annotation) => {
+                      queryClient.setQueryData<AutomationRun>(["automations", room.id, "run", shown.id], (before) => (before ? { ...before, annotation } : before));
+                      void queryClient.invalidateQueries({ queryKey: ["automations", room.id, "runs"] });
+                    }}
+                  />
                 )}
                 <p className="text-muted-foreground">Select a step to see what went in and what came out.</p>
               </section>

@@ -5,6 +5,7 @@ import vm from "node:vm";
 
 import { applySetCookies, cookieHeader, cookieKey, COOKIE_LIMITS, COOKIE_PSL_VERSION, normalizeCookieJar, parseSetCookie, redactCookieValues, requestCookies, type StudioCookie } from "./cookies";
 import { workerSource, type CookieScriptInput } from "./script-worker-source";
+import { getCookieJar, setCookieJar } from "./local-store";
 import type { ScriptResult } from "./scripts";
 
 const NOW = Date.UTC(2026, 10, 19, 12);
@@ -60,6 +61,12 @@ describe("Set-Cookie parsing", () => {
       const result = parseSetCookie(`a=b; Expires=${date}`, ORIGIN, NOW);
       assert.equal(result.cookie?.expiresAt, null); assert.match(result.warning ?? "", /invalid Expires/);
     }
+  });
+
+  it("rejects a Path containing an embedded tab without echoing its value", () => {
+    const result = parseSetCookie("sid=private-fixture; Path=/account\tprivate", ORIGIN, NOW);
+    assert.equal(result.cookie, null); assert.match(result.warning ?? "", /Path/);
+    assert.ok(!result.warning?.includes("private-fixture"));
   });
 
   it("ignores invalid attributes, uses the last valid expiry and clamps large Max-Age", () => {
@@ -240,8 +247,41 @@ describe("jar bounds and corrupt local data", () => {
     assert.equal(result.cookies.constructor, "constructor-fixture");
   });
 
+  it("discards corrupt dates, Max-Age and inconsistent stored expiry metadata", () => {
+    const future = NOW + 60_000;
+    const invalid: Partial<StudioCookie>[] = [
+      { expires: 8_640_000_000_000_001, expiresAt: 8_640_000_000_000_001 },
+      { expires: future + 0.5, expiresAt: future + 0.5 },
+      { expires: Infinity, expiresAt: Infinity }, { expiresAt: future },
+      { maxAge: 1.5, expiresAt: future }, { maxAge: Number.MAX_SAFE_INTEGER + 1, expiresAt: future },
+      { maxAge: 10, expiresAt: null }, { maxAge: -1, expiresAt: future },
+      { createdAt: -1 }, { createdAt: Infinity }, { size: 20.5 }, { path: "/bad\tpath" },
+    ];
+    for (const patch of invalid) assert.deepEqual(normalizeCookieJar([stored("bad", patch)], NOW), [], JSON.stringify(patch));
+    assert.equal(normalizeCookieJar([stored("valid", { expires: future, expiresAt: future })], NOW).length, 1);
+  });
+
+  it("rechecks secure, host and HttpOnly prefix invariants in stored data", () => {
+    for (const [raw, patch] of [
+      ["__Secure-token=fixture; Secure; Path=/", { secure: false }],
+      ["__Host-token=fixture; Secure; Path=/", { hostOnly: false }],
+      ["__Host-token=fixture; Secure; Path=/", { path: "/account" }],
+      ["__Http-token=fixture; Secure; HttpOnly; Path=/", { httpOnly: false }],
+      ["__Host-Http-token=fixture; Secure; HttpOnly; Path=/", { httpOnly: false }],
+      ["none=fixture; Secure; SameSite=None; Path=/", { secure: false }],
+    ] as const) assert.deepEqual(normalizeCookieJar([{ ...parsed(raw), ...patch }], NOW), [], raw);
+  });
+
   it("redacts private values longest-first without reinterpreting regular expression characters", () => {
     assert.equal(redactCookieValues("a.b a.b-long unrelated", ["a.b", "a.b-long", ""]), "[cookie] [cookie] unrelated");
+  });
+
+  it("redacts quoted, JSON-escaped and URI-encoded values and tolerates lone surrogates", () => {
+    const quoted = '"private=="';
+    const variants = [quoted, "private==", JSON.stringify(quoted).slice(1, -1), encodeURIComponent(quoted)];
+    for (const variant of variants) assert.equal(redactCookieValues(variant, [quoted]), "[cookie]", variant);
+    const malformed = "private-\ud800";
+    assert.equal(redactCookieValues(`${malformed} ${JSON.stringify(malformed).slice(1, -1)}`, [malformed]), "[cookie] [cookie]");
   });
 });
 
@@ -253,9 +293,16 @@ const scriptInput = (patch: Partial<CookieScriptInput> = {}): CookieScriptInput 
 });
 
 /** Match the existing script worker harness, adding the web URL global used by cookie matching. */
-async function runCookieScript(code: string, patch: Partial<CookieScriptInput> = {}): Promise<ScriptResult> {
+async function runCookieScript(code: string, patch: Partial<CookieScriptInput> = {}, nativeCalls: unknown[][] = []): Promise<ScriptResult> {
   let posted: unknown;
-  const context = vm.createContext({ URL, postMessage: (message: unknown) => { posted = JSON.parse(JSON.stringify(message)); } });
+  const nativeConsole = Object.fromEntries(["log", "info", "debug", "warn", "error"].map((level) => [level, (...args: unknown[]) => { nativeCalls.push(args); }]));
+  const listeners = new Map<string, (event: unknown) => void>();
+  const context = vm.createContext({
+    URL, console: nativeConsole,
+    addEventListener: (type: string, listener: (event: unknown) => void) => { listeners.set(type, listener); },
+    dispatchEvent: (event: { type: string }) => { listeners.get(event.type)?.(event); },
+    postMessage: (message: unknown) => { posted = JSON.parse(JSON.stringify(message)); },
+  });
   context.self = context;
   vm.runInContext(workerSource(code).source, context);
   await (context.onmessage as (event: { data: CookieScriptInput }) => Promise<void>)({ data: scriptInput(patch) });
@@ -285,6 +332,39 @@ describe("read-only private script cookies", () => {
     assert.equal(result.error, undefined); assert.ok(result.tests.every((test) => test.passed));
   });
 
+  it("resolves changing header names and whitespace on every cookie read", async () => {
+    const result = await runCookieScript(`
+      pm.test("initial jar", () => pm.expect(pm.cookies.get("sid")).to.equal("private-fixture"));
+      pm.env.set("header", " cOoKiE "); pm.env.set("value", "first");
+      pm.test("resolved name and value", () => pm.expect(pm.cookies.get("sid")).to.equal("first"));
+      pm.env.set("value", "second");
+      pm.test("changed value", () => pm.expect(pm.cookies.get("sid")).to.equal("second"));
+      pm.env.set("header", "X-Other");
+      pm.test("restored jar", () => pm.expect(pm.cookies.get("sid")).to.equal("private-fixture"));
+    `, { variables: { header: "X-Other", value: "initial" }, request: { method: "GET", url: ORIGIN, body: null, headers: [{ key: "{{header}}", value: "sid={{value}}" }] } });
+    assert.equal(result.error, undefined); assert.equal(result.tests.length, 4); assert.ok(result.tests.every((test) => test.passed), JSON.stringify(result.tests));
+  });
+
+  it("gives a substituted Cookie auth header precedence over entered headers and the jar", async () => {
+    const result = await runCookieScript(`
+      pm.test("entered header", () => pm.expect(pm.cookies.get("sid")).to.equal("entered"));
+      pm.env.set("authHeader", " Cookie "); pm.env.set("authValue", "auth-fixture");
+      pm.test("auth wins", () => { pm.expect(pm.cookies.get("sid")).to.equal("auth-fixture"); pm.expect(pm.cookies.has("root")).to.equal(false); });
+      pm.env.set("authValue", "");
+      pm.test("empty auth cookie", () => pm.expect(pm.cookies.get("sid")).to.equal(""));
+    `, { variables: { authHeader: "X-Key", authValue: "initial" }, cookieAuth: { key: "{{authHeader}}", value: "sid={{authValue}}" }, request: { method: "GET", url: ORIGIN, body: null, headers: [{ key: "Cookie", value: "sid=entered" }] } });
+    assert.equal(result.error, undefined); assert.equal(result.tests.length, 3); assert.ok(result.tests.every((test) => test.passed), JSON.stringify(result.tests));
+  });
+
+  it("keeps literal braces in the sent Cookie header during an after-response script", async () => {
+    const result = await runCookieScript(`
+      pm.env.set("secret", "new-value");
+      pm.test("literal sent value", () => pm.expect(pm.cookies.get("sid")).to.equal("{{secret}}"));
+      pm.test("auth does not rewrite sent headers", () => pm.expect(pm.cookies.has("auth")).to.equal(false));
+    `, { kind: "test", variables: { secret: "old-value" }, cookieAuth: { key: "Cookie", value: "auth=ignored" }, request: { method: "GET", url: ORIGIN, body: null, headers: [{ key: "Cookie", value: "sid={{secret}}" }] } });
+    assert.equal(result.error, undefined); assert.equal(result.tests.length, 2); assert.ok(result.tests.every((test) => test.passed), JSON.stringify(result.tests));
+  });
+
   it("keeps cookie methods read-only and does not return the jar or cookie metadata", async () => {
     const result = await runCookieScript(`
       let rejected = false;
@@ -296,7 +376,8 @@ describe("read-only private script cookies", () => {
   });
 
   it("matches protocol, expiry, duplicate paths and localhost consistently with the send helper", async () => {
-    const input = scriptInput({ cookieJar: [parsed("sid=root; Path=/"), parsed("sid=narrow; Path=/account; Secure"), stored("expired", { expiresAt: Date.now() - 1 })] });
+    const expiredAt = Date.now() - 1;
+    const input = scriptInput({ cookieJar: [parsed("sid=root; Path=/"), parsed("sid=narrow; Path=/account; Secure"), stored("expired", { expires: expiredAt, expiresAt: expiredAt })] });
     const result = await runCookieScript(`
       pm.test("longest path", () => pm.expect(pm.cookies.get("sid")).to.equal("narrow"));
       pm.test("expired", () => pm.expect(pm.cookies.has("expired")).to.equal(false));
@@ -317,5 +398,100 @@ describe("read-only private script cookies", () => {
     const publicText = JSON.stringify({ logs: result.logs, tests: result.tests, error: result.error });
     assert.ok(!publicText.includes("private-fixture")); assert.ok(!publicText.includes("hidden-fixture")); assert.match(publicText, /redacted/);
     assert.equal(result.tests[0]!.passed, false); assert.ok(result.error);
+  });
+
+  it("redirects global console aliases to redacted Run logs without native output", async () => {
+    const nativeCalls: unknown[][] = [];
+    const result = await runCookieScript(`
+      globalThis.console.log(pm.cookies.get("sid"));
+      self.console.warn(pm.cookies.get("sid"));
+      globalThis.console.debug("safe message");
+    `, {}, nativeCalls);
+    assert.equal(result.error, undefined); assert.deepEqual(nativeCalls, []);
+    assert.deepEqual(result.logs.map((log) => log.level), ["log", "warn", "log"]);
+    assert.equal(result.logs[2]!.text, "safe message");
+    assert.ok(!JSON.stringify(result.logs).includes("private-fixture"));
+    assert.match(result.logs[0]!.text, /redacted/); assert.match(result.logs[1]!.text, /redacted/);
+  });
+
+  it("redacts encoded worker output even when a private value has a lone surrogate", async () => {
+    const secret = '"private=="', malformed = "private-\ud800";
+    const result = await runCookieScript(`
+      const secret = ${JSON.stringify(secret)}, malformed = ${JSON.stringify(malformed)};
+      console.log(secret, secret.slice(1, -1), JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret));
+      console.log(malformed, JSON.stringify(malformed).slice(1, -1));
+    `, { cookieSecrets: [secret, malformed] });
+    assert.equal(result.error, undefined); assert.equal(result.logs.length, 2);
+    assert.equal(result.logs[0]!.text, "[redacted] [redacted] [redacted] [redacted]");
+    assert.equal(result.logs[1]!.text, "[redacted] [redacted]");
+  });
+
+  it("prevents native unhandled-rejection reporting and records its redacted reason", async () => {
+    const nativeCalls: unknown[][] = [];
+    const result = await runCookieScript(`
+      let prevented = false;
+      self.dispatchEvent({ type: "unhandledrejection", reason: pm.cookies.get("sid"), preventDefault() { prevented = true; } });
+      pm.test("native report suppressed", () => pm.expect(prevented).to.equal(true));
+    `, {}, nativeCalls);
+    assert.equal(result.error, undefined); assert.deepEqual(nativeCalls, []);
+    assert.equal(result.tests[0]!.passed, true);
+    assert.deepEqual(result.logs, [{ level: "error", text: "Unhandled promise rejection: [redacted]" }]);
+  });
+});
+
+describe("private local cookie storage", () => {
+  const withWindow = (storage: object, check: () => void) => {
+    const prior = Object.getOwnPropertyDescriptor(globalThis, "window");
+    Object.defineProperty(globalThis, "window", { value: storage, configurable: true });
+    try { check(); } finally {
+      if (prior) Object.defineProperty(globalThis, "window", prior);
+      else Reflect.deleteProperty(globalThis, "window");
+    }
+  };
+  const memoryStorage = () => {
+    const items = new Map<string, string>();
+    return { items, getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => { items.set(key, value); }, removeItem: (key: string) => { items.delete(key); } };
+  };
+
+  it("stores session and persistent cookies separately for each room, person and environment", () => {
+    const localStorage = memoryStorage(), sessionStorage = memoryStorage();
+    withWindow({ localStorage, sessionStorage }, () => {
+      const current = Date.now();
+      const jar = [parsed("session=fixture; Path=/", ORIGIN, current), parsed("persistent=fixture; Path=/; Max-Age=3600", ORIGIN, current)];
+      setCookieJar("storage-room", "storage-person", "storage-env", jar);
+      assert.deepEqual(getCookieJar("storage-room", "storage-person", "storage-env").map((cookie) => cookie.name).sort(), ["persistent", "session"]);
+      const key = "cc:api-studio:storage-person:storage-room:cookies:storage-env";
+      assert.deepEqual(JSON.parse(localStorage.items.get(key)!).map((cookie: StudioCookie) => cookie.name), ["persistent"]);
+      assert.deepEqual(JSON.parse(sessionStorage.items.get(`${key}:session`)!).map((cookie: StudioCookie) => cookie.name), ["session"]);
+      for (const [room, person, env] of [["other-room", "storage-person", "storage-env"], ["storage-room", "other-person", "storage-env"], ["storage-room", "storage-person", "other-env"]]) {
+        assert.deepEqual(getCookieJar(room!, person!, env!), []);
+        setCookieJar(room!, person!, env!, [parsed("isolated=fixture; Path=/", ORIGIN, current)]);
+        assert.deepEqual(getCookieJar(room!, person!, env!).map((cookie) => cookie.name), ["isolated"]);
+      }
+      assert.deepEqual(getCookieJar("storage-room", "storage-person", "storage-env").map((cookie) => cookie.name).sort(), ["persistent", "session"]);
+      setCookieJar("storage-room", "storage-person", "storage-env", []);
+      assert.deepEqual(getCookieJar("storage-room", "storage-person", "storage-env"), []);
+    });
+  });
+
+  it("keeps a usable memory jar when storage is blocked or full", () => {
+    for (const mode of ["blocked", "full"] as const) {
+      let writes = 0;
+      const storage = {
+        getItem: () => { if (mode === "blocked") throw new Error("storage blocked"); return null; },
+        setItem: () => { writes++; throw new Error("storage unavailable"); },
+        removeItem: () => { throw new Error("storage unavailable"); },
+      };
+      withWindow({ localStorage: storage, sessionStorage: storage }, () => {
+        const room = `fallback-${mode}`;
+        assert.deepEqual(getCookieJar(room, "person", "env"), []);
+        const current = Date.now();
+        setCookieJar(room, "person", "env", [parsed("session=fixture; Path=/", ORIGIN, current), parsed("persistent=fixture; Path=/; Max-Age=3600", ORIGIN, current)]);
+        assert.deepEqual(getCookieJar(room, "person", "env").map((cookie) => cookie.name).sort(), ["persistent", "session"]);
+        assert.equal(writes, 2);
+        setCookieJar(room, "person", "env", []);
+        assert.deepEqual(getCookieJar(room, "person", "env"), []);
+      });
+    }
   });
 });

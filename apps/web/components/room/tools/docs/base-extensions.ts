@@ -3,9 +3,11 @@ import { TableKit } from "@tiptap/extension-table";
 import type { Extensions } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
+import { BlockIdentity } from "./extensions/block-handle";
 import { Callout } from "./extensions/callout";
 import { Comment } from "./extensions/comment";
 import { TagHighlight } from "./extensions/tag-highlight";
+import { Toggle, ToggleBody, ToggleSummary, type ToggleOptions } from "./extensions/toggle";
 import { WikiLink, type WikiLinkOptions } from "./extensions/wiki-link";
 
 /**
@@ -13,7 +15,7 @@ import { WikiLink, type WikiLinkOptions } from "./extensions/wiki-link";
  * the headless readers and writers (import, export). Undo comes from the
  * collaboration extension in the live editor, so StarterKit's is off.
  */
-export function baseExtensions(wikiLink: Partial<WikiLinkOptions> = {}): Extensions {
+export function baseExtensions(wikiLink: Partial<WikiLinkOptions> = {}, toggle: Partial<ToggleOptions> = {}): Extensions {
   return [
     StarterKit.configure({
       undoRedo: false,
@@ -23,7 +25,11 @@ export function baseExtensions(wikiLink: Partial<WikiLinkOptions> = {}): Extensi
     TaskList,
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: false } }),
+    BlockIdentity,
     Callout,
+    Toggle.configure(toggle),
+    ToggleSummary,
+    ToggleBody,
     Comment,
     TagHighlight,
     WikiLink.configure(wikiLink),

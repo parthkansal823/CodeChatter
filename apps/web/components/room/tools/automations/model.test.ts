@@ -5,7 +5,7 @@ import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
 
 import { BUILTINS } from "./builtins";
 import { stepsFromClipboard } from "./clipboard";
-import { addSticky, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, toggleSteps } from "./model";
+import { addSticky, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, toggleSteps, withTag } from "./model";
 import { addBranch, addStep, allSteps, asCopiedStep, canPin, newBuiltinStep, chartOfFlow, CONDITIONS, copyOfStep, isPinned, pinStep, unpinStep, duplicateStep, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeBranch, removeStep, replaceStep, resultsOf, setStepNote, statusOfResult, toggleStep, updateStep, type Branch, type Flow, type FlowStep } from "./model";
 
 const code = (name: string, next: FlowStep | null = null): FlowStep => ({ ...newCodeStep(name), nextAction: next });
@@ -391,4 +391,18 @@ test("what the system clipboard has: one step, a list of them, or nothing", () =
   assert.deepEqual(stepsFromClipboard([code("x"), { not: "a step" }]), [], "one that isn't a step spoils the lot");
   assert.deepEqual(stepsFromClipboard("text"), []);
   assert.deepEqual(stepsFromClipboard([]), []);
+});
+
+test("a run's tag as typed: words and - . : /, once whatever its case, and at most 10", () => {
+  assert.deepEqual(withTag([], "  needs   look "), { tags: ["needs look"] });
+  assert.deepEqual(withTag(["release"], "Release"), { tags: ["release"] });
+  assert.deepEqual(withTag([], "v2.1/rc"), { tags: ["v2.1/rc"] });
+  assert.deepEqual(withTag([], "जाँच"), { tags: ["जाँच"] });
+  assert.ok("problem" in withTag([], "<b>"));
+  assert.ok("problem" in withTag([], "-leading"));
+  assert.ok("problem" in withTag([], "x".repeat(31)));
+  assert.ok("problem" in withTag([], " "));
+  const ten = Array.from({ length: 10 }, (_, at) => `tag${at}`);
+  assert.ok("problem" in withTag(ten, "one more"));
+  assert.deepEqual(withTag(ten, "TAG3"), { tags: ten });
 });

@@ -36,6 +36,11 @@ const RunConnections = z.record(z.string().max(60), z.object({ piece: z.string()
 /** The hosts the room's automations may reach (its Internet settings): set by the API, never taken from a browser. */
 const RunInternet = z.array(z.string().max(253)).max(100).optional();
 
+/** A run's notes (annotate): at most this many tags, each a word or a few (letters, numbers, spaces, - . : /, up to 30), and a note this long. */
+export const MOST_RUN_TAGS = 10;
+export const RUN_TAG = /^[\p{L}\p{N}_][\p{L}\p{M}\p{N}_ .:/-]{0,29}$/u;
+export const MOST_RUN_NOTE_CHARACTERS = 500;
+
 export const AutomationInput = z.discriminatedUnion("op", [
   z.object({
     op: z.literal("run"),
@@ -80,8 +85,30 @@ export const AutomationInput = z.discriminatedUnion("op", [
   /** A file a run's step made (File Helper's, a CSV file, Read files'), kept with the run: its name and its bytes as base64. */
   z.object({ op: z.literal("run-file"), id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."), file: z.string().regex(/^[\w-]{1,64}$/, "That isn't a file.") }),
   z.object({ op: z.literal("manifest") }),
+  /** How the room's flows have done, from the sandbox's daily tally: for the tool's Insights. */
+  z.object({ op: z.literal("insights"), days: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional() }),
+  /** A run's notes, once it has ended (n8n's annotations): good or bad, tags to find it by, and a note, all replaced at once. */
+  z.object({
+    op: z.literal("annotate"),
+    id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."),
+    vote: z.enum(["good", "bad"]).nullable().optional(),
+    tags: z.array(z.string().trim().regex(RUN_TAG, "A tag is up to 30 letters, numbers and spaces, with - . : or / between them.")).max(MOST_RUN_TAGS, `A run has up to ${MOST_RUN_TAGS} tags.`).optional(),
+    note: z.string().max(MOST_RUN_NOTE_CHARACTERS, `A note is up to ${MOST_RUN_NOTE_CHARACTERS} characters.`).optional(),
+  }),
 ]);
 export type AutomationInput = z.infer<typeof AutomationInput>;
+
+/** A run's notes, as automation.py keeps them: only what's there. */
+export type AutomationRunAnnotation = { vote?: "good" | "bad"; tags?: string[]; note?: string };
+
+/** Runs counted for Insights: how many, how many failed, by hand, their length, and the time saved, with the rates worked out. */
+export type AutomationInsightCounts = { runs: number; failed: number; byHand: number; ms: number; savedMinutes: number; failureRate: number; averageMs: number };
+export type AutomationInsights = {
+  days: 7 | 30 | 90;
+  totals: AutomationInsightCounts;
+  flows: Array<AutomationInsightCounts & { key: string; name: string; path: string }>;
+  perDay: Array<{ day: string; runs: number; failed: number }>;
+};
 
 const PIECE_NAME = z.string().regex(/^@activepieces\/piece-[a-z0-9-]{1,60}$/, "That isn't a piece.");
 /** What the API asks the runner beyond a browser's ops: whether a connection's details work (the piece's own check, in the sandbox). */
@@ -212,7 +239,7 @@ export function shownOf(value: ConnectionValue, fields: readonly string[] = []):
 export type AutomationStepResult = { type: string; status: string; input?: unknown; output?: unknown; errorMessage?: string; duration?: number };
 /** What a waiting run waits for: a time, or a call to its address (its token is never shown). */
 export type AutomationWaitpoint = { type: "DELAY" | "WEBHOOK"; step: string; resumeAt: number | null };
-export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry" | "resume" | "from"; waitpoint?: AutomationWaitpoint | null; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; /** What it kept to be found by (Save run data): up to 10 names and text. */ data?: Record<string, string> | null; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
+export type AutomationRunSummary = { id: string; path: string; flowId?: string | null; mode?: "run" | "step" | "retry" | "resume" | "from"; waitpoint?: AutomationWaitpoint | null; step?: string | null; retryOf?: string | null; /** A failed run that started its flow's error flow: that run, or why it couldn't. */ errorRun?: string | null; errorProblem?: string | null; /** What it kept to be found by (Save run data): up to 10 names and text. */ data?: Record<string, string> | null; /** Its notes: good or bad, tags and a note. */ annotation?: AutomationRunAnnotation | null; /** A run its flow doesn't keep: read by its id for a minute after it ends, and not listed. */ kept?: false; name: string; trigger: string; by: string | null; status: string; message: string | null; startedAt: number; finishedAt: number | null; durationMs?: number };
 export type AutomationRun = AutomationRunSummary & { steps: Record<string, AutomationStepResult>; failedStep?: { name: string; displayName?: string; message?: string }; payload?: unknown; /** Steps that gave back what was pinned on them rather than running. */ pinned?: string[] };
 export type AutomationLive = (Partial<AutomationRun> & { state: "idle" | "running" | "finished"; id: string | null; steps: Record<string, AutomationStepResult>; queued: number });
 

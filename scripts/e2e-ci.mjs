@@ -50,6 +50,8 @@ const SUITES = [
     ["automation-run-from", "automation-run-from"],
     ["automation-variables", "automation-variables"],
     ["automation-run-data", "automation-run-data"],
+    ["automation-insights", "automation-insights"],
+    ["automation-kept", "automation-kept"],
     ["lighthouse-runner", "lighthouse"],
   ]),
   ...service("apps/collab", [

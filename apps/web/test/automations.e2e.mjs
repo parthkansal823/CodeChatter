@@ -618,6 +618,23 @@ try {
   const saved = await Promise.all([a.waitForEvent("download", { timeout: 20_000 }), download.click()]).then(([event]) => event).catch(() => null);
   check("andDownloadsWithItsName", saved?.suggestedFilename() === "with-files.flow.json", saved?.suggestedFilename());
 
+  // ---- A run's notes: good, a tag and a note, kept with it and shown in its flow's runs ----
+  if (await details.getByRole("button", { name: "Back to the runs" }).isVisible().catch(() => false)) await details.getByRole("button", { name: "Back to the runs" }).click();
+  const runNotes = details.getByRole("region", { name: "Its notes" });
+  await runNotes.getByRole("button", { name: "Good run" }).click();
+  await runNotes.getByLabel("A tag to add").fill("needs-look");
+  await runNotes.getByLabel("A tag to add").press("Enter");
+  await runNotes.getByRole("list", { name: "Its tags" }).getByText("needs-look", { exact: true }).waitFor({ timeout: 10_000 }).catch(() => {});
+  await runNotes.getByLabel("Its note", { exact: true }).fill("Files came through.");
+  await runNotes.getByLabel("Its note", { exact: true }).blur();
+  await sleep(1500);
+  const firstRun = details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").first();
+  check("aRunsNotesAreKept", (await runNotes.getByRole("button", { name: "Good run" }).getAttribute("aria-pressed")) === "true" && /good run · needs-look/.test(await firstRun.textContent()), await firstRun.textContent());
+  await runNotes.getByLabel("A tag to add").fill("<b>");
+  await runNotes.getByLabel("A tag to add").press("Enter");
+  check("aTagThatIsntOneSaysSo", await ok(runNotes.getByText(/^Up to 30 letters/).waitFor({ timeout: 3000 })));
+  await runNotes.getByLabel("A tag to add").fill("");
+
   // ---- Notes placed freely on the chart: added, typed in, moved by their top, kept in the file, removed ----
   await chart.getByRole("button", { name: "Add a note" }).click();
   const note = chart.getByRole("note").first();
@@ -658,6 +675,13 @@ try {
   await sleep(300);
   const failedOnes = await everyRun.getByRole("listitem").count();
   check("theyCanBeNarrowedByHowTheyEnded", failedOnes > 0 && failedOnes < howMany && (await everyRun.getByRole("listitem").filter({ hasText: /^Finished/ }).count()) === 0, { howMany, failedOnes });
+  await tool.getByLabel("How it ended").selectOption("");
+  await tool.getByLabel("Notes", { exact: true }).selectOption("tag:needs-look");
+  await sleep(300);
+  check("andByTheirNotes", (await everyRun.getByRole("listitem").count()) === 1 && (await everyRun.getByRole("listitem").first().textContent()).includes("Files came through."), await everyRun.getByRole("listitem").count());
+  await tool.getByLabel("Notes", { exact: true }).selectOption("");
+  await tool.getByLabel("How it ended").selectOption("FAILED");
+  await sleep(300);
   await everyRun.getByRole("listitem").first().getByRole("button").click();
   check("choosingOneOpensItsFlowWithItShown", await ok(details.getByRole("region", { name: "The run shown" }).getByRole("status").filter({ hasText: /^Failed/ }).waitFor({ timeout: 15_000 })));
 
@@ -675,6 +699,33 @@ try {
   await a.keyboard.press("Enter");
   check("andEveryRunFromThere", await ok(tool.getByRole("region", { name: "Every run" }).waitFor({ timeout: 5000 })));
   await tool.getByRole("button", { name: "Every run" }).click();
+
+  // ---- A flow's own settings, and Insights ----
+  if (await details.getByRole("button", { name: "Back to the runs" }).isVisible().catch(() => false)) await details.getByRole("button", { name: "Back to the runs" }).click();
+  const flowSettings = details.getByRole("region", { name: "Its settings" });
+  await flowSettings.getByLabel(/^Stop a run after/).fill("4");
+  check("aSettingOutOfItsLimitsSaysSo", await ok(flowSettings.getByText("From 5 to 900.").waitFor({ timeout: 3000 })));
+  await flowSettings.getByLabel(/^Stop a run after/).fill("120");
+  await flowSettings.getByLabel(/^Each run saves/).fill("5");
+  await flowSettings.getByLabel(/^Each run saves/).blur();
+  await sleep(600);
+  check("aFlowKeepsItsSettings", (await flowSettings.getByLabel(/^Stop a run after/).inputValue()) === "120" && (await flowSettings.getByLabel(/^Each run saves/).inputValue()) === "5");
+  const zone = flowSettings.getByLabel("Its timezone");
+  await zone.fill("Mars/Olympus");
+  check("aTimezoneThatIsntOneSaysSo", await ok(flowSettings.getByText(/^Not a timezone/).waitFor({ timeout: 3000 })));
+  await zone.fill("europe/london");
+  await zone.blur();
+  await flowSettings.getByRole("checkbox", { name: "Succeeded" }).uncheck();
+  await sleep(600);
+  check("itsTimezoneAndWhichRunsAreKept", (await zone.inputValue()) === "Europe/London" && !(await flowSettings.getByRole("checkbox", { name: "Succeeded" }).isChecked()) && (await flowSettings.getByRole("checkbox", { name: /^Failed/ }).isChecked()));
+  await flowSettings.getByRole("checkbox", { name: "Succeeded" }).check();
+  await tool.getByRole("button", { name: "Insights" }).click();
+  const insightsView = tool.getByRole("region", { name: "Insights" });
+  check("insightsCountTheRuns", await ok(insightsView.getByRole("group", { name: "In all" }).waitFor({ timeout: 15_000 })), await insightsView.innerText().catch(() => ""));
+  check("withEachFlow", (await insightsView.getByRole("table").first().getByRole("row").count()) >= 2);
+  await insightsView.getByRole("radio", { name: "30 days" }).click();
+  check("overALongerTimeToo", (await insightsView.getByRole("radio", { name: "30 days" }).getAttribute("aria-checked")) === "true" && (await ok(insightsView.getByRole("group", { name: "In all" }).waitFor({ timeout: 15_000 }))));
+  await tool.getByRole("button", { name: "Insights" }).click();
 
   // ---- On a phone ----
   await a.setViewportSize({ width: 390, height: 800 });

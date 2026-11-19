@@ -15,6 +15,7 @@ import { baseExtensions } from "./base-extensions";
 import { asSlot, presenceUser, type Connection } from "./connection";
 import { useDocs, type DocsContextValue } from "./docs-context";
 import { useDocsStore } from "./docs-store";
+import { BlockMoves } from "./extensions/block-handle";
 import { COMMENT_EVENT } from "./extensions/comment";
 import { SlashCommand } from "./extensions/slash-command";
 import { TAG_EVENT } from "./extensions/tag-highlight";
@@ -86,7 +87,8 @@ export function PageEditor({ pageId, connection, onEditor, onThread }: Props) {
             return { kind: "page", target: id, path: null, label: title };
           },
           resolve: (text) => resolveTarget(docs, text),
-        }),
+        }, { pageKey: `${roomId}:${pageId}` }),
+        BlockMoves.configure({ pageId: `${roomId}:${pageId}` }),
         Placeholder.configure({ placeholder: ({ node }) => (node.type.name === "heading" ? "Heading" : "Type / for commands") }),
         SlashCommand.configure({
           createSubPage: () => {

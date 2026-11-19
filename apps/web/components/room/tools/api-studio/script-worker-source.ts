@@ -154,7 +154,11 @@ self.onmessage = async function (event) {
   var console = { log: log("log"), info: log("info"), debug: log("log"), warn: log("warn"), error: log("error") };
   // Cover native aliases too: a shared script must not print credentials through self.console.
   [self, Object.getPrototypeOf(self), self.WorkerGlobalScope && self.WorkerGlobalScope.prototype].forEach(function (scope) {
-    if (scope) try { Object.defineProperty(scope, "console", { value: console, configurable: false, writable: false }); } catch (e) {}
+    if (scope && (scope === self || Object.getPrototypeOf(scope) !== null)) try { Object.defineProperty(scope, "console", { value: console, configurable: false, writable: false }); } catch (e) {}
+  });
+  if (typeof self.addEventListener === "function") self.addEventListener("unhandledrejection", function (event) {
+    event.preventDefault();
+    logs.push({ level: "error", text: safe("Unhandled promise rejection: " + __show(event.reason)) });
   });
   var env = {
     get: function (k) { return vars[k]; },

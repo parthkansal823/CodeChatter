@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 import uuid
 
 WORKSPACE = "/workspace"
@@ -21,6 +22,8 @@ MANIFEST = "/usr/local/lib/codechatter/automation/manifest.json"
 HOME = os.path.expanduser("~/automations")
 QUEUE = os.path.join(HOME, "queue")
 RUNS = os.path.join(HOME, "runs")
+# The worker's daily tally of runs, by flow (host.mjs), for the Insights page.
+INSIGHTS = os.path.join(HOME, "insights.json")
 # What runs' steps kept apart (host.mjs): the files they made, a folder for each run.
 FILES = os.path.join(HOME, "files")
 FILE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -36,6 +39,10 @@ MOST_SECONDS = 900
 DEFAULT_SECONDS = 300
 GONE_AFTER_SECONDS = 20
 RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# A run's notes (n8n's annotations): good or bad, tags to find it by, and a note.
+MOST_RUN_TAGS = 10
+MOST_TAG_CHARACTERS = 30
+MOST_NOTE_CHARACTERS = 500
 STEP_NAME = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 # A run that can be taken up again from where it stopped.
 UNFINISHED = ("FAILED", "TIMEOUT", "STOPPED")
@@ -150,6 +157,43 @@ def steps_named(step):
             found |= steps_named(child)
         step = step.get("nextAction")
     return found
+
+
+def timeout_of(flow):
+    """How long a flow's runs may take: its own setting (settings.timeoutSeconds), within the limits, or the default."""
+    settings = flow.get("settings") if isinstance(flow.get("settings"), dict) else {}
+    wanted = settings.get("timeoutSeconds")
+    return max(LEAST_SECONDS, min(MOST_SECONDS, wanted)) if isinstance(wanted, int) and not isinstance(wanted, bool) else DEFAULT_SECONDS
+
+
+def insights(request):
+    """How the room's flows have done, for the Insights page: by day and by flow, over the last 7, 30 or 90 days, from the worker's daily tally (host.mjs),
+    which outlasts the runs kept. Days are UTC."""
+    days = request.get("days") if request.get("days") in (7, 30, 90) else 7
+    stored = (read_json(INSIGHTS) or {}).get("days") or {}
+    now = time.time()
+    dates = [time.strftime("%Y-%m-%d", time.gmtime(now - 86400 * back)) for back in range(days - 1, -1, -1)]
+    per_day, per_flow = [], {}
+    totals = {"runs": 0, "failed": 0, "ms": 0, "savedMinutes": 0, "byHand": 0}
+    for date in dates:
+        entries = stored.get(date) if isinstance(stored.get(date), dict) else {}
+        day = {"day": date, "runs": 0, "failed": 0}
+        for key, entry in entries.items():
+            if not isinstance(entry, dict):
+                continue
+            flow = per_flow.setdefault(key, {"key": key, "name": "", "path": "", "runs": 0, "failed": 0, "ms": 0, "savedMinutes": 0, "byHand": 0})
+            flow["name"], flow["path"] = str(entry.get("name") or key), str(entry.get("path") or "")
+            for field in ("runs", "failed", "ms", "savedMinutes", "byHand"):
+                value = entry.get(field) if isinstance(entry.get(field), (int, float)) else 0
+                flow[field] += value
+                totals[field] += value
+            day["runs"] += entry.get("runs") or 0
+            day["failed"] += entry.get("failed") or 0
+        per_day.append(day)
+    def with_rates(counts):
+        return {**counts, "failureRate": (counts["failed"] / counts["runs"]) if counts["runs"] else 0, "averageMs": round(counts["ms"] / counts["runs"]) if counts["runs"] else 0}
+
+    return {"days": days, "totals": with_rates(totals), "flows": [with_rates(flow) for flow in sorted(per_flow.values(), key=lambda each: (-each["runs"], each["name"]))], "perDay": per_day}
 
 
 def variables_of(request):
@@ -298,7 +342,7 @@ def run(request):
     now = time.time()
     identity = f"{time.strftime('%Y%m%d-%H%M%S', time.gmtime(now))}-{uuid.uuid4().hex[:8]}"
     seconds = request.get("seconds")
-    seconds = max(LEAST_SECONDS, min(MOST_SECONDS, seconds)) if isinstance(seconds, int) else DEFAULT_SECONDS
+    seconds = max(LEAST_SECONDS, min(MOST_SECONDS, seconds)) if isinstance(seconds, int) else timeout_of(flow)
     headers = request.get("headers") if isinstance(request.get("headers"), dict) else {}
     query = request.get("query") if isinstance(request.get("query"), dict) else {}
     resume_base = request.get("resumeBase")
@@ -339,7 +383,7 @@ def stop():
     return {"id": live.get("id")}
 
 
-SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem", "waitpoint", "data")
+SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem", "waitpoint", "data", "annotation")
 
 
 def runs(path):
@@ -362,7 +406,8 @@ def runs(path):
     found = []
     for name in sorted(os.listdir(RUNS), reverse=True):
         run_file = read_json(os.path.join(RUNS, name))
-        if run_file and belongs(run_file):
+        # A run its flow doesn't keep is read by its id for a minute, and not listed.
+        if run_file and run_file.get("kept") is not False and belongs(run_file):
             found.append(shown({key: run_file.get(key) for key in SHOWN}))
     return {"runs": found}
 
@@ -374,6 +419,50 @@ def one_run(identity):
     if not found:
         raise Refused("That run isn't kept any more.")
     return shown(found)
+
+
+def is_tag(text):
+    """A word or a few: letters (with their marks, so Hindi's too), numbers, _, then spaces or - . : / too; as RUN_TAG in the contracts."""
+    if not 0 < len(text) <= MOST_TAG_CHARACTERS or not (unicodedata.category(text[0])[0] in "LN" or text[0] == "_"):
+        return False
+    return all(unicodedata.category(char)[0] in "LMN" or char in "_ .:/-" for char in text[1:])
+
+
+def annotate(request):
+    """A run's notes, as n8n's annotations: good or bad, tags to find it by, and a note. Kept with the run, so they go when it does."""
+    identity = request.get("id")
+    if not isinstance(identity, str) or not RUN_ID.match(identity):
+        raise Refused("That isn't a run.")
+    path = os.path.join(RUNS, f"{identity}.json")
+    found = read_json(path)
+    waiting = os.listdir(QUEUE) if os.path.isdir(QUEUE) else []
+    going = (read_json(LIVE) or {}).get("id") == identity or any(name.endswith(f"-{identity}.json") for name in waiting)
+    if not found and going:
+        raise Refused("A run can have notes once it has ended.")
+    if not found or found.get("kept") is False:
+        raise Refused("That run isn't kept any more.")
+    if found.get("status") in ("RUNNING", "PAUSED") or not found.get("finishedAt"):
+        raise Refused("A run can have notes once it has ended.")
+    vote = request.get("vote")
+    if vote not in (None, "good", "bad"):
+        raise Refused("A run is good or bad, or neither.")
+    tags = request.get("tags") or []
+    if not isinstance(tags, list) or len(tags) > MOST_RUN_TAGS:
+        raise Refused(f"A run has up to {MOST_RUN_TAGS} tags.")
+    kept = []
+    for tag in tags:
+        tag = tag.strip() if isinstance(tag, str) else ""
+        if not is_tag(tag):
+            raise Refused("A tag is up to 30 letters, numbers and spaces, with - . : or / between them.")
+        if tag.lower() not in (each.lower() for each in kept):
+            kept.append(tag)
+    note = request.get("note") or ""
+    if not isinstance(note, str) or len(note) > MOST_NOTE_CHARACTERS:
+        raise Refused(f"A note is up to {MOST_NOTE_CHARACTERS} characters.")
+    annotation = {key: value for key, value in (("vote", vote), ("tags", kept), ("note", note.strip())) if value}
+    found["annotation"] = annotation or None
+    write_json(path, found, 0o664)
+    return {"id": identity, "annotation": found["annotation"]}
 
 
 def run_file(request):
@@ -440,7 +529,7 @@ def resume(request):
     except FileExistsError:
         raise Refused("That run isn't waiting.")
     now = time.time()
-    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": {}, "query": {}, "trigger": earlier.get("trigger") or "manual", "by": earlier.get("by"), "seconds": DEFAULT_SECONDS, "connections": request.get("connections") or {}, "variables": variables_of(request), "resumeBase": earlier.get("resumeBase"), "mode": "resume", "resumeSteps": earlier.get("steps") or {}, "data": earlier.get("data"), "triggerPayload": earlier.get("payload"), "waitedFrom": earlier.get("startedAt")}
+    job = {"id": identity, "path": path, "flowId": flow_id(flow), "flow": flow, "payload": payload, "headers": {}, "query": {}, "trigger": earlier.get("trigger") or "manual", "by": earlier.get("by"), "seconds": timeout_of(flow), "connections": request.get("connections") or {}, "variables": variables_of(request), "resumeBase": earlier.get("resumeBase"), "mode": "resume", "resumeSteps": earlier.get("steps") or {}, "data": earlier.get("data"), "triggerPayload": earlier.get("payload"), "waitedFrom": earlier.get("startedAt")}
     write_json(os.path.join(QUEUE, f"{int(now * 1000):015d}-{identity}-resume.json"), job)
     start_worker()
     return {"id": identity, "queued": queued()}
@@ -546,6 +635,10 @@ def main():
         return one_run(request.get("id"))
     if op == "run-file":
         return run_file(request)
+    if op == "annotate":
+        return annotate(request)
+    if op == "insights":
+        return insights(request)
     if op == "manifest":
         return manifest()
     if op == "find":

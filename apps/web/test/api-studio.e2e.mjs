@@ -20,7 +20,8 @@ await a.getByPlaceholder("name.ext").fill(serverFile);
 await a.getByPlaceholder("name.ext").press("Enter");
 await a.getByRole("tab", { name: new RegExp(serverFile.replace(".", "\\.")) }).waitFor({ timeout: 15_000 });
 await a.locator(".monaco-editor .view-lines").first().click();
-await a.keyboard.type(
+// Insert atomically: fast individual key events can lose characters while Monaco synchronises.
+await a.keyboard.insertText(
   `require("http").createServer((q,s)=>{let b="";q.on("data",c=>b+=c);q.on("end",()=>{s.setHeader("content-type","application/json");s.end(JSON.stringify({ok:true,method:q.method,url:q.url,body:b}))})}).listen(${port},()=>console.log("listening ${port}"))`,
 );
 await a.keyboard.press("Control+Enter");

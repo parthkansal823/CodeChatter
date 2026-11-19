@@ -257,3 +257,99 @@
 .cc-doc-selection {
   background: color-mix(in oklch, var(--caret) 22%, transparent);
 }
+
+/* One overlay follows the hovered or focused block; it adds no widgets to the document. */
+.cc-doc-block-host {
+  position: relative;
+}
+.cc-doc-block-handle {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 28px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  cursor: grab;
+  touch-action: none;
+}
+.cc-doc-block-handle:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.cc-doc-block-handle:active {
+  cursor: grabbing;
+}
+.cc-doc-block-handle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.cc-doc-block-handle svg {
+  width: 12px;
+  height: 18px;
+  fill: var(--muted-foreground);
+}
+.cc-doc-block-handle:hover svg {
+  fill: var(--foreground);
+}
+.cc-doc-drop-line {
+  position: absolute;
+  z-index: 21;
+  height: 2px;
+  background: var(--brand);
+  pointer-events: none;
+}
+.cc-doc-block-handle[hidden],
+.cc-doc-drop-line[hidden] {
+  display: none;
+}
+
+/* Disclosure state is a node-view attribute only; the shared node holds its content and ID. */
+.cc-doc-content .cc-doc-toggle {
+  position: relative;
+  padding-left: 1.75rem;
+}
+.cc-doc-toggle-summary {
+  min-height: 1.65em;
+  font-weight: 500;
+}
+.cc-doc-toggle-body {
+  margin-top: 0.35em;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--border);
+}
+.cc-doc-toggle-body > * + * {
+  margin-top: 0.5em;
+}
+.cc-doc-toggle[data-open="false"] > .cc-doc-toggle-content > .cc-doc-toggle-body {
+  display: none;
+}
+.cc-doc-toggle-arrow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  user-select: none;
+}
+.cc-doc-toggle-arrow:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.cc-doc-toggle-arrow:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.cc-doc-toggle[data-open="true"] > .cc-doc-toggle-arrow {
+  transform: rotate(90deg);
+}
