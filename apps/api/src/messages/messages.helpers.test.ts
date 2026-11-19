@@ -14,7 +14,7 @@ import { chatUnreadQuery, escapeChatLike, markChatReadQuery } from "./messages.h
 const dialect = new PgDialect({ casing: "snake_case" });
 
 describe("chat display and literal search helpers", () => {
-  it("counts retained normal messages after author removal, while excluding own and system posts", () => {
+  it("counts retained normal messages after author removal, while excluding own and integration posts", () => {
     const other = { id: "other", name: "Other", image: null };
     const me = { id: "reader", name: "Reader", image: null };
     for (const kind of ["text", "code", "file"] as const) {
@@ -22,7 +22,7 @@ describe("chat display and literal search helpers", () => {
       expect(isCountedChatMessage({ kind, author: other }, "reader")).toBe(true);
       expect(isCountedChatMessage({ kind, author: me }, "reader")).toBe(false);
     }
-    for (const kind of ["system", "github"] as const) {
+    for (const kind of ["system", "github", "automation"] as const) {
       expect(isCountedChatMessage({ kind, author: null }, "reader")).toBe(false);
       expect(isCountedChatMessage({ kind, author: other }, "reader")).toBe(false);
     }
@@ -65,7 +65,7 @@ describe("unread SQL invariants", () => {
     expect(query.sql).toContain("message.room_id = selected.room_id");
     expect(query.sql).toContain("message.user_id is distinct from");
     expect(query.sql).toContain("message.deleted_at is null");
-    expect(query.sql).toContain("message.kind not in ('system', 'github')");
+    expect(query.sql).toContain("message.kind not in ('system', 'github', 'automation')");
     expect(query.sql).toContain(
       "message.id > coalesce(reads.last_read_message_id, '00000000-0000-0000-0000-000000000000'::uuid)",
     );

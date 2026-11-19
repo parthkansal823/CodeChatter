@@ -494,8 +494,10 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
       (current.state.readThroughId && candidate <= current.state.readThroughId)
     )
       return;
-    if (readPending.current && candidate <= readPending.current) return;
-    readPending.current = candidate;
+    // A previous timer may have expired while search, focus or loading paused reading.
+    // Keep its high-water mark, but schedule it again when the reader returns.
+    if (readPending.current && candidate <= readPending.current && readTimer.current) return;
+    if (!readPending.current || candidate > readPending.current) readPending.current = candidate;
     if (readTimer.current) clearTimeout(readTimer.current);
     readTimer.current = setTimeout(() => void flushRead(), 600);
   }
@@ -584,7 +586,11 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
           onSubmit={(event) => {
             event.preventDefault();
             const query = searchDraft.trim();
-            if (query) setSearchQuery(query);
+            if (query) {
+              if (query === searchQuery)
+                void queryClient.invalidateQueries({ queryKey: ["chat-search", room.id, query], exact: true });
+              setSearchQuery(query);
+            }
           }}
         >
           <label className="sr-only" htmlFor={`chat-search-${room.id}`}>
@@ -733,6 +739,7 @@ export function ChatPanel({ visible, onUnread }: { visible: boolean; onUnread: (
             className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
             role="log"
             aria-label="Room chat"
+            tabIndex={0}
             aria-live="polite"
           >
             {contextLoading && (

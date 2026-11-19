@@ -261,18 +261,28 @@ export class RunnerClient {
   async automations(roomId: string, input: AutomationInput | AutomationRunnerInput, user: RunnerUser): Promise<unknown> {
     // Where a run that waits for a call is carried on from: the API's own address, whatever a browser sent. And the room's connections, opened here for
     // this run only (automations/connections.ts): what a browser sent as connections is never used.
-    const connections = input.op === "run" || input.op === "resume" ? ((await this.vault?.forRun(roomId)) ?? {}) : undefined;
+    // And the hosts its owner turned on for them, which the room's proxy lets through (the runner sees to it).
+    const given = input.op === "run" || input.op === "resume" || input.op === "poll" || input.op === "test-connection" ? ((await this.vault?.forRun(roomId)) ?? { connections: {}, internet: [] }) : null;
+    const resumeBase = `${this.env.APP_URL.replace(/\/$/, "")}/api/hooks/automations/resume/${roomId}`;
     const body =
-      input.op === "run"
-        ? { ...input, resumeBase: `${this.env.APP_URL.replace(/\/$/, "")}/api/hooks/automations/resume/${roomId}`, connections }
+      input.op === "run" || input.op === "poll"
+        ? { ...input, resumeBase, connections: given!.connections, internet: given!.internet }
         : input.op === "resume"
-          ? { ...input, connections }
-          : input;
+          ? { ...input, connections: given!.connections, internet: given!.internet }
+          : input.op === "test-connection"
+            ? { ...input, internet: given!.internet }
+            : input;
     if (input.op === "run" || input.op === "resume") void this.redis?.zadd(RECENT_AUTOMATION_ROOMS, Date.now(), roomId).catch(() => {});
     const response = await this.call(`/rooms/${roomId}/automations`, { method: "POST", headers: this.headers(roomId, user), body: JSON.stringify(body) });
     if (response.status === 409 || response.status === 422) throw new ConflictException(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "It couldn't reach the automation.");
     if (!response.ok) throw new RunnerUnavailableError();
     return response.json();
+  }
+
+  /** The hosts the room's automations may reach, now: the room's proxy follows (apps/runner/src/egress.ts). */
+  async internet(roomId: string, hosts: string[], user: RunnerUser): Promise<void> {
+    const response = await this.call(`/rooms/${roomId}/sandbox/services`, { method: "PUT", headers: this.headers(roomId, user), body: JSON.stringify({ hosts }) });
+    if (!response.ok) throw new RunnerUnavailableError();
   }
 
   /** Lighthouse on one of the room's servers (apps/runner/src/lighthouse.ts). */

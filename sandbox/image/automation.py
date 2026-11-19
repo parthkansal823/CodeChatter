@@ -21,6 +21,10 @@ MANIFEST = "/usr/local/lib/codechatter/automation/manifest.json"
 HOME = os.path.expanduser("~/automations")
 QUEUE = os.path.join(HOME, "queue")
 RUNS = os.path.join(HOME, "runs")
+# What runs' steps kept apart (host.mjs): the files they made, a folder for each run.
+FILES = os.path.join(HOME, "files")
+FILE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+MOST_FILE_BYTES = 10 * 1024 * 1024
 LIVE = os.path.join(HOME, "live.json")
 STOP = os.path.join(HOME, "stop")
 LOCK = os.path.join(HOME, "worker")
@@ -36,6 +40,11 @@ STEP_NAME = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 # A run that can be taken up again from where it stopped.
 UNFINISHED = ("FAILED", "TIMEOUT", "STOPPED")
 SCHEDULE_PIECE = "@activepieces/piece-schedule"
+# A piece's polling trigger (a new row, a new issue): its hooks, and its own store, which keeps what it has seen.
+TRIGGER_STORES = os.path.join(HOME, "trigger-stores")
+POLL_HOOKS = ("ON_ENABLE", "RUN", "ON_DISABLE", "TEST")
+MOST_NEW_ITEMS = 20
+NOT_POLLING = "This flow doesn't start on a service's new items any more."
 
 
 class Refused(Exception):
@@ -159,7 +168,8 @@ def flow_by_id(wanted):
     return None, None
 
 
-def run(request):
+def flow_asked_for(request):
+    """The flow a request is for: at its path, or, started by a trigger, the one it was turned on for, even if its file has moved or been replaced."""
     path = request.get("path")
     wanted = request.get("flowId")
     try:
@@ -168,13 +178,33 @@ def run(request):
         if not wanted:
             raise
         flow = None
-    # Started by a trigger: the flow is the one it was turned on for, even if its file has moved or been replaced by another.
     if wanted and (flow is None or flow_id(flow) != wanted):
         path, flow = flow_by_id(wanted)
         if flow is None:
             raise Refused("The flow this was turned on for isn't in the room any more.")
+    return path, flow
+
+
+def polling_piece(flow):
+    """The piece and trigger settings, when the flow starts on a piece's polling trigger (one that asks a service what's new every few minutes)."""
+    trigger = flow.get("trigger") or {}
+    settings = trigger.get("settings") if isinstance(trigger.get("settings"), dict) else {}
+    pieces = read_json(MANIFEST) or {}
+    piece = pieces.get(settings.get("pieceName") or "")
+    about = ((piece or {}).get("triggers") or {}).get(settings.get("triggerName") or "")
+    # The schedule piece's triggers are polling ones to Activepieces, but schedules run on the API's own timer.
+    if trigger.get("type") != "PIECE_TRIGGER" or settings.get("room") or settings.get("pieceName") == SCHEDULE_PIECE or not about or about.get("kind") != "POLLING":
+        return None
+    return piece, settings
+
+
+def run(request):
+    path, flow = flow_asked_for(request)
     started_by = str(request.get("trigger") or "manual")[:20]
     settings = flow["trigger"].get("settings") if isinstance(flow["trigger"].get("settings"), dict) else {}
+    # A flow turned on for a service's new items runs on one only while it still starts on them.
+    if started_by == "poll" and polling_piece(flow) is None:
+        raise Refused(NOT_POLLING)
     # A flow turned on for a schedule may have been changed since: it's run only while it still starts on one.
     if started_by == "schedule" and settings.get("pieceName") != SCHEDULE_PIECE:
         raise Refused("This flow doesn't start on a schedule any more.")
@@ -299,6 +329,25 @@ def one_run(identity):
     return shown(found)
 
 
+def run_file(request):
+    """A step's file, kept with its run, for its Download in the tool: its name and its bytes (as base64)."""
+    identity, file_id = request.get("id"), request.get("file")
+    if not isinstance(identity, str) or not RUN_ID.match(identity) or not isinstance(file_id, str) or not FILE_ID.match(file_id):
+        raise Refused("That isn't a run's file.")
+    path = os.path.join(FILES, identity, file_id)
+    if not os.path.isfile(path):
+        raise Refused("That file isn't kept any more: its run has gone.")
+    if os.path.getsize(path) > MOST_FILE_BYTES:
+        raise Refused("That file is too big to download here.")
+    meta = read_json(os.path.join(FILES, identity, f"{file_id}.json")) or {}
+    name = str(meta.get("name") or "file")[:200]
+    with open(path, "rb") as source:
+        data = source.read()
+    import base64
+
+    return {"name": name, "size": len(data), "data": base64.b64encode(data).decode("ascii")}
+
+
 def waits():
     """The runs waiting: the API's timer carries on those waiting for a time when it comes, even after the sandbox has stopped and started again."""
     found = []
@@ -362,6 +411,52 @@ def engine_call(call, seconds):
         raise Refused("The engine couldn't be asked. Restarting the sandbox brings it up to date.")
 
 
+def poll(request):
+    """
+    A flow's polling trigger, through the engine (Activepieces' own trigger hooks, as its server calls them): ON_ENABLE when it's turned on (the piece
+    remembers what's there already, so only what's new from then counts), RUN on its schedule (what's new, each started as a run of the flow), ON_DISABLE
+    when it's turned off, TEST for an example of what it gives. Its store is its own file, kept between them.
+    """
+    hook = request.get("hook")
+    if hook not in POLL_HOOKS:
+        raise Refused("That isn't something a polling trigger does.")
+    path, flow = flow_asked_for(request)
+    found = polling_piece(flow)
+    if found is None:
+        raise Refused(NOT_POLLING)
+    piece, settings = found
+    identity = flow_id(flow) or path
+    store = os.path.join(TRIGGER_STORES, re.sub(r"[^A-Za-z0-9_-]", "_", identity)[:100] + ".json")
+    if hook == "ON_DISABLE" and not os.path.exists(store):
+        return {"ok": True}
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    trigger = {**flow["trigger"], "settings": {**settings, "pieceVersion": piece.get("version")}}
+    version = {"id": f"poll-{uuid.uuid4().hex[:12]}", "flowId": identity, "displayName": flow.get("displayName") or path, "valid": True, "state": "LOCKED", "schemaVersion": str(flow.get("schemaVersion") or "27"), "trigger": trigger, "agentIds": [], "connectionIds": [], "notes": [], "updatedBy": None, "backupFiles": None, "created": now, "updated": now}
+    operation = {"hookType": hook, "test": hook == "TEST", "flowVersion": version, "webhookUrl": ""}
+    os.makedirs(TRIGGER_STORES, exist_ok=True)
+    answer = engine_call({"kind": "EXECUTE_TRIGGER_HOOK", "operation": operation, "connections": request.get("connections") or {}, "store": store, "seconds": 120}, 120)
+    if not answer.get("ok"):
+        raise Refused(str(answer.get("error") or "The service couldn't be asked.")[:500])
+    response = answer.get("response") or {}
+    if hook == "ON_ENABLE":
+        return {"schedule": response.get("scheduleOptions")}
+    if hook == "ON_DISABLE":
+        try:
+            os.remove(store)
+        except FileNotFoundError:
+            pass
+        return {"ok": True}
+    items = response.get("output") if isinstance(response.get("output"), list) else []
+    if hook == "TEST":
+        return {"items": items[:5]}
+    started = []
+    for item in items[:MOST_NEW_ITEMS]:
+        if queued() >= MOST_QUEUED:
+            break
+        started.append(run({"path": path, "flowId": flow_id(flow), "payload": item, "trigger": "poll", "by": request.get("by"), "connections": request.get("connections") or {}, "resumeBase": request.get("resumeBase")})["id"])
+    return {"items": len(items), "runs": started, "passedOver": len(items) - len(started)}
+
+
 def test_connection(request):
     """Whether a connection's details work, by the piece's own check (Activepieces' validate), as the Connections panel's Test asks."""
     pieces = read_json(MANIFEST) or {}
@@ -402,6 +497,8 @@ def main():
         return runs(request.get("path"))
     if op == "run-details":
         return one_run(request.get("id"))
+    if op == "run-file":
+        return run_file(request)
     if op == "manifest":
         return manifest()
     if op == "find":
@@ -412,6 +509,8 @@ def main():
         return resume(request)
     if op == "test-connection":
         return test_connection(request)
+    if op == "poll":
+        return poll(request)
     raise Refused("That isn't something this can do.")
 
 

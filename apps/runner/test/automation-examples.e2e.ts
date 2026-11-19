@@ -157,6 +157,9 @@ try {
 } finally {
   const node = findByPath(doc, FOLDER);
   if (node) trash(doc, node.id);
+  // What examples write into the room's files.
+  const written = findByPath(doc, "automation-output");
+  if (written) trash(doc, written.id);
   await sleep(600);
   check("theTestsFilesAreGone", !flatten(listTree(doc)).some((item) => item.path.startsWith(FOLDER)));
   provider.destroy();

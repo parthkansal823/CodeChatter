@@ -111,7 +111,7 @@ export function textFrame(shape: Shape): { x: number; y: number; width: number |
 
 /** SVG transform for a rotated shape, or undefined. */
 export function rotationTransform(shape: Shape): string | undefined {
-  if (!shape.rotation) return undefined;
+  if (shape.type === "group" || !shape.rotation) return undefined;
   return `rotate(${r2(shape.rotation)} ${r2(shape.x + shape.w / 2)} ${r2(shape.y + shape.h / 2)})`;
 }
 

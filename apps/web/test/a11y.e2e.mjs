@@ -140,6 +140,17 @@ try {
     for (const app of ["Docs", "API", "Tasks", "Tours", "Analysis", "Prompts", "MCP", "Databases", "Lakehouse", "Flow", "Automations", "Design", "Whiteboard", "Diagrams"]) {
       await step(page, `${theme} room, ${app}`, () => openApp(page, app));
     }
+    // The automations' connections: one listed (it didn't work) and the form to add one open. The list is stood in for.
+    await page.route("**/api/rooms/*/automations/connections", (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: [{ name: "room-db", piece: "@activepieces/piece-postgres", type: "CUSTOM_AUTH", shown: { host: "postgres", port: 5432 }, createdBy: { id: "u", name: "Test" }, createdAt: 1794037625000, updatedAt: 1794037625000, lastTest: { valid: false, error: "password authentication failed", at: 1794037625000 } }] })
+        : route.continue(),
+    );
+    await openApp(page, "Automations");
+    await page.getByRole("region", { name: "Automations", exact: true }).getByRole("button", { name: "Connections", exact: true }).click({ timeout: 60_000 });
+    await page.getByRole("dialog", { name: "Connections" }).getByRole("button", { name: "Add a connection" }).click();
+    await step(page, `${theme} room, the automations' connections`, () => page.getByRole("dialog", { name: "Connections" }).getByRole("form", { name: "Add a connection" }).waitFor({ timeout: 15_000 }));
+    await page.keyboard.press("Escape");
     // A prompt with its answers: the tool's empty screen says little. The model is stood in for, and the prompt is deleted.
     await page.route("**/api/rooms/*/ai/prompt", (route) => {
       const events = [{ type: "delta", text: "An answer." }, { type: "done", stop: "end", usage: { inputTokens: 5, outputTokens: 5, estimated: true }, timing: { firstMs: 200, totalMs: 900 } }];

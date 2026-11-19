@@ -25,16 +25,18 @@ import {
 } from "@codechatter/contracts";
 import { schema, type DbHandle } from "@codechatter/db";
 import { BadRequestException, ConflictException, ForbiddenException, GoneException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import type { Redis } from "ioredis";
 import { createHash, randomBytes } from "node:crypto";
 
 import type { Env } from "../config/env.js";
-import { DB, ENV, OBJECT_STORE } from "../infra/tokens.js";
+import { DB, ENV, OBJECT_STORE, VALKEY } from "../infra/tokens.js";
 import { MailService } from "../mail/mail.service.js";
 import { EventsGateway } from "../realtime/events.gateway.js";
 import { RoomsRepository } from "../rooms/rooms.repository.js";
 import { newRoomCode, RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient, RunnerUnavailableError, type RunnerUser } from "../runner/runner.client.js";
+import { AssessmentReminders } from "./assessment-reminders.js";
 import { adhocPaperQuestion, askedOf, drawQuestions, nextQuestionId, PaperError, paperQuestion, secureRandom, sittingFrom, type BankQuestion } from "./paper.js";
 import { candidateInterview, candidateRun, interviewerInterview, interviewerRun, interviewListItem, scorecardView, testsOf, type InterviewRow, type RunRow, type ScorecardRow, type ScorecardViewer } from "./views.js";
 
@@ -84,6 +86,8 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   private timer: ReturnType<typeof setInterval> | null = null;
   /** Interviews whose tests are running on this instance. */
   private readonly testing = new Set<string>();
+  private readonly reminders: AssessmentReminders;
+  private reminding = false;
 
   constructor(
     @Inject(DB) private readonly handle: DbHandle,
@@ -94,10 +98,28 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
     private readonly runner: RunnerClient,
     private readonly mail: MailService,
     private readonly events: EventsGateway,
-  ) {}
+    @Inject(VALKEY) redis: Redis,
+  ) {
+    this.reminders = new AssessmentReminders(redis, {
+      reload: async (id) => {
+        const [row] = await this.db.select().from(schema.interviews).where(eq(schema.interviews.id, id)).limit(1);
+        return row ?? null;
+      },
+      send: async (row, now) => this.mail.sendAssessmentReminder({
+        email: row.candidateEmail!, candidateName: row.candidateName, title: row.question.title,
+        minutes: row.durationMinutes, closesAt: row.closesAt!, now,
+      }),
+      // Do not include transport errors: they can contain addresses or SMTP credentials.
+      failed: (id, step) => this.logger.warn(`assessment ${id}: reminder ${step} failed`),
+    });
+  }
 
   onModuleInit() {
-    this.timer = setInterval(() => void this.sweep().catch((error: unknown) => this.logger.warn(`interview timer: ${String(error)}`)), SWEEP_MS);
+    // The existing timer also sends reminders. Only isolated development tests shorten it.
+    const requested = Number(process.env.ASSESSMENT_REMINDER_SWEEP_MS);
+    const interval = this.env.NODE_ENV !== "production" && Number.isFinite(requested) && requested >= 100
+      ? Math.min(requested, SWEEP_MS) : SWEEP_MS;
+    this.timer = setInterval(() => void this.sweep().catch((error: unknown) => this.logger.warn(`interview timer: ${String(error)}`)), interval);
     this.timer.unref();
   }
 
@@ -426,7 +448,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async interviewerView(row: InterviewRow, userId: string): Promise<InterviewerInterview> {
-    const [runs, name, answers, events, bigEdits, runScores, contexts] = await Promise.all([
+    const [runs, name, answers, events, bigEdits, runScores, contexts, assessmentReminder] = await Promise.all([
       this.runRows(row.id),
       this.interviewerName(row),
       this.db.select().from(schema.interviewAnswers).where(eq(schema.interviewAnswers.interviewId, row.id)),
@@ -434,8 +456,9 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       this.bigEditsByRoom([row.roomId]),
       this.db.select({ questionId: schema.interviewRuns.questionId, passed: schema.interviewRuns.passed, total: schema.interviewRuns.total }).from(schema.interviewRuns).where(eq(schema.interviewRuns.interviewId, row.id)),
       this.scorecardContexts([row], userId),
+      row.mode === "assessment" ? this.reminders.state(row.id) : undefined,
     ]);
-    return interviewerInterview(row, runs, name, new Date(), { answers, events, bigEdits: bigEdits.get(row.roomId) ?? 0, runScores, ...contexts.get(row.id)! });
+    return { ...interviewerInterview(row, runs, name, new Date(), { answers, events, bigEdits: bigEdits.get(row.roomId) ?? 0, runScores, ...contexts.get(row.id)! }), assessmentReminder };
   }
 
   async viewFor(id: string, userId: string): Promise<InterviewerInterview> {
@@ -656,7 +679,28 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
       .where(and(eq(schema.interviews.status, "live"), lte(schema.interviews.endsAt, new Date())));
     let closed = 0;
     for (const { id } of due) if (await this.closeSitting(id, SYSTEM)) closed += 1;
+    await this.remindAssessments();
     return closed;
+  }
+
+  /** Closing stays ahead of mail; the Valkey claim also coordinates other API instances. */
+  private async remindAssessments(): Promise<void> {
+    if (this.reminding) return;
+    this.reminding = true;
+    try {
+      const now = new Date();
+      this.reminders.prune(now);
+      const rows = await this.db.select().from(schema.interviews).where(and(
+        eq(schema.interviews.status, "scheduled"), eq(schema.interviews.mode, "assessment"),
+        isNull(schema.interviews.startedAt), isNull(schema.interviews.finishedAt), isNotNull(schema.interviews.candidateEmail),
+        sql`coalesce(${schema.interviews.opensAt}, ${schema.interviews.createdAt}) <= ${now.toISOString()}::timestamptz`,
+        gt(schema.interviews.closesAt, new Date(now.getTime() + 15 * 60_000)),
+        lte(schema.interviews.closesAt, new Date(now.getTime() + 24 * 60 * 60_000)),
+      ));
+      for (const row of rows) if (await this.reminders.sendDue(row)) this.events.interviewChanged(row.roomId);
+    } finally {
+      this.reminding = false;
+    }
   }
 
   async cancel(id: string, userId: string): Promise<InterviewerInterview> {
@@ -693,6 +737,7 @@ export class InterviewsService implements OnModuleInit, OnModuleDestroy {
   async removeSitting(id: string, user: RunnerUser): Promise<void> {
     const row = await this.row(id);
     await this.repo.deleteRoom(row.roomId); // The interview and its runs go with the room.
+    await this.reminders.forget(id).catch(() => this.logger.warn(`assessment ${id}: reminder cleanup failed`));
     await this.rooms.accessChanged(row.roomId);
     await Promise.all([
       this.runner.destroyRoom(row.roomId, user).catch(() => {}),

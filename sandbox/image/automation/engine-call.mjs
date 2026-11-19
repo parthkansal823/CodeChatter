@@ -111,6 +111,10 @@ export async function engineCall(call) {
         AP_SANDBOX_WS_TOKEN: token,
         AP_CUSTOM_PIECES_PATHS: ROOT,
         AP_NETWORK_MODE: "UNRESTRICTED",
+        // Pieces reach the internet only through the room's proxy (HTTPS_PROXY, the agent's relay): Node's own fetch honours it only when told to, and the
+        // engine's calls to this worker, and the room's own services, never go through it.
+        NODE_USE_ENV_PROXY: "1",
+        NO_PROXY: [process.env.NO_PROXY, "127.0.0.1", "localhost", "postgres", "mysql", "mariadb", "mongo", "redis"].filter(Boolean).join(","),
         SANDBOX_ID: "room",
       },
     });

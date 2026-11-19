@@ -148,7 +148,7 @@ export function Canvas({ empty, label }: { empty?: ReactNode; label: string }) {
     }
     const pointer = info(e);
     session.setCursor(pointer.world);
-    if (!interaction.busy) editor.hoverId.set(tool === "select" ? pointer.hit.shapeId : null);
+    if (!interaction.busy) editor.hoverId.set(tool === "select" ? editor.resolveHit(pointer.hit.shapeId) : null);
     interaction.move(pointer);
   };
 
@@ -165,9 +165,15 @@ export function Canvas({ empty, label }: { empty?: ReactNode; label: string }) {
   };
 
   const onDoubleClick = (e: ReactMouseEvent<SVGSVGElement>) => {
-    if (readOnly) return;
     const hit = hitOf(e.target);
-    const shape = hit.shapeId ? editor.get(hit.shapeId) : undefined;
+    const id = editor.resolveHit(hit.shapeId);
+    const shape = id ? editor.get(id) : undefined;
+    if (shape?.type === "group" && editor.enterGroup(shape.id)) {
+      const child = editor.resolveHit(hit.shapeId);
+      editor.select(child ? [child] : []);
+      return;
+    }
+    if (readOnly) return;
     if (shape && hasText(shape.type)) return editor.startEditing(shape.id);
     // On a whiteboard, double-clicking empty space starts typing there, in the chosen ink (notes have their own tool).
     if (!shape && editor.kind === "board") {

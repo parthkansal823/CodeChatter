@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { openToken, sealToken } from "../github/token-box.js";
-import { CONNECTION_PURPOSE, entriesOf, forRun, openedValue, shownConnectionOf, storedOf } from "./connections.js";
+import { CONNECTION_PURPOSE, entriesOf, forRun, openedValue, plainConnectionError, shownConnectionOf, storedOf } from "./connections.js";
 
 const SECRET = "a".repeat(48);
 const seal = (text: string) => sealToken(SECRET, text, CONNECTION_PURPOSE);
@@ -35,5 +35,17 @@ describe("a room's connections", () => {
     expect(forRun(all, open)).toEqual({ "room-db": { piece: "@activepieces/piece-postgres", value: roomDb.value } });
     expect(entriesOf(null)).toEqual({});
     expect(entriesOf({ automationConnections: [1] })).toEqual({});
+  });
+});
+
+describe("why a connection didn't work", () => {
+  it("says it in plain words, from a driver's error code", () => {
+    expect(plainConnectionError('{"length":99,"name":"error","severity":"FATAL","code":"28P01","file":"auth.c","routine":"auth_failed"}')).toBe("The user name or password is wrong. (28P01)");
+    expect(plainConnectionError('{"code":"ECONNREFUSED","errno":-111}')).toBe("Nothing answered at that host and port. Is the database running? (ECONNREFUSED)");
+    expect(plainConnectionError('{"code":"XX000","routine":"something_odd"}')).toBe("It was refused: something_odd (XX000).");
+    expect(plainConnectionError('{"message":"Invalid token"}')).toBe("Invalid token");
+    expect(plainConnectionError("The bot token is invalid.")).toBe("The bot token is invalid.");
+    expect(plainConnectionError("")).toBe("It didn't work with these details.");
+    expect(plainConnectionError("{}")).toBe("It didn't work with these details.");
   });
 });

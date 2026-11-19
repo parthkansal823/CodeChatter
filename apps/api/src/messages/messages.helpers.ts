@@ -24,7 +24,7 @@ export function chatUnreadQuery(userId: string, roomId?: string): SQL {
         select message.id from messages message
         where message.room_id = selected.room_id
           and message.user_id is distinct from ${userId}
-          and message.deleted_at is null and message.kind not in ('system', 'github')
+          and message.deleted_at is null and message.kind not in ('system', 'github', 'automation')
           and message.id > coalesce(reads.last_read_message_id, '00000000-0000-0000-0000-000000000000'::uuid)
         order by message.id asc limit 100
       ) candidate

@@ -12,6 +12,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 ## In progress (2026-11-06)
 
 - ✅ Checked: ChatGPT's prompt 11 (nightly backups and the restore drill), prompt 10 (account security: profile, password, two-factor, active sessions), prompt 9 (teams: `/orgs/new`, members, `/invite/<id>`) and prompt 13 (webhook leases and retention, the audit CSV, the load test's `WORKERS`).
+- ✅ ChatGPT 22 verified locally (2026-11-19): room chat unread counts across devices and room chat search. Browser checks 21/21, PostgreSQL checks 6/6, API chat unit tests 28/28; see `roadmap-details.md`.
 - ✅ Just finished by Claude:
   - accessibility: no axe violations on 93 screens, open files reachable by keyboard, and Lighthouse 90+ on the marketing page (`apps/web/test/a11y.e2e.mjs`);
   - signing out a device now ends what it has open, at once: the live document, chat, terminals, language servers and the debugger;
@@ -31,7 +32,7 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
 ## Up next, in order
 
 
-1. **ChatGPT**, each checked before it counts: **22** (unread messages and searching a room's chat), **23** (a reminder before an assessment closes), **24** (groups on the design canvas), **25** (Mermaid diagrams inside Markdown), **26** (cookies in API Studio: commit API Studio's scripts first, as it builds on them) and **27** (the task board, next). They touch different files, so they can go to ChatGPT side by side; 22 is the only one with a migration.
+1. **ChatGPT**, each checked before it counts: **24** (groups on the design canvas), **25** (Mermaid diagrams inside Markdown), **26** (cookies in API Studio: commit API Studio's scripts first, as it builds on them) and **27** (the task board, next). They touch different files, so they can go to ChatGPT side by side.
 2. **Claude:** gVisor, a final security review and the cutover from v1 (step 10), before launch. The owner's other ideas are under steps 9 and 13, with a verdict on each.
 3. **Claude, at the very end:** a video explaining every feature (step 12).
 
@@ -105,13 +106,13 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
   - comments on shapes;
   - diagrams in Docs pages;
   - AI "draw this as a diagram".
-- ⬜ **Messaging:**
+- 🟡 **Messaging:**
   - channels and conversations;
-  - rich messages, and unread tracking (🟡 **ChatGPT 22**, with search);
+  - rich messages;
   - huddles;
   - slash commands and bots;
   - presence and status;
-  - search.
+  - search across future channels and conversations (room chat unread tracking and search are complete).
 - ⬜ **Across the suite:**
   - one command bar (Ctrl+K);
   - one permissions model;
@@ -155,16 +156,16 @@ Every unfinished piece of CodeChatter v2, grouped by the steps of the pathway ([
     2. ✅ Flows as files in the room, in Activepieces' own format, so they're edited together, versioned, and can leave.
     3. ✅ The Automations tool: n8n-like flowchart (`components/flowchart`), steps edited from each piece's own description of its fields, a test run, and each run's history with the data at every step lit up on the chart.
     4. Triggers: by hand, a webhook URL, a schedule, room events (a push, a failed test), and pieces' polling triggers. Retries and error handling come from the engine.
-    5. Secrets for a room, encrypted in the database, given to a run in memory only. A room's connections never leave its own sandbox.
-    6. The internet: rooms have none (ADR 0007), so an owner's switch and an allowlist per service, through the room's egress proxy, with limits and a security review first. Automations that stay inside the room work without it.
+    5. ✅ Secrets for a room (roadmap-details, "Automations, part fourteen"): sealed with the room, given to a run from the API, never shown again.
+    6. ✅ The internet (roadmap-details, "Automations, part sixteen"): the services and hosts a room's owner turns on, through the room's own proxy. **Left:** rate limits on what goes out, and a look at the proxy's log from the tool (which hosts were reached, and when). It was: Found so far (2026-11-18, in a throwaway sandbox with a stand-in proxy): Node's fetch goes through `HTTPS_PROXY` with a proper CONNECT tunnel only with `NODE_USE_ENV_PROXY=1`, and ignores it without; pieces are bundled, the HTTP piece with undici's `EnvHttpProxyAgent` (it reads `HTTP_PROXY` and `NO_PROXY`), and with the real engine (a flow's HTTP step, in a throwaway sandbox): without `NODE_USE_ENV_PROXY` a piece looks the host up itself and fails (`EAI_AGAIN`); with it, everything goes to the proxy, the engine's own loopback calls to its worker too, which breaks the run; with it and `NO_PROXY=127.0.0.1,localhost` (and the room's own service names), the step sends `CONNECT api.github.com:443` to the proxy, as wanted. The plan: the owner chooses services (each piece's hosts), kept as the room's allowlist rather than for an hour, and the room's egress proxy (today's, for package registries) opens CONNECT tunnels to those hosts only.
     7. ✅ CodeChatter's own steps (roadmap-details, "Automations, part thirteen"): Run a command in the sandbox, Ask the room's AI, Post to the room's chat. **Left:** ask the room's AI with tools (the agent step, under 7 of the n8n list), and an @mention in a post notifying whoever it names.
     8. ✅ **100-200 example automations for coding**, written here, as collections found online don't show terms that allow copying them: reviewing a pull request with the AI, release notes from commits, triaging issues, running tests on a push, explaining a failed run, dependency alerts, stale branches and so on. A gallery in the tool. **Each is checked to load in the engine; each is run for real only where the service is available to try it on, and the gallery says which.**
   - **Every n8n feature, or better** (the owner's request, 2026-11-07: "n8n ke saare features", our own UI). This list comes from n8n's own source, read for what it does. Its code isn't copied: its licence allows only internal, personal or non-commercial use, its `.ee` files need a paid licence, and either limit would land on CodeChatter. Only its permissively licensed packages may be used directly: `@n8n/tournament` (expressions, Apache-2.0), `@n8n/codemirror-lang`, `-html`, `-sql` (MIT), `@n8n/json-schema-to-zod` (ISC), `@n8n/rules-engine` (MIT). In order:
     1. 🟡 **The editor.** Done (roadmap-details, "Automations, part two"): a + on arrows and wherever nothing comes next, branch names on the chart, the right-click menu and keys (copy, cut, paste, duplicate, turn off, rename, add, remove, the arrows between boxes, Ctrl+Enter), undo and redo, a note on any step, replacing a step and changing the trigger, searching every action, Table, JSON and Schema views with Use to put data in a field and what an expression comes to, and routers with and, or, every test the engine has, more branches, and running each that matches. Expressions offered as they're typed (2026-11-18). **Left:** choosing several boxes at once, sticky notes and groups placed freely on the chart, and the command bar.
     2. 🟡 **Trying things.** Done (roadmap-details, "Automations, part three"): one step on its own, pinning a step's output, carrying a failed run on from where it stopped, and sending what an earlier run was sent. **Left:** running from a chosen step onward (n8n's partial runs), and pinning the trigger's data.
     3. 🟡 **Built-in steps.** Done (roadmap-details, "Automations, part four"): Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates, Split Out, Rename Keys, Merge (one after the other, matched, side by side, every pairing), Compare Datasets, and Stop and Error. **Left:** Execute Command, Read and Write Files, Convert to File, Extract from File, Compression, iCal, Edit Image, Execution Data and Data Tables. Crypto, Date, HTML, Markdown, XML, HTTP and RSS come from Activepieces' pieces.
-    4. 🟡 **Starting by itself.** Done (roadmap-details, "Automations, part five"): turning a flow on and off, and webhooks: a live address and a test one, any method, JSON, forms and text, answering at once or when the flow finishes, a new address, and a moved flow still found; schedules (part six); room events (part seven); an error flow (part eight); sub-flows (part nine); webhooks checking who calls (part ten); and waiting, for a time or a call, with approvals (part eleven). Room events from what people do (part twelve): a Run or tests failing or finishing, commits in the sandbox's git, and chat messages and commands. **Left:** pieces' polling triggers; Wait for a form (with forms); forms and a chat trigger with public pages.
-    5. **Connections.** Room secrets, encrypted, with each piece's kinds of sign-in, tested on save; OAuth2; allowed domains per secret; variables; the internet switch and allowlist.
+    4. 🟡 **Starting by itself.** Done (roadmap-details, "Automations, part five"): turning a flow on and off, and webhooks: a live address and a test one, any method, JSON, forms and text, answering at once or when the flow finishes, a new address, and a moved flow still found; schedules (part six); room events (part seven); an error flow (part eight); sub-flows (part nine); webhooks checking who calls (part ten); and waiting, for a time or a call, with approvals (part eleven). Room events from what people do (part twelve): a Run or tests failing or finishing, commits in the sandbox's git, and chat messages and commands. Pieces' polling triggers (part fifteen). **Left:** Wait for a form (with forms); forms and a chat trigger with public pages; services calling in (pieces' webhook triggers), which needs the room reachable from the internet.
+    5. 🟡 **Connections.** Done (part fourteen): room secrets, sealed, with each piece's kinds of sign-in (a secret, a user and password, the piece's own fields), tested on save by the piece's own check, owners only. The internet for the services the owner turns on (part sixteen). **Left:** OAuth2 (10 of the 44 pieces sign in with it); allowed domains per secret; variables.
     6. **Runs and settings.** Every flow's runs in one list, filters, notes and tags on a run, custom data, redaction, how long runs are kept; each flow's timezone, timeout, what to save, error flow and time saved; tags and favourites; a visual diff between versions, restoring one; the Insights page (runs, failures, failure rate, time saved, average time).
     7. **AI.** An agent step with a model, memory, tools and an output parser; chains (Basic LLM, Q&A, Summarize, Information Extractor, Sentiment, Text Classifier, AI Transform); tools (calculator, code, HTTP, a flow as a tool, a vector store, MCP client, think); memory (window, Postgres, Redis); vector stores, embeddings, document loaders, splitters and retrievers; a flow as an MCP server; guardrails; evaluations with test cases. All able to use the room's AI through the gateway, with no key.
     8. **More.** Import n8n's workflow JSON (its format, converting what we have a step for, and saying what we don't); the rest of Activepieces' MIT pieces for services (n8n has 363 service nodes, we have 44, so measure the image first); a room's own pieces; the public API and a CLI for flows.
@@ -205,7 +206,7 @@ Interviews and assessments are done (`docs/interviews.md`). What's left:
 - ⬜ The AI on real recordings: tried on real-looking stills only. `gemma4:e4b` on this laptop found about half of what was there (16 of 30, 6 false alarms), so stills are notes that say which moment to watch, and finding nothing there means nothing. Try a stronger or cloud model when there's a reason to rely on them
 - ⬜ Negative marking, and sections with a time each
 - ⬜ Showing Diagrams and Boards in the replay (files only now)
-- 🟡 An email reminder before an assessment closes (**ChatGPT 23**)
+- ⬜ Assessment reminders, later: removing their receipts when a room or an organisation is deleted (only an interview's removal does now), tests that make mail fail on purpose, and delivery monitoring
 - ⬜ Hidden tests on the Kubernetes driver (a one-off pod, as the Docker driver's throwaway container); **Run tests** refuses there until then
 - ⬜ The report as a PDF (Markdown now)
 

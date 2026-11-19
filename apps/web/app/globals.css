@@ -338,6 +338,14 @@
 }
 
 /* The flowchart (components/flowchart/flowchart.tsx): React Flow's credit, in our colours. */
+/* A code tour's stop, marked in the editor (components/room/editor/tour-marks.ts): a light tint the code stays readable on, and a line beside it. */
+.monaco-editor .cc-tour-line {
+  background-color: color-mix(in oklab, var(--brand) 14%, transparent);
+}
+.monaco-editor .cc-tour-gutter {
+  border-left: 2px solid var(--brand);
+}
+
 .cc-flowchart .react-flow__attribution {
   background: transparent;
 }

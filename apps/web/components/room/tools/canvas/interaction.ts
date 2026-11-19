@@ -18,6 +18,7 @@ import {
 } from "./geometry";
 import { isLinear, pointStride, type Shape, type ShapePatch, type ShapeType } from "./shape";
 import { snapRect } from "./snap";
+import { effectiveHidden, effectiveLocked } from "./tree";
 
 export type HandleId = Handle | "start" | "end";
 
@@ -94,8 +95,9 @@ export class Interaction {
     const br = this.editor.screenToWorld({ x: w, y: h });
     const view = rectFromPoints(tl, br);
     const out: Rect[] = [];
-    for (const shape of this.editor.store.all().values()) {
-      if (exclude.has(shape.id) || shape.hidden || shape.type === "path") continue;
+    const shapes = this.editor.store.all();
+    for (const shape of shapes.values()) {
+      if (exclude.has(shape.id) || effectiveHidden(shapes, shape.id) || effectiveLocked(shapes, shape.id) || shape.type === "path") continue;
       const r = this.editor.bounds(shape.id);
       if (r && rectsIntersect(r, view)) out.push(r);
     }
@@ -126,7 +128,9 @@ export class Interaction {
 
     if (readOnly || tool === "select") {
       if (!readOnly && hit.handle) return this.startHandle(hit.handle, info);
-      const shape = hit.shapeId ? editor.get(hit.shapeId) : undefined;
+      const id = editor.resolveHit(hit.shapeId);
+      const shapes = editor.store.all();
+      const shape = id && !effectiveHidden(shapes, id) && !effectiveLocked(shapes, id) ? editor.get(id) : undefined;
       // A top-level frame's empty area starts a marquee unless the frame is already selected.
       const selected = editor.selection.get();
       const bodyOfTopFrame = shape?.type === "frame" && hit.frameBody && !shape.parentId && !selected.includes(shape.id);
@@ -144,12 +148,12 @@ export class Interaction {
       }
       const base = info.shift ? selected : [];
       if (!info.shift) editor.select([]);
-      this.state = { kind: "marquee", start: info.world, base, scope: editor.kind === "design" ? editor.frameAt(info.world) : null };
+      this.state = { kind: "marquee", start: info.world, base, scope: editor.activeGroup.get() ?? (editor.kind === "design" ? editor.frameAt(info.world) : null) };
       return;
     }
 
     editor.beginGesture();
-    const parentId = editor.kind === "design" ? editor.frameAt(info.world) : null;
+    const parentId = editor.activeGroup.get() ?? (editor.kind === "design" ? editor.frameAt(info.world) : null);
     if (CREATE_TOOLS.has(tool)) {
       const type = tool as ShapeType;
       const start = this.snapPoint(info.world, new Set());
@@ -181,7 +185,7 @@ export class Interaction {
 
   private startHandle(handle: HandleId, info: PointerInfo) {
     const editor = this.editor;
-    const ids = editor.topSelection().filter((id) => !editor.get(id)?.locked);
+    const ids = editor.topSelection().filter((id) => !effectiveLocked(editor.store.all(), id));
     if (ids.length === 0) return;
     editor.beginGesture();
     if (handle === "start" || handle === "end") {
@@ -239,7 +243,10 @@ export class Interaction {
         dx = this.round(dx);
         dy = this.round(dy);
         this.write(() => {
-          for (const o of state.origins) editor.apply(o.id, { x: o.x + dx, y: o.y + dy });
+          for (const o of state.origins) {
+            // Group boxes are derived from their children; writing both would move children twice.
+            if (o.type !== "group") editor.apply(o.id, { x: o.x + dx, y: o.y + dy });
+          }
         });
         return;
       }
@@ -278,7 +285,7 @@ export class Interaction {
 
   private startMove(start: Point) {
     const editor = this.editor;
-    const ids = editor.topSelection().filter((id) => !editor.get(id)?.locked);
+    const ids = editor.topSelection().filter((id) => !effectiveLocked(editor.store.all(), id));
     const bounds = editor.selectionBounds(ids);
     if (ids.length === 0 || !bounds) {
       this.state = { kind: "idle" };
@@ -314,6 +321,7 @@ export class Interaction {
     const next = { x: this.round(raw.x), y: this.round(raw.y), w: Math.max(1, this.round(raw.w)), h: Math.max(1, this.round(raw.h)) };
     this.write(() => {
       for (const o of state.origins) {
+        if (o.type === "group") continue;
         const r = mapRect(o, bounds, next);
         const patch: ShapePatch = { x: r.x, y: r.y, w: r.w, h: r.h };
         if (isLinear(o.type) || o.type === "path") {
@@ -353,7 +361,7 @@ export class Interaction {
     for (const id of editor.store.childIds(scope)) {
       const shape = editor.get(id);
       const bounds = editor.bounds(id);
-      if (!shape || !bounds || shape.hidden || shape.locked) continue;
+      if (!shape || !bounds || effectiveHidden(editor.store.all(), id) || effectiveLocked(editor.store.all(), id)) continue;
       const hit = shape.type === "frame" && !scope ? rectContains(rect, bounds) || rectsIntersect(rect, bounds) : rectsIntersect(rect, bounds);
       if (hit) out.push(id);
     }
@@ -494,19 +502,12 @@ export class Interaction {
       for (const id of this.probe({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) {
         if (hits.has(id)) continue;
         const shape = this.editor.get(id);
-        if (!shape || shape.type === "frame" || this.lockedAt(id)) continue;
+        if (!shape || shape.type === "frame" || shape.type === "group" || effectiveHidden(this.editor.store.all(), id) || effectiveLocked(this.editor.store.all(), id)) continue;
         hits.add(id);
         changed = true;
       }
     }
     if (changed) this.editor.erasing.set(new Set(hits));
-  }
-
-  private lockedAt(id: string): boolean {
-    for (let shape = this.editor.get(id); shape; shape = shape.parentId ? this.editor.get(shape.parentId) : undefined) {
-      if (shape.locked) return true;
-    }
-    return false;
   }
 
   private finishPen(state: Extract<State, { kind: "pen" }>) {

@@ -18,6 +18,13 @@ describe("refusal", () => {
     expect(refusal("registry.npmjs.org.evil.com:443", allow)).toMatch(/isn't a package registry/);
   });
 
+  it("names what it holds when the automations' hosts are on it too", () => {
+    const hosts = new Set(["api.github.com"]);
+    expect(refusal("api.github.com:443", hosts, "the hosts this room may reach")).toBeNull();
+    expect(refusal("example.com:443", hosts, "the hosts this room may reach")).toMatch(/isn't one of the hosts this room may reach: its owner chooses them under Automations/);
+    expect(refusal("api.github.com:80", hosts, "the hosts this room may reach")).toBe("Only HTTPS (port 443) to the hosts this room may reach");
+  });
+
   it("refuses other ports", () => {
     expect(refusal("registry.npmjs.org:80", allow)).toMatch(/Only HTTPS/);
     expect(refusal("registry.npmjs.org:22", allow)).toMatch(/Only HTTPS/);

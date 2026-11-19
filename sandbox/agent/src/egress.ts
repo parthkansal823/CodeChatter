@@ -6,16 +6,24 @@ import { isPublicAddress, parseTarget, refusal } from "./egress-policy.js";
 
 /**
  * A room's egress proxy (ADR 0007), in a container of its own on the room's
- * network as "egress", while the room's owner allows package installs. It is
- * the room's only way out, and it only opens HTTPS tunnels (CONNECT) to the
- * registry hosts in EGRESS_ALLOW. A name that resolves into a private range is
- * refused, so DNS can't point it back inside. It exits at EGRESS_UNTIL by
- * itself, so installs stop on time even if the runner is down.
+ * network as "egress", while the room's owner allows package installs or has
+ * turned services on for its automations. It is the room's only way out, and
+ * it only opens HTTPS tunnels (CONNECT) to the registry hosts in EGRESS_ALLOW
+ * (until EGRESS_UNTIL) and the services' hosts in EGRESS_ALWAYS (for as long
+ * as it runs). A name that resolves into a private range is refused, so DNS
+ * can't point it back inside. At EGRESS_UNTIL it stops letting registries
+ * through by itself, so installs stop on time even if the runner is down: it
+ * exits then, unless the automations' hosts keep it.
  */
 const PORT = 3128;
 const IDLE_MS = 5 * 60_000;
-const allow = new Set((process.env.EGRESS_ALLOW ?? "").split(",").filter(Boolean));
+const registries = new Set((process.env.EGRESS_ALLOW ?? "").split(",").filter(Boolean));
+const always = new Set((process.env.EGRESS_ALWAYS ?? "").split(",").filter(Boolean));
 const until = Number(process.env.EGRESS_UNTIL) || 0;
+let installsOpen = registries.size > 0;
+/** What it lets through now, and how its refusals name that. */
+const allowed = () => new Set([...always, ...(installsOpen ? registries : [])]);
+const what = () => (always.size ? "the hosts this room may reach" : "package registries");
 
 /** One JSON line per decision: the container's log is the record of what the room reached. */
 function log(entry: Record<string, unknown>): void {
@@ -28,7 +36,7 @@ function reply(client: Socket, status: number, reason: string): void {
 
 async function tunnel(authority: string, client: Socket, head: Buffer): Promise<void> {
   client.on("error", () => {});
-  const why = refusal(authority, allow);
+  const why = refusal(authority, allowed(), what());
   if (why) {
     log({ to: authority.slice(0, 300), ok: false, why });
     return reply(client, 403, why);
@@ -67,15 +75,20 @@ async function tunnel(authority: string, client: Socket, head: Buffer): Promise<
 const server = createServer((req, res) => {
   // Plain HTTP (GET http://…) is never proxied: every registry speaks HTTPS.
   log({ to: String(req.headers.host ?? "").slice(0, 300), ok: false, why: "plain http" });
-  const reason = "Only HTTPS to package registries";
+  const reason = `Only HTTPS to ${what()}`;
   res.writeHead(403, reason, { "content-type": "text/plain", connection: "close" }).end(`${reason}\n`);
 });
 server.on("connect", (req, client: Socket, head: Buffer) => void tunnel(req.url ?? "", client, head));
 server.maxConnections = 256;
-server.listen(PORT, () => log({ listening: PORT, registries: allow.size, until: until ? new Date(until).toISOString() : null }));
+server.listen(PORT, () => log({ listening: PORT, registries: registries.size, services: always.size, until: until ? new Date(until).toISOString() : null }));
 
 if (until) {
   setTimeout(() => {
+    installsOpen = false;
+    if (always.size) {
+      log({ installs: "the owner's time for installs is up; the automations' hosts stay" });
+      return;
+    }
     log({ stopping: "the owner's time for installs is up" });
     process.exit(0);
   }, Math.max(0, until - Date.now()));

@@ -28,6 +28,7 @@ import {
   type AutomationTrigger,
   type AutomationTriggerInput,
   type AutomationTriggerPatch,
+  type PollSettings,
   type QueuedRoomEvent,
   type RoomEventPayload,
   type RoomEventPerson,
@@ -56,6 +57,7 @@ const RECENT_MS = 30 * 60_000;
 const WEBHOOK_USER = { id: "webhook", name: "Webhook" };
 const SCHEDULE_USER = { id: "schedule", name: "Schedule" };
 const EVENT_USER = { id: "event", name: "Room event" };
+const POLL_USER = { id: "poll", name: "New items" };
 /** How often the queue of room events is looked at: a flow on one starts within about this long of collab sending it. */
 const EVENTS_TICK_MS = 1000;
 /** How long a webhook told to answer when the flow finishes waits for it. */
@@ -64,7 +66,7 @@ const TEST_EVENT_SECONDS = 600;
 /** A time on a schedule is claimed for a day: long enough that no other server runs it too. */
 const CLAIM_SECONDS = 24 * 60 * 60;
 /** What the sandbox says when a flow on a schedule can't run again until someone changes it, so it's turned off rather than tried every time. */
-const STOPS_IT = ["isn't in the room any more", "doesn't start on a schedule any more", "doesn't start on a room event any more", "listens for another room event now"];
+const STOPS_IT = ["isn't in the room any more", "doesn't start on a schedule any more", "doesn't start on a room event any more", "listens for another room event now", "doesn't start on a service's new items any more"];
 
 type Stored = {
   id: string;
@@ -82,6 +84,9 @@ type Stored = {
   schedule?: Schedule;
   /** A room event's: what it listens for. */
   event?: RoomEventSettings;
+  /** A polling trigger's: how often it looks, and when it last did. */
+  poll?: PollSettings;
+  polledAt?: number;
   enabledAt?: number;
   problem?: string | null;
   createdBy: string | null;
@@ -154,6 +159,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     const token = trigger.tokenSealed ? openToken(this.env.BETTER_AUTH_SECRET, trigger.tokenSealed) : null;
     const url = token ? `${this.env.APP_URL.replace(/\/$/, "")}/api/hooks/automations/${roomId}/${token}` : null;
     let nextRunAt: number | null = null;
+    if (trigger.kind === "poll" && trigger.enabled && trigger.poll) nextRunAt = Math.max(Date.now(), (trigger.polledAt ?? trigger.enabledAt ?? trigger.createdAt) + trigger.poll.everyMinutes * 60_000);
     if (trigger.kind === "schedule" && trigger.enabled && trigger.schedule) {
       try {
         nextRunAt = nextRun(trigger.schedule.cron, trigger.schedule.timezone, Math.max(Date.now(), this.sinceOf(trigger, last)));
@@ -173,6 +179,7 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       schedule: trigger.schedule ?? null,
       nextRunAt,
       event: trigger.event ?? null,
+      poll: trigger.kind === "poll" ? (trigger.poll ?? null) : null,
       auth: trigger.kind === "webhook" ? shownAuthOf(trigger.auth) : null,
       problem: trigger.problem ?? last?.problem ?? null,
       createdBy: trigger.createdBy,
@@ -207,6 +214,11 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     let trigger: Stored;
     if (input.kind === "schedule") trigger = { ...base, schedule: input.schedule!, enabledAt: now };
     else if (input.kind === "event") trigger = { ...base, event: input.event! };
+    else if (input.kind === "poll") {
+      // The piece remembers what's there now, so only what's new from here on runs; a flow that doesn't start on new items is refused, saying why.
+      await this.pollHook(roomId, { path: input.path, flowId: input.flowId }, "ON_ENABLE", userId);
+      trigger = { ...base, poll: input.poll!, enabledAt: now, polledAt: now };
+    }
     else {
       const token = randomBytes(24).toString("base64url");
       trigger = { ...base, tokenHash: hashOf(token), tokenSealed: sealToken(this.env.BETTER_AUTH_SECRET, token) };
@@ -220,7 +232,11 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
     if (patch.schedule && trigger.kind !== "schedule") throw new BadRequestException("Only a flow on a schedule has a time to run.");
     if (patch.event && trigger.kind !== "event") throw new BadRequestException("Only a flow on a room event listens for one.");
     if (patch.auth && trigger.kind !== "webhook") throw new BadRequestException("Only a webhook is called from outside.");
+    if (patch.poll && trigger.kind !== "poll") throw new BadRequestException("Only a flow on a service's new items looks for them.");
     const turningOn = patch.enabled === true && !trigger.enabled;
+    // A polling trigger turned on again starts from what's there then; turned off, the piece forgets.
+    if (trigger.kind === "poll" && turningOn) await this.pollHook(roomId, trigger, "ON_ENABLE", userId);
+    if (trigger.kind === "poll" && patch.enabled === false && trigger.enabled) await this.pollHook(roomId, trigger, "ON_DISABLE", userId).catch(() => {});
     const next: Stored = {
       ...trigger,
       ...(patch.enabled !== undefined && { enabled: patch.enabled }),
@@ -228,9 +244,10 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
       ...(patch.path && { path: patch.path }),
       ...(patch.schedule && { schedule: patch.schedule }),
       ...(patch.event && { event: patch.event }),
+      ...(patch.poll && { poll: patch.poll }),
       ...(patch.auth && { auth: storedAuthOf(patch.auth, (secret) => sealToken(this.env.BETTER_AUTH_SECRET, secret)) }),
       // Turned on again: nothing it missed while it was off is run, and why it stopped is forgotten.
-      ...(turningOn && { enabledAt: Date.now(), problem: null }),
+      ...(turningOn && { enabledAt: Date.now(), problem: null, ...(trigger.kind === "poll" && { polledAt: Date.now() }) }),
     };
     await this.repository.setSettingEntry(roomId, TRIGGERS, id, next);
     if (turningOn && last?.problem) await this.repository.setSettingEntry(roomId, LAST_RUNS, id, { ...last, problem: null } satisfies LastRun);
@@ -249,9 +266,28 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
 
   async remove(roomId: string, userId: string, id: string): Promise<Change> {
     const { room, trigger, last } = await this.one(roomId, userId, id);
+    if (trigger.kind === "poll" && trigger.enabled) await this.pollHook(roomId, trigger, "ON_DISABLE", userId).catch(() => {});
     await this.repository.setSettingEntry(roomId, TRIGGERS, id, null);
     await this.repository.setSettingEntry(roomId, LAST_RUNS, id, null);
     return { orgId: room.orgId, trigger: this.shown(roomId, trigger, last) };
+  }
+
+  /** A polling trigger's hook, in the room's sandbox (automation.py's poll), with the room's connections. */
+  private async pollHook(roomId: string, flow: { path: string; flowId?: string }, hook: "ON_ENABLE" | "RUN" | "ON_DISABLE" | "TEST", user: string | { id: string; name: string }) {
+    const who = typeof user === "string" ? { id: user, name: "Someone" } : user;
+    try {
+      return (await this.runner.automations(roomId, { op: "poll", path: flow.path, flowId: flow.flowId, hook }, who)) as { schedule?: unknown; items?: unknown; runs?: string[]; passedOver?: number };
+    } catch (error) {
+      if (error instanceof ConflictException) throw new BadRequestException(error.message);
+      throw error;
+    }
+  }
+
+  /** An example of what a polling trigger gives, asked of the service now: for setting the flow up with real data. */
+  async pollTest(roomId: string, user: { id: string; name: string }, flow: { path: string; flowId?: string }): Promise<{ items: unknown[] }> {
+    await this.manage(roomId, user.id);
+    const answer = await this.pollHook(roomId, flow, "TEST", user);
+    return { items: Array.isArray(answer.items) ? answer.items : [] };
   }
 
   /** What the test address was last sent, for setting the flow up with real data. */
@@ -330,9 +366,43 @@ export class AutomationTriggersService implements OnModuleInit, OnModuleDestroy 
           if (await this.runScheduled(room.id, trigger, slot, last[trigger.id])) started += 1;
         }
       }
+      started += await this.pollDue(now);
       started += await this.carryOnWaits(now);
     } finally {
       this.ticking = false;
+    }
+    return started;
+  }
+
+  /**
+   * Polling triggers whose time to look has come: each asks its service what's new (the piece remembers what it has seen), and each new item is a run of
+   * its own. Each look is claimed in Valkey first, so with several API servers only one looks. A flow that no longer starts on new items turns itself off.
+   */
+  private async pollDue(now: number): Promise<number> {
+    let started = 0;
+    for (const room of await this.repository.withSetting(TRIGGERS)) {
+      if (room.kind === "interview") continue;
+      const last = this.entries<LastRun>(room.settings, LAST_RUNS);
+      for (const trigger of Object.values(this.entries<Stored>(room.settings, TRIGGERS))) {
+        if (trigger.kind !== "poll" || !trigger.enabled || !trigger.poll) continue;
+        const since = trigger.polledAt ?? trigger.enabledAt ?? trigger.createdAt;
+        if (now < since + trigger.poll.everyMinutes * 60_000) continue;
+        const claimed = await this.redis.set(`automations:poll:${room.id}:${trigger.id}:${since}`, "1", "EX", CLAIM_SECONDS, "NX");
+        if (claimed !== "OK") continue;
+        await this.repository.setSettingEntry(room.id, TRIGGERS, trigger.id, { ...trigger, polledAt: now } satisfies Stored);
+        try {
+          const answer = await this.pollHook(room.id, trigger, "RUN", POLL_USER);
+          const runs = Array.isArray(answer.runs) ? answer.runs : [];
+          started += runs.length;
+          const passed = typeof answer.passedOver === "number" && answer.passedOver > 0 ? `${answer.passedOver} new items were passed over: the room already had 20 runs waiting.` : null;
+          if (runs.length || passed) await this.repository.setSettingEntry(room.id, LAST_RUNS, trigger.id, { at: now, id: runs.at(-1) ?? last[trigger.id]?.id ?? null, problem: passed } satisfies LastRun);
+        } catch (error) {
+          const message = error instanceof HttpException ? error.message : "The room's sandbox couldn't be reached.";
+          if (STOPS_IT.some((words) => message.includes(words))) await this.repository.setSettingEntry(room.id, TRIGGERS, trigger.id, { ...trigger, polledAt: now, enabled: false, problem: `Turned off by itself: ${message}` } satisfies Stored);
+          else await this.repository.setSettingEntry(room.id, LAST_RUNS, trigger.id, { at: last[trigger.id]?.at ?? now, id: last[trigger.id]?.id ?? null, problem: message } satisfies LastRun);
+          this.logger.warn(`A flow on new items in ${room.id} didn't look: ${message}`);
+        }
+      }
     }
     return started;
   }

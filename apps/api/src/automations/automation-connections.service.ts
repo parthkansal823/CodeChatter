@@ -11,7 +11,7 @@ import { ENV } from "../infra/tokens.js";
 import { RoomsRepository } from "../rooms/rooms.repository.js";
 import { RoomsService } from "../rooms/rooms.service.js";
 import { RunnerClient } from "../runner/runner.client.js";
-import { CONNECTION_PURPOSE, CONNECTIONS, entriesOf, openedValue, shownConnectionOf, storedOf } from "./connections.js";
+import { CONNECTION_PURPOSE, CONNECTIONS, entriesOf, openedValue, plainConnectionError, shownConnectionOf, storedOf } from "./connections.js";
 
 export type ConnectionChange = { orgId: string | null; connection: AutomationConnection };
 
@@ -78,9 +78,10 @@ export class AutomationConnectionsService {
   private async check(roomId: string, user: { id: string; name: string }, piece: string, value: ConnectionValue): Promise<NonNullable<AutomationConnection["lastTest"]>> {
     try {
       const answer = (await this.runner.automations(roomId, { op: "test-connection", piece, value }, user)) as { valid?: boolean; error?: string | null };
-      return { valid: answer.valid === true, error: answer.valid === true ? null : String(answer.error ?? "It didn't work with these details.").slice(0, 500), at: Date.now() };
+      return { valid: answer.valid === true, error: answer.valid === true ? null : plainConnectionError(String(answer.error ?? "")), at: Date.now() };
     } catch (error) {
-      return { valid: false, error: error instanceof Error ? error.message.slice(0, 500) : "The room's sandbox couldn't be reached.", at: Date.now() };
+      // The sandbox's answer of "didn't work" comes back as a refusal (its error), worded by the piece's driver: said in words here too.
+      return { valid: false, error: error instanceof Error ? plainConnectionError(error.message) : "The room's sandbox couldn't be reached.", at: Date.now() };
     }
   }
 }

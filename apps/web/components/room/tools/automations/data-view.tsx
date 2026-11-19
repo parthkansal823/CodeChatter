@@ -1,12 +1,77 @@
 /** A step's data on a run, as a table, as JSON, or as its fields with the expression that reads each, and "Use" to put one in the field being filled in, as n8n maps data. */
 "use client";
 
+import { Download, FileIcon, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
+import { useRoom } from "@/components/room/room-context";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { api, ApiError } from "@/lib/api";
 
 import { fieldsOf } from "./expressions";
+
+/** A step's file, as the sandbox's worker gives it (sandbox/image/automation/files.mjs): its run, its id and its name are in its address. */
+const STEP_FILE = /^http:\/\/127\.0\.0\.1:\d+\/v1\/step-files\/([\w-]{1,64})\/([\w-]{1,64})\/([^/?#]+)$/;
+const MOST_FILES = 20;
+type StepFile = { run: string; file: string; name: string };
+
+/** The steps' files in some data, each once: File Helper's, a CSV file, Read files'. */
+export function filesIn(value: unknown): StepFile[] {
+  const found = new Map<string, StepFile>();
+  const walk = (current: unknown, depth: number) => {
+    if (found.size >= MOST_FILES || depth > 8) return;
+    if (typeof current === "string") {
+      const [, run, file, given] = STEP_FILE.exec(current) ?? [];
+      if (run && file && given) {
+        let name = given;
+        try {
+          name = decodeURIComponent(given);
+        } catch {
+          // Shown as it is.
+        }
+        found.set(`${run}/${file}`, { run, file, name });
+      }
+    } else if (current && typeof current === "object") for (const each of Object.values(current)) walk(each, depth + 1);
+  };
+  walk(value, 0);
+  return [...found.values()];
+}
+
+/** A step's file, downloaded through the API from the sandbox it's kept in, while its run is kept. */
+function FileRow({ file }: { file: StepFile }) {
+  const { room } = useRoom();
+  const [busy, setBusy] = useState(false);
+  async function download() {
+    setBusy(true);
+    try {
+      const got = await api<{ name: string; data: string }>(`/api/rooms/${room.id}/automations`, { method: "POST", json: { op: "run-file", id: file.run, file: file.file } });
+      const bytes = Uint8Array.from(atob(got.data), (character) => character.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = got.name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "The file couldn't be downloaded.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <li className="flex min-h-6 items-center gap-1.5">
+      <FileIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="min-w-0 flex-1 truncate font-mono text-[11px]" title={file.name}>
+        {file.name}
+      </span>
+      <Button size="xs" variant="ghost" className="h-6 shrink-0 px-1.5" disabled={busy} aria-label={`Download ${file.name}`} onClick={() => void download()}>
+        {busy ? <Loader2 className="animate-spin" /> : <Download />} Download
+      </Button>
+    </li>
+  );
+}
 
 const MOST_ROWS = 50;
 const MOST_COLUMNS = 12;
@@ -106,8 +171,16 @@ export function SchemaOf({ value, base, onUse }: { value: unknown; base: string;
 /** Data as a table, as JSON, or as its fields. `base` is the expression that reads it, such as `step_1.output`. */
 export function DataView({ label, value, base, onUse }: { label: string; value: unknown; base?: string; onUse?: (expression: string) => void }) {
   const [view, setView] = useState("json");
+  const files = filesIn(value);
   return (
     <section aria-label={label} className="grid gap-1">
+      {files.length > 0 && (
+        <ul aria-label={`Files in ${label.toLowerCase()}`} className="grid gap-0.5 rounded-md border px-1.5 py-1">
+          {files.map((file) => (
+            <FileRow key={`${file.run}/${file.file}`} file={file} />
+          ))}
+        </ul>
+      )}
       <Tabs value={view} onValueChange={setView} className="gap-1">
         <div className="flex items-center gap-2">
           <h4 className="flex-1 font-medium">{label}</h4>

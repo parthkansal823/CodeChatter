@@ -1,13 +1,15 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 
+import { expandInstances } from "./components";
 import { fontOf, freehandPath, linearPaths, rotationTransform, STICKY_TEXT, textFrame } from "./draw";
 import type { Editor } from "./editor";
-import { useAtom, useAtomSelector, useChildIds, useEditor, useShape } from "./hooks";
+import { useAllShapes, useAtom, useAtomSelector, useChildIds, useEditor, useShape } from "./hooks";
 import { measureAtom } from "./measure";
 import type { Shape } from "./shape";
 import { alignX, layoutText, lineHeight } from "./text-layout";
+import { childrenIndex } from "./tree";
 
 const paint = (color: string) => (color === "none" || !color ? "none" : color);
 
@@ -51,7 +53,9 @@ function ShapeNode({ id, parentLocked }: { id: string; parentLocked: boolean }) 
   );
 }
 
-function ShapeBody({ shape, locked }: { shape: Shape; locked: boolean }) {
+type ExpandedContent = { shapes: ReadonlyMap<string, Shape>; index: Map<string | null, Shape[]> };
+
+function ShapeBody({ shape, locked, expanded }: { shape: Shape; locked: boolean; expanded?: ExpandedContent }) {
   const { x, y, w, h } = shape;
   // Locked shapes let clicks through to whatever is under them.
   const pe = locked ? "none" : "all";
@@ -59,7 +63,11 @@ function ShapeBody({ shape, locked }: { shape: Shape; locked: boolean }) {
   const stroke = shape.stroke !== "none" && shape.strokeWidth > 0 ? { stroke: shape.stroke, strokeWidth: shape.strokeWidth } : {};
   switch (shape.type) {
     case "frame":
-      return <FrameBody shape={shape} locked={locked} />;
+      return <FrameBody shape={shape} locked={locked}>{expanded ? <ExpandedLayer parentId={shape.id} locked={locked} content={expanded} /> : undefined}</FrameBody>;
+    case "group":
+      return expanded ? <ExpandedLayer parentId={shape.id} locked={locked} content={expanded} /> : <ShapeLayer parentId={shape.id} locked={locked} />;
+    case "instance":
+      return expanded ? null : <InstanceBody shape={shape} locked={locked} />;
     case "rect":
       return <rect x={x} y={y} width={w} height={h} rx={radius || undefined} pointerEvents={pe} style={{ fill: paint(shape.fill), ...stroke }} />;
     case "ellipse":
@@ -80,7 +88,7 @@ function ShapeBody({ shape, locked }: { shape: Shape; locked: boolean }) {
       );
     case "line":
     case "arrow":
-      return <LinearBody shape={shape} locked={locked} />;
+      return <LinearBody shape={shape} locked={locked} shapes={expanded?.shapes} />;
     case "path":
       return (
         <path
@@ -99,7 +107,26 @@ function ShapeBody({ shape, locked }: { shape: Shape; locked: boolean }) {
   }
 }
 
-function FrameBody({ shape, locked }: { shape: Shape; locked: boolean }) {
+/** Virtual descendants keep the instance's hit target while sharing the live shape painters. */
+function ExpandedLayer({ parentId, locked, content }: { parentId: string; locked: boolean; content: ExpandedContent }) {
+  return (content.index.get(parentId) ?? []).map((shape) => shape.hidden ? null : (
+    <g key={shape.id} data-instance-shape-id={shape.id} opacity={shape.opacity < 1 ? shape.opacity : undefined} transform={rotationTransform(shape)}>
+      <ShapeBody shape={shape} locked={locked || shape.locked} expanded={content} />
+    </g>
+  ));
+}
+
+/** Components stay live: edits to any main descendant refresh its instances, including nested groups. */
+function InstanceBody({ shape, locked }: { shape: Shape; locked: boolean }) {
+  const editor = useEditor();
+  const shapes = useAllShapes(editor);
+  const expanded = expandInstances(shapes);
+  const root = expanded.get(shape.id);
+  if (!root || root.type !== "frame") return null;
+  return <ShapeBody shape={root} locked={locked} expanded={{ shapes: expanded, index: childrenIndex(expanded) }} />;
+}
+
+function FrameBody({ shape, locked, children }: { shape: Shape; locked: boolean; children?: ReactNode }) {
   const editor = useEditor();
   const zoom = useSyncExternalStore(editor.camera.subscribe, () => editor.camera.get().zoom, () => 1);
   const { id, x, y, w, h } = shape;
@@ -127,17 +154,17 @@ function FrameBody({ shape, locked }: { shape: Shape; locked: boolean }) {
         </clipPath>
       </defs>
       <g clipPath={`url(#${clipId})`}>
-        <ShapeLayer parentId={id} locked={locked} />
+        {children ?? <ShapeLayer parentId={id} locked={locked} />}
       </g>
     </>
   );
 }
 
-function LinearBody({ shape, locked }: { shape: Shape; locked: boolean }) {
+function LinearBody({ shape, locked, shapes }: { shape: Shape; locked: boolean; shapes?: ReadonlyMap<string, Shape> }) {
   const editor = useEditor();
   const start = useShape(editor, shape.startId);
   const end = useShape(editor, shape.endId);
-  const lookup = (id: string) => (id === start?.id ? start : id === end?.id ? end : undefined);
+  const lookup = (id: string) => shapes?.get(id) ?? (id === start?.id ? start : id === end?.id ? end : undefined);
   const { line, head } = linearPaths(shape, lookup);
   const width = shape.strokeWidth;
   return (

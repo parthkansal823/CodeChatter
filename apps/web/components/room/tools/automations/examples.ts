@@ -655,6 +655,20 @@ const IN_THE_ROOM: Example[] = [
         data("tell", "post_to_chat", "Tell the room", { text: "Tests of {{trigger.output.data.path}}: {{trigger.output.data.passed}} of {{trigger.output.data.total}} passed. {{explain.output.text}}" }),
       ]),
   },
+  {
+    id: "rows-to-csv-in-room",
+    title: "Save a call's rows as a CSV file in the room",
+    about: "The rows sent become a CSV file (the CSV piece), written into the room's files, where everyone sees it.",
+    category: OPS,
+    runsHere: true,
+    sample: { rows: [{ name: "Asha", tests: 12 }, { name: "Ravi", tests: 9 }] },
+    expect: { step: "save", output: { path: "automation-output/rows.csv" } },
+    flow: () =>
+      chain(webhook("Rows to save"), [
+        action("csv", "csv", "create_csv_file", "Make a CSV file", { json_array: "{{trigger.output.body.rows}}", file_name: "rows.csv", delimiter: ",", include_header: true }, false),
+        data("save", "write_file", "Save it in the room", { path: "automation-output/rows.csv", content: "{{csv.output}}", content_is: "file", mode: "replace" }),
+      ]),
+  },
 ];
 
 const ONE_OFFS: Example[] = [

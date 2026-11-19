@@ -112,7 +112,7 @@ flowchart TD
 - 🟡 **API studio** (like Postman): collections, request builder, environments, tests, scripts before sending and after the response (Postman's `pm`), cURL, OpenAPI and Postman import, snippets with axios
 - 🟡 **Design canvas** (like Figma): multiplayer vectors, layers, components, auto layout, export, CSS handoff
 - 🟡 **Diagrams** (draw.io): edited together live, in the app's look, with export. Production hosting ⬜
-- ⬜ **Messaging** (like Slack): channels, threads, huddles, bots, search
+- 🟡 **Messaging** (like Slack): room chat unread tracking and search ✅; channels, threads, huddles and bots remain
 - ⬜ **Across the suite:** one command bar, one permissions model, AI everywhere
 
 ## Step 6 · Collaboration tools ✅
@@ -153,7 +153,7 @@ flowchart TD
 
 - ✅ Outgoing webhooks: signed, retried, with a delivery log, leases and retention
 - ✅ Dependency alerts from OSV, in a side tool
-- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here), most of n8n's editor (adding anywhere, the menu and keys, undo, data mapping, and routers with and and or), trying things (one step on its own, pinned data, and carrying a failed run on from where it stopped), n8n's built-in steps for data, from Filter and Sort to Merge and Compare Datasets, and flows turned on with a webhook, a schedule, or something happening in the room (files changing, a Run or tests failing, a commit in a terminal, a chat command such as /deploy, someone let in), run with nobody in the room, an error flow when one fails, flows calling each other, runs that wait (an hour, or an approval) and carry on, and CodeChatter's own steps: run a command in the sandbox, ask the room's AI, post to the room's chat. Next: triggers, connections, the internet, and the rest of n8n's features
+- 🟡 Automations on Activepieces' real engine (MIT), in each room's sandbox: flows as files on an n8n-like chart, lit up by real runs, with 179 examples for coding (80 run here), most of n8n's editor (adding anywhere, the menu and keys, undo, data mapping, and routers with and and or), trying things (one step on its own, pinned data, and carrying a failed run on from where it stopped), n8n's built-in steps for data, from Filter and Sort to Merge and Compare Datasets, and flows turned on with a webhook, a schedule, or something happening in the room (files changing, a Run or tests failing, a commit in a terminal, a chat command such as /deploy, someone let in), or a service's new items (a new row, a new issue), run with nobody in the room, an error flow when one fails, flows calling each other, runs that wait (an hour, or an approval) and carry on, CodeChatter's own steps: run a command in the sandbox, ask the room's AI, post to the room's chat, the room's connections for its pieces (sealed, never shown again, tried by each piece's own check), and the internet for them: the services the owner turns on, through the room's own proxy. Next: triggers, connections, the internet, and the rest of n8n's features
 - ⬜ Pipelines, Jenkins-style; public API and `cc` CLI; MCP server; `devcontainer.json`
 
 ## Step 10 · Hardening and launch 🟡 ← now
@@ -179,7 +179,7 @@ flowchart TD
 - ✅ Hidden tests in a throwaway container; private rubric, and a scorecard for each interviewer, unseen by the others until they've given theirs
 - ✅ Replay, and a report
 - ✅ Live interviews on video: questions asked on the spot, from the bank or written by hand; the interviewer decides about the AI, and marks there and then
-- ✅ Assessments: many candidates at once, a random paper for each, a window to start in, a results table
+- ✅ Assessments: many candidates at once, a random paper for each, a window to start in, a results table, and an email reminder to those who haven't started before it closes
 - ✅ Multiple choice marked by the server, short answers, and system design in the room's Diagrams and Board
 - ✅ A record of anything unusual (leaving the tab, pasting, a second device, the page going quiet), and comparing candidates' code
 - ✅ Recording assessments, webcam and screen, with consent, audited viewing and automatic deletion

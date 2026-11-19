@@ -662,6 +662,8 @@ export type InterviewerInterview = Omit<CandidateInterview, "runs" | "paper" | "
   aiReviewRecording: boolean;
   candidateEmail: string | null;
   candidateJoined: boolean;
+  /** Assessment-only delivery receipt; absent when its status cannot be read. */
+  assessmentReminder?: { status: "sending" | "sent" | "failed"; attemptedAt: string; sentAt: string | null } | null;
   hiddenTests: Array<Pick<InterviewTest, "id" | "input" | "expected">>;
   rubric: InterviewCriterion[];
   /** Your own values (also present with submission metadata in scorecards.own), never the former shared column. */

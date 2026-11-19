@@ -23,6 +23,7 @@ const profiles = [];
 const owned = new Map();
 const releaseResponses = [];
 const removeRoutes = [];
+const readStatuses = [];
 let author, reader, otherDevice, dashboard, speaker, ownSpeaker;
 let stage = "sign in";
 let oldMessage;
@@ -133,6 +134,9 @@ try {
   author = await signIn("test1@codechatter.local"); profiles.push(author);
   reader = await signIn("test2@codechatter.local"); profiles.push(reader);
   otherDevice = await signIn("test2@codechatter.local"); profiles.push(otherDevice);
+  reader.page.on("response", (response) => {
+    if (response.request().method() === "POST" && new URL(response.url()).pathname === `/api/rooms/${ROOM}/messages/read`) readStatuses.push(response.status());
+  });
   for (const profile of profiles) {
     profile.page.setDefaultTimeout(20_000);
     profile.userId = (await profile.context.request.get(`${BASE}/api/me`).then((response) => response.json())).user.id;
@@ -228,6 +232,15 @@ try {
   await until(() => paged.getByRole("button").filter({ hasText: batchWord }).count().then((count) => count === 54));
   check("More fetches the next 50-message search page without duplicates", true);
 
+  stage = "submitting the same search refreshes matching live messages";
+  const refreshedMatch = await say(author, speaker, `${prefix} ${batchWord} same search refresh`);
+  await countOnButton(reader.page, 1);
+  await reader.page.getByRole("button", { name: "Search chat", exact: true }).click();
+  await paged.getByRole("button").filter({ hasText: "same search refresh" }).waitFor();
+  check("submitting the same search fetches newly matching messages", true);
+  await call(author, `/${refreshedMatch.id}`, { method: "DELETE" });
+  await countOnButton(reader.page, 0);
+
   stage = "deleting counted messages updates every device";
   await closeChat(reader.page);
   const deleted = await say(author, speaker, `${prefix} delete while unread`);
@@ -247,18 +260,27 @@ try {
   const anchor = await say(author, speaker, `${prefix} ${raceWord}`);
   await countOnButton(reader.page, 1);
   await openChat(reader.page);
+  // Opening unread may already have selected a context window. Establish latest mode
+  // explicitly before holding a fresh selection, so C belongs only to the live cache.
+  stage = "establish latest mode before delayed context";
+  const warmResults = await search(reader.page, raceWord);
+  await warmResults.getByRole("button").filter({ hasText: raceWord }).click();
+  await reader.page.getByRole("button", { name: "Back to latest", exact: true }).click();
   const anchorResults = await search(reader.page, raceWord);
+  stage = "capture delayed context snapshot";
   const delayedContext = await holdResponse(reader.page, (url) => url.pathname === `/api/rooms/${ROOM}/messages/context` && url.searchParams.get("around") === anchor.id);
   await anchorResults.getByRole("button").filter({ hasText: raceWord }).click();
   const contextSnapshot = await delayedContext.snapshot();
   if (contextSnapshot.hasMoreAfter || !contextSnapshot.messages.some((message) => message.id === anchor.id)) throw new Error("Delayed context fixture did not end at its anchor");
   const during = await say(author, speaker, `${prefix} arrived during context request`);
   await countOnButton(reader.page, 2);
+  stage = "observe live arrival while context is held";
   // Reveal latest history without cancelling the selected context request. C in the DOM proves its live event arrived before the old snapshot.
   await reader.page.getByRole("button", { name: "Close chat search", exact: true }).click();
   await reader.page.locator(`[data-message-id="${during.id}"]`).waitFor();
   delayedContext.release();
   await delayedContext.finished;
+  stage = "retain the gap after delayed context and another arrival";
   await reader.page.getByRole("button", { name: "Back to latest", exact: true }).waitFor();
   const after = await say(author, speaker, `${prefix} arrived after context request`);
   await countOnButton(reader.page, 3);
@@ -266,12 +288,20 @@ try {
   await reader.page.unroute(readUrl, unavailableRead);
   await dashboard.bringToFront();
   await reader.page.bringToFront();
+  stage = "read only the prefix before the live gap";
+  await reader.page.locator(`[data-message-id="${anchor.id}"]`).scrollIntoViewIfNeeded();
+  await reader.page.getByRole("log", { name: "Room chat", exact: true }).hover();
+  await reader.page.mouse.wheel(0, -80);
+  await pause(75);
+  await reader.page.mouse.wheel(0, 80);
   await until(async () => (await call(reader, "/unread")).readThroughId >= anchor.id);
   const beforeGap = await call(reader, "/unread");
   check("a delayed context preserves the live gap instead of marking unseen messages read", beforeGap.readThroughId < during.id && beforeGap.count >= 2);
   await reader.page.getByRole("button", { name: "Newer messages", exact: true }).click();
+  stage = "fill and read the newer gap";
   await reader.page.locator(`[data-message-id="${during.id}"]`).waitFor();
   await reader.page.locator(`[data-message-id="${after.id}"]`).waitFor();
+  await reader.page.locator(`[data-message-id="${after.id}"]`).scrollIntoViewIfNeeded();
   await countOnButton(reader.page, 0);
   check("fetching newer messages fills the gap in order and permits reading them", true);
 
@@ -316,6 +346,12 @@ try {
   await closeChat(reader.page);
 } catch (error) {
   await reader?.page.screenshot({ path: `${process.env.TEMP}/codechatter-chat-unread-failure.png` }).catch(() => {});
+  const visibility = await reader?.page.evaluate(() => {
+    const log = document.querySelector('[role="log"][aria-label="Room chat"]');
+    const bounds = log?.getBoundingClientRect();
+    return { focused: document.hasFocus(), visible: document.visibilityState, finalRows: bounds ? [...log.querySelectorAll('[data-message-id]')].slice(-3).map((row) => { const r = row.getBoundingClientRect(); return { height: r.height, overlap: Math.min(r.bottom, bounds.bottom) - Math.max(r.top, bounds.top) }; }) : [] };
+  }).catch(() => null);
+  console.log(JSON.stringify({ readStatuses: readStatuses.slice(-8), visibility }));
   check(`chat unread/search workflow completes (${stage})`, false, error?.name ?? "Error");
 } finally {
   for (const release of releaseResponses) release();

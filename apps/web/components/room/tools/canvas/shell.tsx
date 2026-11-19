@@ -16,6 +16,7 @@ export function CanvasShell({ session, keys, children }: { session: CanvasSessio
   return (
     <SessionContext value={session}>
       <div
+        data-canvas-shell=""
         className="flex h-full min-h-0 flex-col bg-background"
         onKeyDown={(e) => void handleCanvasKey(e, session, keys)}
         onKeyUp={(e) => handleCanvasKeyUp(e, session)}

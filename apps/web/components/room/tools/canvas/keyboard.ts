@@ -6,6 +6,7 @@ import { copySelection } from "./clipboard-io";
 import type { ToolId } from "./editor";
 import type { CanvasSession } from "./session";
 import { hasText } from "./shape";
+import { groupWithFeedback } from "./group-controls";
 
 const isEditable = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
@@ -39,7 +40,7 @@ export function handleCanvasKey(event: KeyboardEvent, session: CanvasSession, to
   if (key === "escape") {
     if (interaction.busy) interaction.cancel();
     else if (editor.tool.get() !== "select") editor.tool.set("select");
-    else editor.select([]);
+    else if (!editor.exitGroup()) editor.select([]);
     return done();
   }
 
@@ -65,7 +66,7 @@ export function handleCanvasKey(event: KeyboardEvent, session: CanvasSession, to
   if (mod && key === "y") return (editor.redo(), done());
   if (mod && key === "x") return (void copySelection(editor, true), done());
   if (mod && key === "d") return (editor.duplicate(selection), done());
-  if (mod && key === "g" && editor.kind === "design") return (editor.frameSelection(), done());
+  if (mod && key === "g") return (event.shiftKey ? editor.ungroupSelection() : groupWithFeedback(editor), done());
   if (mod && (key === "]" || event.code === "BracketRight")) return (editor.reorder(selection, event.shiftKey ? "front" : "forward"), done());
   if (mod && (key === "[" || event.code === "BracketLeft")) return (editor.reorder(selection, event.shiftKey ? "back" : "backward"), done());
   if (key === "delete" || key === "backspace") return (editor.deleteShapes(selection), done());

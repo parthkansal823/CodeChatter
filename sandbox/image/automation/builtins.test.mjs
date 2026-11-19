@@ -277,3 +277,84 @@ test("Run a command: its output, its exit code, failing, and a time limit", { sk
   if (previous === undefined) delete process.env.CC_WORKSPACE;
   else process.env.CC_WORKSPACE = previous;
 });
+
+test("Read files and Write a file: the room's files, through a stand-in worker that keeps step files", async () => {
+  const { createServer } = await import("node:http");
+  const { mkdtempSync, mkdirSync: makeFolder, readFileSync, rmSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const kept = new Map();
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      if (req.method === "POST" && req.url === "/v1/codechatter/files") {
+        const { name, data } = JSON.parse(Buffer.concat(chunks).toString());
+        const id = `f${kept.size + 1}`;
+        kept.set(id, Buffer.from(data, "base64"));
+        res.setHeader("content-type", "application/json");
+        return res.end(JSON.stringify({ url: `http://127.0.0.1:${server.address().port}/v1/step-files/run1/${id}/${encodeURIComponent(name)}` }));
+      }
+      const found = kept.get(req.url.split("/")[4] ?? "");
+      if (req.method === "GET" && found) return res.end(found);
+      res.writeHead(404).end();
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const root = mkdtempSync(join(tmpdir(), "cc-files-"));
+  const before = { port: process.env.AP_SANDBOX_WS_PORT, workspace: process.env.CC_WORKSPACE };
+  process.env.AP_SANDBOX_WS_PORT = String(server.address().port);
+  process.env.CC_WORKSPACE = root;
+  try {
+    makeFolder(join(root, "reports", "old"), { recursive: true });
+    writeFileSync(join(root, "reports", "b.csv"), "name,n\nb,2\n");
+    writeFileSync(join(root, "reports", "a.csv"), "name,n\na,1\n");
+    writeFileSync(join(root, "reports", "old", "z.csv"), "z");
+    const read = await run("read_files", { paths: "reports/*.csv", as_text: true });
+    assert.deepEqual(
+      read.map(({ path, fileName, size, mimeType, text }) => ({ path, fileName, size, mimeType, text })),
+      [
+        { path: "reports/a.csv", fileName: "a.csv", size: 11, mimeType: "text/csv", text: "name,n\na,1\n" },
+        { path: "reports/b.csv", fileName: "b.csv", size: 11, mimeType: "text/csv", text: "name,n\nb,2\n" },
+      ],
+    );
+    assert.match(read[0].file, /\/v1\/step-files\/run1\/f1\/a\.csv$/, "each is a step's file");
+    const both = await run("read_files", { paths: "reports/a.csv\nreports/**/*.csv" });
+    assert.deepEqual(both.map((item) => item.path), ["reports/a.csv", "reports/b.csv", "reports/old/z.csv"], "each once, in the order named");
+    assert.equal(both[0].text, undefined, "text only when asked");
+    assert.deepEqual(await run("read_files", { paths: "nothing/*.csv" }), [], "a pattern can find none");
+    await assert.rejects(run("read_files", { paths: "reports/missing.csv" }), /no file reports\/missing\.csv in the room/);
+    await assert.rejects(run("read_files", { paths: "../outside.txt" }), /should be a path in the room/);
+    await assert.rejects(run("read_files", { paths: "reports/**/*.csv", max: 2 }), /More than 2 files match/);
+    await assert.rejects(run("read_files", { paths: " " }), /Say which files/);
+
+    // Text, JSON, and a step's file, into the room.
+    assert.deepEqual(await run("write_file", { path: "out/summary.txt", content: "hello" }), { path: "out/summary.txt", size: 5, written: 5, action: "created" });
+    assert.equal((await run("write_file", { path: "out/summary.txt", content: " world", mode: "append" })).action, "added to");
+    assert.equal(readFileSync(join(root, "out", "summary.txt"), "utf8"), "hello world");
+    await run("write_file", { path: "out/data.json", content: { ok: true } });
+    assert.equal(readFileSync(join(root, "out", "data.json"), "utf8"), '{\n  "ok": true\n}\n');
+    assert.equal((await run("write_file", { path: "out/copy.csv", content: read[1].file, content_is: "file" })).action, "created");
+    assert.equal(readFileSync(join(root, "out", "copy.csv"), "utf8"), "name,n\nb,2\n");
+    assert.equal((await run("write_file", { path: "out/copy2.csv", content: read[0], content_is: "file" })).written, 11, "an item with a file is taken");
+    assert.equal((await run("write_file", { path: "out/copy3.csv", content: { fileName: "b.csv", url: read[1].file }, content_is: "file" })).written, 11, "and one with a url, as File Helper's Create File gives");
+    await run("write_file", { path: "out/data.txt", content: "data:text/plain;base64,aGk=", content_is: "file" });
+    assert.equal(readFileSync(join(root, "out", "data.txt"), "utf8"), "hi");
+    assert.equal(readFileSync(join(root, "out", "summary.txt"), "utf8"), "hello world");
+    await run("write_file", { path: "out/link.txt", content: "https://example.com is ours" });
+    assert.equal(readFileSync(join(root, "out", "link.txt"), "utf8"), "https://example.com is ours", "text that starts with an address is text");
+    await assert.rejects(run("write_file", { path: "out/summary.txt", content: "x", mode: "new" }), /already in the room/);
+    assert.equal((await run("write_file", { path: "out/summary.txt", content: "new" })).action, "replaced");
+    await assert.rejects(run("write_file", { path: "out", content: "x" }), /is a folder/);
+    await assert.rejects(run("write_file", { path: "/etc/passwd", content: "x" }), /should be a path in the room/);
+    await assert.rejects(run("write_file", { path: "out/x.txt", content: "not an address", content_is: "file" }), /Give a file's address/);
+    await assert.rejects(run("write_file", { path: "out/x.txt", content: "x", mode: "sideways" }), /doesn't know how to "sideways"/);
+  } finally {
+    for (const [name, value] of [["AP_SANDBOX_WS_PORT", before.port], ["CC_WORKSPACE", before.workspace]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

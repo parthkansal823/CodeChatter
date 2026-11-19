@@ -8,7 +8,7 @@
 
 import { connectionExpression, connectionNameOf, type AutomationConnection, type AutomationConnectionInput, type ConnectionValue, type PieceField, type PieceInfo } from "@codechatter/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Loader2, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Globe, KeyRound, Loader2, Plus, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
 import { useRoom } from "@/components/room/room-context";
@@ -17,6 +17,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
+
+import { openInternet } from "./internet-settings";
 
 const OPEN_EVENT = "cc:automation-connections";
 const field = "h-7 min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -96,7 +98,7 @@ function AuthField({ name, spec, value, onChange }: { name: string; spec: PieceF
       {label}
       <Input
         id={id}
-        className="h-7 text-xs"
+        className="h-7 text-xs md:text-xs"
         type={spec.type === "SECRET_TEXT" ? "password" : spec.type === "NUMBER" ? "number" : "text"}
         autoComplete={spec.type === "SECRET_TEXT" ? "new-password" : "off"}
         spellCheck={false}
@@ -188,7 +190,7 @@ function ConnectionForm({ pieces, start, replacing, onDone }: { pieces: Record<s
       {!replacing && (
         <label className="grid gap-1">
           Name
-          <Input className="h-7 font-mono text-xs" spellCheck={false} value={name} onChange={(event) => setName(event.target.value)} />
+          <Input className="h-7 font-mono text-xs md:text-xs" spellCheck={false} value={name} onChange={(event) => setName(event.target.value)} />
           <span className="text-muted-foreground">Steps use it as {connectionExpression(name || "name")}. Letters, digits, dashes and underscores.</span>
         </label>
       )}
@@ -372,13 +374,16 @@ export function ConnectionField({ pieceName, piece, auth, canEdit, onChange }: {
       {oauth ? (
         <p className="text-muted-foreground">{piece.label} signs in with OAuth, which comes later.</p>
       ) : (
-        <div>
+        <div className="flex flex-wrap gap-1">
           <Button size="xs" variant="outline" onClick={() => openConnections(pieceName)}>
             <KeyRound /> Connections…
           </Button>
+          <Button size="xs" variant="ghost" onClick={() => openInternet()}>
+            <Globe /> Internet…
+          </Button>
         </div>
       )}
-      <p className="text-muted-foreground">A room reaches its own databases and services; the internet outside it comes later, so services like {piece.label} out there can&apos;t be reached yet.</p>
+      <p className="text-muted-foreground">A room reaches its own databases and services. To reach {piece.label} on the internet, the room&apos;s owner turns it on under Internet.</p>
     </section>
   );
 }

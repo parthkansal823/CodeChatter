@@ -1,12 +1,15 @@
 // CodeChatter's own built-in steps for automations, as n8n has for working on data: Edit Fields, Filter, Sort, Limit, Aggregate, Summarize, Remove Duplicates,
 // Split Out, Rename Keys, Merge, Compare Datasets, Stop and Error, Call a flow and Approval links, and CodeChatter's own: Run a command in the sandbox, Ask the
-// room's AI and Post to the room's chat. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
+// room's AI, Post to the room's chat, and Read files and Write a file in the room's files. Written here, not taken from n8n. A built-in step is a code step marked `builtin` in the flow's
 // file: host.mjs writes it as a module that calls run() here, and Activepieces' engine has already worked out its inputs' expressions. Each works on a list of
 // items, as n8n's do; a single object counts as a list of one. The Automations tool's forms for them are in apps/web/components/room/tools/automations/builtins.ts.
 
 import { spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { isAbsolute, posix } from "node:path";
+
+import { filesMatching, MOST_FILE_BYTES, roomPathOf, typeOf } from "./files.mjs";
 
 /** The room's files, where a command runs. */
 export const workspaceRoot = () => process.env.CC_WORKSPACE ?? "/workspace";
@@ -510,6 +513,78 @@ export const BUILTINS = {
     if (text.length > 4000) throw new Error("A message is up to 4,000 characters.");
     const posted = await askDoor("/codechatter/chat", { text }, 30);
     return { id: posted.id, text, postedAt: posted.createdAt };
+  },
+
+  /**
+   * Read files (n8n's Read Files from Disk): the room's files a path or a pattern names (reports/*.csv, docs/**\/*.md), one item each, with the file as a
+   * step's file is (for File Helper, CSV, an email's attachment) and, when asked, its text. A path that isn't there fails the step; a pattern can find none.
+   */
+  async read_files(inputs) {
+    const asked = String(inputs.paths ?? "")
+      .split("\n")
+      .map((each) => each.trim())
+      .filter(Boolean);
+    if (!asked.length) throw new Error("Say which files, such as reports/*.csv.");
+    const most = Math.min(Math.max(Math.floor(numberOf(inputs.max ?? 100)) || 100, 1), 100);
+    const asText = inputs.as_text === true || inputs.as_text === "true";
+    const paths = [];
+    for (const each of asked) {
+      const { paths: found, more } = filesMatching(workspaceRoot(), each, most);
+      if (more || paths.length + found.length > most) throw new Error(`More than ${most} files match: name fewer, or raise the most to read.`);
+      for (const path of found) if (!paths.includes(path)) paths.push(path);
+    }
+    const items = [];
+    let total = 0;
+    for (const path of paths) {
+      const full = posix.join(workspaceRoot(), path);
+      let size;
+      try {
+        const stat = statSync(full);
+        if (!stat.isFile()) throw new Error("not a file");
+        size = stat.size;
+      } catch {
+        throw new Error(`There's no file ${path} in the room.`);
+      }
+      if (size > MOST_FILE_BYTES) throw new Error(`${path} is over ${MOST_FILE_BYTES / 1024 / 1024} MB, the most a step's file can be.`);
+      total += size;
+      if (total > 5 * MOST_FILE_BYTES) throw new Error(`These files are over ${(5 * MOST_FILE_BYTES) / 1024 / 1024} MB together: read fewer at a time.`);
+      const data = readFileSync(full);
+      const fileName = path.split("/").at(-1);
+      const { url } = await askWorker("/v1/codechatter/files", { name: fileName, data: data.toString("base64") });
+      items.push({ path, fileName, size, mimeType: typeOf(fileName), file: url, ...(asText && { text: data.toString("utf8") }) });
+    }
+    return items;
+  },
+
+  /**
+   * Write a file (n8n's Write File to Disk): text, JSON or a step's file (from File Helper, CSV, an earlier Read files, or any address) into the room's files,
+   * as anyone in the room then sees it. A new file, replacing one, or adding to its end; folders are made as needed.
+   */
+  async write_file(inputs) {
+    const path = roomPathOf(inputs.path);
+    const full = posix.join(workspaceRoot(), path);
+    const mode = inputs.mode || "replace";
+    if (!["replace", "append", "new"].includes(mode)) throw new Error(`Write a file doesn't know how to "${mode}".`);
+    const there = existsSync(full);
+    if (there && statSync(full).isDirectory()) throw new Error(`${path} is a folder.`);
+    if (mode === "new" && there) throw new Error(`${path} is already in the room, and this step only makes new files.`);
+    const content = inputs.content;
+    let data;
+    if (inputs.content_is === "file") {
+      // A step's file is its address (or a data: address); an object with one is taken too: Read files' and Unzip File's file, Create File's url.
+      const address = typeof content === "string" ? content.trim() : typeof content?.file === "string" ? content.file : typeof content?.url === "string" ? content.url : "";
+      if (!/^(data:|https?:\/\/)/.test(address)) throw new Error("Give a file's address, as an earlier step gives it (Read files' file, say).");
+      const answer = await fetch(address, { signal: AbortSignal.timeout(60_000) }).catch(() => null);
+      if (!answer?.ok) throw new Error(answer ? `The file couldn't be read: its address said ${answer.status}.` : "The file couldn't be read from its address.");
+      data = Buffer.from(await answer.arrayBuffer());
+    } else if (typeof content === "string") data = Buffer.from(content, "utf8");
+    else if (content === undefined || content === null) data = Buffer.alloc(0);
+    else data = Buffer.from(`${JSON.stringify(content, null, 2)}\n`, "utf8");
+    if (data.length > MOST_FILE_BYTES) throw new Error(`That's over ${MOST_FILE_BYTES / 1024 / 1024} MB, the most this step writes.`);
+    mkdirSync(posix.dirname(full), { recursive: true });
+    if (mode === "append") appendFileSync(full, data);
+    else writeFileSync(full, data);
+    return { path, size: statSync(full).size, written: data.length, action: !there ? "created" : mode === "append" ? "added to" : "replaced" };
   },
 
   /** Stop and Error: stops the run, with this message, so an error flow or a person sees why. */

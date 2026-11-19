@@ -222,7 +222,7 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
     const duckdb = /^\/rooms\/([A-Z0-9]{6})\/duckdb(?:\/(tables|query|preview))?$/.exec(url.pathname);
     if (duckdb) return handleDuckdb(req, res, duckdb[1]!, duckdb[2]);
 
-    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|terminals\/close|judge|dev)$/.exec(url.pathname);
+    const match = /^\/rooms\/([A-Z0-9]{6})\/(runs|runs\/stop|runs\/input|runs\/current|sandbox|sandbox\/restart|sandbox\/installs|sandbox\/services|terminals\/close|judge|dev)$/.exec(url.pathname);
     if (!match || !RoomCode.safeParse(match[1]).success) return json(res, 404, { error: "Not found." });
     const roomId = match[1]!;
     const claims = authorize(req, roomId);
@@ -282,6 +282,15 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       const session = rooms.get(roomId);
       await stopDev(session);
       return json(res, 200, await devStatus(session, rooms.warm));
+    }
+    // The hosts the room's automations may reach (the API has checked it's the owner who changed them): the proxy follows if the sandbox is up, or
+    // goes if there are none; otherwise the next run sees to it.
+    if (route === "PUT sandbox/services") {
+      const body = z.object({ hosts: z.array(z.string().max(253)).max(100) }).safeParse(await readJson(req));
+      if (!body.success) return json(res, 400, { error: "That isn't a list of hosts." });
+      const session = rooms.peek(roomId);
+      if (session || body.data.hosts.length === 0) await rooms.egress.services((session ?? rooms.get(roomId)).sandbox, body.data.hosts);
+      return json(res, 200, { ok: true });
     }
     if (route === "DELETE sandbox/installs") {
       await rooms.egress.stop(roomId);
@@ -580,6 +589,9 @@ export function createRunnerServer(deps: { env: Env; docker: Docker; rooms: Room
       const session = rooms.get(roomId);
       session.touch();
       await session.ready();
+      // The hosts the room's automations may reach, before the run, the look or the check that may need them.
+      const internet = "internet" in input.data ? input.data.internet : undefined;
+      if (internet) await rooms.egress.services(session.sandbox, internet).catch((error: unknown) => log.warn(`room ${roomId}: the automations' hosts didn't apply: ${String(error)}`));
       // Runs what's in the room at this moment, and what the person just changed: here first, then in the sandbox.
       if (input.data.op === "run") {
         if (input.data.stateVector) await session.sync.waitFor(input.data.stateVector);

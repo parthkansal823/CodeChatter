@@ -1,8 +1,9 @@
 import { freehandPath, fontOf, linearPaths, rotationTransform, shapeBounds, STICKY_TEXT, textFrame, type Lookup } from "./draw";
 import { round, unionRects, type Rect } from "./geometry";
+import { normalizeGroups } from "./groups";
 import { TYPE_LABEL, type Shape } from "./shape";
 import { alignX, layoutText, lineHeight, type Measure } from "./text-layout";
-import { childrenIndex, descendantsOf } from "./tree";
+import { childrenIndex, descendantsOf, effectiveHidden, topLevelIds } from "./tree";
 
 /**
  * Export and handoff: SVG, CSS and HTML as strings. Pure, so it runs in unit
@@ -52,6 +53,9 @@ function shapeSvg(shape: Shape, ctx: ExportContext, index: Map<string | null, Sh
   const radius = shape.radius ? ` rx="${n(Math.min(shape.radius, w / 2, h / 2))}"` : "";
   let body: string;
   switch (shape.type) {
+    case "group":
+      body = (index.get(shape.id) ?? []).map((child) => shapeSvg(child, ctx, index, defs)).join("");
+      break;
     case "frame": {
       const clipId = `clip-${defs.length}`;
       defs.push(`<clipPath id="${clipId}"><rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}"${radius}/></clipPath>`);
@@ -105,13 +109,14 @@ function shapeSvg(shape: Shape, ctx: ExportContext, index: Map<string | null, Sh
  * them), cropped to their bounds plus padding.
  */
 export function exportSvg(ids: string[], ctx: ExportContext, padding = 0): { svg: string; width: number; height: number } | null {
+  ctx = { ...ctx, shapes: normalizeGroups(ctx.shapes) };
   const index = childrenIndex(ctx.shapes);
   const lookup = lookupIn(ctx);
-  const roots = ids.map((id) => ctx.shapes.get(id)).filter((s): s is Shape => Boolean(s) && !s!.hidden);
+  const roots = topLevelIds(ctx.shapes, ids).map((id) => ctx.shapes.get(id)).filter((s): s is Shape => Boolean(s) && !effectiveHidden(ctx.shapes, s!.id));
   const bounds = unionRects(roots.map((s) => shapeBounds(s, lookup)));
   if (!bounds) return null;
   // Pen strokes and thick lines reach past their points; leave room for them.
-  const bleed = Math.max(0, ...roots.flatMap((s) => [s, ...descendantsOf(index, s.id)]).map((s) => (s.type === "frame" ? 0 : s.strokeWidth * 2)));
+  const bleed = Math.max(0, ...roots.flatMap((s) => [s, ...descendantsOf(index, s.id)]).filter((s) => !effectiveHidden(ctx.shapes, s.id)).map((s) => (s.type === "frame" || s.type === "group" ? 0 : s.strokeWidth * 2)));
   const pad = padding + (roots.every((s) => s.type === "frame") ? 0 : bleed);
   const view: Rect = { x: bounds.x - pad, y: bounds.y - pad, w: Math.max(1, bounds.w + pad * 2), h: Math.max(1, bounds.h + pad * 2) };
   // Keep the canvas's stacking order, not the order things were selected in.
@@ -148,6 +153,8 @@ function styleDecls(shape: Shape, ctx: ExportContext): string[] {
   const hasFill = shape.fill !== "none" && shape.fill !== "";
   const hasStroke = shape.stroke !== "none" && shape.strokeWidth > 0;
   switch (shape.type) {
+    case "group":
+      return shape.opacity < 1 ? [`opacity: ${n(shape.opacity)};`] : [];
     case "text":
       if (hasFill) decls.push(colorDecl(ctx, "color", shape.fill));
       decls.push(
@@ -185,6 +192,7 @@ function styleDecls(shape: Shape, ctx: ExportContext): string[] {
 
 /** "Copy CSS" for one shape: its size and look, the way design tools hand them off. */
 export function shapeCss(shape: Shape, ctx: ExportContext): string {
+  if (shape.type === "group") shape = normalizeGroups(ctx.shapes).get(shape.id) ?? shape;
   const size = shape.type === "line" || shape.type === "arrow" ? [] : [`width: ${n(shape.w)}px;`, `height: ${n(shape.h)}px;`];
   const label = shape.name || TYPE_LABEL[shape.type];
   return [`/* ${label.replace(/\*\//g, "")} */`, ...size, ...styleDecls(shape, ctx)].join("\n");
@@ -204,8 +212,9 @@ function slug(text: string): string {
  * strokes and lines become inline SVG; that's the honest way to hand them off.
  */
 export function frameHtml(frameId: string, ctx: ExportContext): string | null {
+  ctx = { ...ctx, shapes: normalizeGroups(ctx.shapes) };
   const frame = ctx.shapes.get(frameId);
-  if (!frame || frame.type !== "frame") return null;
+  if (!frame || frame.type !== "frame" || effectiveHidden(ctx.shapes, frameId)) return null;
   const index = childrenIndex(ctx.shapes);
   const used = new Map<string, number>();
   const className = (shape: Shape) => {
@@ -226,6 +235,11 @@ export function frameHtml(frameId: string, ctx: ExportContext): string | null {
       : [`position: relative;`];
     const size = [`width: ${n(shape.w)}px;`, `height: ${n(shape.h)}px;`];
     switch (shape.type) {
+      case "group": {
+        rule(cls, [...position, ...size, ...styleDecls(shape, ctx), `overflow: visible;`]);
+        const children = (index.get(shape.id) ?? []).map((child) => element(child, shape, depth + 1)).filter(Boolean);
+        return `${indent}<div class="${cls}">${children.length ? `\n${children.join("\n")}\n${indent}` : ""}</div>`;
+      }
       case "frame": {
         rule(cls, [...position, ...size, ...styleDecls(shape, ctx), `overflow: hidden;`]);
         const children = (index.get(shape.id) ?? []).map((child) => element(child, shape, depth + 1)).filter(Boolean);

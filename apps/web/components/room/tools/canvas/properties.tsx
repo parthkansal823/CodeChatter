@@ -23,9 +23,10 @@ import { cn } from "@/lib/utils";
 
 import { copyCss, copyHtml } from "./export-actions";
 import { ColorField, Field, NumberField, Section, TextField } from "./fields";
-import { useAtom, useEditor, usePick } from "./hooks";
+import { useAllShapes, useAtom, useEditor, usePick } from "./hooks";
 import { ToolButton } from "./chrome";
 import { isLinear, TYPE_LABEL, type Shape, type ShapePatch } from "./shape";
+import { effectiveLocked } from "./tree";
 
 /** The value every shape agrees on, or null when they differ. */
 function common<T>(shapes: Shape[], get: (s: Shape) => T): T | null {
@@ -73,16 +74,18 @@ function NothingSelected({ readOnly }: { readOnly: boolean }) {
 
 function Inspector({ shapes, readOnly }: { shapes: Shape[]; readOnly: boolean }) {
   const editor = useEditor();
+  const all = useAllShapes(editor);
   const single = shapes.length === 1 ? shapes[0]! : null;
   const apply = (patch: ShapePatch, only: (s: Shape) => boolean = () => true) =>
-    editor.updateMany(shapes.filter(only).map((s) => [s.id, patch] as [string, ShapePatch]));
+    editor.updateMany(shapes.filter((s) => only(s) && !effectiveLocked(all, s.id)).map((s) => [s.id, patch] as [string, ShapePatch]));
   const bounds = editor.selectionBounds(shapes.map((s) => s.id));
   const fillable = shapes.filter(supportsFill);
   const strokable = shapes.filter(supportsStroke);
   const roundable = shapes.filter(supportsRadius);
   const texty = shapes.filter(hasText);
   const attached = !!single && isLinear(single.type) && (!!single.startId || !!single.endId);
-  const free = shapes.filter((s) => !s.locked);
+  const free = shapes.filter((s) => !effectiveLocked(all, s.id));
+  const singleLocked = !!single && effectiveLocked(all, single.id);
 
   // A move carries what's inside frames, so X and Y go through nudge, not a plain patch.
   const moveTo = (axis: "x" | "y", value: number) => {
@@ -103,18 +106,18 @@ function Inspector({ shapes, readOnly }: { shapes: Shape[]; readOnly: boolean })
             value={single ? single.w : null}
             min={1}
             onCommit={(w) => single && editor.setBox(single.id, { w })}
-            disabled={!single || single.locked || attached}
+            disabled={!single || singleLocked || attached}
           />
           <NumberField
             label="Height"
             value={single ? single.h : null}
             min={1}
             onCommit={(h) => single && editor.setBox(single.id, { h })}
-            disabled={!single || single.locked || attached || single.type === "text"}
+            disabled={!single || singleLocked || attached || single.type === "text"}
           />
           <NumberField
-            label="Rotation"
-            value={common(shapes, (s) => s.rotation)}
+            label={single?.type === "group" ? "Rotate by" : "Rotation"}
+            value={single?.type === "group" ? 0 : common(shapes, (s) => s.rotation)}
             suffix="deg"
             min={-360}
             max={360}

@@ -11,6 +11,7 @@ import { ZodPipe } from "../common/zod.pipe.js";
 import { AutomationTriggersService, type Change } from "./automation-triggers.service.js";
 
 const TriggerId = z.string().regex(/^trg_[a-f0-9]{16}$/, "That isn't an automation's trigger.");
+const PollTestInput = z.object({ path: z.string().min(1).max(1024), flowId: z.string().min(1).max(100).optional() });
 
 @Controller("rooms/:roomId/automations/triggers")
 export class AutomationTriggersController {
@@ -48,6 +49,13 @@ export class AutomationTriggersController {
   @HttpCode(204)
   async remove(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string, @Param("id", new ZodPipe(TriggerId)) id: string, @Req() request: Request): Promise<void> {
     await this.note(session, request, roomId, "automation.trigger.delete", await this.triggers.remove(roomId, session.user.id, id));
+  }
+
+  /** An example of what a polling trigger gives, asked of its service now. */
+  @Post("poll-test")
+  @HttpCode(200)
+  pollTest(@CurrentSession() session: AuthSession, @Param("roomId", new ZodPipe(RoomCode)) roomId: string, @Body(new ZodPipe(PollTestInput)) input: z.infer<typeof PollTestInput>): Promise<{ items: unknown[] }> {
+    return this.triggers.pollTest(roomId, { id: session.user.id, name: session.user.name }, input);
   }
 
   @Get(":id/test-event")

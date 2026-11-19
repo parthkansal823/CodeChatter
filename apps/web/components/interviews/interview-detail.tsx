@@ -43,6 +43,21 @@ function Countdown({ interview, fetchedAt }: { interview: InterviewerInterview; 
   return <span role="timer" className="font-mono tabular-nums">{left <= 0 ? "Time's up" : `${formatCountdown(left)} left`}</span>;
 }
 
+function AssessmentReminder({ interview }: { interview: InterviewerInterview }) {
+  if (interview.mode !== "assessment") return null;
+  const reminder = interview.assessmentReminder;
+  if (reminder === undefined) return <span className="text-muted-foreground">Can&apos;t tell if a reminder was sent.</span>;
+  if (reminder === null) return <span className="text-muted-foreground">{!interview.candidateEmail ? "No reminder: there's no email for them." : interview.status === "scheduled" ? "No reminder sent yet." : "No reminder sent."}</span>;
+  const at = reminder.sentAt ?? reminder.attemptedAt;
+  const date = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(at));
+  // Short and plain, so the line beside it keeps its room: a mail that failed may still have arrived, so it says the mail failed, not that they missed it.
+  return (
+    <span className="text-muted-foreground">
+      {reminder.status === "sent" ? "Reminder sent" : reminder.status === "sending" ? "Reminder sending since" : "Reminder mail failed"} <time dateTime={at}>{date} UTC</time>.
+    </span>
+  );
+}
+
 export function InterviewDetail({ id }: { id: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -141,6 +156,7 @@ export function InterviewDetail({ id }: { id: string }) {
         <Countdown interview={interview} fetchedAt={query.dataUpdatedAt} />
         {scheduled && <span className="text-muted-foreground">{interview.candidateJoined ? `${interview.candidateName} is in the waiting room.` : "The candidate hasn't used their link yet."}</span>}
         {interview.candidateEmail && <span className="text-muted-foreground">{interview.candidateEmail}</span>}
+        <AssessmentReminder interview={interview} />
         <div className="ml-auto flex flex-wrap gap-1">
           {scheduled && !interview.candidateJoined && <Button size="sm" variant="ghost" onClick={() => void rotate()}><Link2 /> New link</Button>}
           {scheduled && (

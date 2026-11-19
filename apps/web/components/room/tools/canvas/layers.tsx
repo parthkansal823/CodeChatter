@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   Frame,
+  Group,
   ImageIcon,
   Lock,
   LockOpen,
@@ -20,18 +21,20 @@ import {
   Type,
   type LucideIcon,
 } from "lucide-react";
-import { useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { Atom } from "./atom";
-import type { LayerDrop } from "./editor";
+import type { Editor, LayerDrop } from "./editor";
 import { useAtom, useAtomSelector, useChildIds, useEditor, useIsSelected, useShape } from "./hooks";
 import { TYPE_LABEL, type ShapeType } from "./shape";
+import { effectiveHidden, effectiveLocked, effectiveParent, isContainer } from "./tree";
 
 const ICONS: Record<ShapeType, LucideIcon> = {
   frame: Frame,
+  group: Group,
   rect: Square,
   ellipse: Circle,
   line: Minus,
@@ -66,15 +69,15 @@ class LayersState {
   }
 }
 
-function dropZone(event: DragEvent<HTMLElement>, isFrame: boolean): LayerDrop {
+function dropZone(event: DragEvent<HTMLElement>, container: boolean): LayerDrop {
   const rect = event.currentTarget.getBoundingClientRect();
   const y = (event.clientY - rect.top) / Math.max(1, rect.height);
-  if (isFrame && y > 0.25 && y < 0.75) return "inside";
+  if (container && y > 0.25 && y < 0.75) return "inside";
   // The list is drawn top-most first, so the upper half of a row is "above" it in the stack too.
   return y < 0.5 ? "above" : "below";
 }
 
-/** Layers: every shape by frame, top of the stack first. */
+/** Layers: every shape by frame or group, top of the stack first. */
 export function LayersPanel() {
   const editor = useEditor();
   const [state] = useState(() => new LayersState());
@@ -123,17 +126,33 @@ function focusSibling(event: KeyboardEvent<HTMLElement>, step: 1 | -1) {
   items[items.indexOf(event.currentTarget) + step]?.focus();
 }
 
+/** A primitive snapshot keeps unrelated child edits from re-rendering every layer row. */
+function useInheritedFlags(editor: Editor, id: string): number {
+  "use no memo";
+  const get = () => {
+    const all = editor.store.all();
+    const parent = effectiveParent(all, id);
+    return parent ? Number(effectiveLocked(all, parent)) + 2 * Number(effectiveHidden(all, parent)) : 0;
+  };
+  return useSyncExternalStore(editor.store.subscribeAny, get, get);
+}
+
 function LayerRow({ id, depth, state }: { id: string; depth: number; state: LayersState }) {
   const editor = useEditor();
   const shape = useShape(editor, id);
   const selected = useIsSelected(editor, id);
   const readOnly = useAtom(editor.readOnly);
+  const inherited = useInheritedFlags(editor, id);
+  const parentLocked = Boolean(inherited & 1);
+  const parentHidden = Boolean(inherited & 2);
   const collapsed = useAtomSelector(state.collapsed, (set) => set.has(id));
   const renaming = useAtomSelector(state.renaming, (current) => current === id);
   const dropHere = useAtomSelector(state.drop, (drop) => (drop?.id === id ? drop.where : null));
   if (!shape) return null;
   const Icon = ICONS[shape.type];
-  const isFrame = shape.type === "frame";
+  const container = isContainer(shape);
+  const locked = shape.locked || parentLocked;
+  const hidden = shape.hidden || parentHidden;
   const name = shape.name || TYPE_LABEL[shape.type];
 
   const select = (event: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => {
@@ -147,10 +166,10 @@ function LayerRow({ id, depth, state }: { id: string; depth: number; state: Laye
         role="treeitem"
         aria-selected={selected}
         aria-level={depth + 1}
-        aria-expanded={isFrame ? !collapsed : undefined}
+        aria-expanded={container ? !collapsed : undefined}
         aria-label={name}
         tabIndex={0}
-        draggable={!readOnly && !renaming}
+        draggable={!readOnly && !locked && !renaming}
         onDragStart={(e) => {
           e.dataTransfer.setData("text/cc-layer", id);
           e.dataTransfer.effectAllowed = "move";
@@ -161,32 +180,32 @@ function LayerRow({ id, depth, state }: { id: string; depth: number; state: Laye
           if (readOnly || !e.dataTransfer.types.includes("text/cc-layer")) return;
           e.preventDefault();
           e.stopPropagation();
-          const where = dropZone(e, isFrame);
+          const where = dropZone(e, container);
           const current = state.drop.get();
           if (current?.id !== id || current.where !== where) state.drop.set({ id, where });
         }}
         onDrop={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          const where = dropZone(e, isFrame);
+          const where = dropZone(e, container);
           state.drop.set(null);
           editor.moveInLayers(state.dragIds, id, where);
         }}
         onClick={select}
-        onDoubleClick={() => !readOnly && state.renaming.set(id)}
+        onDoubleClick={() => !readOnly && !locked && state.renaming.set(id)}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (e.key === "Enter") select(e);
-          else if (e.key === "F2" && !readOnly) state.renaming.set(id);
+          else if (e.key === "F2" && !readOnly && !locked) state.renaming.set(id);
           else if (e.key === "ArrowDown") (e.preventDefault(), focusSibling(e, 1));
           else if (e.key === "ArrowUp") (e.preventDefault(), focusSibling(e, -1));
-          else if (e.key === "ArrowRight" && isFrame && collapsed) state.toggle(id);
-          else if (e.key === "ArrowLeft" && isFrame && !collapsed) state.toggle(id);
+          else if (e.key === "ArrowRight" && container && collapsed) state.toggle(id);
+          else if (e.key === "ArrowLeft" && container && !collapsed) state.toggle(id);
         }}
         className={cn(
           "group relative flex h-6 cursor-default items-center gap-1 pr-1 text-sm select-none hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
           selected ? "bg-accent text-foreground" : "text-muted-foreground",
-          shape.hidden && "opacity-50",
+          hidden && "opacity-50",
           dropHere === "inside" && "bg-brand-muted",
         )}
         style={{ paddingLeft: 4 + depth * 12 }}
@@ -194,7 +213,7 @@ function LayerRow({ id, depth, state }: { id: string; depth: number; state: Laye
         {selected && <span aria-hidden className="absolute inset-y-0 left-0 w-thread bg-brand" />}
         {dropHere === "above" && <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-brand" />}
         {dropHere === "below" && <span aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-brand" />}
-        {isFrame ? (
+        {container ? (
           <button
             type="button"
             aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
@@ -237,7 +256,7 @@ function LayerRow({ id, depth, state }: { id: string; depth: number; state: Laye
         ) : (
           <span className="min-w-0 flex-1 truncate">{name}</span>
         )}
-        {!readOnly && !renaming && (
+        {!readOnly && !locked && !renaming && (
           <span className="flex shrink-0 items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
             <RowButton label={`Bring ${name} forward`} onClick={() => editor.reorder([id], "forward")}>
               <ArrowUp />
@@ -250,33 +269,36 @@ function LayerRow({ id, depth, state }: { id: string; depth: number; state: Laye
         {!readOnly && (
           <>
             <RowButton
-              label={shape.locked ? `Unlock ${name}` : `Lock ${name}`}
+              label={parentLocked ? "Locked by parent" : shape.locked ? `Unlock ${name}` : `Lock ${name}`}
+              disabled={parentLocked}
               onClick={() => editor.update(id, { locked: !shape.locked })}
-              className={cn(!shape.locked && "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100")}
+              className={cn(!locked && "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100")}
             >
-              {shape.locked ? <Lock /> : <LockOpen />}
+              {locked ? <Lock /> : <LockOpen />}
             </RowButton>
             <RowButton
-              label={shape.hidden ? `Show ${name}` : `Hide ${name}`}
+              label={parentHidden ? "Hidden by parent" : shape.hidden ? `Show ${name}` : `Hide ${name}`}
+              disabled={parentHidden}
               onClick={() => editor.update(id, { hidden: !shape.hidden })}
-              className={cn(!shape.hidden && "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100")}
+              className={cn(!hidden && "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100")}
             >
-              {shape.hidden ? <EyeOff /> : <Eye />}
+              {hidden ? <EyeOff /> : <Eye />}
             </RowButton>
           </>
         )}
       </div>
-      {isFrame && !collapsed && <LayerList parentId={id} depth={depth + 1} state={state} />}
+      {container && !collapsed && <LayerList parentId={id} depth={depth + 1} state={state} />}
     </>
   );
 }
 
-function RowButton({ label, onClick, className, children }: { label: string; onClick: () => void; className?: string; children: ReactNode }) {
+function RowButton({ label, onClick, className, children, disabled = false }: { label: string; onClick: () => void; className?: string; children: ReactNode; disabled?: boolean }) {
   return (
     <Button
       variant="ghost"
       size="icon-xs"
       aria-label={label}
+      disabled={disabled}
       tabIndex={-1}
       className={cn("size-5 [&_svg:not([class*='size-'])]:size-3", className)}
       onClick={(e) => {

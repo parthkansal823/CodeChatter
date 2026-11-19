@@ -17,7 +17,7 @@ export function chatUnreadLabel(count: number): string {
 
 /** A removed author's normal messages survive the user FK and still belong to someone other than the reader. */
 export function isCountedChatMessage(message: Pick<ChatMessage, "author" | "kind">, readerId: string): boolean {
-  return message.author?.id !== readerId && message.kind !== "system" && message.kind !== "github";
+  return message.author?.id !== readerId && message.kind !== "system" && message.kind !== "github" && message.kind !== "automation";
 }
 
 /** Spaces separate literal AND terms; punctuation, percent and underscore stay literal. */

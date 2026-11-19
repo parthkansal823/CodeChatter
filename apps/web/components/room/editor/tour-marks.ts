@@ -24,8 +24,9 @@ export function attachTourMarks(
         range: new monaco.Range(mark.startLine, 1, mark.endLine, model.getLineMaxColumn(mark.endLine)),
         options: {
           isWholeLine: true,
-          className: "cc-tour-line bg-brand/15",
-          linesDecorationsClassName: "border-l-2 border-brand",
+          // Classes of their own (app/globals.css): Monaco takes a decoration's class apart at "/", so "bg-brand/15" became a solid "bg-brand".
+          className: "cc-tour-line",
+          linesDecorationsClassName: "cc-tour-gutter",
           stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
           hoverMessage: { value: "Current tour stop" },
         },

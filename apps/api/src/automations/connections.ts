@@ -68,3 +68,38 @@ export function forRun(all: Record<string, StoredConnection>, open: Open): Recor
   }
   return out;
 }
+
+/** What a database or service answers when it refuses, by its code, in plain words. */
+const REFUSALS: Record<string, string> = {
+  "28P01": "The user name or password is wrong.",
+  "28000": "This user isn't allowed to sign in.",
+  "3D000": "There's no database with that name.",
+  ER_ACCESS_DENIED_ERROR: "The user name or password is wrong.",
+  ER_BAD_DB_ERROR: "There's no database with that name.",
+  ECONNREFUSED: "Nothing answered at that host and port. Is the database running?",
+  ENOTFOUND: "There's no host with that name here.",
+  ETIMEDOUT: "It didn't answer in time.",
+  EAI_AGAIN: "That host's name couldn't be looked up: rooms reach only their own services for now.",
+};
+
+/**
+ * Why a connection didn't work, as a person can read it. A piece's check often hands back the error it caught as JSON (a database driver's error, whose
+ * message isn't one of its fields): its code says what happened.
+ */
+export function plainConnectionError(text: string): string {
+  const raw = text.trim();
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Already words.
+  }
+  if (!parsed || typeof parsed !== "object") return raw.slice(0, 500) || "It didn't work with these details.";
+  const error = parsed as { message?: unknown; code?: unknown; routine?: unknown; errno?: unknown };
+  const code = typeof error.code === "string" ? error.code : typeof error.errno === "string" ? error.errno : null;
+  const known = code ? REFUSALS[code] : undefined;
+  if (known) return `${known} (${code})`;
+  if (typeof error.message === "string" && error.message) return error.message.slice(0, 500);
+  if (code) return typeof error.routine === "string" ? `It was refused: ${error.routine} (${code}).` : `It was refused (${code}).`;
+  return "It didn't work with these details.";
+}

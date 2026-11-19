@@ -9,6 +9,7 @@ import { Canvas } from "../canvas/canvas";
 import { CanvasHeader, EmptyCanvas, HistoryButtons, NameField, PeerAvatars, ShortcutHint, ZoomMenu } from "../canvas/chrome";
 import type { ToolId } from "../canvas/editor";
 import { ExportDialog } from "../canvas/export-dialog";
+import { GroupControls } from "../canvas/group-controls";
 import { renameItem, type ListItem } from "../canvas/list";
 import { useLiveDoc, type LiveDoc } from "../canvas/live-doc";
 import { CanvasShell } from "../canvas/shell";
@@ -63,6 +64,7 @@ export function BoardEditor({ roomId, item, list, me, editable, onBack, onClose 
             )}
             <PeerAvatars />
             <HistoryButtons />
+            <GroupControls />
             <ZoomMenu />
             <ExportDialog name={item.name} />
           </>

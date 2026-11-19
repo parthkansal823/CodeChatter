@@ -13,7 +13,7 @@ import type { AlignItems, Justify, LayoutDirection } from "./autolayout";
  * moving a frame moves its children explicitly, but hit testing, snapping and
  * export never have to walk parents to find where something is.
  */
-export type ShapeType = "frame" | "rect" | "ellipse" | "line" | "arrow" | "text" | "path" | "image" | "sticky" | "instance";
+export type ShapeType = "group" | "frame" | "rect" | "ellipse" | "line" | "arrow" | "text" | "path" | "image" | "sticky" | "instance";
 export type TextAlign = "left" | "center" | "right";
 export type CanvasKind = "design" | "board";
 export type Transition = "none" | "dissolve" | "slide-left" | "slide-right" | "slide-up" | "slide-down";
@@ -52,7 +52,7 @@ export type Shape = {
    * Resizing scales them, so (x, y, w, h) stays the bounding box.
    */
   points: number[];
-  /** The frame this shape sits in (clipped by it and moved with it). */
+  /** The frame or transparent group this shape sits in. Coordinates stay absolute. */
   parentId: string | null;
   /** Fractional index among siblings (order.ts); higher draws on top. */
   z: string;
@@ -97,6 +97,7 @@ export const hasText = (type: ShapeType) => type === "text" || type === "sticky"
 export const isBox = (type: ShapeType) => type === "rect" || type === "frame" || type === "image" || type === "sticky";
 
 export const TYPE_LABEL: Record<ShapeType, string> = {
+  group: "Group",
   frame: "Frame",
   rect: "Rectangle",
   ellipse: "Ellipse",
@@ -154,6 +155,8 @@ const BASE: ShapeProps = {
 export function defaultsFor(type: ShapeType, kind: CanvasKind): ShapeProps {
   const board = kind === "board";
   switch (type) {
+    case "group":
+      return { ...BASE, type, fill: "none", w: 0, h: 0 };
     case "frame":
       return { ...BASE, type, fill: "var(--background)" };
     case "rect":
@@ -176,7 +179,7 @@ export function defaultsFor(type: ShapeType, kind: CanvasKind): ShapeProps {
   }
 }
 
-const SHAPE_TYPES = new Set<string>(["frame", "rect", "ellipse", "line", "arrow", "text", "path", "image", "sticky", "instance"]);
+const SHAPE_TYPES = new Set<string>(["group", "frame", "rect", "ellipse", "line", "arrow", "text", "path", "image", "sticky", "instance"]);
 const ALIGNS = new Set<string>(["left", "center", "right"]);
 const DIRECTIONS = new Set<string>(["none", "row", "column"]);
 const JUSTIFIES = new Set<string>(["start", "center", "end", "between"]);

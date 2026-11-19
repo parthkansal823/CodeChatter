@@ -186,12 +186,22 @@ function MoreMenu({ presenting }: { presenting: boolean }) {
   const { room } = useRoom();
   const { resolvedTheme, setTheme } = useTheme();
   const [forking, setForking] = useState(false);
+  // The menu gives focus back to its button when it closes, which would open the tooltip there and leave it over the buttons beside it (the
+  // Automations tool's header, say) until the pointer came back: it waits for the pointer instead.
+  const [tip, setTip] = useState(false);
+  const [quiet, setQuiet] = useState(false);
   return (
     <>
       {/* Not modal: a modal menu hides the whole page from screen readers while its buttons can still take focus. */}
-      <DropdownMenu modal={false}>
-        <Tooltip>
-          <TooltipTrigger asChild>
+      <DropdownMenu
+        modal={false}
+        onOpenChange={(open) => {
+          if (!open) setQuiet(true);
+          setTip(false);
+        }}
+      >
+        <Tooltip open={tip && !quiet} onOpenChange={setTip}>
+          <TooltipTrigger asChild onPointerEnter={() => setQuiet(false)}>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label="More">
                 <MoreHorizontal />

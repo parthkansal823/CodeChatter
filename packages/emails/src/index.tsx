@@ -83,6 +83,25 @@ export function interviewInvitationEmail(input: { candidateName: string; intervi
   );
 }
 
+/** Remind without replacing a link the candidate may already have open on another device. */
+export function assessmentReminderEmail(input: { candidateName: string; title: string; minutes: number; closesAt: Date; now: Date }) {
+  const minutesLeft = Math.max(1, Math.floor((input.closesAt.getTime() - input.now.getTime()) / 60_000));
+  const amount = minutesLeft >= 60 ? Math.floor(minutesLeft / 60) : minutesLeft;
+  const unit = minutesLeft >= 60 ? "hour" : "minute";
+  const remaining = `${amount} ${unit}${amount === 1 ? "" : "s"}`;
+  const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(input.closesAt);
+  const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }).format(input.closesAt);
+  return build(
+    `Assessment reminder: ${input.title}`,
+    <EmailLayout preview={`${input.title} closes in ${remaining}`}>
+      <Heading>{input.title}</Heading>
+      <Paragraph>Hi {input.candidateName}, your assessment closes in {remaining}, on {date} at {time} UTC.</Paragraph>
+      <Paragraph>You have {input.minutes} minutes to complete it once you start.</Paragraph>
+      <Paragraph>Use the link in your original invitation to open your assessment. If you cannot find it, ask your interviewer for help.</Paragraph>
+    </EmailLayout>,
+  );
+}
+
 export function roomShareEmail(input: { inviterName: string; roomName: string; role: string; url: string }) {
   return build(
     `${input.inviterName} shared “${input.roomName}” with you`,

@@ -192,6 +192,36 @@ export const BUILTINS: Record<string, Builtin> = {
     fields: { text: long("Message", "Up to 4,000 characters, such as: Deployed {{trigger.output.data.args}}.", true) },
     defaults: { text: "" },
   },
+  read_files: {
+    group: "room",
+    label: "Read files",
+    description: "The room's files a path or pattern names, one item each, with the file for File Helper, CSV or an attachment",
+    fields: {
+      paths: long("Files", "A path or a pattern on each line, such as reports/*.csv or docs/**/*.md. Never .git or node_modules unless named.", true),
+      as_text: check("Also give their text", "Each item's text too, for the next steps to read."),
+      max: number("At most", "How many files: 100 if empty, and at most."),
+    },
+    defaults: { paths: "", as_text: false, max: 100 },
+  },
+  write_file: {
+    group: "room",
+    label: "Write a file",
+    description: "Text, JSON or a step's file, into the room's files, as everyone in the room then sees it",
+    fields: {
+      path: text("Path", "Where in the room, such as reports/summary.md. Folders are made as needed.", true),
+      content: long("What to write", "Text or JSON from steps before, or a step's file, such as {{step_1.output[0].file}}.", true),
+      content_is: choice("It is", [
+        ["text", "Text, or JSON"],
+        ["file", "A step's file (its address)"],
+      ]),
+      mode: choice("If the file is there", [
+        ["replace", "Replace it"],
+        ["append", "Add to its end"],
+        ["new", "Fail the step"],
+      ]),
+    },
+    defaults: { path: "", content: "", content_is: "text", mode: "replace" },
+  },
   stop_and_error: {
     label: "Stop and Error",
     description: "Stop the run here, saying why",

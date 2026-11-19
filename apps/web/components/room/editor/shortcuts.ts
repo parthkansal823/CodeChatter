@@ -116,6 +116,8 @@ export function useEditorShortcuts() {
       const inMonaco = Boolean(target?.closest?.(".monaco-editor"));
       const inField =
         !inMonaco && Boolean(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)));
+      // The focused canvas owns grouping before Go to line and Source control.
+      if (!inField && !event.altKey && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "g" && target?.closest?.("[data-canvas-shell]")) return;
       const ownKey = Boolean(target?.closest?.(".xterm, [data-own-run-key]"));
       const allowed = (id: string) => {
         const where = whereOf(id);

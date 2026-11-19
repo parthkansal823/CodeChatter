@@ -10,6 +10,7 @@ import { Canvas } from "../canvas/canvas";
 import { CanvasHeader, EmptyCanvas, HistoryButtons, NameField, PeerAvatars, ShortcutHint, ToolButton, ZoomMenu } from "../canvas/chrome";
 import { ExportDialog } from "../canvas/export-dialog";
 import { LayersPanel } from "../canvas/layers";
+import { GroupControls } from "../canvas/group-controls";
 import { renameItem, type ListItem } from "../canvas/list";
 import { useLiveDoc, type LiveDoc } from "../canvas/live-doc";
 import { PropertiesPanel } from "../canvas/properties";
@@ -67,6 +68,7 @@ export function DesignEditor({ roomId, item, list, me, editable, onBack, onClose
             )}
             <PeerAvatars />
             <HistoryButtons />
+            <GroupControls />
             <ZoomMenu />
             <ToolButton label={layers ? "Hide layers" : "Show layers"} active={layers} onClick={() => setLayers((v) => !v)}>
               <PanelLeft />

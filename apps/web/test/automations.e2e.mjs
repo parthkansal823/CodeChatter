@@ -527,6 +527,65 @@ try {
   const ifItFails = details.getByRole("combobox", { name: "If it fails, run" });
   check("aFlowCanNameItsErrorFlow", await ok(ifItFails.waitFor({ timeout: 5000 })) && (await ifItFails.getByRole("option", { name: "Nothing" }).count()) === 1);
 
+  // ---- Connections: the owner adds one with its piece's own fields, it's tried, a step chooses it, and it's removed; its secret is never shown ----
+  const connectionName = `ui-db-${Date.now().toString(36)}`;
+  const connectionSecret = `secret-${Date.now().toString(36)}`;
+  await tool.getByRole("button", { name: "Connections", exact: true }).click();
+  const connectionsDialog = a.getByRole("dialog", { name: "Connections" });
+  check("theConnectionsOpen", await ok(connectionsDialog.getByRole("list", { name: "The room's connections" }).waitFor({ timeout: 15_000 })));
+  await connectionsDialog.getByRole("button", { name: "Add a connection" }).click();
+  const connectionForm = connectionsDialog.getByRole("form", { name: "Add a connection" });
+  await connectionForm.getByRole("combobox", { name: "For" }).selectOption({ value: "@activepieces/piece-postgres" });
+  check("itAsksForThePiecesOwnFields", (await connectionForm.getByLabel(/^Host/).count()) === 1 && (await connectionForm.getByLabel(/^Password/).getAttribute("type")) === "password");
+  await connectionForm.getByRole("textbox", { name: /^Name/ }).fill(connectionName);
+  await connectionForm.getByLabel(/^Host/).fill("postgres");
+  await connectionForm.getByLabel(/^Port/).fill("5432");
+  await connectionForm.getByLabel(/^User/).fill("nobody");
+  await connectionForm.getByLabel(/^Password/).fill(connectionSecret);
+  await connectionForm.getByLabel(/^Database/).fill("nothing");
+  await connectionForm.getByRole("button", { name: "Save and test" }).click();
+  check("wrongDetailsAreSavedAndSayTheyDidntWork", await ok(connectionForm.getByRole("alert").filter({ hasText: /^Saved, but it didn't work/ }).waitFor({ timeout: 60_000 })), await connectionForm.innerText().catch(() => ""));
+  await connectionForm.getByRole("button", { name: "Done" }).click();
+  const connectionRow = connectionsDialog.getByRole("listitem", { name: `Connection ${connectionName}` });
+  check("itsListedWithWhatIsntSecret", (await ok(connectionRow.waitFor({ timeout: 10_000 }))) && /host: postgres/.test(await connectionRow.innerText()) && /Didn't work/.test(await connectionRow.innerText()));
+  check("andItsSecretIsntShown", !(await a.content()).includes(connectionSecret));
+  await a.keyboard.press("Escape");
+  // A Postgres step chooses it.
+  await chart.getByRole("button", { name: /^Add a step after / }).last().click();
+  await picker.getByPlaceholder(/^Search \d+ actions$/).fill("postgres run query");
+  await picker.getByRole("option", { name: /^Postgres: Run Query/ }).first().click();
+  const itsConnection = details.getByRole("region", { name: "Its connection" });
+  check("aStepThatNeedsOneAsksWhich", await ok(itsConnection.waitFor({ timeout: 10_000 })));
+  await itsConnection.getByRole("combobox", { name: "Connection" }).selectOption(connectionName);
+  check("andTakesIt", (await itsConnection.getByRole("combobox", { name: "Connection" }).inputValue()) === connectionName);
+  await itsConnection.getByRole("button", { name: "Connections…" }).click();
+  await connectionRow.getByRole("button", { name: "Remove" }).click();
+  await connectionRow.getByRole("group", { name: "Are you sure?" }).getByRole("button", { name: "Remove it" }).click();
+  check("anOwnerRemovesIt", await ok(connectionRow.waitFor({ state: "detached", timeout: 15_000 })));
+  await a.keyboard.press("Escape");
+  check("theStepSaysItsGone", await ok(itsConnection.getByText(`There's no connection called ${connectionName}`).waitFor({ timeout: 10_000 })));
+
+  // ---- Files: Read files from the picker, run on the engine, and the file it gave shown with Download ----
+  await tool.getByRole("button", { name: "New automation" }).click();
+  await tool.getByLabel("Name of the new automation").fill("With files");
+  await tool.getByRole("button", { name: "Make it" }).click();
+  await chart.getByRole("button", { name: /^Step / }).first().waitFor({ timeout: 10_000 });
+  await sleep(500);
+  await chart.getByRole("button", { name: /^Add a step after / }).last().click();
+  await picker.getByPlaceholder(/^Search \d+ actions$/).fill("read files");
+  await option("Read files").click();
+  await box("Read files").waitFor({ timeout: 5000 });
+  const readPanel = details.getByRole("region", { name: "Step Read files" });
+  await readPanel.getByRole("textbox", { name: /^Files/ }).fill(`${FOLDER}/with-files.flow.json`);
+  await sleep(800);
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  await runUntil({}, /^Finished in/);
+  await select("Read files");
+  const download = readPanel.getByRole("region", { name: "What came out" }).getByRole("button", { name: "Download with-files.flow.json" });
+  check("aStepsFileIsShownWithDownload", await ok(download.waitFor({ timeout: 10_000 })));
+  const saved = await Promise.all([a.waitForEvent("download", { timeout: 20_000 }), download.click()]).then(([event]) => event).catch(() => null);
+  check("andDownloadsWithItsName", saved?.suggestedFilename() === "with-files.flow.json", saved?.suggestedFilename());
+
   // ---- On a phone ----
   await a.setViewportSize({ width: 390, height: 800 });
   await sleep(800);
@@ -542,6 +601,9 @@ try {
   // Whatever it turned on, even if it stopped halfway.
   const triggers = await a.request.get(`${BASE}/api/rooms/E2ETST/automations/triggers`).then((response) => response.json()).catch(() => []);
   for (const trigger of Array.isArray(triggers) ? triggers : []) if (trigger.path?.startsWith(`${FOLDER}/`)) await a.request.delete(`${BASE}/api/rooms/E2ETST/automations/triggers/${trigger.id}`, { headers: { origin: BASE } }).catch(() => {});
+  // And any connection it added.
+  const connections = await a.request.get(`${BASE}/api/rooms/E2ETST/automations/connections`).then((response) => response.json()).catch(() => []);
+  for (const connection of Array.isArray(connections) ? connections : []) if (connection.name?.startsWith("ui-db-")) await a.request.delete(`${BASE}/api/rooms/E2ETST/automations/connections/${connection.name}`, { headers: { origin: BASE } }).catch(() => {});
   await removeTheirFiles().catch(() => {});
   check("itsFilesAreRemoved", (await files.getByRole("treeitem", { name: new RegExp(`^${FOLDER}`) }).count()) === 0);
   check("noPageErrors", errors.length === 0, errors.join(" | "));

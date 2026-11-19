@@ -1,4 +1,5 @@
 import { OVERRIDABLE, type Overrides, type Shape } from "./shape";
+import { normalizeGroups } from "./groups";
 import { childrenIndex, descendantsOf } from "./tree";
 
 /**
@@ -60,7 +61,7 @@ export function instanceContent(instance: Shape, main: Shape, shapes: ReadonlyMa
  * copies of its component's content. Export, inspect and code generation
  * work on this, so they never need to know about components.
  */
-export function expandInstances(shapes: ReadonlyMap<string, Shape>): Map<string, Shape> {
+export function expandInstances(shapes: ReadonlyMap<string, Shape>): ReadonlyMap<string, Shape> {
   const out = new Map(shapes);
   const lookup: Lookup = (id) => shapes.get(id);
   const expand = (instance: Shape, depth: number) => {
@@ -91,13 +92,13 @@ export function expandInstances(shapes: ReadonlyMap<string, Shape>): Map<string,
     }
   };
   for (const shape of shapes.values()) if (shape.type === "instance") expand(shape, 0);
-  return out;
+  return normalizeGroups(out);
 }
 
 /** The shapes inside a component that an instance can override, with what each can change. */
 export function overridableIn(main: Shape, shapes: ReadonlyMap<string, Shape>): Shape[] {
   const index = childrenIndex(shapes);
-  return descendantsOf(index, main.id).filter((s) => s.type !== "instance" && s.type !== "frame");
+  return descendantsOf(index, main.id).filter((s) => s.type !== "instance" && s.type !== "frame" && s.type !== "group");
 }
 
 /** Instances of a component, for "N instances" and for what to detach when it's deleted. */

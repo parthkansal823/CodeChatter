@@ -1,5 +1,6 @@
 import type * as Y from "yjs";
 
+import { normalizeGroups } from "./groups";
 import { readShape, type CanvasKind, type Shape } from "./shape";
 import { childrenIndex } from "./tree";
 
@@ -36,6 +37,7 @@ export class ShapeStore {
     this.map = map;
     this.kind = kind;
     map.forEach((entry, id) => this.put(id, readShape(id, entry, kind)));
+    this.shapes = new Map(normalizeGroups(this.shapes));
     map.observeDeep(this.onChange);
   }
 
@@ -64,6 +66,11 @@ export class ShapeStore {
       if (entry) this.put(id, readShape(id, entry, this.kind));
       else this.remove(id);
     }
+    const derived = normalizeGroups(this.shapes);
+    for (const [id, shape] of derived) {
+      if (shape !== this.shapes.get(id)) changed.add(id);
+    }
+    this.shapes = new Map(derived);
     this.lastChanged = changed;
     this.allSnapshot = null;
     if (structure) this.structureStale = true;

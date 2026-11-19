@@ -7,6 +7,7 @@
 import { roomEventOf, SCHEDULE_PIECE, type AutomationStepResult, type PieceField, type PieceInfo } from "@codechatter/contracts";
 import { Loader2, Pin, PinOff, Play, Plus, Replace, Trash2, Zap } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import Markdown, { type Components } from "react-markdown";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { insertAt, previewOf } from "./expressions";
 import { addBranch, canPin, expressionsFor, isPinned, kindOf, pinStep, removeBranch, removeStep, setStepNote, toggleStep, unpinStep, updateStep, type Flow, type FlowStep, type Place } from "./model";
 import { RouterFields } from "./router-fields";
 import { ConnectionField } from "./connections";
+import { PollSettings } from "./poll-settings";
 import { CallFlowField } from "./error-flow-field";
 import { ExpressionInput } from "./expression-input";
 import { RoomEventSettings } from "./room-event-settings";
@@ -41,11 +43,38 @@ function PreviewLine({ text, data }: { text: unknown; data: Record<string, unkno
   );
 }
 
+// A piece's note among its fields is Markdown ("**NOTE:** ..."), small and plain here: no headings' sizes, no pictures, links to a new tab.
+const noteParts: Components = {
+  p: ({ children }) => <p className="my-1 first:mt-0 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="my-1 list-disc pl-4">{children}</ul>,
+  ol: ({ children }) => <ol className="my-1 list-decimal pl-4">{children}</ol>,
+  h1: ({ children }) => <p className="my-1 font-medium text-foreground">{children}</p>,
+  h2: ({ children }) => <p className="my-1 font-medium text-foreground">{children}</p>,
+  h3: ({ children }) => <p className="my-1 font-medium text-foreground">{children}</p>,
+  strong: ({ children }) => <strong className="font-medium text-foreground">{children}</strong>,
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground">
+      {children}
+    </a>
+  ),
+  code: ({ children }) => <code className="rounded-sm bg-muted px-1 font-mono text-[11px]">{children}</code>,
+  pre: ({ children }) => <pre className="my-1 overflow-x-auto rounded-md bg-chrome p-2 text-[11px]">{children}</pre>,
+  img: () => null,
+};
+
+function PieceNote({ text }: { text: string }) {
+  return (
+    <div className="text-muted-foreground">
+      <Markdown components={noteParts}>{text}</Markdown>
+    </div>
+  );
+}
+
 /** One field. Any can take an expression like {{step_1.output.x}}, so text is always allowed, and what can't have a form here is typed as JSON. */
 function PieceFieldEditor({ name, spec, value, onChange, readOnly, onFocusField, data, bases }: { name: string; spec: PieceField; value: unknown; onChange: (next: unknown) => void; readOnly: boolean; onFocusField: FocusField; data: Record<string, unknown> | null; bases: string[] }) {
   const helpId = useId();
   const label = `${spec.label || name}${spec.required ? " (required)" : ""}`;
-  if (spec.type === "MARKDOWN") return spec.description ? <p className="text-muted-foreground whitespace-pre-wrap">{spec.description}</p> : null;
+  if (spec.type === "MARKDOWN") return spec.description ? <PieceNote text={spec.description} /> : null;
   // Beside the field and tied to it, rather than in its label, so a field's name stays short for anyone listening.
   const help = spec.description ? <span id={helpId} className="text-muted-foreground">{spec.description}</span> : null;
   const describedBy = spec.description ? helpId : undefined;
@@ -300,7 +329,8 @@ export function StepPanel({
       {roomEvent && <RoomEventSettings flow={flow} path={path} room={roomEvent} canRun={canRun} canEdit={canEdit} onSave={onChange} onUseEvent={onUseEvent} />}
       {isTrigger && !roomEvent && settings.pieceName === "@activepieces/piece-webhook" && <TriggerSettings flow={flow} path={path} canRun={canRun} onSave={onChange} onUseEvent={onUseEvent} />}
       {isTrigger && settings.pieceName === SCHEDULE_PIECE && <ScheduleSettings flow={flow} path={path} canRun={canRun} onSave={onChange} />}
-      {isTrigger && !roomEvent && settings.pieceName && settings.pieceName !== "@activepieces/piece-webhook" && settings.pieceName !== SCHEDULE_PIECE && <p className="rounded-md border p-2 text-muted-foreground">This trigger can&apos;t start the flow by itself yet: webhooks and schedules can, and services&apos; own triggers come next. Until then it runs when you press Run it, with what you send standing in for what this trigger would give.</p>}
+      {isTrigger && !roomEvent && settings.pieceName && settings.pieceName !== "@activepieces/piece-webhook" && settings.pieceName !== SCHEDULE_PIECE && pieceStep?.kind === "POLLING" && <PollSettings flow={flow} path={path} label={pieceStep.label} canRun={canRun} onUseEvent={onUseEvent} />}
+      {isTrigger && !roomEvent && settings.pieceName && settings.pieceName !== "@activepieces/piece-webhook" && settings.pieceName !== SCHEDULE_PIECE && pieceStep?.kind !== "POLLING" && <p className="rounded-md border p-2 text-muted-foreground">This trigger is the service calling in, which needs the room to be reachable from the internet: that comes later. Until then it runs when you press Run it, with what you send standing in for what this trigger would give.</p>}
       {pieceStep?.needsAuth && piece?.auth && settings.pieceName && <ConnectionField pieceName={settings.pieceName} piece={piece} auth={input.auth} canEdit={canEdit} onChange={(auth) => setInput("auth", auth)} />}
       {settings.pieceName && !piece && <p role="alert" className="text-destructive">This room&apos;s image doesn&apos;t have {settings.pieceName}.</p>}
 

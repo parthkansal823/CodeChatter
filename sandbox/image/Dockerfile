@@ -200,7 +200,7 @@ RUN set -eu; \
 # drives the engine, in each room's own sandbox, so rooms stay apart and nothing runs when nothing's asked for. Pieces that won't load fail this build.
 FROM activepieces/activepieces:0.92.3-hotfix.2@sha256:3aa4093ca5774589a861703f20a22c250891fe31c56edb9a516a7deaeb04b165 AS apengine
 FROM node:24-slim AS automation
-COPY image/automation/package.json image/automation/package-lock.json image/automation/host.mjs image/automation/engine-call.mjs image/automation/builtins.mjs image/automation/prepare.mjs /out/lib/codechatter/automation/
+COPY image/automation/package.json image/automation/package-lock.json image/automation/host.mjs image/automation/engine-call.mjs image/automation/builtins.mjs image/automation/files.mjs image/automation/prepare.mjs /out/lib/codechatter/automation/
 COPY --from=apengine /usr/src/app/dist/packages/engine/main.js /out/lib/codechatter/automation/engine/main.js
 COPY image/automation.py /out/lib/codechatter/automation.py
 RUN set -eu; \

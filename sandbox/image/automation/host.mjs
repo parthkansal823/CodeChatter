@@ -12,9 +12,13 @@ import { zstdDecompressSync } from "node:zlib";
 
 import { Server } from "socket.io";
 
+import { dispositionOf, FILE_ID, fileNameOf, filesHere, MOST_FILE_BYTES, RUN_ID, stepFileUrl, typeOf, wholeSteps } from "./files.mjs";
+
 const HOME = join(process.env.HOME, "automations");
 const QUEUE = join(HOME, "queue");
 const RUNS = join(HOME, "runs");
+/** What runs' steps kept apart: the files they made (File Helper's, a CSV file, a zip), and outputs too big for the run's details. A folder for each run. */
+const FILES = join(HOME, "files");
 const CODES = join(HOME, "codes");
 const LIVE = join(HOME, "live.json");
 const STORE = join(HOME, "store.json");
@@ -88,8 +92,58 @@ function writeCodeSteps(flow, versionId) {
   }
 }
 
+/**
+ * The secrets in a run's connections (a token, a password, a piece's secret fields, as its manifest describes them), to take out of everything the run
+ * keeps: its steps' inputs, outputs and errors, as Activepieces' own server does. A step could still pass one on to a service; it isn't written down here.
+ */
+function secretsOf(connections) {
+  const pieces = readJson(join(ROOT, "manifest.json"), {}) ?? {};
+  const found = new Set();
+  for (const connection of Object.values(connections ?? {})) {
+    const value = connection?.value ?? {};
+    if (value.type === "SECRET_TEXT") found.add(value.secret_text);
+    else if (value.type === "BASIC_AUTH") found.add(value.password);
+    else if (value.type === "CUSTOM_AUTH") {
+      const fields = pieces[connection.piece]?.auth?.fields ?? {};
+      for (const [name, field] of Object.entries(value.props ?? {})) if (typeof field === "string" && (fields[name]?.type === "SECRET_TEXT" || /pass|secret|token|key|cred|private|pwd/i.test(name))) found.add(field);
+    }
+  }
+  // Very short values would take out ordinary words.
+  return [...found].filter((secret) => typeof secret === "string" && secret.length >= 4).sort((a, b) => b.length - a.length);
+}
+
+/** What's kept of a run, with its connections' secrets taken out wherever they appear, as JSON has them. */
+function scrubbed(value, secrets) {
+  if (!secrets.length) return value;
+  const text = JSON.stringify(value);
+  let clean = text;
+  for (const secret of secrets) clean = clean.split(JSON.stringify(secret).slice(1, -1)).join("**REDACTED**");
+  return clean === text ? value : JSON.parse(clean);
+}
+
 function readStep(execution) {
   return execution?.executionState?.steps ?? {};
+}
+
+/** A step's file, kept with its run: its bytes and its name, or null once the run isn't kept. */
+function stepFile(runId, fileId) {
+  if (!RUN_ID.test(runId) || !FILE_ID.test(fileId)) return null;
+  try {
+    const meta = readJson(join(FILES, runId, `${fileId}.json`), {}) ?? {};
+    return { name: fileNameOf(meta.name), data: readFileSync(join(FILES, runId, fileId)) };
+  } catch {
+    return null;
+  }
+}
+
+/** An output the engine kept apart (over 32 KB), by its id, from whichever run it was in: ids are the engine's, random and long. */
+function sliceOf(fileId) {
+  if (!FILE_ID.test(fileId) || !existsSync(FILES)) return null;
+  for (const run of readdirSync(FILES)) {
+    const path = join(FILES, run, `${fileId}.slice`);
+    if (existsSync(path)) return readFileSync(path);
+  }
+  return null;
 }
 
 /**
@@ -116,11 +170,14 @@ function withPins(flow, except = null) {
 async function runJob(job) {
   const startedAt = NOW();
   const mode = job.mode === "step" || job.mode === "retry" || job.mode === "resume" ? job.mode : "run";
-  const { flow, pinned } = withPins(job.flow ?? { trigger: null }, mode === "step" ? job.step : null);
+  // The flow's steps' files are read from this worker once it has a port (below).
+  let { flow, pinned } = withPins(job.flow ?? { trigger: null }, mode === "step" ? job.step : null);
+  running.add(job.id);
   const live = { state: "running", id: job.id, path: job.path, flowId: job.flowId ?? null, name: job.flow?.displayName ?? job.path, trigger: job.trigger, by: job.by ?? null, mode, step: mode === "step" ? job.step : null, retryOf: mode === "retry" ? job.retryOf : null, pinned, startedAt, finishedAt: null, beat: startedAt, steps: {}, status: null, message: null };
   // A flow called by another runs inside its run: the live view stays the caller's.
+  const secrets = secretsOf(job.connections);
   const writeLive = () => {
-    if (!job.nested) writeJson(LIVE, live);
+    if (!job.nested) writeJson(LIVE, scrubbed(live, secrets));
   };
   // Approval links made in this run (builtins.mjs), for the wait after them: kept here, never in the run's details.
   let reservedToken = null;
@@ -140,20 +197,76 @@ async function runJob(job) {
       res.end(JSON.stringify(value ?? {}));
     };
     const path = url.pathname;
+    const port = http.address().port;
     if (path.startsWith("/v1/files/")) {
-      // Running again from where a run failed: the engine reads that run's steps, keeps what succeeded, and carries on from what didn't.
-      if (req.method === "GET" && (mode === "retry" || mode === "resume") && path === `/v1/files/resume-${job.id}`) return send(200, { executionState: { steps: job.resumeSteps ?? {}, tags: [] } });
+      const fileId = path.slice("/v1/files/".length);
+      if (req.method === "GET") {
+        // Running again from where a run failed: the engine reads that run's steps, keeps what succeeded, and carries on from what didn't.
+        if ((mode === "retry" || mode === "resume") && fileId === `resume-${job.id}`) return send(200, { executionState: { steps: filesHere(job.resumeSteps ?? {}, port), tags: [] } });
+        // A step's output the engine kept apart, read back when a later step uses it.
+        const slice = sliceOf(fileId);
+        if (!slice) return send(404);
+        res.writeHead(200, { "content-type": "application/octet-stream", "content-length": slice.length });
+        return res.end(slice);
+      }
       if (req.method !== "PUT") return send(404);
+      const kind = String(req.headers["x-ap-file-type"] ?? "FLOW_RUN_LOG");
+      const zstd = String(req.headers["content-encoding"] ?? "").toLowerCase() === "zstd";
+      if (kind !== "FLOW_RUN_LOG") {
+        if (!FILE_ID.test(fileId)) return send(400, { message: "That isn't a file's id." });
+        const data = zstd ? zstdDecompressSync(raw) : raw;
+        if (data.length > MOST_FILE_BYTES) return send(413, { message: `A step's file is up to ${MOST_FILE_BYTES / 1024 / 1024} MB.` });
+        mkdirSync(join(FILES, job.id), { recursive: true });
+        // An output over 32 KB, kept apart by the engine: put back into the run's details below.
+        if (kind === "FLOW_RUN_LOG_SLICE") {
+          writeFileSync(join(FILES, job.id, `${fileId}.slice`), data);
+          const readUrl = `http://127.0.0.1:${port}/v1/files/${fileId}`;
+          res.setHeader("x-ap-file-read-url", readUrl);
+          return send(200, { readUrl });
+        }
+        // A file a step made: the next steps, and a run carried on later, read it from its address.
+        const name = fileNameOf(req.headers["x-ap-file-name"]);
+        writeFileSync(join(FILES, job.id, fileId), data);
+        writeFileSync(join(FILES, job.id, `${fileId}.json`), JSON.stringify({ name, size: data.length }));
+        const readUrl = stepFileUrl(port, job.id, fileId, name);
+        res.setHeader("x-ap-file-read-url", readUrl);
+        return send(200, { readUrl });
+      }
       try {
-        steps = readStep(JSON.parse((raw[0] === 0x28 ? zstdDecompressSync(raw) : raw).toString()));
+        steps = wholeSteps(readStep(JSON.parse((zstd || raw[0] === 0x28 ? zstdDecompressSync(raw) : raw).toString())), sliceOf);
         live.steps = steps;
         writeLive();
       } catch {
         // Details that can't be read don't stop the run.
       }
-      const readUrl = `http://127.0.0.1:${http.address().port}${path}`;
+      const readUrl = `http://127.0.0.1:${port}${path}`;
       res.setHeader("x-ap-file-read-url", readUrl);
       return send(200, { readUrl });
+    }
+    // A step's file, from this run or an earlier one still kept.
+    if (path.startsWith("/v1/step-files/") && req.method === "GET") {
+      const [runId = "", fileId = ""] = path.slice("/v1/step-files/".length).split("/");
+      const found = stepFile(runId, fileId);
+      if (!found) return send(404, { message: "That file isn't kept any more: its run has gone." });
+      res.writeHead(200, { "content-type": typeOf(found.name), "content-length": found.data.length, "content-disposition": dispositionOf(found.name) });
+      return res.end(found.data);
+    }
+    // A file made by a built-in step (Read files), kept as a piece's would be.
+    if (path === "/v1/codechatter/files" && req.method === "POST") {
+      let asked = {};
+      try {
+        asked = JSON.parse(raw.toString());
+      } catch {
+        return send(400, { error: "That isn't a file." });
+      }
+      const data = Buffer.from(String(asked.data ?? ""), "base64");
+      if (data.length > MOST_FILE_BYTES) return send(413, { error: `A step's file is up to ${MOST_FILE_BYTES / 1024 / 1024} MB.` });
+      const fileId = randomBytes(12).toString("base64url");
+      const name = fileNameOf(asked.name);
+      mkdirSync(join(FILES, job.id), { recursive: true });
+      writeFileSync(join(FILES, job.id, fileId), data);
+      writeFileSync(join(FILES, job.id, `${fileId}.json`), JSON.stringify({ name, size: data.length }));
+      return send(200, { url: stepFileUrl(port, job.id, fileId, name) });
     }
     if (path === "/v1/engine/run-logs") {
       try {
@@ -172,7 +285,7 @@ async function runJob(job) {
       try {
         const { step } = JSON.parse(raw.toString());
         if (step?.name) {
-          steps = { ...steps, [step.name]: step.output };
+          steps = { ...steps, ...wholeSteps({ [step.name]: step.output }, sliceOf) };
           live.steps = steps;
           writeLive();
         }
@@ -218,7 +331,8 @@ async function runJob(job) {
         return send(400, { error: "That isn't a call." });
       }
       const answer = await callFlow(job, call, startedAt);
-      return send(answer.status, answer.body);
+      // Files the flow called made were read from its worker, gone now: they're read from this one.
+      return send(answer.status, filesHere(answer.body, port));
     }
     if (path.startsWith("/v1/store-entries")) {
       const key = url.searchParams.get("key");
@@ -251,6 +365,8 @@ async function runJob(job) {
   io.use((socket, next) => (socket.handshake.auth?.connectionToken === token ? next() : next(new Error("refused"))));
   await new Promise((resolve) => http.listen(0, "127.0.0.1", resolve));
   const port = http.address().port;
+  // Pinned data, or what's sent, may name files from an earlier run: they're read from this worker.
+  flow = filesHere(flow, port);
 
   const finish = (status, message) => {
     clearInterval(stopTimer);
@@ -263,10 +379,13 @@ async function runJob(job) {
     // A flow that failed, with an error flow, starts it: n8n's error workflow. Not for a step tried alone, nor an error flow's own failure, so it can't loop.
     if ((status === "FAILED" || status === "TIMEOUT") && mode !== "step" && job.trigger !== "error" && typeof job.flow?.errorFlow === "string") Object.assign(live, queueErrorFlow(job, live));
     // What started it stays its payload when it carries on; where it's carried on from goes with it, for a waitpoint after this one.
-    writeJson(join(RUNS, `${job.id}.json`), { ...live, payload: (mode === "resume" ? job.triggerPayload : job.payload) ?? null, resumeBase: job.resumeBase ?? null });
+    writeJson(join(RUNS, `${job.id}.json`), scrubbed({ ...live, payload: (mode === "resume" ? job.triggerPayload : job.payload) ?? null, resumeBase: job.resumeBase ?? null }, secrets));
     writeLive();
     rmSync(join(CODES, job.id), { recursive: true, force: true });
+    running.delete(job.id);
     for (const old of readdirSync(RUNS).sort().reverse().slice(MOST_RUNS)) rmSync(join(RUNS, old), { force: true });
+    // A run's files go with it, but not while it (or a run that called it) is going on.
+    if (existsSync(FILES)) for (const run of readdirSync(FILES)) if (!running.has(run) && !existsSync(join(RUNS, `${run}.json`))) rmSync(join(FILES, run), { recursive: true, force: true });
     engine?.kill("SIGKILL");
     io.close();
     http.close();
@@ -314,6 +433,10 @@ async function runJob(job) {
         AP_NETWORK_MODE: "UNRESTRICTED",
         AP_MAX_FLOW_RUN_LOG_SIZE_MB: "10",
         AP_MAX_FILE_SIZE_MB: "10",
+        // Pieces reach the internet only through the room's proxy (HTTPS_PROXY, the agent's relay): Node's own fetch honours it only when told to, and the
+        // engine's calls to this worker, and the room's own services, never go through it.
+        NODE_USE_ENV_PROXY: "1",
+        NO_PROXY: [process.env.NO_PROXY, "127.0.0.1", "localhost", "postgres", "mysql", "mariadb", "mongo", "redis"].filter(Boolean).join(","),
         SANDBOX_ID: "room",
       },
     });
@@ -343,16 +466,16 @@ async function runJob(job) {
         executeTrigger: false,
         ...(mode === "resume"
           ? // Carrying on from a waitpoint: the step that waited gets what the call to its address sent (or nothing, after a time).
-            { executionType: "RESUME", resumeReason: "WAITPOINT", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: job.payload && typeof job.payload === "object" ? job.payload : { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
+            { executionType: "RESUME", resumeReason: "WAITPOINT", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: job.payload && typeof job.payload === "object" ? filesHere(job.payload, port) : { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
           : mode === "retry"
           ? { executionType: "RESUME", logsFileId: `resume-${job.id}`, resumePayload: { type: "inline", value: { body: {}, headers: {}, queryParams: {} } }, stepNameToTest: null }
           : {
               executionType: "BEGIN",
               logsFileId: `logs-${job.id}`,
-              triggerPayload: { type: "inline", value: triggerOutputOf(flow, job) },
+              triggerPayload: { type: "inline", value: filesHere(triggerOutputOf(flow, job), port) },
               // One step on its own: the engine stands every other step in with this data, and runs only that one.
               stepNameToTest: mode === "step" ? job.step : null,
-              ...(mode === "step" ? { sampleData: { ...(job.sampleData ?? {}), ...Object.fromEntries(pinned.map((name) => [name, job.flow.pinned[name]])) } } : {}),
+              ...(mode === "step" ? { sampleData: filesHere({ ...(job.sampleData ?? {}), ...Object.fromEntries(pinned.map((name) => [name, job.flow.pinned[name]])) }, port) } : {}),
             }),
       };
       try {
@@ -374,6 +497,8 @@ async function runJob(job) {
 function triggerOutputOf(flow, job) {
   // An error flow: the failed run and its flow, as n8n's Error Trigger gives them. A called flow: what its caller sent.
   if (job.trigger === "error" || job.trigger === "flow") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
+  // A service's new item, from its polling trigger (automation.py's poll): the item, as Activepieces' own server gives it.
+  if (job.trigger === "poll") return job.payload ?? {};
   // A room event (a `room` setting on the webhook trigger): what happened, as it is.
   if (flow.trigger?.settings?.room) return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
   if (flow.trigger?.settings?.pieceName === "@activepieces/piece-schedule") return job.payload && typeof job.payload === "object" && !Array.isArray(job.payload) ? job.payload : {};
@@ -400,6 +525,8 @@ function newRunId() {
 const MOST_DEPTH = 5;
 /** Set when Stop is pressed, so a called flow and the run that called it both stop. */
 let stopping = false;
+/** The runs going on: a flow called, and the run that called it. Their files are kept while they are. */
+const running = new Set();
 
 /**
  * Call a flow (n8n's Execute Workflow). The flow called must start on "Called by another flow": that's what lets it be called. Waiting, it runs here and now,

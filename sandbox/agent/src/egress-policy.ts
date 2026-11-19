@@ -38,15 +38,16 @@ export function parseTarget(authority: string): { host: string; port: number } |
 }
 
 /**
- * Why the proxy won't tunnel to `authority`, or null when it's a listed
- * registry host on 443. Hosts match exactly: no wildcards, and an IP address
- * is never on the list. The reason ends up in an HTTP status line, which
- * package managers show.
+ * Why the proxy won't tunnel to `authority`, or null when it's a listed host
+ * on 443. Hosts match exactly: no wildcards, and an IP address is never on the
+ * list. The reason ends up in an HTTP status line, which package managers and
+ * HTTP clients show. `what` is what the list holds: package registries, or
+ * those and the services the room's owner turned on for its automations.
  */
-export function refusal(authority: string, allow: ReadonlySet<string>): string | null {
+export function refusal(authority: string, allow: ReadonlySet<string>, what = "package registries"): string | null {
   const target = parseTarget(authority);
-  if (!target) return "Only package registries, by name";
-  if (target.port !== 443) return "Only HTTPS (port 443) to package registries";
-  if (!allow.has(target.host)) return `${target.host} isn't a package registry this room may reach`;
+  if (!target) return `Only ${what}, by name`;
+  if (target.port !== 443) return `Only HTTPS (port 443) to ${what}`;
+  if (!allow.has(target.host)) return what === "package registries" ? `${target.host} isn't a package registry this room may reach` : `${target.host} isn't one of the hosts this room may reach: its owner chooses them under Automations, Internet`;
   return null;
 }

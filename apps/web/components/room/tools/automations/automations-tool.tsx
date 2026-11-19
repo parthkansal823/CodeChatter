@@ -4,7 +4,7 @@
 import { isFlowFile, type AutomationInput, type AutomationLive, type AutomationManifest } from "@codechatter/contracts";
 import { createFileAtPath, findByPath, flatten } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileCode, KeyRound, Plus, Workflow } from "lucide-react";
+import { FileCode, Globe, KeyRound, Plus, Workflow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 
@@ -18,6 +18,7 @@ import { api, ApiError } from "@/lib/api";
 
 import { ConnectionsDialog, openConnections } from "./connections";
 import { ExamplesView } from "./examples-view";
+import { InternetDialog, openInternet } from "./internet-settings";
 import { FlowFileView } from "./flow-view";
 import { newTrigger, SCHEMA_VERSION, type Flow } from "./model";
 
@@ -115,6 +116,11 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
               <KeyRound /> Connections
             </Button>
           )}
+          {pieces && can("code.run") && (
+            <Button size="xs" variant="ghost" onClick={() => openInternet()}>
+              <Globe /> Internet
+            </Button>
+          )}
           {canEdit && pieces &&
             (naming ? (
               <form
@@ -166,6 +172,7 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
         <FlowFileView key={current.id} node={current} pieces={pieces} live={live} ask={ask} version={version} />
       ) : null}
       {pieces && can("code.run") && <ConnectionsDialog pieces={pieces} />}
+      {pieces && can("code.run") && <InternetDialog pieces={pieces} />}
     </section>
   );
 }
