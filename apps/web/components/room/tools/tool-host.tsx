@@ -17,7 +17,7 @@ export function ToolHost({ tool, ...props }: { tool: RoomTool } & RoomToolProps)
   return (
     <Suspense
       fallback={
-        <div className="grid gap-2 p-4" aria-label={`Loading ${tool.label}`}>
+        <div role="status" className="grid gap-2 p-4" aria-label={`Loading ${tool.label}`}>
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-2/3" />

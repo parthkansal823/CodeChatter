@@ -42,3 +42,18 @@ test("which runs are kept: only a run not kept is written", () => {
   assert.equal("settings" in withSetting(off, "saveSucceeded", null), false);
   assert.deepEqual(withSetting(withSetting(off, "saveFailed", false), "timezone", "Asia/Kolkata").settings, { saveSucceeded: false, saveFailed: false, timezone: "Asia/Kolkata" });
 });
+
+test("which flows may call it: a list kept even when empty (none may), and taken out for any", () => {
+  const none = withSetting(flow, "callers", []);
+  assert.deepEqual(none.settings, { callers: [] });
+  assert.deepEqual(withSetting(none, "callers", ["flow_a"]).settings, { callers: ["flow_a"] });
+  assert.equal("settings" in withSetting(none, "callers", null), false);
+});
+
+test("how many runs it keeps: from 1 to 500, empty for 50", () => {
+  assert.deepEqual(settingOf("keepRuns", "3"), { value: 3 });
+  assert.deepEqual(settingOf("keepRuns", "0"), { problem: "From 1 to 500." });
+  assert.deepEqual(settingOf("keepRuns", "501"), { problem: "From 1 to 500." });
+  assert.deepEqual(settingOf("keepRuns", ""), { value: null });
+  assert.deepEqual(withSetting(flow, "keepRuns", 3).settings, { keepRuns: 3 });
+});

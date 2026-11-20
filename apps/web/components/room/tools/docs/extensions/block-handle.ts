@@ -104,10 +104,7 @@ export const BlockMoves = Extension.create<{ pageId: string }>({
       let frame = 0;
       let lastPointer: { left: number; top: number } | null = null;
       let hovered = false;
-      let activeDom: HTMLElement | null = null;
       const show = (block: BlockRange | null) => {
-        activeDom?.classList.remove("cc-doc-block-active");
-        activeDom = null;
         current = block;
         handle.hidden = !view.editable || !block;
         if (!block || !view.editable) return;
@@ -116,8 +113,6 @@ export const BlockMoves = Extension.create<{ pageId: string }>({
         const rect = dom.getBoundingClientRect(), container = host.getBoundingClientRect();
         handle.style.left = `${rect.left - container.left - 25}px`;
         handle.style.top = `${rect.top - container.top}px`;
-        activeDom = dom;
-        dom.classList.add("cc-doc-block-active");
       };
       const pointerBlock = () => {
         const position = lastPointer && view.posAtCoords(lastPointer);
@@ -206,7 +201,6 @@ export const BlockMoves = Extension.create<{ pageId: string }>({
         update: () => { if (!dragging) hovered && lastPointer ? pointerBlock() : show(view.hasFocus() ? findBlock(view.state.doc, view.state.selection.from) : null); },
         destroy: () => {
           cancelAnimationFrame(frame);
-          activeDom?.classList.remove("cc-doc-block-active");
           handle.remove(); line.remove(); host.classList.remove("cc-doc-block-host");
           host.removeEventListener("dragover", over); host.removeEventListener("drop", drop, true);
           view.dom.removeEventListener("mousemove", pointer); view.dom.removeEventListener("mouseleave", leave);

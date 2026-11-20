@@ -669,6 +669,20 @@ const IN_THE_ROOM: Example[] = [
         data("save", "write_file", "Save it in the room", { path: "automation-output/rows.csv", content: "{{csv.output}}", content_is: "file", mode: "replace" }),
       ]),
   },
+  {
+    id: "release-review-invite",
+    title: "Make a calendar invite for a release review",
+    about: "A release's title and time become an .ics file (iCalendar), saved in the room for anyone to add to their calendar, or to send on.",
+    category: OPS,
+    runsHere: true,
+    sample: { version: "2.4.0", start: "2026-12-01T10:00:00Z", people: "lead@example.com, qa@example.com" },
+    expect: { step: "save", output: { path: "automation-output/release-review.ics" } },
+    flow: () =>
+      chain(webhook("A release to review"), [
+        data("invite", "ical", "Make the invite", { title: "Review release {{trigger.output.body.version}}", start: "{{trigger.output.body.start}}", end: "", all_day: false, description: "What's in {{trigger.output.body.version}}, and whether it's ready.", location: "", url: "", organizer: "", attendees: "{{trigger.output.body.people}}", file_name: "release-review.ics" }),
+        data("save", "write_file", "Save it in the room", { path: "automation-output/release-review.ics", content: "{{invite.output.file}}", content_is: "file", mode: "replace" }),
+      ]),
+  },
 ];
 
 const ONE_OFFS: Example[] = [

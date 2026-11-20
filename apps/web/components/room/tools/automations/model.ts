@@ -26,6 +26,8 @@ export type Flow = {
   trigger: FlowStep;
   /** What it's for, in a sentence or two. Ours, not the engine's: the host never hands it on. */
   description?: string;
+  /** Words to find it by (flow-tags.tsx), as n8n's workflow tags. Ours, as its description is. */
+  tags?: string[];
   /** A note on a step, by its name, shown under its box. */
   stepNotes?: Record<string, string>;
   /** Output pinned on a step, by its name: when the flow runs, the step gives this back instead of running (image/automation/host.mjs). */
@@ -33,13 +35,13 @@ export type Flow = {
   /** Notes placed freely on the chart (n8n's sticky notes), in its own coordinates. Ours: the engine never sees them. */
   stickies?: FlowSticky[];
   /**
-   * Its own settings (flow-settings.tsx): how long a run may take (automation.py), the time each run saves, for Insights, its timezone, and which runs its
-   * trigger started are kept (host.mjs). Only what isn't the default is written.
+   * Its own settings (flow-settings.tsx): how long a run may take (automation.py), the time each run saves, for Insights, its timezone, which runs its
+   * trigger started are kept, and which flows may call it (host.mjs). Only what isn't the default is written.
    */
   settings?: FlowSettingValues;
 };
 
-export type FlowSettingValues = { timeoutSeconds?: number; timeSavedMinutes?: number; timezone?: string; saveSucceeded?: false; saveFailed?: false };
+export type FlowSettingValues = { timeoutSeconds?: number; timeSavedMinutes?: number; /** How many of its runs it keeps (sandbox/image/automation/runs.mjs). */ keepRuns?: number; timezone?: string; saveSucceeded?: false; saveFailed?: false; /** The only flows that may call it, by id (none if empty); any, without it. */ callers?: string[] };
 
 export type FlowSticky = { id: string; text: string; x: number; y: number; width: number; height: number };
 const MOST_STICKIES = 50;
@@ -631,4 +633,33 @@ export function withTag(tags: readonly string[], typed: string): { tags: string[
   if (tags.some((each) => each.toLowerCase() === tag.toLowerCase())) return { tags: [...tags] };
   if (tags.length >= MOST_RUN_TAGS) return { problem: `A run has up to ${MOST_RUN_TAGS} tags.` };
   return { tags: [...tags, tag] };
+}
+
+/** The flow with these tags; none leaves none in its file. */
+export function withTags(flow: Flow, tags: readonly string[]): Flow {
+  const next: Flow = { ...flow, tags: [...tags] };
+  if (!tags.length) delete next.tags;
+  return next;
+}
+
+/** Every tag the flows have, once whatever its case (the first spelling), in order. */
+export function tagsOfFlows(flows: readonly Pick<Flow, "tags">[]): string[] {
+  const found = new Map<string, string>();
+  for (const flow of flows) for (const tag of flow.tags ?? []) if (typeof tag === "string" && !found.has(tag.toLowerCase())) found.set(tag.toLowerCase(), tag);
+  return [...found.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/** A flow's tags, with what its runs and Insights know it by: its id (its path without one) and its path. */
+export type FlowTagged = { key: string; path: string; tags: readonly string[] };
+const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** The keys of the flows with this tag, for Insights. */
+export function keysTagged(flows: readonly FlowTagged[], tag: string): string[] {
+  return flows.filter((flow) => flow.tags.some((each) => sameTag(each, tag))).map((flow) => flow.key);
+}
+
+/** Whether a run's flow has this tag: found by its id, or by its path for a flow without one. */
+export function flowTagged(flows: readonly FlowTagged[], run: { flowId?: string | null; path: string }, tag: string): boolean {
+  const flow = flows.find((each) => (run.flowId ? each.key === run.flowId : each.path === run.path));
+  return Boolean(flow?.tags.some((each) => sameTag(each, tag)));
 }

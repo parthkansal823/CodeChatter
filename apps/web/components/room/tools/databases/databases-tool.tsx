@@ -90,7 +90,7 @@ export default function DatabasesTool({ close }: RoomToolProps) {
             can. Databases sleep when the room is idle and wake with it.
           </p>
           {list.isPending ? (
-            <div className="grid gap-2" aria-label="Loading databases">
+            <div role="status" className="grid gap-2" aria-label="Loading databases">
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-2/3" />

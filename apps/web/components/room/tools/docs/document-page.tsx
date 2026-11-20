@@ -137,7 +137,7 @@ export function DocumentPage({ page }: { page: PageRecord }) {
             {connection ? (
               <PageEditor pageId={page.id} connection={connection} onEditor={setEditor} onThread={showThread} />
             ) : (
-              <div className="grid gap-2 py-2" aria-label="Loading page">
+              <div role="status" className="grid gap-2 py-2" aria-label="Loading page">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-4 w-2/3" />
               </div>

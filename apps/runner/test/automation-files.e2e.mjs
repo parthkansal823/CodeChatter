@@ -1,7 +1,7 @@
 // Files in automations, the whole way, in E2ETST's sandbox by Activepieces' real engine: a step's output over the engine's 32 KB reaching the next step and
 // the run's details whole; File Helper's file read by the CSV piece; the room's files read (Read files), zipped and unzipped by File Helper and written back
 // (Write a file), as the room's live document then has them; a run tried again reading a file made before it failed; and a step's file downloaded as the
-// tool does (run-file). It removes what it made.
+// tool does (run-file), and iCalendar's event file. It removes what it made.
 //   node --env-file=../../.env test/automation-files.e2e.mjs        (from apps/runner, with the dev stack running and the current sandbox images)
 import { signServiceToken } from "@codechatter/auth/service-token";
 import { createFileAtPath, filesDocName, findByPath, textOf, trash } from "@codechatter/workspace-model";
@@ -134,6 +134,10 @@ try {
     "retry",
     flowOf("retry", piece("create", "file-helper", "createFile", { content: `made before ${stamp}`, fileName: "before.txt", encoding: "utf8" }, builtin("needs", "read_files", { paths: `${FOLDER}/later.txt` }, piece("back", "file-helper", "read_file", { file: "{{create.output.url}}", readOptions: "text" })))),
   );
+  const ICAL = write(
+    "ical",
+    flowOf("ical", builtin("event", "ical", { title: `Review ${stamp}`, start: "2026-12-01T10:00:00+05:30", attendees: "a@example.com, b@example.com", file_name: "review" }, piece("back", "file-helper", "read_file", { file: "{{event.output.file}}", readOptions: "text" }))),
+  );
   await sleep(2000);
 
   // ---- An output over 32 KB reaches the next step, and the run's details have it whole ----
@@ -168,6 +172,16 @@ try {
   check("Unzip File gives them back, where they were in the zip", (round?.steps?.unzip?.output ?? []).map((item) => item.filePath).join() === "docs/more.md,notes.md", round?.steps?.unzip?.output);
   check("Write a file puts one in the room", round?.steps?.save?.output?.action === "created", round?.steps?.save?.output);
   check("the room's live document has it", (await roomText(`${FOLDER}/out/unzipped.md`)) === `# Notes ${stamp}\n`, await roomText(`${FOLDER}/out/unzipped.md`, 1));
+
+  // ---- iCalendar: an event's file, read by the next step, and downloaded ----
+  const ical = await runByHand(ICAL);
+  const event = ical?.steps?.event?.output;
+  check("iCalendar makes the event's file", ical?.status === "SUCCEEDED" && event?.fileName === "review.ics" && event?.mimeType === "text/calendar" && STEP_FILE.test(String(event?.file)), ical?.failedStep ?? event);
+  const icalText = JSON.stringify(ical?.steps?.back?.output ?? "");
+  check("which the next step reads: the event in UTC, with who's asked", icalText.includes("BEGIN:VCALENDAR") && icalText.includes(`SUMMARY:Review ${stamp}`) && icalText.includes("DTSTART:20261201T043000Z") && icalText.includes("mailto:b@example.com"), icalText.slice(0, 300));
+  const [, icalRun, icalFile] = STEP_FILE.exec(String(event?.file)) ?? [];
+  const icalDownload = await automations({ op: "run-file", id: icalRun ?? "x", file: icalFile ?? "x" });
+  check("and Download gives it, named", icalDownload.status === 200 && icalDownload.body.name === "review.ics" && Buffer.from(icalDownload.body.data ?? "", "base64").toString().startsWith("BEGIN:VCALENDAR"), icalDownload.body?.name);
 
   // ---- Tried again: a file made before the step that failed is still read ----
   const failed = await runByHand(RETRY);

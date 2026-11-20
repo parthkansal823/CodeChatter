@@ -37,7 +37,7 @@ export default function ApiStudio({ openFile, close }: RoomToolProps) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
         <Header close={close} />
-        <div className="grid gap-2 p-4" aria-label="Opening API Studio" aria-busy>
+        <div role="status" className="grid gap-2 p-4" aria-label="Opening API Studio" aria-busy>
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-2/3" />

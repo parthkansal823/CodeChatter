@@ -121,6 +121,8 @@ try {
   const fromC = await start(MAIN, { mode: "from", step: "c", retryOf: first?.id });
   check("from the last step: it runs again, and the steps before give what they gave", fromC?.status === "SUCCEEDED" && sameAs(fromC, first, ["a", "b1"]) && newerThan(fromC, first, ["c"]), timesOf(fromC));
   check("the run says it ran from that step, of which run", fromC?.mode === "from" && fromC?.step === "c" && fromC?.retryOf === first?.id, { mode: fromC?.mode, step: fromC?.step, retryOf: fromC?.retryOf });
+  const listedRuns = (await automations({ op: "runs", path: MAIN })).body?.runs ?? [];
+  check("and its flow's runs list it so, newest first", listedRuns[0]?.id === fromC?.id && listedRuns[0]?.mode === "from" && listedRuns[0]?.step === "c" && listedRuns.some((run) => run.id === first?.id), listedRuns.slice(0, 3).map((run) => ({ id: run.id, mode: run.mode, step: run.step })));
   check("what the step after it was given came from the kept step", fromC?.steps?.c?.output?.b1 === timesOf(first).b1, fromC?.steps?.c?.output);
   const fromB1 = await start(MAIN, { mode: "from", step: "b1", retryOf: first?.id });
   check("from a step inside a branch: it and what's after run again, and not what's before", fromB1?.status === "SUCCEEDED" && sameAs(fromB1, first, ["a"]) && newerThan(fromB1, first, ["b1", "c"]), timesOf(fromB1));

@@ -191,8 +191,8 @@ function Answer({ request, run, response }: { request: RequestData; run: RunStat
         <ul className="shrink-0 border-b bg-panel px-3 py-1 text-xs text-warning">
           {response.truncated && <li>The response was cut at 5 MB. Download keeps what was received.</li>}
           {response.notice && <li>{response.notice}</li>}
-          {run.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
+          {run.warnings.map((warning, index) => (
+            <li key={`${index}-${warning}`}>{warning}</li>
           ))}
         </ul>
       )}

@@ -43,7 +43,7 @@ export function DesignEditor({ roomId, item, list, me, editable, onBack, onClose
     return (
       <div className="flex h-full min-h-0 flex-col">
         <CanvasHeader backLabel="Designs" onBack={onBack} onClose={onClose} name={<span className="px-1 text-sm font-medium">{item.name}</span>} />
-        <div className="grid gap-2 p-6" aria-label="Opening design">
+        <div role="status" className="grid gap-2 p-6" aria-label="Opening design">
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-2/3" />

@@ -17,6 +17,11 @@ const Env = z.object({
   API_INTERNAL_URL: z.string().startsWith("http").default("http://127.0.0.1:4000"),
   SANDBOX_IMAGE: z.string().default("codechatter-sandbox:dev"),
   /**
+   * Development only: the repo's sandbox/image folder, whose automation scripts are mounted over the image's (dev-scripts.ts), so changing them
+   * needs no image build. Relative to the runner's folder; "off" for the image's own. Never used in production.
+   */
+  SANDBOX_DEV_SCRIPTS: z.string().default(production ? "off" : "../../sandbox/image"),
+  /**
    * The base and full images a room's owner can pick between (Ports panel), when both are
    * set; a room that hasn't picked runs SANDBOX_IMAGE.
    */

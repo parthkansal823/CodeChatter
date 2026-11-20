@@ -36,7 +36,7 @@ export default function DocsTool({ openFile, close }: RoomToolProps) {
             <X />
           </Button>
         </div>
-        <div className="grid gap-2 p-6" aria-label="Loading docs">
+        <div role="status" className="grid gap-2 p-6" aria-label="Loading docs">
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-2/3" />

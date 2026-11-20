@@ -5,7 +5,7 @@
  */
 "use client";
 
-import { ROOM_EVENT_CARRIER, roomEventOf, SCHEDULE_PIECE, type AutomationInput, type AutomationLive, type AutomationManifest, type AutomationRun, type AutomationRunSummary } from "@codechatter/contracts";
+import { CALLED_FLOW_EVENT, ROOM_EVENT_CARRIER, roomEventOf, SCHEDULE_PIECE, type AutomationInput, type AutomationLive, type AutomationManifest, type AutomationRun, type AutomationRunSummary } from "@codechatter/contracts";
 import { setFileText, textOf, type TreeNode } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Code2, Copy, GitBranch, Loader2, Play, Puzzle, Redo2, Repeat, RotateCcw, Rows3, Scissors, Square, Trash2, Undo2, X, Zap } from "lucide-react";
@@ -25,12 +25,14 @@ import { cn } from "@/lib/utils";
 import { copyStep, stepsToPaste } from "./clipboard";
 import { addStep, addSticky, allSteps, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, toggleSteps, newBuiltinStep, chartOfFlow, copyOfStep, duplicateStep, findStep, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newRoomEventTrigger, newTrigger, parseFlow, pasteStep, removeStep, replaceStep, resultsOf, toggleStep, type ChartEdge, type Flow, type FlowStep, type Glyph, type Place } from "./model";
 import { ErrorFlowField } from "./error-flow-field";
+import { CallersSetting } from "./callers-setting";
 import { FlowSettings } from "./flow-settings";
+import { GLYPHS } from "./glyphs";
+import { FlowTags } from "./flow-tags";
 import { RunNotes } from "./run-notes";
 import { StepPanel } from "./step-panel";
 import { StepPicker, type Picked } from "./step-picker";
 
-const GLYPHS: Record<Glyph, FlowchartNode["icon"]> = { trigger: Zap, code: Code2, piece: Puzzle, router: GitBranch, loop: Repeat, data: Rows3 };
 const failure = (error: unknown) => (error instanceof ApiError ? error.message : "Couldn't reach the server. Try again.");
 const when = (at: number | null | undefined) => (at ? new Date(at).toLocaleString([], { dateStyle: "short", timeStyle: "medium" }) : "–");
 const STATUS_WORDS: Record<string, string> = { SUCCEEDED: "Finished", FAILED: "Failed", STOPPED: "Stopped", TIMEOUT: "Took too long", RUNNING: "Running", PAUSED: "Waiting" };
@@ -627,8 +629,11 @@ export function FlowFileView({ node, pieces, live, ask, version, initialRun = nu
               ) : (
                 flow.description && <p className="whitespace-pre-wrap">{flow.description}</p>
               )}
+              <FlowTags flow={flow} canEdit={canEdit} onSave={save} />
               <ErrorFlowField flow={flow} fileId={node.id} canEdit={canEdit} onSave={save} />
-              <FlowSettings flow={flow} canEdit={canEdit} onSave={save} />
+              <FlowSettings flow={flow} canEdit={canEdit} onSave={save}>
+                {roomEventOf(flow.trigger.settings)?.event === CALLED_FLOW_EVENT && <CallersSetting flow={flow} fileId={node.id} canEdit={canEdit} onSave={save} />}
+              </FlowSettings>
             </div>
             {canRun && (
               <section aria-label="Run it" className="grid gap-1">

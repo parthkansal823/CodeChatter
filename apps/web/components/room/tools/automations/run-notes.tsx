@@ -82,7 +82,12 @@ export function RunNotes({ runId, annotation, canEdit, ask, onSaved }: { runId: 
               void addTag();
             }}
           >
-            <Input className="h-7 text-xs md:text-xs" aria-label="A tag to add" aria-describedby={tagProblem ? `${runId}-tag-problem` : undefined} aria-invalid={Boolean(tagProblem)} maxLength={30} placeholder="A tag, such as release or flaky" value={typedTag} disabled={saving} onChange={(event) => setTypedTag(event.target.value)} />
+            <Input className="h-7 text-xs md:text-xs" aria-label="A tag to add" aria-describedby={tagProblem ? `${runId}-tag-problem` : undefined} aria-invalid={Boolean(tagProblem)} maxLength={30} placeholder="A tag, such as release or flaky" value={typedTag} disabled={saving}
+              onChange={(event) => {
+                setTypedTag(event.target.value);
+                setTagProblem(null);
+              }}
+            />
             <Button type="submit" size="xs" variant="outline" disabled={saving || !typedTag.trim()}>
               Add
             </Button>
@@ -94,22 +99,21 @@ export function RunNotes({ runId, annotation, canEdit, ask, onSaved }: { runId: 
           )}
         </div>
       )}
-      <label className="grid gap-1">
-        <span className="sr-only">Its note</span>
-        <Textarea
-          className={cn("min-h-12 text-xs md:text-xs", !canEdit && "resize-none")}
-          readOnly={!canEdit}
-          maxLength={MOST_RUN_NOTE_CHARACTERS}
-          placeholder={canEdit ? "A note on this run, for whoever looks at it next" : "No note."}
-          value={typedNote ?? current.note}
-          onChange={(event) => setTypedNote(event.target.value)}
-          onBlur={() => {
-            if (typedNote === null) return;
-            if (typedNote.trim() === current.note) return setTypedNote(null);
-            void save({ note: typedNote }).then((saved) => saved && setTypedNote(null));
-          }}
-        />
-      </label>
+      {/* Named by aria-label rather than a wrapping label, whose name would take in what's typed. */}
+      <Textarea
+        aria-label="Its note"
+        className={cn("min-h-12 text-xs md:text-xs", !canEdit && "resize-none")}
+        readOnly={!canEdit}
+        maxLength={MOST_RUN_NOTE_CHARACTERS}
+        placeholder={canEdit ? "A note on this run, for whoever looks at it next" : "No note."}
+        value={typedNote ?? current.note}
+        onChange={(event) => setTypedNote(event.target.value)}
+        onBlur={() => {
+          if (typedNote === null) return;
+          if (typedNote.trim() === current.note) return setTypedNote(null);
+          void save({ note: typedNote }).then((saved) => saved && setTypedNote(null));
+        }}
+      />
     </section>
   );
 }

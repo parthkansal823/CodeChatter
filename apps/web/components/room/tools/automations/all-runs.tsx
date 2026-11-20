@@ -1,6 +1,6 @@
 /**
  * Every run of the room's flows in one list, newest first, as n8n's executions: how each ended, which flow, what started it, when and how long, and what
- * it kept to be found by (Save run data), and its notes (good or bad, tags, a note). Filters narrow it: how it ended, which flow, what started it, its notes,
+ * it kept to be found by (Save run data), and its notes (good or bad, tags, a note). Filters narrow it: how it ended, which flow, its flow's tag, what started it, its notes,
  * and words found in what a run kept, its tags and note, or its flow's name. Choosing one opens its flow with that run shown.
  */
 "use client";
@@ -14,6 +14,8 @@ import { useRoom } from "@/components/room/room-context";
 import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+import { flowTagged, tagsOfFlows, type FlowTagged } from "./model";
 
 type Run = AutomationRunSummary;
 
@@ -40,24 +42,26 @@ export function runMatches(run: Run, words: string): boolean {
   return wanted.every((word) => text.includes(word));
 }
 
-export function AllRuns({ ask, onOpen }: { ask: <T>(input: AutomationInput) => Promise<T>; onOpen: (run: Run) => void }) {
+export function AllRuns({ ask, flowTags, onOpen }: { ask: <T>(input: AutomationInput) => Promise<T>; /** Each flow's tags, to narrow by. */ flowTags: readonly FlowTagged[]; onOpen: (run: Run) => void }) {
   const { room } = useRoom();
   const runs = useQuery({ queryKey: ["automations", room.id, "runs", "all"], queryFn: () => ask<{ runs: Run[] }>({ op: "runs" }), staleTime: 0, refetchInterval: 5000, retry: false });
   const [ended, setEnded] = useState("");
   const [flow, setFlow] = useState("");
   const [started, setStarted] = useState("");
   const [notes, setNotes] = useState("");
+  const [flowTag, setFlowTag] = useState("");
+  const flowTagsAll = tagsOfFlows(flowTags.map((each) => ({ tags: [...each.tags] })));
   const [words, setWords] = useState("");
   const all = runs.data?.runs ?? [];
   const flows = [...new Set(all.map((run) => run.name))].sort((a, b) => a.localeCompare(b));
   const tags = [...new Map(all.flatMap((run) => run.annotation?.tags ?? []).map((tag) => [tag.toLowerCase(), tag])).values()].sort((a, b) => a.localeCompare(b));
-  const shown = all.filter((run) => (!ended || run.status === ended) && (!flow || run.name === flow) && (!started || run.trigger === started) && notesMatch(run, notes) && runMatches(run, words));
+  const shown = all.filter((run) => (!ended || run.status === ended) && (!flow || run.name === flow) && (!started || run.trigger === started) && (!flowTag || flowTagged(flowTags, run, flowTag)) && notesMatch(run, notes) && runMatches(run, words));
 
   return (
     <section aria-label="Every run" className="grid min-h-0 content-start gap-3 overflow-auto p-4 text-xs">
       <div className="grid gap-1">
         <h3 className="text-[13px] font-medium">Every run</h3>
-        <p className="text-muted-foreground">The room keeps its last 50 runs, of every flow. What a run kept with Save run data can be searched for here.</p>
+        <p className="text-muted-foreground">Each flow keeps its last 50 runs, or as many as its settings say, but not those its settings don&apos;t keep; here are the newest 500. What a run kept with Save run data, its tags and its note can be searched for here.</p>
       </div>
       <div role="group" aria-label="Narrow the runs" className="flex flex-wrap items-end gap-2">
         <label className="grid gap-1">
@@ -82,6 +86,19 @@ export function AllRuns({ ask, onOpen }: { ask: <T>(input: AutomationInput) => P
             ))}
           </select>
         </label>
+        {flowTagsAll.length > 0 && (
+          <label className="grid gap-1">
+            Its flow&apos;s tag
+            <select className={cn(select, "max-w-40")} value={flowTag} onChange={(event) => setFlowTag(event.target.value)}>
+              <option value="">Any</option>
+              {flowTagsAll.map((each) => (
+                <option key={each} value={each}>
+                  {each}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="grid gap-1">
           Started by
           <select className={select} value={started} onChange={(event) => setStarted(event.target.value)}>

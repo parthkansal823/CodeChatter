@@ -960,6 +960,110 @@ What's left is in `docs/pending.md` under step 11.
 - `apps/runner/test/automation-examples.e2e.ts` (188 examples, 89 run on the engine: every built-in step's fields checked against its form, and every form against the image's code)
 - `apps/web/test/automations.e2e.mjs` (80 checks), adding Filter from the picker, its form rather than code, and its run on the engine
 
+### Automations, part thirty-two: iCalendar ✅ (2026-11-20)
+
+**What:** n8n's iCalendar step (Create Event File), built in: a title, when it starts and ends (an hour when there's no end), or whole days, what it's about, where, an address, the organiser and who's asked. It gives an `.ics` file that the next step can email, attach or save in the room, and its text. Times are written in UTC, so every calendar shows them in its own zone; text is escaped and long lines folded as iCalendar asks; a missing title, a time that isn't one, an end before the start, or an address that isn't an email is said. A new example, **Make a calendar invite for a release review**, makes one and saves it in the room, and runs here.
+
+Also: the step panel's "it works on a list of items" now shows only for the steps that do, and the tool's header keeps to one line, with Its file and Versions as icons (named, with a tooltip).
+
+**Where:** `sandbox/image/automation/builtins.mjs` (`icsOf`, `ical`); in `components/room/tools/automations/`: `builtins.ts`, `examples.ts`, `step-panel.tsx`, `automations-tool.tsx`.
+
+**Tests:**
+- `sandbox/image/automation/builtins.test.mjs` (22 run, 1 skipped on Windows; adding 3: the text in UTC, escaped and folded with the people asked; a whole day, an hour by default and long lines; what's wrong said)
+- `apps/runner/test/automation-files.e2e.mjs` (21/21 on the real engine, adding: the event's file, read by File Helper, and downloaded with its name)
+- `apps/runner/test/automation-examples.e2e.ts` (11/11: 195 examples, 93 that run here, the new invite among them, and every built-in step's form against the image's code)
+- `apps/web/test/automations.e2e.mjs` (162/162, with the icons and the note). Looked at in a browser, light and dark.
+
+### Development: the sandbox's scripts from the repo ✅ (2026-11-20)
+
+**What:** in development, the runner mounts the automation scripts that run fresh for each run or call (`automation.py`, and `host.mjs`, `engine-call.mjs`, `builtins.mjs`, `files.mjs`, `runs.mjs`) from the repo over the image's copies, read-only. A change to one works at once in every dev room: no image build (which was two, base and full) and no room restart. The image is still rebuilt for its Dockerfile, packages, the engine, other scripts, and once before a release.
+
+**How:** `devScriptMounts` (`apps/runner/src/dev-scripts.ts`) gives bind mounts for each script the repo has, from `SANDBOX_DEV_SCRIPTS` (the repo's `sandbox/image`, relative to the runner; `off` turns it off; never in production). A container with them has its own shape label (`3-dev`), so turning them on or off makes rooms' containers again. Docker Desktop shares the files, so an edit reaches a running sandbox straight away (checked by editing one and reading it inside).
+
+**Where:** `apps/runner/src/dev-scripts.ts` (new), `sandbox.ts`, `env.ts`.
+
+**Tests:** `apps/runner/src/dev-scripts.test.ts` (3/3: each script mounted read-only over the image's, one the repo hasn't left out, none in production or turned off); `automation-files.e2e.mjs` above ran on the mounted scripts, and a script edited in the repo read back the same inside the sandbox at once.
+
+### Automations, part thirty-one: how many runs each flow keeps ✅ (2026-11-20)
+
+**What:** each flow keeps its own last runs, rather than the room keeping its last 50 between all its flows, where one busy flow pushed out everyone else's. A flow's settings have **Keep its last … runs** (1 to 500; 50 when empty). A run that's waiting is never dropped, so it can carry on, and the room keeps 1,000 runs at most whatever its flows say. Every run shows the newest 500.
+
+**How:** the sandbox keeps an index of the runs kept: a folder for each flow (its id, which stays with it when its file moves, or its path, hashed), with a marker for each run holding how it ended (`runs.mjs`). When a run ends, its flow's oldest beyond its number go, with their files; then, past the room's 1,000, the oldest of any flow that isn't waiting. A flow's runs are read from its folder, not by reading every run. Runs kept before this were put in the index the first time the worker started (once; until then, a flow's runs are found as before).
+
+**Where:** `sandbox/image/automation/runs.mjs` (new: `flowKeyOf`, `keepRunsOf`, `runsToDrop`), `host.mjs` (`markRun`, `pruneRuns`, `indexOldRuns`), `automation.py` (`runs`, `flow_key`, `mark_run`), the Dockerfile's copy; in `components/room/tools/automations/`: `flow-settings.tsx` (`keepRuns`), `model.ts`, `all-runs.tsx`.
+
+**Tests:**
+- `sandbox/image/automation/runs.test.mjs` (3/3, with `node --test`: a flow's folder from its id or its path, how many it keeps, and the oldest beyond that going but never one waiting)
+- `apps/runner/test/automation-kept.e2e.mjs` (16/16 on the real engine, adding: a flow keeping 2 keeps its newest 2, the oldest gone, while another flow keeps its own); `automation-run-from.e2e.mjs` (18/18, adding: a run from a step listed in its flow's runs, newest first, from the index); `automations.e2e.mjs` (79/79) and `automation-wait.e2e.mjs` (21/21) unchanged
+- `flow-settings.test.ts` (6/6, with tsx: from 1 to 500, empty for 50)
+- `apps/web/test/automations.e2e.mjs` (162/162: none refused, and 20 kept). Looked at in a browser, light and dark.
+
+### Automations, part thirty: flows' tags in Every run and Insights ✅ (2026-11-19)
+
+**What:** the tags flows have (part twenty-eight) narrow the rest of the tool too. **Every run** gets **Its flow's tag**, showing only the runs of the flows with it; **Insights** gets **Flows tagged**, counting only those flows: the four figures, each flow, and each day. Both appear once any flow has a tag.
+
+**How:** the tool reads each flow's tags with what its runs and the tally know it by (its id, or its path without one: `FlowTagged`). Every run matches a run's flow by its id, so a flow that has moved since keeps its runs. Insights asks the sandbox for only those flows (the `insights` op's new `flows`), so each day's runs are theirs too, not the room's.
+
+**Where:** `sandbox/image/automation.py` (`insights`, `flows`), `packages/contracts/src/automations.ts`; in `components/room/tools/automations/`: `model.ts` (`FlowTagged`, `keysTagged`, `flowTagged`), `all-runs.tsx`, `insights.tsx`, `automations-tool.tsx`.
+
+**Tests:**
+- `apps/runner/test/automation-insights.e2e.mjs` (10/10 on the real engine, adding: only the flows asked for, in the figures and by day, and none asked for counting nothing)
+- `model.test.ts` (38/38, with tsx, adding: the flows with a tag, and a run's flow found by its id, or its path without one)
+- `apps/web/test/automations.e2e.mjs` (160/160: Insights counting only the flow with a tag, and Every run showing only its runs). Looked at in a browser, light and dark.
+
+### Automations, part twenty-nine: a flow's versions ✅ (2026-11-19)
+
+**What:** n8n's workflow history, compared and restored. **Versions** in the tool's header lists the room's checkpoints (History's), newest first. For the one chosen it says what's changed since ("Since then: 1 step changed, 1 step removed."), step by step (added, changed with what: its settings, its kind, the name shown, turned off or on, where it is; and gone), and in the flow's own fields (its name, what it's for, settings, error flow, tags, pinned data, notes). Below is its chart as it was, with each step changed since drawn as a warning and each one gone since dashed, with a note under the box. **Restore this version** puts it back, after saving a checkpoint of the room as it is ("Before restoring …"), so History can undo it; a version that's the same as now has nothing to restore. A flow that has moved since is still found, by its id.
+
+**How:** a checkpoint's files are read as History reads them (`useCheckpointFiles`). The comparison is a pure function (`flowChanges` in `flow-diff.ts`): steps are matched by name, which a step keeps; their settings are compared with keys in order, so the same settings written in another order aren't a change; where a step is means what it comes after, or the step and branch it's first in. Restoring writes the version's text to the flow's file, as an edit, so everyone sees it at once.
+
+**Where:** in `components/room/tools/automations/`: `versions.tsx` (new), `flow-diff.ts` (new: `flowChanges`, `flowIn`, `changesInWords`, `stable`), `glyphs.ts` (new: the chart's icons, shared with `flow-view.tsx`), `automations-tool.tsx` (the button and view).
+
+**Tests:**
+- `flow-diff.test.ts` (6/6, with tsx: keys in another order, steps added, removed, changed and moved, a step's name, kind and turning off, a step moved to another branch, the flow's own fields, and finding the flow in a checkpoint, moved or not)
+- `apps/web/test/automation-versions.e2e.mjs` (15/15 in a browser: a named checkpoint, a step turned off and one removed, Versions saying so in words and on the chart as it was, axe in light and dark, Restore putting both back after a "Before restoring" checkpoint, then the same as now with nothing to restore; it removes the flow and its checkpoint)
+- `apps/web/test/automations.e2e.mjs` (158/158, unchanged with the new button). Looked at in a browser, light and dark.
+
+### Automations, part twenty-eight: a flow's tags ✅ (2026-11-19)
+
+**What:** n8n's workflow tags. Each flow's details have **Tags**, under what it's for: words to find it by, added with Enter or Add and taken off with their ×, under the same rules as a run's tags (up to 10, each up to 30 letters, numbers and spaces with `- . : /`, once whatever their case; a mistake is shown until you type again). When any flow has tags, the tool's header gets **Show the automations tagged**, and the list of automations then shows only the flows with that tag, and the one shown.
+
+**How:** kept in the flow's file as `tags`, so they go with it, with git and History; the engine never sees them (the worker hands it only the flow's steps). The header reads every flow's tags as it draws, and the shown flow's file at once, so a tag added there appears straight away.
+
+**Where:** in `components/room/tools/automations/`: `flow-tags.tsx` (new), `model.ts` (`tags`, `withTags`, `tagsOfFlows`), `automations-tool.tsx` (the filter), `flow-view.tsx`.
+
+**Tests:**
+- `model.test.ts` (37/37, with tsx, adding: none leaves none in the file, and every flow's tags once, in order)
+- `apps/web/test/automations.e2e.mjs` (158/158: a tag added, the filter offering it and narrowing the list to that flow, and the tag taken off). Looked at in a browser, light and dark.
+
+**Left:** favourites (each person's own, which needs somewhere to keep them for each person), and tags in Every run and Insights.
+
+### Automations, part twenty-seven: which flows may call a flow ✅ (2026-11-19)
+
+**What:** n8n's caller policy. A flow that starts on "Called by another flow" has **Which flows may call it** in its settings: any of the room's (as before), or only these, with the room's other flows to tick. With none ticked, no flow may. A flow that may not gets its Call a flow step failed, saying so ("Picky can't be called by Not allowed: its settings let only some flows call it."), waiting or not, and the flow isn't run. A flow ticked and since gone from the room is still listed, so it can be unticked. Running it by hand, to try it, is as before.
+
+**How:** kept in the flow's file as `settings.callers`, the flows' ids (absent for any). The sandbox's worker checks it before it runs or queues the call (`mayCall` in `host.mjs`).
+
+**Where:** `sandbox/image/automation/host.mjs` (`callFlow`, `mayCall`); in `components/room/tools/automations/`: `callers-setting.tsx` (new), `flow-settings.tsx` (its children), `model.ts` (`callers`), `flow-view.tsx`.
+
+**Tests:**
+- `apps/runner/test/automation-subflows.e2e.mjs` (17/17 on the real engine, adding: a flow the settings name may call, another may not even without waiting, none may with an empty list, and neither refused flow ran)
+- `flow-settings.test.ts` (5/5, with tsx: an empty list kept, and taken out for any)
+- `apps/web/test/automations.e2e.mjs` (154/154: shown for a called flow, any by default, Only these starting with none, and one ticked kept). Looked at in a browser, light and dark.
+
+### Automations, part twenty-six: a run's notes ✅ (2026-11-19)
+
+**What:** n8n's annotations on a run, and a note too. Once a run has ended, the run shown in its flow has **Notes**: Good run or Bad run (pressed again, neither), tags to find it by (up to 10, each up to 30 letters, numbers and spaces with `- . : /`, kept once whatever their case), and a note of up to 500 characters, saved when you leave it. Its flow's runs show them, and **Every run** shows them on each row, narrows by them (with notes, good runs, bad runs, or tagged with one of the tags its runs have), and finds words in tags and notes. Anyone who can run the room's flows can change them.
+
+**How:** a new `annotate` op, which replaces a run's notes all at once. The sandbox (`annotate` in `automation.py`) checks them again, refuses a run still going or waiting ("A run can have notes once it has ended") and one that isn't kept, and writes them into the run's own file, so they go when the run does; nothing left takes them off. The runs list and a run's details carry them.
+
+**Where:** `packages/contracts/src/automations.ts` (the op, `RUN_TAG`, `MOST_RUN_TAGS`, `MOST_RUN_NOTE_CHARACTERS`, `AutomationRunAnnotation`); `sandbox/image/automation.py` (`annotate`); in `components/room/tools/automations/`: `run-notes.tsx` (new), `flow-view.tsx`, `all-runs.tsx` (`notesMatch`).
+
+**Tests:**
+- `apps/runner/test/automation-notes.e2e.mjs` (15/15 on the real engine: notes kept with tags once whatever their case and trimmed, in a run's details, its flow's runs and every run; 11 tags, markup in a tag, a long note, a vote that isn't one, and a run that isn't there refused, changing nothing; a run still going refused until it ends; taking everything off; and what it made removed)
+- `model.test.ts` (36/36, with tsx, adding a tag as typed: words in any script with their marks, - . : /, once whatever its case, at most 10)
+- `apps/web/test/automations.e2e.mjs` (154/154: Good run, a tag and a note kept and shown in the flow's runs, a tag that isn't one, and Every run narrowed to the runs with that tag). Looked at in a browser, light and dark.
+
 ### Automations, part twenty-five: a flow's timezone, and which runs are kept ✅ (2026-11-19)
 
 **What:** two more of n8n's workflow settings, in the flow's "Its settings".

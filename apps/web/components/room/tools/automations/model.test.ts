@@ -5,7 +5,7 @@ import type { AutomationStepResult, PieceInfo } from "@codechatter/contracts";
 
 import { BUILTINS } from "./builtins";
 import { stepsFromClipboard } from "./clipboard";
-import { addSticky, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, toggleSteps, withTag } from "./model";
+import { addSticky, changeSticky, chosenSteps, copyOfSteps, pasteSteps, removeSteps, removeSticky, stickiesOf, flowTagged, keysTagged, tagsOfFlows, toggleSteps, withTag, withTags } from "./model";
 import { addBranch, addStep, allSteps, asCopiedStep, canPin, newBuiltinStep, chartOfFlow, CONDITIONS, copyOfStep, isPinned, pinStep, unpinStep, duplicateStep, expressionsFor, findStep, kindOf, newCodeStep, newLoopStep, newPieceStep, newRouterStep, newStepName, newTrigger, parseFlow, pasteStep, removeBranch, removeStep, replaceStep, resultsOf, setStepNote, statusOfResult, toggleStep, updateStep, type Branch, type Flow, type FlowStep } from "./model";
 
 const code = (name: string, next: FlowStep | null = null): FlowStep => ({ ...newCodeStep(name), nextAction: next });
@@ -405,4 +405,21 @@ test("a run's tag as typed: words and - . : /, once whatever its case, and at mo
   const ten = Array.from({ length: 10 }, (_, at) => `tag${at}`);
   assert.ok("problem" in withTag(ten, "one more"));
   assert.deepEqual(withTag(ten, "TAG3"), { tags: ten });
+});
+
+test("a flow's tags: none leaves none in its file, and every flow's tags once, in order", () => {
+  const flow: Flow = { displayName: "Test", schemaVersion: "27", trigger: { name: "trigger", type: "EMPTY", displayName: "When", settings: {}, nextAction: null } as unknown as FlowStep };
+  assert.deepEqual(withTags(flow, ["deploys"]).tags, ["deploys"]);
+  assert.equal("tags" in withTags(withTags(flow, ["deploys"]), []), false);
+  assert.equal(flow.tags, undefined, "what it was given isn't changed");
+  assert.deepEqual(tagsOfFlows([{ tags: ["reports", "Deploys"] }, {}, { tags: ["deploys", "alerts"] }]), ["alerts", "Deploys", "reports"]);
+});
+
+test("flows with a tag: their keys for Insights, and whether a run's flow has it, by its id or its path", () => {
+  const flows = [{ key: "flow_a", path: "a.flow.json", tags: ["Deploys"] }, { key: "b.flow.json", path: "b.flow.json", tags: ["deploys", "nightly"] }, { key: "flow_c", path: "c.flow.json", tags: [] }];
+  assert.deepEqual(keysTagged(flows, "deploys"), ["flow_a", "b.flow.json"]);
+  assert.equal(flowTagged(flows, { flowId: "flow_a", path: "moved.flow.json" }, "DEPLOYS"), true);
+  assert.equal(flowTagged(flows, { flowId: null, path: "b.flow.json" }, "nightly"), true);
+  assert.equal(flowTagged(flows, { flowId: "flow_c", path: "c.flow.json" }, "deploys"), false);
+  assert.equal(flowTagged(flows, { flowId: "flow_gone", path: "a.flow.json" }, "deploys"), false);
 });

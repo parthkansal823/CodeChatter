@@ -1,6 +1,6 @@
 /**
  * The Automations tool's Insights (n8n's): how the room's flows have done over the last 7, 30 or 90 days, from the sandbox's daily tally, which outlasts the
- * runs kept. Four figures (runs, failed with the failure rate, time saved, the average run), then each flow, then each day with runs. Time saved is each
+ * runs kept, for every flow or those with a tag. Four figures (runs, failed with the failure rate, time saved, the average run), then each flow, then each day with runs. Time saved is each
  * flow's own setting, for runs that succeeded and were started by their trigger.
  */
 "use client";
@@ -12,6 +12,8 @@ import { useState } from "react";
 import { useRoom } from "@/components/room/room-context";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+import { keysTagged, tagsOfFlows, type FlowTagged } from "./model";
 
 const PERIODS = [7, 30, 90] as const;
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
@@ -48,10 +50,13 @@ function Tile({ label, value, detail }: { label: string; value: string; detail?:
 const cell = "px-2 py-1 text-right tabular-nums";
 const head = "px-2 py-1 text-right font-medium";
 
-export function InsightsView({ ask }: { ask: <T>(input: AutomationInput) => Promise<T> }) {
+export function InsightsView({ ask, flowTags }: { ask: <T>(input: AutomationInput) => Promise<T>; /** Each flow's tags, to count only the flows with one. */ flowTags: readonly FlowTagged[] }) {
   const { room } = useRoom();
   const [days, setDays] = useState<(typeof PERIODS)[number]>(7);
-  const insights = useQuery({ queryKey: ["automations", room.id, "insights", days], queryFn: () => ask<AutomationInsights>({ op: "insights", days }), refetchInterval: 15_000, retry: false });
+  const [tag, setTag] = useState("");
+  const tags = tagsOfFlows(flowTags.map((each) => ({ tags: [...each.tags] })));
+  const only = tag ? keysTagged(flowTags, tag) : null;
+  const insights = useQuery({ queryKey: ["automations", room.id, "insights", days, only], queryFn: () => ask<AutomationInsights>({ op: "insights", days, ...(only && { flows: only }) }), refetchInterval: 15_000, retry: false });
   const data = insights.data;
   const busyDays = (data?.perDay ?? []).filter((day) => day.runs > 0).reverse();
 
@@ -62,6 +67,19 @@ export function InsightsView({ ask }: { ask: <T>(input: AutomationInput) => Prom
           <h3 className="text-[13px] font-medium">Insights</h3>
           <p className="text-muted-foreground">How the room&apos;s flows have done, by flow and by day (UTC). Time saved is each flow&apos;s own setting, counted for runs that succeeded and were started by their trigger.</p>
         </div>
+        {tags.length > 0 && (
+          <label className="flex items-center gap-2">
+            Flows tagged
+            <select className="h-7 max-w-40 rounded-md border bg-background px-2 text-xs" value={tag} onChange={(event) => setTag(event.target.value)}>
+              <option value="">Any</option>
+              {tags.map((each) => (
+                <option key={each} value={each}>
+                  {each}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div role="radiogroup" aria-label="Over the last" className="flex rounded-md border p-0.5">
           {PERIODS.map((period) => (
             <button
@@ -84,7 +102,9 @@ export function InsightsView({ ask }: { ask: <T>(input: AutomationInput) => Prom
           {failure(insights.error)}
         </p>
       ) : !data || data.totals.runs === 0 ? (
-        <p className="text-muted-foreground">No runs in the last {days} days.</p>
+        <p className="text-muted-foreground">
+          No runs in the last {days} days{tag ? ` of the flows tagged ${tag}` : ""}.
+        </p>
       ) : (
         <>
           <div role="group" aria-label="In all" className="grid grid-cols-2 gap-2 md:grid-cols-4">

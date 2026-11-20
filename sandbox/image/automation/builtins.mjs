@@ -5,6 +5,7 @@
 // items, as n8n's do; a single object counts as a list of one. The Automations tool's forms for them are in apps/web/components/room/tools/automations/builtins.ts.
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { isAbsolute, posix } from "node:path";
@@ -608,11 +609,90 @@ export const BUILTINS = {
     return { path, size: statSync(full).size, written: data.length, action: !there ? "created" : mode === "append" ? "added to" : "replaced" };
   },
 
+  /** iCalendar (n8n's Create Event File): an event as an .ics file, for the next step to send or save, and its text. */
+  async ical(inputs) {
+    const { uid, text } = icsOf(inputs);
+    const fileName = (String(inputs.file_name ?? "").trim() || "event.ics").replace(/[\\/]/g, "-").replace(/(\.ics)?$/i, ".ics");
+    const { url } = await askWorker("/v1/codechatter/files", { name: fileName, data: Buffer.from(text, "utf8").toString("base64") });
+    return { fileName, mimeType: "text/calendar", size: Buffer.byteLength(text), file: url, uid, ics: text };
+  },
+
   /** Stop and Error: stops the run, with this message, so an error flow or a person sees why. */
   stop_and_error(inputs) {
     throw new Error(String(inputs.message || "This flow was stopped on purpose."));
   },
 };
+
+/** iCalendar's text: backslashes, semicolons, commas and new lines escaped (RFC 5545, 3.3.11). */
+const icalText = (value) => String(value ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+
+/** A line folded at 75 octets, as iCalendar asks, without splitting a character. */
+function icalFold(line) {
+  const parts = [];
+  let current = "";
+  let size = 0;
+  for (const char of line) {
+    const bytes = Buffer.byteLength(char);
+    if (size + bytes > (parts.length ? 74 : 75)) {
+      parts.push(current);
+      current = "";
+      size = 0;
+    }
+    current += char;
+    size += bytes;
+  }
+  parts.push(current);
+  return parts.join("\r\n ");
+}
+
+/** A time as a date, from text (2026-12-01T10:00, with its offset or Z) or a number of milliseconds; what's wrong, otherwise. */
+function icalDate(value, what) {
+  const at = typeof value === "number" ? new Date(value) : new Date(String(value ?? "").trim());
+  if (value === undefined || value === null || String(value).trim() === "" || Number.isNaN(at.getTime())) throw new Error(`Give the event's ${what} as a date and time, such as 2026-12-01T10:00:00Z.`);
+  return at;
+}
+const icalUtc = (at) => at.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+const icalDay = (at) => at.toISOString().slice(0, 10).replace(/-/g, "");
+const EMAIL = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/;
+
+/**
+ * An event as iCalendar text (n8n's iCalendar: Create Event File): its title, start and end (or a whole day, the end then the day after the last), and,
+ * when given, what it's about, where, an address, who organises it and who's asked. Times are kept in UTC, so any calendar shows them in its own zone.
+ */
+export function icsOf(event, now = new Date()) {
+  const title = String(event.title ?? "").trim();
+  if (!title) throw new Error("Give the event a title.");
+  const allDay = event.all_day === true || event.all_day === "true";
+  const start = icalDate(event.start, "start");
+  let end = event.end === undefined || event.end === null || String(event.end).trim() === "" ? null : icalDate(event.end, "end");
+  if (allDay) end = new Date(Date.UTC(...(end ?? start).toISOString().slice(0, 10).split("-").map((part, at) => Number(part) - (at === 1 ? 1 : 0))) + 86_400_000);
+  else end ??= new Date(start.getTime() + 3_600_000);
+  if (end <= start && !allDay) throw new Error("The event has to end after it starts.");
+  const people = listOf(event.attendees).flatMap((each) => String(each).split(/[\s,;]+/)).map((each) => each.trim()).filter(Boolean);
+  for (const email of [...people, ...(event.organizer ? [String(event.organizer).trim()] : [])]) if (!EMAIL.test(email)) throw new Error(`${email} isn't an email address.`);
+  const uid = String(event.uid ?? "").trim() || `${randomUUID()}@codechatter`;
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//CodeChatter//Automations//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${icalText(uid)}`,
+    `DTSTAMP:${icalUtc(now)}`,
+    allDay ? `DTSTART;VALUE=DATE:${icalDay(start)}` : `DTSTART:${icalUtc(start)}`,
+    allDay ? `DTEND;VALUE=DATE:${icalDay(end)}` : `DTEND:${icalUtc(end)}`,
+    `SUMMARY:${icalText(title)}`,
+    ...(event.description ? [`DESCRIPTION:${icalText(event.description)}`] : []),
+    ...(event.location ? [`LOCATION:${icalText(event.location)}`] : []),
+    ...(event.url ? [`URL:${String(event.url).trim()}`] : []),
+    ...(event.organizer ? [`ORGANIZER:mailto:${String(event.organizer).trim()}`] : []),
+    ...people.map((email) => `ATTENDEE;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:${email}`),
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+  return { uid, text: `${lines.map(icalFold).join("\r\n")}\r\n` };
+}
 
 /** What a built-in code step calls. */
 export async function run(name, inputs) {

@@ -364,7 +364,9 @@ export function StepPanel({
 
       {builtin && (
         <section aria-label="Its fields" className="grid gap-2">
-          <p className="text-muted-foreground">{builtin.description}. Built in: it works on a list of items, as n8n&apos;s does.</p>
+          <p className="text-muted-foreground">
+            {builtin.description}.{builtin.fields.items || builtin.fields.first ? " Built in: it works on a list of items, as n8n's does." : ""}
+          </p>
           {Object.entries(builtin.fields).map(([name, spec]) =>
             // Call a flow chooses from the flows that can be called, rather than an id typed in.
             step.builtin === "call_flow" && name === "flow" ? (

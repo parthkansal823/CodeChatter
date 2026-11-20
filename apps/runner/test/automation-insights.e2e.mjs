@@ -110,6 +110,11 @@ try {
   const today = new Date().toISOString().slice(0, 10);
   const day = (insights.body?.perDay ?? []).find((each) => each.day === today);
   check("today is among the days, with these runs in it", insights.body?.perDay?.length === 7 && day?.runs >= 3 && day?.failed >= 1, { days: insights.body?.perDay?.length, day });
+  const onlyQuick = await automations({ op: "insights", days: 7, flows: [`flow_Quick_${stamp}`] });
+  const onlyQuickDay = (onlyQuick.body?.perDay ?? []).find((each) => each.day === today);
+  check("only some flows: those asked for, in the figures and by day", onlyQuick.body?.flows?.length === 1 && onlyQuick.body.flows[0].name === `Quick ${stamp}` && onlyQuick.body.totals.runs === 2 && onlyQuickDay?.runs === 2 && onlyQuickDay?.failed === 0, onlyQuick.body);
+  const none = await automations({ op: "insights", days: 7, flows: [] });
+  check("and none asked for counts nothing", none.body?.totals?.runs === 0 && none.body.flows.length === 0, none.body?.totals);
   const odd = await automations({ op: "insights", days: 5 });
   check("only 7, 30 or 90 days", odd.status === 400 || odd.body?.days === 7, odd);
 } catch (error) {

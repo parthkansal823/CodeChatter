@@ -85,7 +85,7 @@ export function HistoryPanel({ pageId, current, viewing, onView, onRestore, onCl
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {!connection?.synced ? (
-          <div className="grid gap-2 p-2" aria-label="Loading versions">
+          <div role="status" className="grid gap-2 p-2" aria-label="Loading versions">
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-4 w-1/2" />
           </div>

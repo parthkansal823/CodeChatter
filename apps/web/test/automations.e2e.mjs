@@ -549,6 +549,21 @@ try {
   check("itsExampleIsACommand", sentExample.event === "chat.message" && sentExample.data?.args === "staging", sentExample);
   await chart.getByRole("button", { name: /^Step A chat message/ }).click();
 
+  // ---- Which flows may call one: shown for a flow other flows call, any by default, or only those ticked ----
+  await details.getByRole("button", { name: "Change the trigger" }).click();
+  await details.getByPlaceholder(/^Search \d+ triggers$/).fill("called by another flow");
+  await details.getByRole("option", { name: /^Called by another flow/ }).first().click();
+  await details.getByRole("region", { name: "Step Called by another flow" }).waitFor({ timeout: 10_000 }).catch(() => {});
+  await details.getByRole("button", { name: "Back to the runs" }).click();
+  const mayCallIt = details.getByRole("group", { name: "Which flows may call it" });
+  check("aCalledFlowSaysWhichFlowsMayCallIt", (await ok(mayCallIt.waitFor({ timeout: 5000 }))) && (await mayCallIt.getByRole("radio", { name: "Any of the room's" }).isChecked()));
+  await mayCallIt.getByRole("radio", { name: "Only these" }).check();
+  check("onlyTheseStartsWithNone", await ok(mayCallIt.getByText("No flow may call it now: tick the ones that may.").waitFor({ timeout: 5000 })));
+  await mayCallIt.getByRole("list", { name: "Flows that may call it" }).getByRole("checkbox").first().check();
+  await sleep(600);
+  check("andOneTickedIsKept", (await mayCallIt.getByRole("list", { name: "Flows that may call it" }).getByRole("checkbox").first().isChecked()) && (await mayCallIt.getByText(/^No flow may call it now/).count()) === 0);
+  await chart.getByRole("button", { name: /^Step Called by another flow/ }).click();
+
   // ---- An error flow: nothing to turn on, and each flow names its own under "If it fails, run" ----
   await details.getByRole("button", { name: "Change the trigger" }).click();
   await details.getByPlaceholder(/^Search \d+ triggers$/).fill("another flow fails");
@@ -621,15 +636,17 @@ try {
   // ---- A run's notes: good, a tag and a note, kept with it and shown in its flow's runs ----
   if (await details.getByRole("button", { name: "Back to the runs" }).isVisible().catch(() => false)) await details.getByRole("button", { name: "Back to the runs" }).click();
   const runNotes = details.getByRole("region", { name: "Its notes" });
+  // A tag of this run's own: runs outlast their flows, so an earlier run's tags may still be in Every run.
+  const runTag = `look-${Date.now().toString(36)}`;
   await runNotes.getByRole("button", { name: "Good run" }).click();
-  await runNotes.getByLabel("A tag to add").fill("needs-look");
+  await runNotes.getByLabel("A tag to add").fill(runTag);
   await runNotes.getByLabel("A tag to add").press("Enter");
-  await runNotes.getByRole("list", { name: "Its tags" }).getByText("needs-look", { exact: true }).waitFor({ timeout: 10_000 }).catch(() => {});
+  await runNotes.getByRole("list", { name: "Its tags" }).getByText(runTag, { exact: true }).waitFor({ timeout: 10_000 }).catch(() => {});
   await runNotes.getByLabel("Its note", { exact: true }).fill("Files came through.");
   await runNotes.getByLabel("Its note", { exact: true }).blur();
   await sleep(1500);
   const firstRun = details.getByRole("list", { name: "Runs of this flow" }).getByRole("listitem").first();
-  check("aRunsNotesAreKept", (await runNotes.getByRole("button", { name: "Good run" }).getAttribute("aria-pressed")) === "true" && /good run · needs-look/.test(await firstRun.textContent()), await firstRun.textContent());
+  check("aRunsNotesAreKept", (await runNotes.getByRole("button", { name: "Good run" }).getAttribute("aria-pressed")) === "true" && (await firstRun.textContent()).includes(`good run · ${runTag}`), await firstRun.textContent());
   await runNotes.getByLabel("A tag to add").fill("<b>");
   await runNotes.getByLabel("A tag to add").press("Enter");
   check("aTagThatIsntOneSaysSo", await ok(runNotes.getByText(/^Up to 30 letters/).waitFor({ timeout: 3000 })));
@@ -676,10 +693,10 @@ try {
   const failedOnes = await everyRun.getByRole("listitem").count();
   check("theyCanBeNarrowedByHowTheyEnded", failedOnes > 0 && failedOnes < howMany && (await everyRun.getByRole("listitem").filter({ hasText: /^Finished/ }).count()) === 0, { howMany, failedOnes });
   await tool.getByLabel("How it ended").selectOption("");
-  await tool.getByLabel("Notes", { exact: true }).selectOption("tag:needs-look");
+  await tool.getByRole("combobox", { name: /^Notes/ }).selectOption(`tag:${runTag}`);
   await sleep(300);
   check("andByTheirNotes", (await everyRun.getByRole("listitem").count()) === 1 && (await everyRun.getByRole("listitem").first().textContent()).includes("Files came through."), await everyRun.getByRole("listitem").count());
-  await tool.getByLabel("Notes", { exact: true }).selectOption("");
+  await tool.getByRole("combobox", { name: /^Notes/ }).selectOption("");
   await tool.getByLabel("How it ended").selectOption("FAILED");
   await sleep(300);
   await everyRun.getByRole("listitem").first().getByRole("button").click();
@@ -702,6 +719,21 @@ try {
 
   // ---- A flow's own settings, and Insights ----
   if (await details.getByRole("button", { name: "Back to the runs" }).isVisible().catch(() => false)) await details.getByRole("button", { name: "Back to the runs" }).click();
+  // ---- A flow's tags, and the list of automations narrowed to one ----
+  const flowTags = details.getByRole("region", { name: "Its tags" });
+  const flowTag = `deploys-${Date.now().toString(36)}`;
+  await flowTags.getByLabel("A tag for this flow").fill(flowTag);
+  await flowTags.getByLabel("A tag for this flow").press("Enter");
+  check("aFlowHasTags", await ok(flowTags.getByRole("list", { name: "The flow's tags" }).getByText(flowTag, { exact: true }).waitFor({ timeout: 5000 })));
+  const byTag = tool.getByRole("combobox", { name: "Show the automations tagged" });
+  check("andTheListCanShowOnlyThoseWithOne", (await ok(byTag.waitFor({ timeout: 15_000 }))) && (await byTag.getByRole("option", { name: flowTag, exact: true }).count()) === 1);
+  const everyOne = await tool.getByLabel("Automation to show").getByRole("option").count();
+  await byTag.selectOption(flowTag);
+  await sleep(300);
+  const shownOnes = await tool.getByLabel("Automation to show").getByRole("option").count();
+  check("whichItDoes", everyOne > 1 && shownOnes === 1, { everyOne, shownOnes });
+  await byTag.selectOption("");
+
   const flowSettings = details.getByRole("region", { name: "Its settings" });
   await flowSettings.getByLabel(/^Stop a run after/).fill("4");
   check("aSettingOutOfItsLimitsSaysSo", await ok(flowSettings.getByText("From 5 to 900.").waitFor({ timeout: 3000 })));
@@ -710,6 +742,12 @@ try {
   await flowSettings.getByLabel(/^Each run saves/).blur();
   await sleep(600);
   check("aFlowKeepsItsSettings", (await flowSettings.getByLabel(/^Stop a run after/).inputValue()) === "120" && (await flowSettings.getByLabel(/^Each run saves/).inputValue()) === "5");
+  await flowSettings.getByLabel(/^Keep its last/).fill("0");
+  check("keepingNoRunsSaysSo", await ok(flowSettings.getByText("From 1 to 500.").waitFor({ timeout: 3000 })));
+  await flowSettings.getByLabel(/^Keep its last/).fill("20");
+  await flowSettings.getByLabel(/^Keep its last/).blur();
+  await sleep(600);
+  check("aFlowKeepsAsManyRunsAsItSays", (await flowSettings.getByLabel(/^Keep its last/).inputValue()) === "20");
   const zone = flowSettings.getByLabel("Its timezone");
   await zone.fill("Mars/Olympus");
   check("aTimezoneThatIsntOneSaysSo", await ok(flowSettings.getByText(/^Not a timezone/).waitFor({ timeout: 3000 })));
@@ -725,7 +763,21 @@ try {
   check("withEachFlow", (await insightsView.getByRole("table").first().getByRole("row").count()) >= 2);
   await insightsView.getByRole("radio", { name: "30 days" }).click();
   check("overALongerTimeToo", (await insightsView.getByRole("radio", { name: "30 days" }).getAttribute("aria-checked")) === "true" && (await ok(insightsView.getByRole("group", { name: "In all" }).waitFor({ timeout: 15_000 }))));
-  await tool.getByRole("button", { name: "Insights" }).click();
+  // Only the flows with a tag: this one, which has runs.
+  await insightsView.getByRole("combobox", { name: /^Flows tagged/ }).selectOption(flowTag);
+  await sleep(1500);
+  const taggedRows = await insightsView.getByRole("table").first().getByRole("row").count().catch(() => 0);
+  check("insightsCountOnlyTheFlowsWithATag", taggedRows === 2, taggedRows);
+  await tool.getByRole("button", { name: "Every run" }).click();
+  await everyRun.getByRole("listitem").first().waitFor({ timeout: 15_000 });
+  const runsAll = await everyRun.getByRole("listitem").count();
+  await tool.getByRole("combobox", { name: /^Its flow's tag/ }).selectOption(flowTag);
+  await sleep(300);
+  const runsTagged = await everyRun.getByRole("listitem").count();
+  check("andEveryRunShowsOnlyTheirRuns", runsTagged >= 1 && runsTagged < runsAll, { runsAll, runsTagged });
+  await tool.getByRole("button", { name: "Every run" }).click();
+  await flowTags.getByRole("button", { name: `Remove the tag ${flowTag}` }).click();
+  check("andATagIsRemoved", await ok(flowTags.getByRole("list", { name: "The flow's tags" }).waitFor({ state: "detached", timeout: 5000 })));
 
   // ---- On a phone ----
   await a.setViewportSize({ width: 390, height: 800 });

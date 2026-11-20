@@ -86,7 +86,12 @@ export const AutomationInput = z.discriminatedUnion("op", [
   z.object({ op: z.literal("run-file"), id: z.string().regex(/^[\w-]{1,64}$/, "That isn't a run."), file: z.string().regex(/^[\w-]{1,64}$/, "That isn't a file.") }),
   z.object({ op: z.literal("manifest") }),
   /** How the room's flows have done, from the sandbox's daily tally: for the tool's Insights. */
-  z.object({ op: z.literal("insights"), days: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional() }),
+  z.object({
+    op: z.literal("insights"),
+    days: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional(),
+    /** Only these flows (a flow's id, or its path without one): those with a tag, say. */
+    flows: z.array(z.string().max(300)).max(500).optional(),
+  }),
   /** A run's notes, once it has ended (n8n's annotations): good or bad, tags to find it by, and a note, all replaced at once. */
   z.object({
     op: z.literal("annotate"),

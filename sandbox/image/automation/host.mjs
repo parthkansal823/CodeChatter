@@ -13,6 +13,7 @@ import { zstdDecompressSync } from "node:zlib";
 import { Server } from "socket.io";
 
 import { dispositionOf, FILE_ID, fileNameOf, filesHere, MOST_FILE_BYTES, RUN_ID, stepFileUrl, typeOf, wholeSteps } from "./files.mjs";
+import { flowKeyOf, keepRunsOf, MOST_ROOM_RUNS, runsToDrop } from "./runs.mjs";
 
 // What flows write in the room's files (Write a file, a command, a code step) stays group-writable, as the agent's own (sandbox/agent/src/agent.ts): the agent
 // runs as another user of the same group, and couldn't otherwise remove a file someone deletes, from a folder a flow made.
@@ -21,6 +22,8 @@ process.umask(0o002);
 const HOME = join(process.env.HOME, "automations");
 const QUEUE = join(HOME, "queue");
 const RUNS = join(HOME, "runs");
+/** Each flow's kept runs (runs.mjs): a folder for each flow, a marker for each run, holding how it ended. */
+const BY_FLOW = join(HOME, "by-flow");
 /** What runs' steps kept apart: the files they made (File Helper's, a CSV file, a zip), and outputs too big for the run's details. A folder for each run. */
 const FILES = join(HOME, "files");
 const CODES = join(HOME, "codes");
@@ -37,7 +40,6 @@ const ENGINE = join(ROOT, "engine", "main.js");
 const SCRIPT = join(ROOT, "..", "automation.py");
 const BUILTINS = pathToFileURL(join(ROOT, "builtins.mjs")).href;
 const BUILTIN_NAME = /^[a-z_]{1,40}$/;
-const MOST_RUNS = 50;
 /** How long a run its flow doesn't keep can still be read by its id: a webhook answering when it finishes, or a flow that called it, reads it after. */
 const FORGET_MS = 60_000;
 const STEP_NAME = /^[A-Za-z0-9_]+$/;
@@ -424,12 +426,13 @@ async function runJob(job) {
     const kept = keeps(job, mode, status);
     writeJson(join(RUNS, `${job.id}.json`), scrubbed({ ...live, ...(!kept && { kept: false }), payload: (mode === "resume" ? job.triggerPayload : job.payload) ?? null, resumeBase: job.resumeBase ?? null }, secrets));
     if (!kept) writeFileSync(join(RUNS, `${job.id}.forget`), "");
+    else markRun(job.flowId, job.path, job.id, status);
     if (mode !== "step" && status !== "PAUSED") countRun(job, live);
     writeLive();
     rmSync(join(CODES, job.id), { recursive: true, force: true });
     running.delete(job.id);
     forgetRuns();
-    for (const old of readdirSync(RUNS).filter((name) => name.endsWith(".json") && !existsSync(join(RUNS, `${name.slice(0, -5)}.forget`))).sort().reverse().slice(MOST_RUNS)) rmSync(join(RUNS, old), { force: true });
+    pruneRuns(job);
     // A run's files go with it, but not while it (or a run that called it) is going on.
     if (existsSync(FILES)) for (const run of readdirSync(FILES)) if (!running.has(run) && !existsSync(join(RUNS, `${run}.json`))) rmSync(join(FILES, run), { recursive: true, force: true });
     engine?.kill("SIGKILL");
@@ -681,6 +684,52 @@ function mayCall(flow, callerId) {
   return Array.isArray(callers) && typeof callerId === "string" && callers.includes(callerId);
 }
 
+/** A kept run's marker in its flow's folder of the index, holding how it ended (a run that waits gets one again when it ends). */
+function markRun(flowId, path, id, status) {
+  const folder = join(BY_FLOW, flowKeyOf(flowId, path));
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, id), String(status ?? ""));
+}
+
+/** Drops the runs this flow no longer keeps (its settings' keepRuns), then, past the room's most, the oldest of any flow; never a run that's waiting. */
+function pruneRuns(job) {
+  const folder = join(BY_FLOW, flowKeyOf(job.flowId, job.path));
+  const markers = [];
+  for (const id of existsSync(folder) ? readdirSync(folder) : []) {
+    // A marker whose run has gone (past the room's most, say) goes too.
+    if (!existsSync(join(RUNS, `${id}.json`))) {
+      rmSync(join(folder, id), { force: true });
+      continue;
+    }
+    let status = "";
+    try {
+      status = readFileSync(join(folder, id), "utf8");
+    } catch {
+      // Read as ended: it's dropped in its turn.
+    }
+    markers.push({ id, status });
+  }
+  for (const id of runsToDrop(markers, keepRunsOf(job.flow))) {
+    rmSync(join(RUNS, `${id}.json`), { force: true });
+    rmSync(join(folder, id), { force: true });
+  }
+  const all = readdirSync(RUNS).filter((name) => name.endsWith(".json") && !existsSync(join(RUNS, `${name.slice(0, -5)}.forget`))).sort().reverse();
+  for (const name of all.slice(MOST_ROOM_RUNS)) if (readJson(join(RUNS, name))?.status !== "PAUSED") rmSync(join(RUNS, name), { force: true });
+}
+
+/** Runs kept before the index get their markers, once: each run is read for its flow and how it ended. */
+function indexOldRuns() {
+  const done = join(BY_FLOW, ".indexed");
+  if (existsSync(done)) return;
+  mkdirSync(BY_FLOW, { recursive: true });
+  for (const name of readdirSync(RUNS)) {
+    if (!name.endsWith(".json") || existsSync(join(RUNS, `${name.slice(0, -5)}.forget`))) continue;
+    const run = readJson(join(RUNS, name));
+    if (run && typeof run.id === "string") markRun(run.flowId, run.path, name.slice(0, -5), run.status);
+  }
+  writeFileSync(done, "");
+}
+
 /** The runs not kept whose minute is up: gone, with their files (the sweep after this takes those). */
 function forgetRuns() {
   for (const name of readdirSync(RUNS)) {
@@ -727,6 +776,7 @@ function errorOf(text) {
 
 mkdirSync(QUEUE, { recursive: true });
 mkdirSync(RUNS, { recursive: true });
+indexOldRuns();
 try {
   for (;;) {
     stopping = false;

@@ -102,7 +102,7 @@ export function PageEditor({ pageId, connection, onEditor, onThread }: Props) {
         CollaborationCaret.configure({ provider, user: presenceUser(me), render: renderCaret, selectionRender: renderSelection }),
       ],
       editorProps: {
-        attributes: { class: "cc-doc-content", "aria-label": "Page content" },
+        attributes: { class: "cc-doc-content", role: "textbox", "aria-multiline": "true", "aria-label": "Page content" },
         // Links open with Ctrl or Cmd held, so a plain click can still place the caret in them.
         handleClick: (_view, _pos, event) => {
           const anchor = (event.target as HTMLElement | null)?.closest?.("a[href]");
@@ -245,7 +245,7 @@ export function PageEditor({ pageId, connection, onEditor, onThread }: Props) {
 
   if (!editor || !synced) {
     return (
-      <div className="grid gap-2 py-2" aria-label="Loading page">
+      <div role="status" className="grid gap-2 py-2" aria-label="Loading page">
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-4 w-2/3" />
         <Skeleton className="h-4 w-1/2" />

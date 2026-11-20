@@ -67,7 +67,7 @@ export function ItemList({
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {!live?.synced ? (
-          <div className="grid gap-2 p-4" aria-label={`Loading ${noun.many.toLowerCase()}`}>
+          <div role="status" className="grid gap-2 p-4" aria-label={`Loading ${noun.many.toLowerCase()}`}>
             <Skeleton className="h-8 w-full" />
             <Skeleton className="h-8 w-full" />
             <Skeleton className="h-8 w-2/3" />

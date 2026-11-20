@@ -44,7 +44,7 @@ export default function AiTool({ activeFile }: RoomToolProps) {
 
   if (status.isPending) {
     return (
-      <div className="grid gap-2 p-4" aria-label="Loading the AI">
+      <div role="status" className="grid gap-2 p-4" aria-label="Loading the AI">
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-4 w-3/4" />
       </div>

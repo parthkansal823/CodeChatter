@@ -52,6 +52,7 @@ const SUITES = [
     ["automation-run-data", "automation-run-data"],
     ["automation-insights", "automation-insights"],
     ["automation-kept", "automation-kept"],
+    ["automation-notes", "automation-notes"],
     ["lighthouse-runner", "lighthouse"],
   ]),
   ...service("apps/collab", [
@@ -109,6 +110,7 @@ const SUITES = [
     "two-factor-replay",
     "admin",
     "automations",
+    "automation-versions",
     "a11y",
     "interview-recording",
     "csp",

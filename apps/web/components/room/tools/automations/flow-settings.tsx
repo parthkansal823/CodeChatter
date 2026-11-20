@@ -1,15 +1,15 @@
 /**
  * A flow's own settings, as n8n's workflow settings: how long one of its runs may take before it's stopped, the time each run saves someone, which Insights
- * adds up, its timezone (what its steps take the time to be), and which runs its trigger started are kept. Kept in the flow's file (`settings`), so they
- * go with it; only what isn't the default is written.
+ * adds up, how many of its runs it keeps, its timezone (what its steps take the time to be), which runs its trigger started are kept, and (callers-setting.tsx) which flows may call it.
+ * Kept in the flow's file (`settings`), so they go with it; only what isn't the default is written.
  */
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { Flow, FlowSettingValues } from "./model";
 
-const LIMITS = { timeoutSeconds: [5, 900], timeSavedMinutes: [0, 1440] } as const;
+const LIMITS = { timeoutSeconds: [5, 900], timeSavedMinutes: [0, 1440], keepRuns: [1, 500] } as const;
 type Key = keyof typeof LIMITS;
 /** Every timezone this browser knows, offered as the timezone's typed. */
 const ZONES: readonly string[] = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
@@ -145,14 +145,17 @@ function KeptRuns({ flow, canEdit, onSave }: { flow: Flow; canEdit: boolean; onS
   );
 }
 
-export function FlowSettings({ flow, canEdit, onSave }: { flow: Flow; canEdit: boolean; onSave: (flow: Flow) => void }) {
+/** The settings; `children` are ones that need the room (which flows may call it), so this file stays testable on its own. */
+export function FlowSettings({ flow, canEdit, onSave, children }: { flow: Flow; canEdit: boolean; onSave: (flow: Flow) => void; children?: ReactNode }) {
   return (
-    <section aria-label="Its settings" className="grid gap-2">
+    <section aria-label="Its settings" className="grid gap-2 pt-1">
       <h4 className="font-medium">Settings</h4>
       <Setting flow={flow} name="timeoutSeconds" label="Stop a run after" unit="seconds" placeholder="300" help="Empty is 300 seconds; 900 at most." canEdit={canEdit} onSave={onSave} />
+      <Setting flow={flow} name="keepRuns" label="Keep its last" unit="runs" placeholder="50" help="Empty is 50; 500 at most. A run that's waiting is always kept, and the room keeps 1,000 at most." canEdit={canEdit} onSave={onSave} />
       <Setting flow={flow} name="timeSavedMinutes" label="Each run saves" unit="minutes" placeholder="0" help="What a run saves someone doing it by hand, for Insights: counted for runs started by the trigger that succeed." canEdit={canEdit} onSave={onSave} />
       <TimezoneSetting flow={flow} canEdit={canEdit} onSave={onSave} />
       <KeptRuns flow={flow} canEdit={canEdit} onSave={onSave} />
+      {children}
     </section>
   );
 }

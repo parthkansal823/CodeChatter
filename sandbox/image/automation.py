@@ -4,6 +4,7 @@ it with Activepieces' engine, and reads what happened. Runs carry on after this 
 
 Takes {"op", ...} on stdin, and prints one JSON object. It's asked often while something runs, so it imports nothing heavy.
 """
+import hashlib
 import hmac
 import json
 import os
@@ -22,6 +23,9 @@ MANIFEST = "/usr/local/lib/codechatter/automation/manifest.json"
 HOME = os.path.expanduser("~/automations")
 QUEUE = os.path.join(HOME, "queue")
 RUNS = os.path.join(HOME, "runs")
+# Each flow's kept runs (automation/runs.mjs): a folder for each flow, a marker for each run. Every run reads at most the newest MOST_LISTED.
+BY_FLOW = os.path.join(HOME, "by-flow")
+MOST_LISTED = 500
 # The worker's daily tally of runs, by flow (host.mjs), for the Insights page.
 INSIGHTS = os.path.join(HOME, "insights.json")
 # What runs' steps kept apart (host.mjs): the files they made, a folder for each run.
@@ -122,6 +126,7 @@ def status():
         live.update(state="finished", status="FAILED", finishedAt=now, message="The run stopped before it finished, as the sandbox stopped or restarted.")
         write_json(LIVE, live, 0o644)
         write_json(os.path.join(RUNS, f"{live['id']}.json"), live, 0o644)
+        mark_run(live.get("flowId"), live.get("path"), live["id"], "FAILED")
         release_lock()
     return {**shown(live), "queued": queued()}
 
@@ -168,8 +173,10 @@ def timeout_of(flow):
 
 def insights(request):
     """How the room's flows have done, for the Insights page: by day and by flow, over the last 7, 30 or 90 days, from the worker's daily tally (host.mjs),
-    which outlasts the runs kept. Days are UTC."""
+    which outlasts the runs kept. Days are UTC. With `flows` (their keys: a flow's id, or its path without one), only those flows are counted."""
     days = request.get("days") if request.get("days") in (7, 30, 90) else 7
+    only = request.get("flows")
+    only = {key for key in only if isinstance(key, str)} if isinstance(only, list) else None
     stored = (read_json(INSIGHTS) or {}).get("days") or {}
     now = time.time()
     dates = [time.strftime("%Y-%m-%d", time.gmtime(now - 86400 * back)) for back in range(days - 1, -1, -1)]
@@ -179,7 +186,7 @@ def insights(request):
         entries = stored.get(date) if isinstance(stored.get(date), dict) else {}
         day = {"day": date, "runs": 0, "failed": 0}
         for key, entry in entries.items():
-            if not isinstance(entry, dict):
+            if not isinstance(entry, dict) or (only is not None and key not in only):
                 continue
             flow = per_flow.setdefault(key, {"key": key, "name": "", "path": "", "runs": 0, "failed": 0, "ms": 0, "savedMinutes": 0, "byHand": 0})
             flow["name"], flow["path"] = str(entry.get("name") or key), str(entry.get("path") or "")
@@ -386,6 +393,26 @@ def stop():
 SHOWN = ("id", "path", "flowId", "mode", "step", "retryOf", "name", "trigger", "by", "status", "message", "startedAt", "finishedAt", "durationMs", "errorRun", "errorProblem", "waitpoint", "data", "annotation")
 
 
+def flow_key(flow_id_or_none, path):
+    """A flow's folder in the index, as runs.mjs names it: its id, or its path hashed."""
+    if isinstance(flow_id_or_none, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,100}", flow_id_or_none):
+        return flow_id_or_none
+    return "path-" + hashlib.sha256(str(path or "").encode()).hexdigest()[:24]
+
+
+def mark_run(flow_id_or_none, path, identity, status_now):
+    """A kept run's marker, as host.mjs writes them (a run whose worker stopped is written here)."""
+    if not isinstance(identity, str) or not RUN_ID.match(identity):
+        return
+    folder = os.path.join(BY_FLOW, flow_key(flow_id_or_none, path))
+    try:
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, identity), "w", encoding="utf-8") as marker:
+            marker.write(str(status_now or ""))
+    except OSError:
+        pass
+
+
 def runs(path):
     if not os.path.isdir(RUNS):
         return {"runs": []}
@@ -404,7 +431,15 @@ def runs(path):
         return run_file.get("path") == path and not run_file.get("flowId")
 
     found = []
-    for name in sorted(os.listdir(RUNS), reverse=True):
+    # A flow's runs come from its folder of the index once there is one (host.mjs makes it); every run, from the newest files.
+    indexed = os.path.exists(os.path.join(BY_FLOW, ".indexed"))
+    if path and indexed:
+        folder = os.path.join(BY_FLOW, flow_key(wanted, path))
+        names = [f"{identity}.json" for identity in (os.listdir(folder) if os.path.isdir(folder) else []) if RUN_ID.match(identity)]
+    else:
+        names = [name for name in os.listdir(RUNS) if name.endswith(".json")]
+    names = sorted(names, reverse=True)[: None if path and not indexed else MOST_LISTED]
+    for name in names:
         run_file = read_json(os.path.join(RUNS, name))
         # A run its flow doesn't keep is read by its id for a minute, and not listed.
         if run_file and run_file.get("kept") is not False and belongs(run_file):

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BUILTINS, commandEnv, doorOf, folderOf, listOf, read, run, TESTS, workspaceRoot } from "./builtins.mjs";
+import { BUILTINS, commandEnv, doorOf, folderOf, icsOf, listOf, read, run, TESTS, workspaceRoot } from "./builtins.mjs";
 
 const tests = [
   { name: "login", status: "failed", ms: 120, suite: { name: "auth" }, tags: ["slow", "ui"] },
@@ -387,4 +387,39 @@ test("Save run data: what a run keeps to be found by, through a stand-in worker"
     else process.env.AP_SANDBOX_WS_PORT = before;
     server.close();
   }
+});
+
+test("iCalendar: an event's text, in UTC, escaped and folded, with the people asked", () => {
+  const now = new Date("2026-11-20T08:00:00Z");
+  const { uid, text } = icsOf({ title: "Release review; v2, final", start: "2026-12-01T10:00:00+05:30", end: "2026-12-01T11:30:00+05:30", description: "Line one\nLine two, with a \\ backslash", location: "Room 4", url: "https://example.com/r", organizer: "lead@example.com", attendees: "a@example.com, b@example.com", uid: "fixed-1" }, now);
+  assert.equal(uid, "fixed-1");
+  const lines = text.split("\r\n");
+  assert.equal(lines[0], "BEGIN:VCALENDAR");
+  assert.ok(text.endsWith("END:VCALENDAR\r\n"));
+  assert.ok(lines.includes("DTSTART:20261201T043000Z"), "the start in UTC");
+  assert.ok(lines.includes("DTEND:20261201T060000Z"));
+  assert.ok(lines.includes("DTSTAMP:20261120T080000Z"));
+  assert.ok(lines.includes("SUMMARY:Release review\\; v2\\, final"), "semicolons and commas escaped");
+  assert.ok(lines.includes("DESCRIPTION:Line one\\nLine two\\, with a \\\\ backslash"), "new lines and backslashes escaped");
+  assert.ok(lines.includes("ORGANIZER:mailto:lead@example.com"));
+  assert.equal(lines.filter((line) => line.startsWith("ATTENDEE;")).length, 2);
+  for (const line of lines) assert.ok(Buffer.byteLength(line) <= 75, `folded: ${line}`);
+});
+
+test("iCalendar: a whole day ends the day after, an hour by default, and long lines fold", () => {
+  const day = icsOf({ title: "Offsite", start: "2026-12-24", end: "2026-12-26", all_day: true }).text.split("\r\n");
+  assert.ok(day.includes("DTSTART;VALUE=DATE:20261224"));
+  assert.ok(day.includes("DTEND;VALUE=DATE:20261227"), "the day after the last, as iCalendar has it");
+  const hour = icsOf({ title: "Call", start: "2026-12-01T10:00:00Z" }).text;
+  assert.match(hour, /DTEND:20261201T110000Z/);
+  const long = icsOf({ title: "Planning", start: "2026-12-01T10:00:00Z", description: "é".repeat(100) }).text;
+  assert.match(long, /\r\n /, "a long line goes on, folded");
+  assert.equal(long.replace(/\r\n /g, "").match(/DESCRIPTION:(é+)/)[1].length, 100, "unfolded, nothing is lost");
+});
+
+test("iCalendar: what's wrong is said", () => {
+  assert.throws(() => icsOf({ start: "2026-12-01T10:00:00Z" }), /a title/);
+  assert.throws(() => icsOf({ title: "x", start: "next week" }), /start as a date/);
+  assert.throws(() => icsOf({ title: "x", start: "2026-12-01T10:00:00Z", end: "2026-12-01T09:00:00Z" }), /end after it starts/);
+  assert.throws(() => icsOf({ title: "x", start: "2026-12-01T10:00:00Z", attendees: "not-an-email" }), /isn't an email address/);
 });

@@ -230,6 +230,23 @@ export const BUILTINS: Record<string, Builtin> = {
     },
     defaults: { path: "", content: "", content_is: "text", mode: "replace" },
   },
+  ical: {
+    label: "iCalendar",
+    description: "An event as an .ics file, for the next step to email, attach or save",
+    fields: {
+      title: text("Title", "What the event is called, such as Release review.", true),
+      start: text("Starts", "A date and time with its offset, such as 2026-12-01T10:00:00+05:30, or {{trigger.output.body.start}}.", true),
+      end: text("Ends", "Empty for an hour after it starts."),
+      all_day: check("All day", "Whole days: Starts and Ends are the first and last day, such as 2026-12-24."),
+      description: long("About it"),
+      location: text("Where"),
+      url: text("Address", "A link for the event, such as the meeting's."),
+      organizer: text("Organiser's email"),
+      attendees: long("Who's asked", "Email addresses, one on each line or with commas."),
+      file_name: text("File name", "event.ics if empty."),
+    },
+    defaults: { title: "", start: "", end: "", all_day: false, description: "", location: "", url: "", organizer: "", attendees: "", file_name: "event.ics" },
+  },
   stop_and_error: {
     label: "Stop and Error",
     description: "Stop the run here, saying why",

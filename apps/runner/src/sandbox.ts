@@ -3,6 +3,7 @@ import type Docker from "dockerode";
 import { PassThrough, type Duplex, type Writable } from "node:stream";
 
 import { AgentChannel } from "./agent-channel.js";
+import { devScriptMounts } from "./dev-scripts.js";
 import type { Env } from "./env.js";
 import { log } from "./log.js";
 import { freeSubnets } from "./subnets.js";
@@ -253,7 +254,7 @@ export class Sandbox implements RoomSandbox {
       info &&
       (info.Image !== image.Id ||
         info.NetworkSettings.Networks[this.network]?.NetworkID !== networkId ||
-        info.Config.Labels?.[LABEL_CONFIG] !== CONTAINER_CONFIG)
+        info.Config.Labels?.[LABEL_CONFIG] !== this.config())
     ) {
       log.info(`${this.name}: sandbox image, network or shape changed, recreating the container`);
       await container.remove({ force: true }).catch(() => {});
@@ -353,7 +354,7 @@ export class Sandbox implements RoomSandbox {
         [LABEL_MANAGED]: "1",
         [LABEL_NAMESPACE]: this.env.SANDBOX_NAMESPACE,
         [LABEL_ROOM]: this.roomId,
-        [LABEL_CONFIG]: CONTAINER_CONFIG,
+        [LABEL_CONFIG]: this.config(),
       },
       HostConfig: {
         NetworkMode: this.network,
@@ -374,9 +375,16 @@ export class Sandbox implements RoomSandbox {
           { Type: "volume", Source: this.home, Target: "/home/ccuser" },
           // Pre-warmed template installs (warm-cache.ts), shared by every room and read-only.
           { Type: "volume", Source: warmVolume(this.env.SANDBOX_NAMESPACE), Target: WARM_MOUNT, ReadOnly: true },
+          // In development, the automation scripts from the repo, read-only (dev-scripts.ts).
+          ...devScriptMounts(this.env),
         ],
       },
     });
+  }
+
+  /** The container's shape: with the repo's scripts mounted (development) it's another, so turning them on or off makes it again. */
+  private config(): string {
+    return devScriptMounts(this.env).length ? `${CONTAINER_CONFIG}-dev` : CONTAINER_CONFIG;
   }
 }
 

@@ -14,6 +14,7 @@ const store = new URL("../../../node_modules/.pnpm/", import.meta.url);
 const axe = readFileSync(new URL(`${readdirSync(store).find((name) => name.startsWith("axe-core@"))}/node_modules/axe-core/axe.min.js`, store), "utf8");
 const stamp = Date.now().toString(36);
 const title = `Docs blocks ${stamp}`;
+console.log(JSON.stringify({ docsBlocksFixture: stamp, title }));
 const firstText = `First paragraph ${stamp}`;
 const secondText = `Second paragraph ${stamp}`;
 const summary = `Toggle summary ${stamp}`;
@@ -83,7 +84,9 @@ try {
     return true;
   });
   const titleBox = a.page.getByRole("textbox", { name: "Page title", exact: true });
+  stage = "name owned page";
   await titleBox.fill(title);
+  stage = "focus owned page content";
   await titleBox.press("Enter");
   await until(() => {
     for (const [id, entry] of index.doc.getMap("pages")) if (entry instanceof Y.Map && entry.get("title") === title) { pageId = id; return true; }
@@ -94,6 +97,7 @@ try {
   await a.page.keyboard.type(secondText);
   await a.page.keyboard.press("Enter");
   await a.page.keyboard.type("/toggle");
+  stage = "insert slash toggle";
   await a.page.getByRole("option", { name: /^Toggle/ }).click();
   await a.page.keyboard.type(summary);
   await a.page.keyboard.press("Enter");
@@ -132,6 +136,10 @@ try {
   await rootParagraph(a.page, secondText).hover();
   const handle = a.page.locator(".cc-doc-block-handle");
   await handle.waitFor({ state: "visible" });
+  await until(async () => {
+    const handleBox = await handle.boundingBox(), paragraphBox = await rootParagraph(a.page, secondText).boundingBox();
+    return handleBox && paragraphBox && Math.abs(handleBox.y - paragraphBox.y) < 2;
+  });
   const sourceBox = await handle.boundingBox();
   const targetBox = await rootParagraph(a.page, firstText).boundingBox();
   if (!sourceBox || !targetBox) throw new Error("Block drag positions were unavailable");
@@ -192,6 +200,9 @@ try {
   await until(() => published.doc.getMap("public").size === 0);
 } catch (error) {
   check("Docs blocks completes", false, `${stage}: ${error?.name ?? "Error"}: ${String(error?.message ?? "").split("\n")[0]}`);
+  const frame = String(error?.stack ?? "").split("\n").find((line) => line.includes("docs-blocks.e2e.mjs:"));
+  if (frame) console.error(frame.trim());
+  if (a && !a.page.isClosed()) await a.page.screenshot({ path: `${process.env.TEMP ?? "/tmp"}/docs-blocks-failure.png`, timeout: 5_000 }).catch(() => {});
 } finally {
   try {
     if (index && !pageId && a && !a.page.isClosed()) {

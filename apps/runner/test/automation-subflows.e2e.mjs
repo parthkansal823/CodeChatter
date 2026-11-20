@@ -1,6 +1,7 @@
 // Sub-flows, as n8n's Execute Workflow, the whole way in E2ETST's sandbox with Activepieces' engine: a flow's "Call a flow" step runs another, one that
 // starts on "Called by another flow", with what it sends, and gets what its last step gave; the called flow's run is its own, saying who called it; not
-// waiting, it's queued; a flow that can't be called, one that fails, and a flow calling itself are each stopped with why. It removes what it made.
+// waiting, it's queued; a flow that can't be called, one that fails, a flow calling itself, and a flow the called one's settings don't name (its callers)
+// are each stopped with why. It removes what it made.
 //   node --env-file=../../.env test/automation-subflows.e2e.mjs        (from apps/runner, with the dev stack running and the current sandbox images)
 import { signServiceToken } from "@codechatter/auth/service-token";
 import { createFileAtPath, filesDocName, findByPath, flatten, listTree, trash } from "@codechatter/workspace-model";
@@ -90,9 +91,9 @@ try {
     settings: { pieceName: "@activepieces/piece-webhook", pieceVersion: webhook.version, triggerName: "catch_webhook", input: { authType: "none", authFields: {} }, propertySettings: {}, ...(room && { room }) },
     nextAction: next,
   });
-  const ids = { doubler: `flow_doubler_${stamp}`, caller: `flow_caller_${stamp}`, later: `flow_later_${stamp}`, plain: `flow_plain_${stamp}`, callsPlain: `flow_callsplain_${stamp}`, failing: `flow_failing_${stamp}`, callsFailing: `flow_callsfailing_${stamp}`, self: `flow_self_${stamp}` };
+  const ids = { doubler: `flow_doubler_${stamp}`, caller: `flow_caller_${stamp}`, later: `flow_later_${stamp}`, plain: `flow_plain_${stamp}`, callsPlain: `flow_callsplain_${stamp}`, failing: `flow_failing_${stamp}`, callsFailing: `flow_callsfailing_${stamp}`, self: `flow_self_${stamp}`, picky: `flow_picky_${stamp}`, allowed: `flow_allowed_${stamp}`, notAllowed: `flow_notallowed_${stamp}`, closed: `flow_closed_${stamp}`, callsClosed: `flow_callsclosed_${stamp}` };
   const paths = Object.fromEntries(Object.keys(ids).map((key) => [key, `${FOLDER}/${key}.flow.json`]));
-  const write = (key, name, trig) => createFileAtPath(doc, paths[key], JSON.stringify({ id: ids[key], displayName: name, schemaVersion: "27", trigger: trig }, null, 2));
+  const write = (key, name, trig, settings) => createFileAtPath(doc, paths[key], JSON.stringify({ id: ids[key], displayName: name, schemaVersion: "27", ...(settings && { settings }), trigger: trig }, null, 2));
   // Called: doubles what it's sent, in two steps, so the last one's output is what goes back.
   write("doubler", "Doubler", trigger({ event: "flow.called" }, code("read", "export const code = async (inputs) => ({ n: Number(inputs.n) });", { n: "{{trigger.output.n}}" }, code("double", "export const code = async (inputs) => ({ doubled: inputs.n * 2 });", { n: "{{read.output.n}}" }))));
   // Calls it with what it was sent, then uses the answer.
@@ -103,6 +104,12 @@ try {
   write("failing", "Fails when called", trigger({ event: "flow.called" }, code("boom", "export const code = async () => { throw new Error('No stock left'); };")));
   write("callsFailing", "Calls one that fails", trigger(null, callStep("call", ids.failing, {})));
   write("self", "Calls itself", trigger({ event: "flow.called" }, callStep("again", ids.self, {})));
+  // Which flows may call one (its settings' callers): only Allowed may call Picky, and none may call Closed.
+  write("picky", "Picky", trigger({ event: "flow.called" }, code("yes", "export const code = async () => ({ yes: true });")), { callers: [ids.allowed] });
+  write("allowed", "Allowed", trigger(null, callStep("call", ids.picky, {})));
+  write("notAllowed", "Not allowed", trigger(null, callStep("call", ids.picky, {}, false)));
+  write("closed", "Closed", trigger({ event: "flow.called" }, code("yes", "export const code = async () => ({ yes: true });")), { callers: [] });
+  write("callsClosed", "Calls a closed one", trigger(null, callStep("call", ids.closed, {})));
   await sleep(1500);
 
   // ---- Calling and waiting: the last step's output comes back ----
@@ -130,6 +137,15 @@ try {
   const self = await run(paths.self);
   check("aFlowCallingItselfStopsAtTheDepth", self?.status === "FAILED" && /more than 5 deep/.test(JSON.stringify(self)), self?.failedStep ?? self?.message);
   check("withARunForEachLevel", (await runsOf(paths.self)).length === 6, (await runsOf(paths.self)).length);
+
+  // ---- Which flows may call one ----
+  const allowed = await run(paths.allowed);
+  check("aFlowItsSettingsNameMayCallIt", allowed?.status === "SUCCEEDED" && allowed.steps?.call?.output?.yes === true, allowed?.failedStep ?? allowed?.status);
+  const notAllowed = await run(paths.notAllowed);
+  check("anotherMayNotEvenWithoutWaiting", notAllowed?.status === "FAILED" && notAllowed.failedStep?.message === "Picky can't be called by Not allowed: its settings let only some flows call it.", notAllowed?.failedStep ?? notAllowed?.status);
+  const closed = await run(paths.callsClosed);
+  check("andNoneMayCallOneWithAnEmptyList", closed?.status === "FAILED" && /Closed can't be called by Calls a closed one/.test(closed.failedStep?.message ?? ""), closed?.failedStep ?? closed?.status);
+  check("andTheyDidntRun", (await runsOf(paths.picky)).length === 1 && (await runsOf(paths.closed)).length === 0, { picky: (await runsOf(paths.picky)).length });
 
   // ---- And it can't be turned on like a room event ----
   const turnOn = await call(`/api/rooms/${ROOM}/automations/triggers`, { method: "POST", json: { path: paths.doubler, flowId: ids.doubler, kind: "event", event: { event: "flow.called" } } });

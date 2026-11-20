@@ -102,6 +102,7 @@ try {
   const FORGOTTEN = write("forgotten", code("ok", "export const code = async () => ({ ok: true });\n"), { saveSucceeded: false });
   const FAILING = write("failing", code("boom", "export const code = async () => { throw new Error('No stock left'); };\n"), { saveFailed: false });
   write("called", code("answer", "export const code = async () => ({ answer: 42 });\n"), { saveSucceeded: false }, { event: "flow.called" });
+  const FEW = write("few", code("ok", "export const code = async () => ({ ok: true });\n"), { keepRuns: 2 });
   const CALLER = write("caller", callStep("call", `flow_called_${stamp}`, code("after", "export const code = async (inputs) => ({ got: inputs.got });\n", { got: "{{call.output.answer}}" })));
   await sleep(2000);
 
@@ -130,6 +131,17 @@ try {
   const insights = await automations({ op: "insights", days: 7 });
   const counted = (insights.body?.flows ?? []).find((flow) => flow.name === `forgotten ${stamp}`);
   check("runs not kept still count in Insights", counted?.runs === 2, counted);
+
+  // ---- How many runs each flow keeps: its own number, without pushing out another flow's ----
+  const plainBefore = await listed(PLAIN);
+  const few = [];
+  for (let i = 0; i < 3; i++) few.push(await start(FEW));
+  const fewRuns = await listed(FEW);
+  check("a flow keeps as many runs as its settings say, the newest", few.every((run) => run?.status === "SUCCEEDED") && fewRuns.length === 2 && fewRuns[0] === few[2]?.id && fewRuns[1] === few[1]?.id, { fewRuns, made: few.map((run) => run?.id) });
+  const oldest = await automations({ op: "run-details", id: few[0]?.id });
+  check("and the oldest has gone", oldest.status !== 200 && /isn't kept/.test(JSON.stringify(oldest.body)), oldest.status);
+  const plainAfter = await listed(PLAIN);
+  check("while another flow keeps its own", plainBefore.length > 0 && plainBefore.every((id) => plainAfter.includes(id)), { plainBefore, plainAfter });
 
   // ---- A minute later, they've gone ----
   await sleep(62_000);

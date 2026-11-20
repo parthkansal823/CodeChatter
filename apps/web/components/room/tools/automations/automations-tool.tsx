@@ -2,9 +2,9 @@
 "use client";
 
 import { isFlowFile, type AutomationInput, type AutomationLive, type AutomationManifest } from "@codechatter/contracts";
-import { createFileAtPath, findByPath, flatten } from "@codechatter/workspace-model";
+import { createFileAtPath, findByPath, flatten, textOf } from "@codechatter/workspace-model";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Braces, FileCode, Globe, History, KeyRound, Plus, Workflow } from "lucide-react";
+import { BarChart3, Braces, FileClock, FileCode, Globe, History, KeyRound, Plus, Workflow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type * as Y from "yjs";
@@ -12,6 +12,7 @@ import type * as Y from "yjs";
 import { useFileTree } from "@/components/room/hooks";
 import { useKeyCommands } from "@/components/room/editor/shortcuts";
 import { useRoom } from "@/components/room/room-context";
+import { useYVersion } from "@/components/room/tools/api-studio/connection";
 import type { RoomToolProps } from "@/components/room/tools/registry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,8 @@ import { openVariables, VariablesDialog } from "./variables-settings";
 import { AllRuns } from "./all-runs";
 import { InsightsView } from "./insights";
 import { FlowFileView } from "./flow-view";
-import { newTrigger, SCHEMA_VERSION, type Flow } from "./model";
+import { VersionsView } from "./versions";
+import { newTrigger, parseFlow, SCHEMA_VERSION, tagsOfFlows, type Flow, type FlowTagged } from "./model";
 
 const failure = (error: unknown) => (error instanceof ApiError ? error.message : "Couldn't reach the server. Try again.");
 const WEBHOOK = "@activepieces/piece-webhook";
@@ -68,12 +70,14 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
 
   const flows = flatten(tree).filter((node) => node.kind === "file" && !node.blob && isFlowFile(node.name));
   const [chosen, setChosen] = useState<string | null>(null);
-  const [view, setView] = useState<"flow" | "examples" | "runs" | "insights">("flow");
+  const [view, setView] = useState<"flow" | "examples" | "runs" | "insights" | "versions">("flow");
   // A run chosen in Every run: its flow opens with it shown.
   const [opening, setOpening] = useState<string | null>(null);
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   const [wanted, setWanted] = useState<string | null>(null);
+  // The chooser shows only the flows with this tag (flow-tags.tsx), and the one shown.
+  const [tag, setTag] = useState("");
   const current = flows.find((node) => node.path === (wanted ?? chosen)) ?? flows.find((node) => node.path === chosen) ?? flows[0] ?? null;
   // A file just made isn't in the list until the tree has caught up.
   if (wanted && flows.some((node) => node.path === wanted)) {
@@ -82,6 +86,17 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
   }
 
   const pieces = manifest.data?.pieces;
+  // Its text, so tags added to the flow shown reach the header at once; other flows' are read as the tool draws.
+  useYVersion(current ? textOf(doc, current.id) : null);
+  const flowTags: FlowTagged[] = flows.map((node) => {
+    const parsed = parseFlow(textOf(doc, node.id)?.toString() ?? "");
+    const flow = "flow" in parsed ? parsed.flow : null;
+    return { key: flow?.id ?? node.path, path: node.path, tags: flow?.tags ?? [] };
+  });
+  const tagsByPath = new Map(flowTags.map((each) => [each.path, each.tags]));
+  const allTags = tagsOfFlows(flowTags.map((each) => ({ tags: [...each.tags] })));
+  const tagged = (node: (typeof flows)[number]) => (tagsByPath.get(node.path) ?? []).some((each) => each.toLowerCase() === tag.toLowerCase());
+  const chooserFlows = tag && allTags.some((each) => each.toLowerCase() === tag.toLowerCase()) ? flows.filter((node) => node === current || tagged(node)) : flows;
   // In the command palette (Ctrl+Shift+P) while the tool is open, as n8n's command bar: what's in its header, and each automation by name.
   const group = "Automations";
   useKeyCommands("tool:automations", [
@@ -128,9 +143,19 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
       <header className="flex min-h-9 shrink-0 flex-wrap items-center gap-2 border-b px-3 py-1">
         <Workflow className="size-4 text-muted-foreground" aria-hidden />
         <h2 className="font-medium">Automations</h2>
-        {flows.length > 0 && view === "flow" && (
-          <select aria-label="Automation to show" className="h-7 max-w-64 rounded-md border bg-background px-2 text-xs" value={current?.path ?? ""} onChange={(event) => setChosen(event.target.value)}>
-            {flows.map((node) => (
+        {allTags.length > 0 && (view === "flow" || view === "versions") && (
+          <select aria-label="Show the automations tagged" className="h-7 max-w-40 rounded-md border bg-background px-2 text-xs" value={tag} onChange={(event) => setTag(event.target.value)}>
+            <option value="">Any tag</option>
+            {allTags.map((each) => (
+              <option key={each} value={each}>
+                {each}
+              </option>
+            ))}
+          </select>
+        )}
+        {flows.length > 0 && (view === "flow" || view === "versions") && (
+          <select aria-label="Automation to show" className="h-7 max-w-56 rounded-md border bg-background px-2 text-xs" value={current?.path ?? ""} onChange={(event) => setChosen(event.target.value)}>
+            {chooserFlows.map((node) => (
               <option key={node.id} value={node.path}>
                 {node.name.replace(/\.flow\.json$/i, "")}
               </option>
@@ -139,8 +164,14 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
         )}
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {canEdit && current && view === "flow" && (
-            <Button size="xs" variant="ghost" onClick={() => openFile(current.id)}>
-              <FileCode /> Its file
+            // The flow's own two are icons, so the header keeps to one line.
+            <Button size="icon-xs" variant="ghost" aria-label="Its file" title="Its file" onClick={() => openFile(current.id)}>
+              <FileCode />
+            </Button>
+          )}
+          {current && (view === "flow" || view === "versions") && (
+            <Button size="icon-xs" variant={view === "versions" ? "secondary" : "ghost"} aria-label="Versions" title="Versions: earlier ones, compared and restored" aria-pressed={view === "versions"} onClick={() => setView(view === "versions" ? "flow" : "versions")}>
+              <FileClock />
             </Button>
           )}
           {flows.length > 0 && (
@@ -208,10 +239,13 @@ export default function AutomationsTool({ openFile }: RoomToolProps) {
       ) : view === "examples" ? (
         <ExamplesView pieces={pieces ?? {}} canEdit={canEdit} onUse={addFlow} />
       ) : view === "insights" ? (
-        <InsightsView ask={ask} />
+        <InsightsView ask={ask} flowTags={flowTags} />
+      ) : view === "versions" && current ? (
+        <VersionsView key={current.id} node={current} pieces={pieces} onRestored={() => setView("flow")} />
       ) : view === "runs" ? (
         <AllRuns
           ask={ask}
+          flowTags={flowTags}
           onOpen={(run) => {
             const found = flows.find((each) => each.path === run.path);
             if (!found) {

@@ -207,7 +207,7 @@ export function DiagramEditor({ roomId, item, list, editable, onBack, onClose }:
       />
       <div className="relative min-h-0 flex-1">
         {!loaded && (
-          <div className="absolute inset-0 grid content-start gap-2 p-6" aria-label="Opening diagram">
+          <div role="status" className="absolute inset-0 grid content-start gap-2 p-6" aria-label="Opening diagram">
             <Skeleton className="h-5 w-48" />
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-4 w-2/3" />
